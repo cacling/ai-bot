@@ -18,10 +18,10 @@ import { drizzle } from "drizzle-orm/libsql";
 import { and, eq } from "drizzle-orm";
 import { integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
-import { runDiagnosis } from "../../skills/fault-diagnosis/scripts/run_diagnosis.ts";
-import type { IssueType } from "../../skills/fault-diagnosis/scripts/types.ts";
-import { runSecurityDiagnosis } from "../../skills/telecom-app/scripts/run_security_diagnosis.ts";
-import type { SecurityIssueType, AppUserContext } from "../../skills/telecom-app/scripts/types.ts";
+import { runDiagnosis } from "../../skills/biz-skills/fault-diagnosis/scripts/run_diagnosis.ts";
+import type { IssueType } from "../../skills/biz-skills/fault-diagnosis/scripts/types.ts";
+import { runSecurityDiagnosis } from "../../skills/biz-skills/telecom-app/scripts/run_security_diagnosis.ts";
+import type { SecurityIssueType, AppUserContext } from "../../skills/biz-skills/telecom-app/scripts/types.ts";
 
 // ── 数据库连接 ─────────────────────────────────────────────────────────────────
 // SQLITE_PATH 可由环境变量覆盖，默认指向 backend/data/telecom.db

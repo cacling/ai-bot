@@ -506,7 +506,14 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
             <button disabled className="relative w-16 h-16 rounded-full flex items-center justify-center shadow-lg bg-gray-300 text-white cursor-not-allowed">
               <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
             </button>
-          ) : connState === 'transferred' || connState === 'ended' ? (
+          ) : connState === 'transferred' ? (
+            <button
+              onClick={() => { disconnect(); setConnState('ended'); }}
+              className="relative w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 bg-red-500 hover:bg-red-600 shadow-red-200 text-white"
+            >
+              <Square size={22} fill="white" />
+            </button>
+          ) : connState === 'ended' ? (
             <button disabled className="relative w-16 h-16 rounded-full flex items-center justify-center shadow-lg bg-gray-300 text-white cursor-not-allowed">
               <Phone size={26} />
             </button>
@@ -523,7 +530,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
         <p className="text-xs text-gray-400">
           {connState === 'idle'
             ? t.outbound_hint_idle
-            : isInCall
+            : isInCall || connState === 'transferred'
             ? t.outbound_hint_active
             : '\u00A0'}
         </p>

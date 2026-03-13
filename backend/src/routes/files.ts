@@ -87,9 +87,10 @@ files.get('/content', async (c) => {
     logger.warn('files', 'read_rejected', { reason: 'missing_path' });
     return c.json({ error: 'path 参数缺失' }, 400);
   }
-  if (extname(filePath).toLowerCase() !== '.md') {
-    logger.warn('files', 'read_rejected', { path: filePath, reason: 'not_md' });
-    return c.json({ error: '只允许读取 .md 文件' }, 400);
+  const TEXT_EXTS = new Set(['.md', '.ts', '.tsx', '.js', '.jsx', '.py', '.sh', '.bash', '.json', '.yaml', '.yml', '.txt', '.toml', '.env']);
+  if (!TEXT_EXTS.has(extname(filePath).toLowerCase())) {
+    logger.warn('files', 'read_rejected', { path: filePath, reason: 'unsupported_type' });
+    return c.json({ error: '不支持读取此文件类型' }, 400);
   }
   if (!isPathSafe(filePath)) {
     logger.warn('files', 'read_rejected', { path: filePath, reason: 'unsafe_path' });
@@ -117,9 +118,10 @@ files.put('/content', async (c) => {
     logger.warn('files', 'write_rejected', { reason: 'missing_params' });
     return c.json({ error: 'path 和 content 不能为空' }, 400);
   }
-  if (extname(filePath).toLowerCase() !== '.md') {
-    logger.warn('files', 'write_rejected', { path: filePath, reason: 'not_md' });
-    return c.json({ error: '只允许写入 .md 文件' }, 400);
+  const TEXT_EXTS = new Set(['.md', '.ts', '.tsx', '.js', '.jsx', '.py', '.sh', '.bash', '.json', '.yaml', '.yml', '.txt', '.toml', '.env']);
+  if (!TEXT_EXTS.has(extname(filePath).toLowerCase())) {
+    logger.warn('files', 'write_rejected', { path: filePath, reason: 'unsupported_type' });
+    return c.json({ error: '不支持写入此文件类型' }, 400);
   }
   if (!isPathSafe(filePath)) {
     logger.warn('files', 'write_rejected', { path: filePath, reason: 'unsafe_path' });

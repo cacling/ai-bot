@@ -18,6 +18,7 @@
  *   { source: 'agent', type: 'skill_diagram_update', skill_name, mermaid }
  *   { source: 'agent', type: 'response',             text, card, skill_diagram }
  *   { type: 'error',   message: '...' }
+ *   { source: 'system', type: 'new_session', channel: 'chat'|'voice'|'outbound' }
  */
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
@@ -110,6 +111,12 @@ agentWs.get('/ws/agent', upgradeWebSocket((c) => {
               }
             }
           }
+          try { ws.send(JSON.stringify(event)); } catch { /* ws closed */ }
+          return;
+        }
+
+        if (event.source === 'system') {
+          logger.info('agent-ws', 'system_event_forward', { phone, eventType: event.type, channel: (event as Record<string,unknown>).channel });
           try { ws.send(JSON.stringify(event)); } catch { /* ws closed */ }
           return;
         }

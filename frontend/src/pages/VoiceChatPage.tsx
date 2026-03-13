@@ -36,10 +36,11 @@ interface EmotionResult {
 
 interface VoiceMessage {
   id: number;
-  role: 'user' | 'bot' | 'agent';
+  role: 'user' | 'bot' | 'agent' | 'handoff';
   text: string;
   time: string;
   emotion?: EmotionResult;
+  handoffCtx?: HandoffContext;
 }
 
 interface HandoffContext {
@@ -126,6 +127,8 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
   const messagesEndRef    = useRef<HTMLDivElement>(null);
   const disconnectRef     = useRef<() => void>(() => {});  // 避免循环依赖
   const transferToBotRef  = useRef(false);
+  const transferredRef    = useRef(false);  // 转人工后为 true，用于回调闭包内判断
+  const needResumeRef     = useRef(false);  // 转回机器人时标记需要 resume=true 重连
   const connectRef        = useRef<() => Promise<void>>(async () => {});
   // MP3 流式播放
   const audioElemRef      = useRef<HTMLAudioElement | null>(null);
@@ -253,7 +256,8 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
 
     // VAD：用户停止说话
     if (type === 'input_audio_buffer.speech_stopped') {
-      setConnState('thinking');
+      // 转人工后不显示机器人思考状态
+      if (!transferredRef.current) setConnState('thinking');
       return;
     }
 
@@ -315,15 +319,21 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
 
     // 转人工
     if (type === 'transfer_to_human') {
-      stopMic();
+      transferredRef.current = true;
+      const ctx = msg.context as HandoffContext;
       setConnState('transferred');
-      setHandoffCtx(msg.context as HandoffContext);
+      setHandoffCtx(ctx);
+      // 把 banner 插入消息流，后续消息自然排在 banner 下方
+      setMessages(prev => [...prev, { id: nextMsgId.current(), role: 'handoff', text: '', time: nowTime(), handoffCtx: ctx }]);
       return;
     }
 
     // 转回机器人
     if (type === 'transfer_to_bot') {
       transferToBotRef.current = true;
+      needResumeRef.current = true;   // 标记：下次 connect 应携带 resume=true
+      transferredRef.current = false;
+      console.log('[VoiceChat] transfer_to_bot: needResumeRef=true, will reconnect with resume=true');
       setHandoffCtx(null);
       disconnectRef.current();
       return;
@@ -371,6 +381,11 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
 
   // ── 建立连接 ──────────────────────────────────────────────────────────────
   const connect = useCallback(async () => {
+    // 在任何 await 之前捕获 resume 标志，避免异步后 ref 已被清除
+    const resumeFlag = needResumeRef.current ? '&resume=true' : '';
+    needResumeRef.current = false;
+    console.log('[VoiceChat] connect: resumeFlag=', resumeFlag || '(none)', 'phone=', selectedUserPhone);
+
     setErrorMsg('');
     setConnState('connecting');
 
@@ -388,7 +403,8 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
     streamRef.current = stream;
 
     // 连接后端 WebSocket 代理
-    const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/voice?lang=${lang}&phone=${selectedUserPhone}`;
+    const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/voice?lang=${lang}&phone=${selectedUserPhone}${resumeFlag}`;
+    console.log('[VoiceChat] ws connecting to:', wsUrl);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -477,7 +493,7 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
   const btnClass =
     connState === 'disconnected' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200 text-white' :
     connState === 'connecting'   ? 'bg-gray-300 cursor-not-allowed text-white' :
-    connState === 'transferred'  ? 'bg-gray-300 cursor-not-allowed text-white' :
+    connState === 'transferred'  ? 'bg-red-500 hover:bg-red-600 shadow-red-200 text-white' :
                                    'bg-red-500 hover:bg-red-600 shadow-red-200 text-white';
 
   const statusColor =
@@ -523,7 +539,17 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
                 {new Date().toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { month: 'long', day: 'numeric' })}
               </span>
             </div>
-            {messages.map(msg => (
+            {messages.map(msg => msg.role === 'handoff' ? (
+              <div key={msg.id} className="mx-1 mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-50 border border-orange-200 text-sm text-orange-700">
+                <Headset size={15} className="flex-shrink-0" />
+                <span className="font-medium">{t.voice_handoff_title}</span>
+                {msg.handoffCtx && (
+                  <span className="text-orange-400 text-xs">
+                    · {t.voice_transfer_reason[msg.handoffCtx.transfer_reason] ?? msg.handoffCtx.transfer_reason}
+                  </span>
+                )}
+              </div>
+            ) : (
               <div key={msg.id} className={`flex w-full mb-4 ${msg.role !== 'user' ? 'justify-start' : 'justify-end'}`}>
                 {msg.role === 'bot' && (
                   <div className="flex-shrink-0 mr-3">
@@ -567,7 +593,7 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
               </div>
             ))}
 
-            {/* 思考中动画 */}
+            {/* 思考中动画（转人工后不显示） */}
             {connState === 'thinking' && (
               <div className="flex w-full mb-4 justify-start items-center space-x-3">
                 <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
@@ -578,17 +604,6 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
-              </div>
-            )}
-
-            {/* 转人工状态提示（详细摘要仅在坐席侧展示） */}
-            {handoffCtx && (
-              <div className="mx-1 mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-50 border border-orange-200 text-sm text-orange-700">
-                <Headset size={15} className="flex-shrink-0" />
-                <span className="font-medium">{t.voice_handoff_title}</span>
-                <span className="text-orange-400 text-xs">
-                  · {t.voice_transfer_reason[handoffCtx.transfer_reason] ?? handoffCtx.transfer_reason}
-                </span>
               </div>
             )}
 

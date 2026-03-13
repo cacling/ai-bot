@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot, Send, Headset, User, Radio, MessageSquare, BookOpen, PlusCircle, Smile } from 'lucide-react';
+import { Bot, Send, Headset, User, Radio, MessageSquare, BookOpen, PlusCircle, Smile, Library, Wrench } from 'lucide-react';
 import { nowTime, CardMessage, DEFAULT_USER_PHONE, type CardData } from '../App';
 import { T, type Lang } from '../i18n';
 import { fetchMockUsers, type MockUser } from '../mockUsers';
@@ -11,6 +11,7 @@ import '../components/cards/index';  // register all card defs (side-effect)
 import { buildInitialCardStates, findCardByEvent, type CardState } from '../components/cards/registry';
 import { CardPanel } from '../components/cards/CardPanel';
 import { EditorPage } from './EditorPage';
+import { SkillManagerPage } from './SkillManagerPage';
 
 interface AgentMessage {
   id: number;
@@ -24,9 +25,11 @@ interface AgentMessage {
 }
 
 type AgentTab = 'chat' | 'editor';
+type KnowledgeSubTab = 'knowledge' | 'skill';
 
 export function AgentWorkstationPage() {
   const [agentTab, setAgentTab] = useState<AgentTab>('chat');
+  const [knowledgeSubTab, setKnowledgeSubTab] = useState<KnowledgeSubTab>('knowledge');
   const [lang, setLang] = useState<Lang>('zh');
   const [userPhone, setUserPhone] = useState(DEFAULT_USER_PHONE);
   const [allUsers, setAllUsers] = useState<MockUser[]>([]);
@@ -85,6 +88,17 @@ export function AgentWorkstationPage() {
         if (processedMsgIds.current.has(msg.msg_id)) return;
         processedMsgIds.current.add(msg.msg_id);
         if (processedMsgIds.current.size > 2000) processedMsgIds.current.clear();
+      }
+
+      if (msg.type === 'new_session') {
+        setMessages([]);
+        setBotMode('bot');
+        botModeRef.current = 'bot';
+        pendingBotRef.current = null;
+        setIsTyping(false);
+        setCardStates(buildInitialCardStates());
+        processedMsgIds.current.clear();
+        return;
       }
 
       if (msg.type === 'user_message') {
@@ -303,8 +317,35 @@ export function AgentWorkstationPage() {
 
       {/* Knowledge Base tab */}
       {agentTab === 'editor' && (
-        <div className="flex-1 overflow-hidden">
-          <EditorPage />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Secondary menu */}
+          <div className="bg-white border-b border-gray-200 px-4 flex items-center h-9 flex-shrink-0">
+            <button
+              onClick={() => setKnowledgeSubTab('knowledge')}
+              className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
+                knowledgeSubTab === 'knowledge'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Library size={13} />
+              知识管理
+            </button>
+            <button
+              onClick={() => setKnowledgeSubTab('skill')}
+              className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
+                knowledgeSubTab === 'skill'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Wrench size={13} />
+              技能管理
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            {knowledgeSubTab === 'knowledge' ? <EditorPage /> : <SkillManagerPage />}
+          </div>
         </div>
       )}
 

@@ -22,7 +22,7 @@ const MODEL = siliconflow(
 const SKILLS_DIR = resolve(import.meta.dir, '../../skills');
 
 const SKILL_SYSTEM = (() => {
-  const raw = readFileSync(`${SKILLS_DIR}/handoff-analysis/SKILL.md`, 'utf-8');
+  const raw = readFileSync(`${SKILLS_DIR}/tech-skills/handoff-analysis/SKILL.md`, 'utf-8');
   return raw.replace(/^---[\s\S]*?---\n/, '').trim();
 })();
 

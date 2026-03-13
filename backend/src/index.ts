@@ -4,6 +4,7 @@ import chatRoutes from './routes/chat';
 import chatWsRoutes from './routes/chat-ws';
 import agentWsRoutes from './routes/agent-ws';
 import filesRoutes from './routes/files';
+import skillsRoutes from './routes/skills';
 import voiceRoutes, { voiceWebsocket } from './routes/voice';
 import outboundRoutes from './routes/outbound';
 import mockDataRoutes from './routes/mock-data';
@@ -30,6 +31,9 @@ app.route('/api', mockDataRoutes);
 
 // Mount files routes: GET /api/files/tree, GET /api/files/content, PUT /api/files/content
 app.route('/api/files', filesRoutes);
+
+// Mount skills routes: GET /api/skills
+app.route('/api/skills', skillsRoutes);
 
 // Mount voice WebSocket route: GET /ws/voice
 app.route('/', voiceRoutes);

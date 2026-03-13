@@ -22,8 +22,8 @@ import { sessionBus } from '../session-bus';
 
 const SKILLS_DIR = resolve(
   process.env.SKILLS_DIR
-    ? resolve(process.cwd(), process.env.SKILLS_DIR)
-    : resolve(import.meta.dir, '../..', 'skills')
+    ? resolve(process.cwd(), process.env.SKILLS_DIR, 'biz-skills')
+    : resolve(import.meta.dir, '../..', 'skills', 'biz-skills')
 );
 
 const ZHIPU_API_KEY      = process.env.ZHIPU_API_KEY ?? '';
@@ -468,6 +468,8 @@ outbound.get(
     return {
       onOpen(_evt, ws) {
         logger.info('outbound', 'client_connected', { session: sessionId, phone: userPhone, task: taskParam, id: taskId });
+        sessionBus.clearHistory(userPhone);
+        sessionBus.publish(userPhone, { source: 'system', type: 'new_session', channel: 'outbound', msg_id: crypto.randomUUID() });
 
         if (!ZHIPU_API_KEY) {
           ws.send(JSON.stringify({ type: 'error', message: 'ZHIPU_API_KEY 未配置' }));

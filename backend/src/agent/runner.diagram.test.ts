@@ -10,7 +10,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { highlightMermaidTool, highlightMermaidBranch, determineBranch, extractMermaidFromContent } from './runner.ts';
 
-const SKILLS_DIR = resolve(import.meta.dir, '../..', 'skills');
+const SKILLS_DIR = resolve(import.meta.dir, '../..', 'skills', 'biz-skills');
 
 // ── highlightMermaidTool ──────────────────────────────────────────────────────
 

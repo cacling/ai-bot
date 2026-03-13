@@ -9,6 +9,9 @@ import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { eq } from 'drizzle-orm';
+import { db } from '../db';
+import { subscribers, plans } from '../db/schema';
 import { analyzeHandoff } from '../skills/handoff-analyzer';
 import { analyzeEmotion } from '../skills/emotion-analyzer';
 import { textToSpeech } from '../skills/tts';
@@ -19,11 +22,11 @@ import { getLangs } from '../lang-session';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
-// Resolve skills directory (mirrors logic in skills.ts)
+// Resolve biz-skills directory (mirrors logic in skills.ts)
 const SKILLS_DIR = resolve(
   process.env.SKILLS_DIR
-    ? resolve(process.cwd(), process.env.SKILLS_DIR)
-    : resolve(import.meta.dir, '../..', 'skills')
+    ? resolve(process.cwd(), process.env.SKILLS_DIR, 'biz-skills')
+    : resolve(import.meta.dir, '../..', 'skills', 'biz-skills')
 );
 
 /** Tool → skill name mapping: used to send skill_diagram_update to the frontend */
@@ -79,10 +82,31 @@ const ENGLISH_LANG_INSTRUCTION = `
 You MUST respond ONLY in English for this entire conversation. All spoken responses must be in English. Do not switch to Chinese under any circumstances, even if the user speaks Chinese.
 When calling tools that accept a \`lang\` parameter (such as diagnose_network, diagnose_app), always pass \`lang: "en"\` to receive English diagnostic output.`;
 
-function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh'): string {
+async function fetchSubscriberInfo(phone: string): Promise<{ name: string; planName: string } | null> {
+  try {
+    const rows = await db
+      .select({ name: subscribers.name, planId: subscribers.plan_id })
+      .from(subscribers)
+      .where(eq(subscribers.phone, phone))
+      .limit(1);
+    if (!rows.length) return null;
+    const planRows = await db
+      .select({ name: plans.name })
+      .from(plans)
+      .where(eq(plans.plan_id, rows[0].planId))
+      .limit(1);
+    return { name: rows[0].name, planName: planRows[0]?.name ?? '' };
+  } catch {
+    return null;
+  }
+}
+
+function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberName?: string, planName?: string): string {
   const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
   const base = VOICE_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
+    .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? '用户')
+    .replace('{{PLAN_NAME}}', planName ?? '未知套餐')
     .replace('{{CURRENT_DATE}}', today);
   return lang === 'en' ? base + ENGLISH_LANG_INSTRUCTION : base;
 }
@@ -117,6 +141,7 @@ export class VoiceSessionState {
   currentBotAccum       = '';    // 累积当前 bot 回复
   collectedSlots: Record<string, unknown> = {};
   transferTriggered     = false; // 防止重复触发转人工
+  farewellDone          = false; // 告别语播完后为 true，之后才拦截 GLM 响应
 
   constructor(readonly phone: string, readonly sessionId: string) {}
 
@@ -282,6 +307,7 @@ voice.get(
   upgradeWebSocket((c) => {
     const userPhone = c.req.query('phone') ?? DEFAULT_PHONE;
     const lang      = (c.req.query('lang') ?? 'zh') as 'zh' | 'en';
+    const resume    = c.req.query('resume') === 'true';
     const sessionId = crypto.randomUUID();
     let glmWs: InstanceType<typeof NodeWebSocket> | null = null;
     const state = new VoiceSessionState(userPhone, sessionId);
@@ -361,8 +387,14 @@ voice.get(
 
     return {
       // ── 前端连接建立 ──────────────────────────────────────────────────────
-      onOpen(_evt, ws) {
-        logger.info('voice', 'client_connected', { session: sessionId, phone: userPhone });
+      async onOpen(_evt, ws) {
+        logger.info('voice', 'client_connected', { session: sessionId, phone: userPhone, resume });
+        if (!resume) {
+          sessionBus.clearHistory(userPhone);
+          sessionBus.publish(userPhone, { source: 'system', type: 'new_session', channel: 'voice', msg_id: crypto.randomUUID() });
+        }
+        const subInfo = await fetchSubscriberInfo(userPhone);
+        logger.info('voice', 'subscriber_info', { session: sessionId, name: subInfo?.name ?? null, plan: subInfo?.planName ?? null });
 
         if (!ZHIPU_API_KEY) {
           ws.send(JSON.stringify({ type: 'error', message: 'ZHIPU_API_KEY 未配置' }));
@@ -384,7 +416,7 @@ voice.get(
             session: {
               beta_fields: { chat_mode: 'audio' },
               modalities: ['text', 'audio'],
-              instructions: buildVoicePrompt(userPhone, lang),
+              instructions: buildVoicePrompt(userPhone, lang, subInfo?.name, subInfo?.planName),
               voice: 'tongtong',
               input_audio_format: 'pcm',
               output_audio_format: 'mp3',
@@ -408,6 +440,16 @@ voice.get(
 
             logger.info('voice', 'glm_event', { session: sessionId, type: msg.type, preview: text.slice(0, 200) });
 
+            // ── 会话就绪后：触发机器人主动问候 ───────────────────────────
+            if (msg.type === 'session.updated') {
+              logger.info('voice', 'trigger_bot_opening', { session: sessionId });
+              glmWs!.send(JSON.stringify({
+                event_id: crypto.randomUUID(),
+                client_timestamp: Date.now(),
+                type: 'response.create',
+              }));
+            }
+
             // ── 用户语音转写完成 → 记录用户话语 + 异步情绪分析 ──────────
             if (msg.type === 'conversation.item.input_audio_transcription.completed') {
               const transcript = (msg.transcript ?? '') as string;
@@ -428,7 +470,9 @@ voice.get(
             }
 
             // ── bot 回复完整文本 → 记录助手话语 + 检测转人工兜底 ──────────
+            // 告别语播完后忽略 GLM 回复，由人工坐席接管
             if (msg.type === 'response.audio_transcript.done') {
+              if (state.transferTriggered && state.farewellDone) return;
               const transcript = (msg.transcript ?? '') as string;
               if (transcript) {
                 state.addAssistantTurn(transcript);
@@ -515,6 +559,19 @@ voice.get(
                 type: 'response.create',
               }));
               return; // 不透传给前端
+            }
+
+            // 转人工后：告别语的 response.done 到达后标记完成
+            if (state.transferTriggered && !state.farewellDone && msg.type === 'response.done') {
+              state.farewellDone = true;
+            }
+
+            // 转人工且告别语已播完：拦截后续 GLM 响应/音频，仅放行用户转写
+            if (state.transferTriggered && state.farewellDone && (
+              msg.type.startsWith('response.') ||
+              msg.type.startsWith('output_audio_buffer.')
+            )) {
+              return;
             }
 
             // 其余事件正常透传

@@ -21,7 +21,7 @@ import { Hono } from 'hono';
 import { asc, eq } from 'drizzle-orm';
 import { type CoreMessage } from 'ai';
 import { db } from '../db';
-import { messages, sessions } from '../db/schema';
+import { messages, sessions, subscribers, plans } from '../db/schema';
 import { runAgent } from '../agent/runner';
 import { upgradeWebSocket } from './voice';
 import { sessionBus } from '../session-bus';
@@ -38,6 +38,8 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
 
   let unsubscribe: (() => void) | null = null;
   let botEnabled = true;
+  let cachedSubscriberName: string | undefined;
+  let cachedPlanName: string | undefined;
 
   return {
     onOpen: async (_, ws) => {
@@ -45,6 +47,8 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       const existing = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
       if (existing.length === 0) {
         await db.insert(sessions).values({ id: sessionId });
+        sessionBus.clearHistory(phone);
+        sessionBus.publish(phone, { source: 'system', type: 'new_session', channel: 'chat', msg_id: crypto.randomUUID() });
       }
 
       // Register language + active session
@@ -77,6 +81,51 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       });
 
       logger.info('chat-ws', 'connected', { phone, session: sessionId });
+
+      // 查询用户身份，推送个性化问候
+      try {
+        const subRows = await db
+          .select({ name: subscribers.name, planId: subscribers.plan_id })
+          .from(subscribers)
+          .where(eq(subscribers.phone, phone))
+          .limit(1);
+        let greetingText: string;
+        if (subRows.length) {
+          const planRows = await db
+            .select({ name: plans.name })
+            .from(plans)
+            .where(eq(plans.plan_id, subRows[0].planId))
+            .limit(1);
+          cachedSubscriberName = subRows[0].name;
+          cachedPlanName = planRows[0]?.name ?? '';
+          const name = cachedSubscriberName;
+          const planName = cachedPlanName;
+          greetingText = langParam === 'en'
+            ? `Hello, ${name}! I'm Xiaotong from customer service. You're currently on the ${planName} plan. How can I help you today?`
+            : `您好，${name}！我是客服小通，您当前使用的是${planName}，请问今天有什么可以帮您？`;
+        } else {
+          greetingText = langParam === 'en'
+            ? "Hello! I'm Xiaotong from customer service. How can I help you today?"
+            : '您好！我是客服小通，请问今天有什么可以帮您？';
+        }
+
+        // 持久化问候到 DB
+        await db.insert(messages).values({ sessionId, role: 'assistant', content: greetingText });
+
+        // 流式推送
+        const CHUNK_SIZE = 3;
+        const CHUNK_DELAY_MS = 20;
+        for (let i = 0; i < greetingText.length; i += CHUNK_SIZE) {
+          const delta = greetingText.slice(i, i + CHUNK_SIZE);
+          try { ws.send(JSON.stringify({ source: 'user', type: 'text_delta', delta, msg_id: crypto.randomUUID() })); } catch { break; }
+          if (i + CHUNK_SIZE < greetingText.length) await new Promise(r => setTimeout(r, CHUNK_DELAY_MS));
+        }
+        ws.send(JSON.stringify({ source: 'user', type: 'response', text: greetingText, card: null, skill_diagram: null, msg_id: crypto.randomUUID() }));
+        sessionBus.publish(phone, { source: 'user', type: 'response', text: greetingText, card: null, skill_diagram: null, msg_id: crypto.randomUUID() });
+        logger.info('chat-ws', 'greeting_sent', { phone, session: sessionId });
+      } catch (err) {
+        logger.warn('chat-ws', 'greeting_error', { phone, session: sessionId, error: String(err) });
+      }
     },
 
     onMessage: async (evt, ws) => {
@@ -136,6 +185,9 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
             try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
             sessionBus.publish(phone, ev);
           },
+          undefined,
+          cachedSubscriberName,
+          cachedPlanName,
         );
       } catch (err) {
         logger.error('chat-ws', 'agent_error', { session: sessionId, error: String(err) });

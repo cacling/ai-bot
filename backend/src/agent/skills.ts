@@ -4,11 +4,11 @@ import { resolve } from 'path';
 import { z } from 'zod';
 import { logger } from '../logger';
 
-// Resolve skills directory relative to this file's location (src/agent/ → ../../skills → backend/skills/)
+// Resolve biz-skills directory (src/agent/ → ../../skills/biz-skills → backend/skills/biz-skills/)
 const SKILLS_DIR = resolve(
   process.env.SKILLS_DIR
-    ? resolve(process.cwd(), process.env.SKILLS_DIR)
-    : resolve(import.meta.dir, '../..', 'skills')
+    ? resolve(process.cwd(), process.env.SKILLS_DIR, 'biz-skills')
+    : resolve(import.meta.dir, '../..', 'skills', 'biz-skills')
 );
 
 export const skillsTools = {

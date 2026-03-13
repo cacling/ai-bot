@@ -12,8 +12,8 @@ const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://localhost:8003/mc
 
 const SKILLS_DIR = resolve(
   process.env.SKILLS_DIR
-    ? resolve(process.cwd(), process.env.SKILLS_DIR)
-    : resolve(import.meta.dir, '../..', 'skills')
+    ? resolve(process.cwd(), process.env.SKILLS_DIR, 'biz-skills')
+    : resolve(import.meta.dir, '../..', 'skills', 'biz-skills')
 );
 
 /** Tool → skill name mapping for diagram highlighting */
@@ -74,10 +74,12 @@ const SYSTEM_PROMPT_TEMPLATE =
 
 const ENGLISH_LANG_INSTRUCTION = `\n\n---\n\n**LANGUAGE REQUIREMENT (MANDATORY)**\nYou MUST reply ONLY in English for this entire conversation. All responses must be in English. Do not switch to Chinese under any circumstances, even if the user writes in Chinese.\nWhen calling tools that accept a \`lang\` parameter (such as diagnose_network, diagnose_app), always pass \`lang: "en"\` to receive English diagnostic output.`;
 
-function buildSystemPrompt(phone: string, lang: 'zh' | 'en' = 'zh'): string {
+function buildSystemPrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberName?: string, planName?: string): string {
   const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
   const base = SYSTEM_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
+    .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? '用户')
+    .replace('{{PLAN_NAME}}', planName ?? '未知套餐')
     .replace('{{CURRENT_DATE}}', today);
   return lang === 'en' ? base + ENGLISH_LANG_INSTRUCTION : base;
 }
@@ -189,13 +191,15 @@ export async function runAgent(
   lang: 'zh' | 'en' = 'zh',
   onDiagramUpdate?: DiagramUpdateCallback,
   onTextDelta?: TextDeltaCallback,
+  subscriberName?: string,
+  planName?: string,
 ): Promise<AgentResult> {
   const t_run_start = Date.now();
   const { tools: mcpTools } = await getMCPTools();
   const t_mcp_ready = Date.now();
   logger.info('agent', 'mcp_ready', { mcp_init_ms: t_mcp_ready - t_run_start });
 
-  const systemPrompt = buildSystemPrompt(userPhone, lang);
+  const systemPrompt = buildSystemPrompt(userPhone, lang, subscriberName, planName);
 
   // Per-request abort controller with 120s timeout
   const AGENT_TIMEOUT_MS = 180_000;

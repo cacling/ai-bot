@@ -19,7 +19,7 @@ const MODEL = siliconflow(
 const SKILLS_DIR = resolve(import.meta.dir, '../../skills');
 
 function loadSkill(name: string): string {
-  const raw = readFileSync(`${SKILLS_DIR}/${name}/SKILL.md`, 'utf-8');
+  const raw = readFileSync(`${SKILLS_DIR}/tech-skills/${name}/SKILL.md`, 'utf-8');
   return raw.replace(/^---[\s\S]*?---\n/, '').trim();
 }
 
