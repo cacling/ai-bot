@@ -1,0 +1,151 @@
+/**
+ * 电信卡片渲染 E2E 测试（真实后端）
+ * 通过包含手机号的具体指令触发 4 种结构化卡片，验证前端正确渲染
+ * bill_card / cancel_card / plan_card / diagnostic_card
+ *
+ * 注意：调用真实 LLM，每条消息响应最长 90s
+ */
+import { test, expect } from '@playwright/test';
+
+async function sendMessage(page: import('@playwright/test').Page, text: string) {
+  const input = page.getByPlaceholder(/输入您的问题/);
+  await input.fill(text);
+  await input.press('Enter');
+}
+
+/**
+ * 等待 bot 回复完成（打字指示器消失）
+ */
+async function waitForBotReply(page: import('@playwright/test').Page) {
+  try {
+    await expect(page.locator('.animate-bounce').first()).toBeVisible({ timeout: 5_000 });
+  } catch {
+    // 响应太快，指示器已消失
+  }
+  await expect(page.locator('.animate-bounce').first()).not.toBeVisible({ timeout: 150_000 });
+}
+
+test.describe('电信卡片渲染', () => {
+  test.beforeEach(async ({ page }) => {
+    // 含 LLM 调用的测试最长可能等 180s，这里留 200s 余量
+    test.setTimeout(200_000);
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: '智能客服小通' })).toBeVisible();
+  });
+
+  // ── Bill Card ──────────────────────────────────────────────────────────────
+
+  test('TC-CARD-01 账单查询返回 bill_card 并正确渲染', async ({ page }) => {
+    await sendMessage(page, '查询2026-02月账单');
+    await waitForBotReply(page);
+
+    // 验证卡片头部
+    await expect(page.getByText(/2026-02 账单/)).toBeVisible();
+    // 验证账单总额
+    await expect(page.getByText('账单总额')).toBeVisible();
+    // 验证费用明细项（用 .first() 避免 LLM 文本与卡片元素同名导致 strict mode violation）
+    await expect(page.getByText('套餐月费').first()).toBeVisible();
+    await expect(page.getByText('流量超额费').first()).toBeVisible();
+    await expect(page.getByText('增值业务费').first()).toBeVisible();
+    await expect(page.getByText('税费').first()).toBeVisible();
+    // 验证缴费状态
+    await expect(page.getByText('已缴清')).toBeVisible();
+  });
+
+  test('TC-CARD-02 话费查询也触发 bill_card', async ({ page }) => {
+    await sendMessage(page, '查询本月话费账单');
+    await waitForBotReply(page);
+    await expect(page.getByText('账单总额')).toBeVisible();
+  });
+
+  // ── Cancel Card ────────────────────────────────────────────────────────────
+
+  test('TC-CARD-03 退订业务返回 cancel_card 并正确渲染', async ({ page }) => {
+    await sendMessage(page, '帮我退订视频会员流量包(video_pkg)');
+    await waitForBotReply(page);
+
+    // 验证退订卡片头部（退订确认 仅出现在 CancelCard 中，无需 .first()）
+    await expect(page.getByText('退订确认')).toBeVisible();
+    // 验证卡片字段（.first() 避免同名文本出现在初始欢迎语或 FAQ 按钮中）
+    await expect(page.getByText('退订业务').first()).toBeVisible();
+    await expect(page.getByText('月费减少').first()).toBeVisible();
+    await expect(page.getByText('生效时间').first()).toBeVisible();
+    await expect(page.getByText('手机号').first()).toBeVisible();
+    // 验证警告提示
+    await expect(page.getByText(/本月费用正常收取/)).toBeVisible();
+  });
+
+  test('TC-CARD-04 cancel_card 显示业务名称和费用', async ({ page }) => {
+    // 使用 sms_100（TC-CARD-03 已退订 video_pkg，sms_100 仍在订阅中）
+    await sendMessage(page, '帮我退订短信百条包(sms_100)业务');
+    await waitForBotReply(page);
+    await expect(page.getByText(/短信百条包/).first()).toBeVisible();
+    await expect(page.getByText(/-¥5\.00\/月/)).toBeVisible();
+  });
+
+  // ── Plan Card ──────────────────────────────────────────────────────────────
+
+  test('TC-CARD-05 套餐查询返回 plan_card 并正确渲染', async ({ page }) => {
+    await sendMessage(page, '查询 plan_unlimited 套餐的详细信息');
+    await waitForBotReply(page);
+
+    // 验证套餐卡片头部（.first() 避免 LLM 文本与卡片元素重名）
+    await expect(page.getByText('套餐详情').first()).toBeVisible();
+    // 验证套餐名称
+    await expect(page.getByText('无限流量套餐').first()).toBeVisible();
+    // 验证流量/通话展示区
+    await expect(page.getByText('国内流量').first()).toBeVisible();
+    await expect(page.getByText('通话时长').first()).toBeVisible();
+    // 验证无限标识
+    await expect(page.getByText('不限量').first()).toBeVisible();
+  });
+
+  test('TC-CARD-06 plan_card 显示月费和权益列表', async ({ page }) => {
+    await sendMessage(page, '介绍 plan_unlimited 无限流量套餐');
+    await waitForBotReply(page);
+    await expect(page.getByText('¥128').first()).toBeVisible();
+    // 权益项（.first() 避免 LLM 文本与卡片元素重名）
+    await expect(page.getByText('免费来电显示').first()).toBeVisible();
+  });
+
+  // ── Diagnostic Card ────────────────────────────────────────────────────────
+
+  test('TC-CARD-07 故障诊断返回 diagnostic_card 并正确渲染', async ({ page }) => {
+    await sendMessage(page, '帮我诊断网速慢(slow_data)的问题');
+    await waitForBotReply(page);
+
+    // 验证诊断卡片头部（.first() 避免 LLM 文本与卡片元素重名）
+    await expect(page.getByText('网速慢诊断').first()).toBeVisible();
+    // 验证诊断步骤
+    await expect(page.getByText('账号状态检查').first()).toBeVisible();
+    await expect(page.getByText('流量余额检查').first()).toBeVisible();
+    await expect(page.getByText('网络拥塞检测').first()).toBeVisible();
+    await expect(page.getByText('后台应用检测').first()).toBeVisible();
+  });
+
+  test('TC-CARD-08 diagnostic_card 显示诊断步骤状态和结论', async ({ page }) => {
+    await sendMessage(page, '我的手机网速非常慢，帮我诊断slow_data问题');
+    await waitForBotReply(page);
+    // 验证结论文字
+    await expect(page.getByText(/未发现严重故障/)).toBeVisible();
+    // 验证步骤详情（流量使用信息，.first() 避免多个含 GB 的元素）
+    await expect(page.getByText(/GB/).first()).toBeVisible();
+  });
+
+  test('TC-CARD-09 无信号问题触发 diagnostic_card', async ({ page }) => {
+    await sendMessage(page, '帮我诊断no_signal无信号问题');
+    await waitForBotReply(page);
+    await expect(page.getByText(/诊断/).first()).toBeVisible();
+  });
+
+  // ── 非卡片消息 ────────────────────────────────────────────────────────────
+
+  test('TC-CARD-10 普通消息不显示卡片', async ({ page }) => {
+    await sendMessage(page, '你好，请介绍一下你自己');
+    await waitForBotReply(page);
+    // 不应该出现任何卡片头部
+    await expect(page.getByText('账单总额')).not.toBeVisible();
+    await expect(page.getByText('退订确认')).not.toBeVisible();
+    await expect(page.getByText('套餐详情')).not.toBeVisible();
+  });
+});

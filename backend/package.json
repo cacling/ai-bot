@@ -1,0 +1,31 @@
+{
+  "name": "telecom-support-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test skills/fault-diagnosis/scripts/run_diagnosis.test.ts src/agent/runner.diagram.test.ts",
+    "test:diagnosis": "bun test skills/fault-diagnosis/scripts/run_diagnosis.test.ts",
+    "test:diagram": "bun test src/agent/runner.diagram.test.ts",
+    "db:push": "drizzle-kit push",
+    "db:seed": "bun run src/db/seed.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.3.22",
+    "@libsql/client": "^0.17.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "ai": "^4.3.16",
+    "drizzle-orm": "^0.43.1",
+    "hono": "^4.7.5",
+    "ws": "^8.19.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/ws": "^8.18.1",
+    "drizzle-kit": "^0.31.1",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,5 @@
+# Bun 运行时缓存
+.bun-cache/
+
+# TypeScript 编译产物（如果本地手动编译）
+*.js.map

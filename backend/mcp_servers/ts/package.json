@@ -1,0 +1,22 @@
+{
+  "name": "telecom-mcp-servers",
+  "version": "1.0.0",
+  "description": "Telecom support MCP servers in TypeScript",
+  "type": "module",
+  "scripts": {
+    "order": "node --import tsx/esm order_service.ts",
+    "ticket": "node --import tsx/esm ticket_service.ts"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "better-sqlite3": "^11.9.1",
+    "drizzle-orm": "^0.43.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
