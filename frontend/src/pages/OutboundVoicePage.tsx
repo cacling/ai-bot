@@ -116,6 +116,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
   const messagesEndRef    = useRef<HTMLDivElement>(null);
   const disconnectRef     = useRef<() => void>(() => {});
   const transferToBotRef  = useRef(false);
+  const micReadyRef       = useRef(false);  // bot 开场白结束后才开始发送麦克风音频
   const connectRef        = useRef<() => Promise<void>>(async () => {});
   const audioElemRef      = useRef<HTMLAudioElement | null>(null);
   const mediaSourceRef    = useRef<MediaSource | null>(null);
@@ -240,6 +241,10 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
     }
 
     if (type === 'response.done') {
+      // 第一个 response.done = bot 开场白结束，此后才允许发送麦克风音频
+      if (!micReadyRef.current) {
+        micReadyRef.current = true;
+      }
       setConnState('listening');
       botMsgIdRef.current = null; botTextRef.current = '';
       pendingUserIdRef.current = null;
@@ -303,6 +308,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
   // ── 开始外呼 ───────────────────────────────────────────────────────────────
 
   const startCall = useCallback(async () => {
+    micReadyRef.current = false;  // 每次新通话重置，等 bot 开场白结束
     setErrorMsg('');
     setConnState('connecting');
 
@@ -330,7 +336,8 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
       const mute = ctx.createGain(); mute.gain.value = 0;
       processor.connect(mute); mute.connect(ctx.destination);
       processor.onaudioprocess = (e) => {
-        if (ws.readyState !== WebSocket.OPEN) return;
+        // 等 bot 开场白播完（第一个 response.done）再发送麦克风音频，避免回声污染 VAD
+        if (!micReadyRef.current || ws.readyState !== WebSocket.OPEN) return;
         const pcm16 = float32ToInt16(e.inputBuffer.getChannelData(0));
         ws.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'input_audio_buffer.append', audio: arrayBufferToBase64(pcm16.buffer as ArrayBuffer) }));
       };

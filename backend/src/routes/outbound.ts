@@ -212,6 +212,29 @@ const ENGLISH_LANG_INSTRUCTION = `
 **LANGUAGE REQUIREMENT (MANDATORY)**
 You MUST speak ONLY in English for this entire call. All spoken responses must be in English. Do not switch to Chinese under any circumstances, even if the customer speaks Chinese.`;
 
+/** 各场景的音色与语速配置 */
+const OUTBOUND_VOICE_CONFIG: Record<'collection' | 'marketing' | 'bank-marketing', {
+  voice: string;
+  styleLabel: string;
+  styleInstruction: string;
+}> = {
+  'collection': {
+    voice: 'tongtong',
+    styleLabel: '沉稳认真型',
+    styleInstruction: '说话语速适中偏慢（约每分钟160字），语气沉稳认真，每句话停顿清晰，让客户有时间充分理解。不要显得催促或强硬，保持礼貌但坚定。',
+  },
+  'marketing': {
+    voice: 'tongtong',
+    styleLabel: '热情活泼型',
+    styleInstruction: '说话语速轻快活泼（约每分钟230字），语气热情积极、富有感染力，像在分享一件好事。重点信息（优惠、价格）适当放慢强调。',
+  },
+  'bank-marketing': {
+    voice: 'tongtong',
+    styleLabel: '专业自信型',
+    styleInstruction: '说话语速标准清晰（约每分钟200字），语气专业自信、值得信赖。避免过于推销感，像在为客户提供专业建议。',
+  },
+};
+
 function buildOutboundPrompt(phone: string, taskType: 'collection' | 'marketing' | 'bank-marketing', taskInfo: CollectionCase | MarketingTask | BankMarketingTask, lang: 'zh' | 'en' = 'zh'): string {
   const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
   const taskInfoStr = JSON.stringify(taskInfo, null, 2);
@@ -219,11 +242,14 @@ function buildOutboundPrompt(phone: string, taskType: 'collection' | 'marketing'
     taskType === 'collection'    ? '欠款催收（collection）' :
     taskType === 'bank-marketing'? '银行外呼营销（bank-marketing）' :
     '套餐营销（marketing）';
+  const voiceCfg = OUTBOUND_VOICE_CONFIG[taskType];
   const base = OUTBOUND_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
     .replace('{{CURRENT_DATE}}', today)
     .replace('{{TASK_TYPE}}', taskTypeLabel)
-    .replace('{{TASK_INFO}}', taskInfoStr);
+    .replace('{{TASK_INFO}}', taskInfoStr)
+    .replace('{{VOICE_STYLE}}', voiceCfg.styleLabel)
+    .replace('{{VOICE_STYLE_INSTRUCTION}}', voiceCfg.styleInstruction);
   return lang === 'en' ? base + ENGLISH_LANG_INSTRUCTION : base;
 }
 
@@ -467,7 +493,7 @@ outbound.get(
 
     return {
       onOpen(_evt, ws) {
-        logger.info('outbound', 'client_connected', { session: sessionId, phone: userPhone, task: taskParam, id: taskId });
+        logger.info('outbound', 'client_connected', { session: sessionId, phone: userPhone, task: taskParam, id: taskId, voice: OUTBOUND_VOICE_CONFIG[taskParam].voice });
         sessionBus.clearHistory(userPhone);
         sessionBus.publish(userPhone, { source: 'system', type: 'new_session', channel: 'outbound', msg_id: crypto.randomUUID() });
 
@@ -492,7 +518,7 @@ outbound.get(
               beta_fields: { chat_mode: 'audio' },
               modalities: ['text', 'audio'],
               instructions: systemPrompt,
-              voice: 'tongtong',
+              voice: OUTBOUND_VOICE_CONFIG[taskParam].voice,
               input_audio_format: 'pcm',
               output_audio_format: 'mp3',
               turn_detection: {
