@@ -7,7 +7,7 @@
 
 import { generateText } from 'ai';
 import { readFileSync } from 'fs';
-import { siliconflow } from '../agent/llm';
+import { siliconflow } from '../engine/llm';
 import { logger } from '../logger';
 import { TECH_SKILLS_DIR } from '../config/paths';
 

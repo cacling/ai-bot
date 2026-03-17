@@ -8,7 +8,7 @@
 import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { highlightMermaidTool, highlightMermaidBranch, determineBranch, extractMermaidFromContent } from '../../../backend/src/agent/runner.ts';
+import { highlightMermaidTool, highlightMermaidBranch, determineBranch, extractMermaidFromContent } from '../../../backend/src/engine/runner.ts';
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../../../backend/src/config/paths';
 
 // ── highlightMermaidTool · sequenceDiagram ───────────────────────────────────

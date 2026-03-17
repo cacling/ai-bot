@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 import { generateText } from 'ai';
-import { chatModel } from '../../llm';
+import { chatModel } from '../../../engine/llm';
 import { saveSkillWithVersion } from './version-manager';
 import { logger } from '../../../logger';
 import { requireRole } from '../../../middleware/auth';

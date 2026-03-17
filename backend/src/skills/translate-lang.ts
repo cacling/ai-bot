@@ -10,7 +10,7 @@
 import { generateText } from 'ai';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { siliconflow } from '../agent/llm';
+import { siliconflow } from '../engine/llm';
 
 const MODEL = siliconflow(
   process.env.SILICONFLOW_CHAT_MODEL ?? 'stepfun-ai/Step-3.5-Flash'

@@ -6,12 +6,12 @@ import { experimental_createMCPClient as createMCPClient } from 'ai';
 import { chatModel } from './llm';
 import { skillsTools, getSkillsDescriptionByChannel } from './skills';
 import { logger } from '../logger';
-import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from './card/handoff-analyzer';
+import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../agent/card/handoff-analyzer';
 import { t } from '../i18n';
 import { translateText } from '../skills/translate-lang';
 import { isNoDataResult } from '../utils/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../utils/mermaid';
-import { analyzeProgress } from './card/progress-tracker';
+import { analyzeProgress } from '../agent/card/progress-tracker';
 
 // Re-export for test file
 export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };

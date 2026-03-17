@@ -18,7 +18,7 @@ import testCaseRoutes from './agent/km/skills/test-cases';
 import skillCreatorRoutes from './agent/km/skills/skill-creator';
 import kmRoutes from './agent/km/kms';
 import { logger } from './logger';
-import { runAgent } from './agent/runner';
+import { runAgent } from './engine/runner';
 
 const app = new Hono();
 

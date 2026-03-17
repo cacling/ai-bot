@@ -22,7 +22,7 @@ import { asc, eq } from 'drizzle-orm';
 import { type CoreMessage } from 'ai';
 import { db } from '../db';
 import { messages, sessions, subscribers, plans } from '../db/schema';
-import { runAgent } from '../agent/runner';
+import { runAgent } from '../engine/runner';
 import { upgradeWebSocket } from './voice';
 import { sessionBus } from '../session-bus';
 import { logger } from '../logger';

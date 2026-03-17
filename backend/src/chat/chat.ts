@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { type CoreMessage } from 'ai';
 import { db } from '../db';
 import { messages, sessions } from '../db/schema';
-import { runAgent, type AgentResult } from '../agent/runner';
+import { runAgent, type AgentResult } from '../engine/runner';
 import { logger } from '../logger';
 
 const chat = new Hono();

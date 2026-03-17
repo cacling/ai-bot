@@ -21,7 +21,7 @@ import { checkCompliance } from '../services/keyword-filter';
 import { VoiceSessionState, TRANSFER_PHRASE_RE, type HandoffContext } from '../services/voice-session';
 import { callMcpTool } from '../services/mcp-client';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
-import { getSkillsDescriptionByChannel } from '../agent/skills';
+import { getSkillsDescriptionByChannel } from '../engine/skills';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -40,9 +40,9 @@ const DEFAULT_PHONE      = '13800000001';
 
 // ── 语音 system prompt ────────────────────────────────────────────────────────
 const VOICE_PROMPT_TEMPLATE =
-  readFileSync(resolve(import.meta.dir, '../agent/inbound-base-system-prompt.md'), 'utf-8') +
+  readFileSync(resolve(import.meta.dir, '../engine/inbound-base-system-prompt.md'), 'utf-8') +
   '\n\n' +
-  readFileSync(resolve(import.meta.dir, '../agent/inbound-voice-system-prompt.md'), 'utf-8');
+  readFileSync(resolve(import.meta.dir, '../engine/inbound-voice-system-prompt.md'), 'utf-8');
 
 const ENGLISH_LANG_INSTRUCTION = `**LANGUAGE REQUIREMENT (MANDATORY — HIGHEST PRIORITY)**
 You MUST respond ONLY in English for this entire conversation. All spoken responses must be in English. Do not switch to Chinese under any circumstances, even if the user speaks Chinese or tool results contain Chinese data. Always translate any Chinese data from tool results into English before including it in your response.

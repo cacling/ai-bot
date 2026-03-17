@@ -25,7 +25,7 @@ import { outboundTasks } from '../db/schema';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { textToSpeech } from '../skills/tts';
 import { translateText } from '../skills/translate-lang';
-import { getSkillContentByChannel } from '../agent/skills';
+import { getSkillContentByChannel } from '../engine/skills';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ const DEFAULT_PHONE      = '13800000001';
 // ── 外呼 system prompt ────────────────────────────────────────────────────────
 
 const OUTBOUND_PROMPT_TEMPLATE =
-  readFileSync(resolve(import.meta.dir, '../agent/outbound-system-prompt.md'), 'utf-8');
+  readFileSync(resolve(import.meta.dir, '../engine/outbound-system-prompt.md'), 'utf-8');
 
 const ENGLISH_LANG_INSTRUCTION = `**LANGUAGE REQUIREMENT (MANDATORY — HIGHEST PRIORITY)**
 You MUST respond ONLY in English for this entire conversation. All spoken responses must be in English. Do not switch to Chinese under any circumstances, even if the user speaks Chinese or tool results contain Chinese data. Always translate any Chinese data from tool results into English before including it in your response.`;

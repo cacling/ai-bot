@@ -17,10 +17,10 @@
 import { Hono } from 'hono';
 import { generateText, tool } from 'ai';
 import { z } from 'zod';
-import { skillCreatorModel } from '../../llm';
+import { skillCreatorModel } from '../../../engine/llm';
 import { logger } from '../../../logger';
 import { saveSkillWithVersion } from './version-manager';
-import { refreshSkillsCache } from '../../skills';
+import { refreshSkillsCache } from '../../../engine/skills';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 

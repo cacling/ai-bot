@@ -16,7 +16,7 @@ import { readFile, writeFile, mkdir, rm, cp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { type CoreMessage } from 'ai';
 import { eq } from 'drizzle-orm';
-import { runAgent } from '../../runner';
+import { runAgent } from '../../../engine/runner';
 import { saveSkillWithVersion } from './version-manager';
 import { logger } from '../../../logger';
 import { requireRole } from '../../../middleware/auth';

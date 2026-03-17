@@ -12,7 +12,7 @@ import { generateText } from 'ai';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { NO_DATA_RE } from '../../utils/tool-result';
-import { siliconflow } from '../llm';
+import { siliconflow } from '../../engine/llm';
 
 // ── 模型 ──────────────────────────────────────────────────────────────────────
 const MODEL = siliconflow(
