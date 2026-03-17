@@ -2,7 +2,7 @@ import { tool } from 'ai';
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
 import { z } from 'zod';
-import { logger } from '../logger';
+import { logger } from '../services/logger';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 

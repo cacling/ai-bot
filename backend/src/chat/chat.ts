@@ -4,7 +4,7 @@ import { type CoreMessage } from 'ai';
 import { db } from '../db';
 import { messages, sessions } from '../db/schema';
 import { runAgent, type AgentResult } from '../engine/runner';
-import { logger } from '../logger';
+import { logger } from '../services/logger';
 
 const chat = new Hono();
 

@@ -8,7 +8,7 @@
 import { generateText } from 'ai';
 import { readFileSync } from 'fs';
 import { siliconflow } from '../engine/llm';
-import { logger } from '../logger';
+import { logger } from './logger';
 import { TECH_SKILLS_DIR } from '../services/paths';
 
 const MODEL = siliconflow(process.env.SILICONFLOW_CHAT_MODEL ?? 'stepfun-ai/Step-3.5-Flash');

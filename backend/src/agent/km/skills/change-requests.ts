@@ -13,7 +13,7 @@ import { db } from '../../../db';
 import { changeRequests } from '../../../db/schema';
 import { saveSkillWithVersion } from './version-manager';
 import { requireRole } from '../../../services/auth';
-import { logger } from '../../../logger';
+import { logger } from '../../../services/logger';
 
 const changeRequestRoutes = new Hono();
 

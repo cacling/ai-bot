@@ -17,7 +17,7 @@ import {
   checkCompliance,
   type RuleCategory,
 } from '../../services/keyword-filter';
-import { logger } from '../../logger';
+import { logger } from '../../services/logger';
 import { requireRole } from '../../services/auth';
 
 const compliance = new Hono();

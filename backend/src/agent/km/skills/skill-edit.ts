@@ -13,7 +13,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { generateText } from 'ai';
 import { chatModel } from '../../../engine/llm';
 import { saveSkillWithVersion } from './version-manager';
-import { logger } from '../../../logger';
+import { logger } from '../../../services/logger';
 import { requireRole } from '../../../services/auth';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../../../services/paths';

@@ -25,14 +25,14 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../db';
 import { sessions } from '../../db/schema';
 import { upgradeWebSocket } from '../../chat/voice';
-import { sessionBus } from '../../session-bus';
-import { logger } from '../../logger';
+import { sessionBus } from '../../services/session-bus';
+import { logger } from '../../services/logger';
 import { analyzeEmotion } from '../card/emotion-analyzer';
 import { analyzeHandoff, type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../card/handoff-analyzer';
-import { setAgentLang, getLangs } from '../../lang-session';
+import { setAgentLang, getLangs } from '../../services/lang-session';
 import { translateText } from '../../services/translate-lang';
 import { checkCompliance } from '../../services/keyword-filter';
-import { t, TOOL_LABELS } from '../../i18n';
+import { t, TOOL_LABELS } from '../../services/i18n';
 
 const agentWs = new Hono();
 

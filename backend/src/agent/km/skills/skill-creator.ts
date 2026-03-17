@@ -18,7 +18,7 @@ import { Hono } from 'hono';
 import { generateText, tool } from 'ai';
 import { z } from 'zod';
 import { skillCreatorModel } from '../../../engine/llm';
-import { logger } from '../../../logger';
+import { logger } from '../../../services/logger';
 import { saveSkillWithVersion } from './version-manager';
 import { refreshSkillsCache } from '../../../engine/skills';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';

@@ -18,7 +18,7 @@ import { type CoreMessage } from 'ai';
 import { eq } from 'drizzle-orm';
 import { runAgent } from '../../../engine/runner';
 import { saveSkillWithVersion } from './version-manager';
-import { logger } from '../../../logger';
+import { logger } from '../../../services/logger';
 import { requireRole } from '../../../services/auth';
 import { db } from '../../../db';
 import { testCases } from '../../../db/schema';

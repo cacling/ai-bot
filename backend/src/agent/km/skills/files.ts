@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { resolve, join, relative, extname, basename } from 'node:path';
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
-import { logger } from '../../../logger';
+import { logger } from '../../../services/logger';
 import { saveSkillWithVersion } from './version-manager';
 import { requireRole } from '../../../services/auth';
 

@@ -5,7 +5,7 @@ import { Hono } from 'hono';
 import { eq, desc, like, and, SQL } from 'drizzle-orm';
 import { db } from '../../../db';
 import { kmDocuments, kmDocVersions, kmPipelineJobs } from '../../../db/schema';
-import { logger } from '../../../logger';
+import { logger } from '../../../services/logger';
 import { nanoid, writeAudit } from './helpers';
 
 const app = new Hono();

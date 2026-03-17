@@ -8,7 +8,7 @@ import {
   kmActionDrafts, kmAssets, kmAssetVersions,
   kmReviewPackages, kmCandidates, kmRegressionWindows,
 } from '../../../db/schema';
-import { logger } from '../../../logger';
+import { logger } from '../../../services/logger';
 import { nanoid, writeAudit } from './helpers';
 
 const app = new Hono();

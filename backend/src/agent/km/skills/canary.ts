@@ -13,7 +13,7 @@ import { readFile, mkdir, cp, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { saveSkillWithVersion } from './version-manager';
 import { requireRole } from '../../../services/auth';
-import { logger } from '../../../logger';
+import { logger } from '../../../services/logger';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 const CANARY_ROOT = resolve(PROJECT_ROOT, 'skills', '.canary');

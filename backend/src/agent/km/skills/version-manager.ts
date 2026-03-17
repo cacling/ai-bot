@@ -10,7 +10,7 @@ import { resolve, join } from 'node:path';
 import { db } from '../../../db';
 import { skillVersions, changeRequests } from '../../../db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { logger } from '../../../logger';
+import { logger } from '../../../services/logger';
 import { detectHighRisk } from './change-requests';
 
 // Project root for Skill files

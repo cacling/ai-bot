@@ -16,9 +16,9 @@ import { translateMermaid } from '../services/translate-lang';
 import { analyzeHandoff } from '../agent/card/handoff-analyzer';
 import { analyzeEmotion } from '../agent/card/emotion-analyzer';
 import { analyzeProgress } from '../agent/card/progress-tracker';
-import { logger } from '../logger';
-import { sessionBus } from '../session-bus';
-import { t } from '../i18n';
+import { logger } from './logger';
+import { sessionBus } from './session-bus';
+import { t } from './i18n';
 import type { VoiceSessionState, HandoffContext } from './voice-session';
 import type NodeWebSocket from 'ws';
 

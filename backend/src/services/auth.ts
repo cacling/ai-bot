@@ -12,7 +12,7 @@ import { type Context, type Next } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { users } from '../db/schema';
-import { logger } from '../logger';
+import { logger } from './logger';
 
 export type UserRole = 'admin' | 'flow_manager' | 'config_editor' | 'reviewer' | 'auditor';
 
