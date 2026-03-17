@@ -111,12 +111,17 @@ PLAN_COUNT=$(cd "$BASE_DIR/backend" && "$BUN" -e \
    import {plans} from './src/db/schema.ts'; \
    console.log(db.select().from(plans).all().length)" 2>/dev/null || echo "0")
 
-if [[ "$PLAN_COUNT" == "0" ]]; then
-  log "数据库为空，写入初始数据..."
+MOCK_USER_COUNT=$(cd "$BASE_DIR/backend" && "$BUN" -e \
+  "import {db} from './src/db/index.ts'; \
+   import {mockUsers} from './src/db/schema.ts'; \
+   console.log(db.select().from(mockUsers).all().length)" 2>/dev/null || echo "0")
+
+if [[ "$PLAN_COUNT" == "0" || "$MOCK_USER_COUNT" == "0" ]]; then
+  log "数据库不完整（套餐数: ${PLAN_COUNT}, 用户数: ${MOCK_USER_COUNT}），写入初始数据..."
   cd "$BASE_DIR/backend" && "$BUN" run db:seed 2>&1 | tail -5
   ok "初始数据写入完成"
 else
-  ok "数据库已有数据（套餐数: ${PLAN_COUNT}），跳过 seed"
+  ok "数据库已有数据（套餐数: ${PLAN_COUNT}, 用户数: ${MOCK_USER_COUNT}），跳过 seed"
 fi
 
 # ────────────────────────────────────────────────────────────────────────────
