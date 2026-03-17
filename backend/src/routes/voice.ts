@@ -21,6 +21,7 @@ import { checkCompliance } from '../compliance/keyword-filter';
 import { VoiceSessionState, TRANSFER_PHRASE_RE, type HandoffContext } from '../services/voice-session';
 import { callMcpTool } from '../services/mcp-client';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
+import { getSkillsDescriptionByChannel } from '../agent/skills';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -71,11 +72,13 @@ function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberNam
   const today = new Date().toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
   const defaultName = lang === 'en' ? 'Customer' : '用户';
   const defaultPlan = lang === 'en' ? 'Unknown Plan' : '未知套餐';
+  const voiceSkills = getSkillsDescriptionByChannel('voice');
   const base = VOICE_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
     .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? defaultName)
     .replace('{{PLAN_NAME}}', planName ?? defaultPlan)
-    .replace('{{CURRENT_DATE}}', today);
+    .replace('{{CURRENT_DATE}}', today)
+    .replace('{{AVAILABLE_SKILLS}}', voiceSkills || '（暂无可用技能）');
   return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 

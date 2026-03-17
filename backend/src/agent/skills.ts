@@ -8,15 +8,32 @@ import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
 
 // ── 动态扫描可用技能 ──────────────────────────────────────────────────────────
 
-interface SkillEntry {
+export interface SkillEntry {
   name: string;
   description: string;
+  channels: string[];
+}
+
+/** 标准 channel 类型 */
+export type SkillChannel = 'online' | 'voice' | 'outbound-collection' | 'outbound-marketing';
+
+/** 默认 channels（未配置时） */
+const DEFAULT_CHANNELS: string[] = ['online'];
+
+function parseChannels(content: string): string[] {
+  // 匹配 channels: ["online", "voice"] 或 channels: [online, voice]
+  const match = content.match(/^\s*channels:\s*\[([^\]]*)\]/m);
+  if (!match) return DEFAULT_CHANNELS;
+  const raw = match[1];
+  const items = raw.split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+  return items.length ? items : DEFAULT_CHANNELS;
 }
 
 function scanAvailableSkills(): SkillEntry[] {
   const entries: SkillEntry[] = [];
   try {
-    const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true }).filter(d => d.isDirectory());
+    const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
+      .filter(d => d.isDirectory() && !d.name.startsWith('_'));
     for (const dir of dirs) {
       const mdPath = join(SKILLS_DIR, dir.name, 'SKILL.md');
       if (existsSync(mdPath)) {
@@ -25,6 +42,7 @@ function scanAvailableSkills(): SkillEntry[] {
         entries.push({
           name: dir.name,
           description: descMatch?.[1]?.trim() ?? dir.name,
+          channels: parseChannels(content),
         });
       }
     }
@@ -32,15 +50,13 @@ function scanAvailableSkills(): SkillEntry[] {
   return entries;
 }
 
-// 缓存 + 定时刷新（每 30 秒），避免每次请求都扫描磁盘
+// 缓存 + 定时刷新（每 30 秒）
 let _cachedSkills: SkillEntry[] = scanAvailableSkills();
-let _cachedSkillDesc = '';
 let _lastScan = Date.now();
 
 function getAvailableSkills(): SkillEntry[] {
   if (Date.now() - _lastScan > 30_000) {
     _cachedSkills = scanAvailableSkills();
-    _cachedSkillDesc = '';
     _lastScan = Date.now();
   }
   return _cachedSkills;
@@ -49,26 +65,51 @@ function getAvailableSkills(): SkillEntry[] {
 /** 强制刷新技能缓存（新建/删除技能后调用） */
 export function refreshSkillsCache(): void {
   _cachedSkills = scanAvailableSkills();
-  _cachedSkillDesc = '';
   _lastScan = Date.now();
 }
 
-function buildSkillDescription(): string {
-  if (_cachedSkillDesc) return _cachedSkillDesc;
-  const skills = getAvailableSkills();
-  _cachedSkillDesc = skills.map(s => `${s.name}（${s.description}）`).join(', ');
-  return _cachedSkillDesc;
+// ── 按 channel 过滤 ─────────────────────────────────────────────────────────
+
+/** 获取指定 channel 的技能列表 */
+export function getSkillsByChannel(channel: string): SkillEntry[] {
+  return getAvailableSkills().filter(s => s.channels.includes(channel));
 }
 
-/** 获取可用技能描述（用于 system prompt 注入） */
+/** 获取指定 channel 的技能描述（用于 system prompt 注入） */
+export function getSkillsDescriptionByChannel(channel: string): string {
+  return getSkillsByChannel(channel).map(s => `${s.description}→${s.name}`).join('；');
+}
+
+/** 获取指定 channel 的技能 SKILL.md 完整内容（用于语音/外呼 prompt 注入） */
+export function getSkillContentByChannel(channel: string): string {
+  const skills = getSkillsByChannel(channel);
+  return skills.map(s => {
+    const mdPath = join(SKILLS_DIR, s.name, 'SKILL.md');
+    try {
+      const content = readFileSync(mdPath, 'utf-8');
+      // 去掉 YAML frontmatter，只保留正文
+      return `\n---\n### 技能：${s.name}\n${content.replace(/^---[\s\S]*?---\s*/, '')}`;
+    } catch { return ''; }
+  }).filter(Boolean).join('\n');
+}
+
+// ── 兼容旧接口 ──────────────────────────────────────────────────────────────
+
+/** @deprecated 使用 getSkillsDescriptionByChannel('online') 替代 */
 export function getAvailableSkillsDescription(): string {
-  const skills = getAvailableSkills();
-  return skills.map(s => `${s.description}→${s.name}`).join('；');
+  return getSkillsDescriptionByChannel('online');
 }
 
 function getSkillNames(): string[] {
   return getAvailableSkills().map(s => s.name);
 }
+
+function buildSkillDescription(): string {
+  const skills = getAvailableSkills();
+  return skills.map(s => `${s.name}（${s.description}）`).join(', ');
+}
+
+// ── Skill Tools（供在线客服 agent 使用）──────────────────────────────────────
 
 export const skillsTools = {
   get_skill_instructions: tool({

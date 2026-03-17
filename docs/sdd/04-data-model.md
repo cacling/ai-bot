@@ -335,17 +335,31 @@ Agent 推理完成后
 
 ## 9. Skill 元数据结构（SKILL.md frontmatter）
 
-每个 Skill 的 `SKILL.md` 顶部包含 YAML frontmatter：
+每个 Skill 的 `SKILL.md` 顶部包含 YAML frontmatter（v3 格式）：
 
 ```yaml
 ---
-name: skill-name           # Skill 唯一标识（用于 get_skill_instructions 调用）
-description: "..."         # Skill 功能描述
+name: {skill-name}                # Skill 唯一标识（用于 get_skill_instructions 调用）
+description: {一句话中文描述}       # Skill 功能描述
 metadata:
-  version: "1.0.0"
-  tags: ["tag1", "tag2"]  # 分类标签
+  version: "x.y.z"
+  tags: [...]                     # 分类标签
+  mode: inbound | outbound        # 技能方向：呼入 or 外呼
+  trigger: user_intent | task_dispatch  # 触发方式
+  channels: ["online", "voice", "outbound-collection", "outbound-marketing"]
 ---
 ```
+
+**`channels` 字段说明：** 决定哪些机器人类型会加载该技能。标准值：
+
+| 值 | 含义 |
+|----|------|
+| `online` | 文本在线客服 |
+| `voice` | 语音呼入客服 |
+| `outbound-collection` | 外呼催收机器人 |
+| `outbound-marketing` | 外呼营销机器人 |
+
+若 `channels` 未指定，默认为 `["online"]`。
 
 **四个面向 Agent 的 Skill 元数据摘要：**
 
@@ -428,6 +442,12 @@ interface SkillVersion {
   created_by:         string;   // 操作人
   created_at:         string;   // 创建时间 ISO 格式
 }
+```
+
+**技能生命周期：**
+
+```
+编辑 → 保存草稿 → 发布到沙盒（验证+回归测试）→ 发布到生产 → refreshSkillsCache() → 各渠道机器人下次请求自动加载
 ```
 
 ---
@@ -566,11 +586,46 @@ export const testCases = sqliteTable('test_cases', {
   id:                integer('id').primaryKey({ autoIncrement: true }),
   skill_name:        text('skill_name'),            // 关联 Skill 名称
   input_message:     text('input_message'),          // 测试输入消息
-  expected_keywords: text('expected_keywords'),      // JSON 数组，期望响应包含的关键词
+  expected_keywords: text('expected_keywords'),      // JSON 数组，期望响应包含的关键词（向后兼容）
+  assertions:        text('assertions'),             // JSON 数组，Assertion 对象（新）
   phone:             text('phone'),                  // 测试手机号，默认 '13800000001'
   created_at:        text('created_at'),             // 创建时间
 });
 ```
+
+等价 SQL：
+
+```sql
+CREATE TABLE test_cases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  skill_name TEXT NOT NULL,
+  input_message TEXT NOT NULL,
+  expected_keywords TEXT NOT NULL,  -- JSON array (backward compat)
+  assertions TEXT,                   -- JSON array of Assertion objects (new)
+  phone TEXT DEFAULT '13800000001',
+  created_at TEXT
+);
+```
+
+**Assertion 类型定义：**
+
+```typescript
+interface Assertion {
+  type: 'contains' | 'not_contains' | 'tool_called' | 'tool_not_called' | 'skill_loaded' | 'regex';
+  value: string;
+}
+```
+
+**各断言类型说明：**
+
+| type | value 含义 | 判定逻辑 |
+|------|-----------|---------|
+| `contains` | 关键词 | `responseText.includes(value)` |
+| `not_contains` | 禁止词 | `!responseText.includes(value)` |
+| `tool_called` | MCP 工具名 | `toolsCalled.includes(value)` |
+| `tool_not_called` | MCP 工具名 | `!toolsCalled.includes(value)` |
+| `skill_loaded` | 技能名 | `skillsLoaded.includes(value)` |
+| `regex` | 正则表达式 | `new RegExp(value).test(responseText)` |
 
 ---
 

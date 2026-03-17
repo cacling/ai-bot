@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { type CoreMessage, generateText } from 'ai';
 import { experimental_createMCPClient as createMCPClient } from 'ai';
 import { chatModel } from './llm';
-import { skillsTools, getAvailableSkillsDescription } from './skills';
+import { skillsTools, getSkillsDescriptionByChannel } from './skills';
 import { logger } from '../logger';
 import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../skills/handoff-analyzer';
 import { t } from '../i18n';
@@ -44,7 +44,7 @@ function buildSystemPrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberNa
     .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? defaultName)
     .replace('{{PLAN_NAME}}', planName ?? defaultPlan)
     .replace('{{CURRENT_DATE}}', today)
-    .replace('{{AVAILABLE_SKILLS}}', getAvailableSkillsDescription());
+    .replace('{{AVAILABLE_SKILLS}}', getSkillsDescriptionByChannel('online'));
   return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 

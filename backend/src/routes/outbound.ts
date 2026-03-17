@@ -25,6 +25,7 @@ import { outboundTasks } from '../db/schema';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { textToSpeech } from '../skills/tts';
 import { translateText } from '../skills/translate-lang';
+import { getSkillContentByChannel } from '../agent/skills';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -81,13 +82,18 @@ function buildOutboundPrompt(phone: string, taskType: 'collection' | 'marketing'
   const taskInfoStr = JSON.stringify(taskInfo, null, 2);
   const taskTypeLabel = t(taskType === 'collection' ? 'outbound_task_type_collection' : 'outbound_task_type_marketing', lang);
   const voiceCfg = OUTBOUND_VOICE_CONFIG[lang][taskType];
+  // 按任务类型加载对应 channel 的技能内容
+  const channel = `outbound-${taskType}` as const;
+  const skillContent = getSkillContentByChannel(channel);
+
   const base = OUTBOUND_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
     .replace('{{CURRENT_DATE}}', today)
     .replace('{{TASK_TYPE}}', taskTypeLabel)
     .replace('{{TASK_INFO}}', taskInfoStr)
     .replace('{{VOICE_STYLE}}', voiceCfg.styleLabel)
-    .replace('{{VOICE_STYLE_INSTRUCTION}}', voiceCfg.styleInstruction);
+    .replace('{{VOICE_STYLE_INSTRUCTION}}', voiceCfg.styleInstruction)
+    .replace('{{SKILL_CONTENT}}', skillContent || '');
   return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 
