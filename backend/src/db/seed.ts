@@ -32,6 +32,7 @@ import {
   kmGovernanceTasks,
   kmRegressionWindows,
   kmAuditLogs,
+  mcpServers,
 } from './schema';
 
 /** 返回最近 n 个月的 YYYY-MM 字符串，[0] 为最近月，[1] 为上月，依此类推 */
@@ -396,6 +397,67 @@ async function seed() {
   ]).run();
 
   console.log('[seed] 知识管理数据写入完成：5篇文档 / 8条候选 / 4条资产 / 2个评审包 / 5个治理任务');
+
+  // ── 9. MCP Server 注册数据 ─────────────────────────────────────────────────
+  console.log('[seed] 写入 MCP Server 注册数据...');
+  db.delete(mcpServers).run();
+  db.insert(mcpServers).values([
+    {
+      id: 'mcp-telecom',
+      name: 'telecom-service',
+      description: '电信业务系统 MCP 服务（用户查询、账单、套餐、退订、故障诊断）',
+      transport: 'http',
+      status: 'active',
+      enabled: true,
+      url: 'http://localhost:8003/mcp',
+      tools_cache: JSON.stringify([
+        { name: 'query_subscriber', description: '根据手机号查询电信用户信息', inputSchema: {} },
+        { name: 'query_bill', description: '查询用户指定月份的账单明细', inputSchema: {} },
+        { name: 'query_plans', description: '获取所有可用套餐列表或查询指定套餐详情', inputSchema: {} },
+        { name: 'cancel_service', description: '退订用户已订阅的增值业务', inputSchema: {} },
+        { name: 'diagnose_network', description: '对指定手机号进行网络故障诊断', inputSchema: {} },
+        { name: 'diagnose_app', description: '对指定手机号的营业厅 App 进行问题诊断', inputSchema: {} },
+        { name: 'issue_invoice', description: '为指定用户的指定月份账单开具电子发票', inputSchema: {} },
+      ]),
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: 'mcp-outbound',
+      name: 'outbound-service',
+      description: '外呼场景 MCP 服务（通话记录、短信发送、回访任务、营销记录）',
+      transport: 'http',
+      status: 'active',
+      enabled: true,
+      url: 'http://localhost:8004/mcp',
+      tools_cache: JSON.stringify([
+        { name: 'record_call_result', description: '记录本次外呼通话结果', inputSchema: {} },
+        { name: 'send_followup_sms', description: '向客户发送跟进短信', inputSchema: {} },
+        { name: 'create_callback_task', description: '创建回访任务', inputSchema: {} },
+        { name: 'record_marketing_result', description: '记录营销外呼的通话结果', inputSchema: {} },
+      ]),
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: 'mcp-account',
+      name: 'account-service',
+      description: '账户操作 MCP 服务（身份验证、余额查询、合约查询、停机申请）',
+      transport: 'http',
+      status: 'active',
+      enabled: true,
+      url: 'http://localhost:8005/mcp',
+      tools_cache: JSON.stringify([
+        { name: 'verify_identity', description: '验证用户身份（通过短信验证码）', inputSchema: {} },
+        { name: 'check_account_balance', description: '查询用户账户余额和欠费状态', inputSchema: {} },
+        { name: 'check_contracts', description: '查询用户当前有效合约列表', inputSchema: {} },
+        { name: 'apply_service_suspension', description: '执行停机操作', inputSchema: {} },
+      ]),
+      created_at: now,
+      updated_at: now,
+    },
+  ]).run();
+  console.log('[seed] MCP Server 注册数据写入完成：3 个 Server');
 
   console.log('[seed] 初始化完成！');
   process.exit(0);

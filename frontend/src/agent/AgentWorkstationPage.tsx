@@ -3,18 +3,18 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Bot, Send, Headset, User, Radio, MessageSquare, BookOpen, PlusCircle, Smile, Library, Wrench } from 'lucide-react';
 import { nowTime } from '../App';
-import { CardMessage, type CardData } from '../components/CardMessage';
-import { DEFAULT_USER_PHONE } from '../api/chat';
+import { CardMessage, type CardData } from '../chat/CardMessage';
+import { DEFAULT_USER_PHONE } from '../chat/api';
 import { T, type Lang } from '../i18n';
-import { fetchMockUsers, type MockUser } from '../mockUsers';
-import { useAgentUserSync } from '../userSync';
-import { fetchOutboundTasks, findOutboundTaskByPhone, type OutboundTask } from '../outboundData';
-import '../components/cards/index';  // register all card defs (side-effect)
-import { buildInitialCardStates, findCardByEvent, type CardState } from '../components/cards/registry';
-import { CardPanel } from '../components/cards/CardPanel';
-import { EditorPage } from './EditorPage';
-import { SkillManagerPage } from './SkillManagerPage';
-import { KnowledgeManagementPage } from './km/KnowledgeManagementPage';
+import { fetchMockUsers, type MockUser } from '../chat/mockUsers';
+import { useAgentUserSync } from '../chat/userSync';
+import { fetchOutboundTasks, findOutboundTaskByPhone, type OutboundTask } from '../chat/outboundData';
+import './cards/index';  // register all card defs (side-effect)
+import { buildInitialCardStates, findCardByEvent, type CardState } from './cards/registry';
+import { CardPanel } from './cards/CardPanel';
+import { EditorPage } from '../km/EditorPage';
+import { SkillManagerPage } from '../km/SkillManagerPage';
+import { KnowledgeManagementPage } from '../km/KnowledgeManagementPage';
 
 interface AgentMessage {
   id: number;

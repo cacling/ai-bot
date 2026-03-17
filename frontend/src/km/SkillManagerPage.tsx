@@ -23,15 +23,15 @@ import {
   ArrowLeft, AlertCircle,
   Mic, MicOff, Loader2, FlaskConical,
 } from 'lucide-react';
-import { PipelinePanel, type PipelineStage } from '../components/PipelinePanel';
-import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from '../components/SkillEditorWidgets';
+import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
+import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
 import {
   useSkillManager,
   isMdFile,
   isTextFile,
   type SkillFileNode,
   type ViewMode,
-} from '../hooks/useSkillManager';
+} from './hooks/useSkillManager';
 
 // Phase 标签配色映射
 const PHASE_LABELS: Record<string, { label: string; color: string }> = {

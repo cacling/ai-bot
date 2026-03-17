@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Save, AlertCircle, CheckCircle, Loader2, Columns2, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { FileTree, type FileNode } from '../components/FileTree';
-import { MarkdownEditor } from '../components/MarkdownEditor';
+import { FileTree, type FileNode } from './components/FileTree';
+import { MarkdownEditor } from './components/MarkdownEditor';
 
 type ViewMode = 'wysiwyg' | 'split';
 

@@ -7,7 +7,7 @@
 import { memo } from 'react';
 import { User } from 'lucide-react';
 import type { Lang } from '../../../i18n';
-import type { MockUser } from '../../../mockUsers';
+import type { MockUser } from '../../../chat/mockUsers';
 
 export const UserDetailContent = memo(function UserDetailContent({ data, lang }: { data: unknown; lang: Lang }) {
   const user = data as MockUser | null;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { GitBranch, Loader2, AlertTriangle, GitFork } from 'lucide-react';
-import { renderMermaid } from '../utils/mermaid';
+import { renderMermaid } from './mermaid';
 import { T, type Lang } from '../i18n';
 
 export interface ActiveDiagram {

@@ -363,3 +363,32 @@ export const kmAuditLogs = sqliteTable('km_audit_logs', {
   detail_json: text('detail_json'),
   created_at:  text('created_at').$defaultFn(() => new Date().toISOString()),
 });
+
+// ── MCP 服务管理 ─────────────────────────────────────────────────────────────
+
+export const mcpServers = sqliteTable('mcp_servers', {
+  id:              text('id').primaryKey(),
+  name:            text('name').notNull().unique(),
+  description:     text('description').notNull().default(''),
+  transport:       text('transport').notNull().default('http'),   // 'http' | 'stdio' | 'sse'
+  status:          text('status').notNull().default('active'),    // 'active' | 'planned'
+  enabled:         integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  // HTTP / SSE 配置
+  url:             text('url'),
+  headers_json:    text('headers_json'),           // JSON object
+  // stdio 配置
+  command:         text('command'),
+  args_json:       text('args_json'),              // JSON array
+  cwd:             text('cwd'),
+  // 环境变量（公共 / prod 覆盖 / test 覆盖）
+  env_json:        text('env_json'),               // JSON object
+  env_prod_json:   text('env_prod_json'),           // JSON object
+  env_test_json:   text('env_test_json'),           // JSON object
+  // 工具元数据
+  tools_cache:     text('tools_cache'),             // JSON: [{name, description, inputSchema}]
+  disabled_tools:  text('disabled_tools'),           // JSON array of tool names
+  // 时间戳
+  last_connected_at: text('last_connected_at'),
+  created_at:      text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at:      text('updated_at').$defaultFn(() => new Date().toISOString()),
+});

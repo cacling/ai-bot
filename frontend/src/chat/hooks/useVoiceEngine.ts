@@ -12,8 +12,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type React from 'react';
-import { nowTime } from '../App';
-import { float32ToInt16, arrayBufferToBase64, base64ToUint8 } from '../utils/audio';
+import { nowTime } from '../../App';
+import { float32ToInt16, arrayBufferToBase64, base64ToUint8 } from '../../shared/audio';
 
 // ── Shared Types ────────────────────────────────────────────────────────────────
 

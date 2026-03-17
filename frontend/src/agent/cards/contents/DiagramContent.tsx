@@ -11,7 +11,7 @@
 
 import { memo, useEffect, useState, useRef, useCallback } from 'react';
 import { GitFork, Loader2, AlertTriangle, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
-import { renderMermaid } from '../../../utils/mermaid';
+import { renderMermaid } from '../../../shared/mermaid';
 import { T, type Lang } from '../../../i18n';
 
 interface DiagramData {

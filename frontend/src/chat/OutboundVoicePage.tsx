@@ -12,11 +12,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Square, Phone, Headset } from 'lucide-react';
 import { nowTime } from '../App';
-import type { ActiveDiagram } from '../components/DiagramPanel';
+import type { ActiveDiagram } from '../shared/DiagramPanel';
 import { T, type Lang } from '../i18n';
-import { broadcastUserSwitch } from '../userSync';
-import type { OutboundTask } from '../outboundData';
-import { useVoiceEngine, type HandoffContext } from '../hooks/useVoiceEngine';
+import { broadcastUserSwitch } from './userSync';
+import type { OutboundTask } from './outboundData';
+import { useVoiceEngine, type HandoffContext } from './hooks/useVoiceEngine';
 
 // ── 类型 ──────────────────────────────────────────────────────────────────────
 

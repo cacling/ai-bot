@@ -17,6 +17,7 @@ import changeRequestRoutes from './agent/km/skills/change-requests';
 import testCaseRoutes from './agent/km/skills/test-cases';
 import skillCreatorRoutes from './agent/km/skills/skill-creator';
 import kmRoutes from './agent/km/kms';
+import mcpRoutes from './agent/km/mcp';
 import { logger } from './services/logger';
 import { runAgent } from './engine/runner';
 
@@ -70,6 +71,9 @@ app.route('/api/skill-creator', skillCreatorRoutes);
 
 // Mount knowledge management routes: /api/km/*
 app.route('/api/km', kmRoutes);
+
+// Mount MCP management routes: /api/mcp/*
+app.route('/api/mcp', mcpRoutes);
 
 // Mount voice WebSocket route: GET /ws/voice
 app.route('/', voiceRoutes);

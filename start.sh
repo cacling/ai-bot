@@ -42,7 +42,7 @@ cleanup() {
     kill "$pid" 2>/dev/null || true
   done
   # 再按端口强杀实际进程
-  for port in 18472 8003 5173; do
+  for port in 18472 8003 8004 8005 5173; do
     kill_port "$port"
   done
   wait 2>/dev/null || true
@@ -67,8 +67,8 @@ done
 ok "日志已清空"
 
 # ── 清除端口残留进程 ─────────────────────────────────────────────────────────
-log "清理端口残留进程 (18472/8003/5173)..."
-for port in 18472 8003 5173; do
+log "清理端口残留进程 (18472/8003/8004/8005/5173)..."
+for port in 18472 8003 8004 8005 5173; do
   kill_port "$port"
 done
 ok "端口已清理"
@@ -164,6 +164,12 @@ echo -e "\n${BLU}══════ 启动服务 ══════${NC}"
 start_service "telecom-mcp" "$BASE_DIR/backend/mcp_servers/ts" \
   "$NODE --import tsx/esm telecom_service.ts"
 
+start_service "outbound-mcp" "$BASE_DIR/backend/mcp_servers/ts" \
+  "$NODE --import tsx/esm outbound_service.ts"
+
+start_service "account-mcp" "$BASE_DIR/backend/mcp_servers/ts" \
+  "$NODE --import tsx/esm account_service.ts"
+
 start_service "backend"     "$BASE_DIR/backend" \
   "$BUN src/index.ts"
 
@@ -193,6 +199,8 @@ if [[ "$READY" == true ]]; then
   ok "Backend      → http://localhost:18472  ${RESP}"
   ok "Frontend     → http://localhost:5173"
   ok "Telecom MCP  → http://localhost:8003/mcp"
+  ok "Outbound MCP → http://localhost:8004/mcp"
+  ok "Account MCP  → http://localhost:8005/mcp"
   echo ""
   echo -e "${GRN}✓ 所有服务启动成功！${NC}"
 else

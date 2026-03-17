@@ -2,7 +2,7 @@
  * chat.ts — 文字客服 WebSocket API
  */
 
-import type { CardData } from '../components/CardMessage';
+import type { CardData } from './CardMessage';
 
 export const DEFAULT_USER_PHONE = '13800000001';
 

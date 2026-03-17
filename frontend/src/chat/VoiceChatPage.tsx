@@ -13,11 +13,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, Square, Bot, User, Headset } from 'lucide-react';
 import { nowTime } from '../App';
-import type { ActiveDiagram } from '../components/DiagramPanel';
+import type { ActiveDiagram } from '../shared/DiagramPanel';
 import { T, type Lang } from '../i18n';
-import type { MockUser } from '../mockUsers';
-import { broadcastUserSwitch } from '../userSync';
-import { useVoiceEngine, type VoiceMessage, type HandoffContext, type EmotionResult } from '../hooks/useVoiceEngine';
+import type { MockUser } from './mockUsers';
+import { broadcastUserSwitch } from './userSync';
+import { useVoiceEngine, type VoiceMessage, type HandoffContext, type EmotionResult } from './hooks/useVoiceEngine';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────────
 

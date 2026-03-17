@@ -2,7 +2,7 @@
  * outboundData.ts — outbound task types + API fetch helpers
  * Data is loaded from the backend DB via /api/outbound-tasks
  */
-import type { Lang } from './i18n';
+import type { Lang } from '../i18n';
 
 export type OutboundTaskType = 'collection' | 'marketing';
 

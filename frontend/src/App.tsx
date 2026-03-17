@@ -9,17 +9,17 @@ import {
   Smile,
   ChevronRight,
 } from 'lucide-react';
-import { VoiceChatPage } from './pages/VoiceChatPage';
-import { OutboundVoicePage, type TaskType } from './pages/OutboundVoicePage';
+import { VoiceChatPage } from './chat/VoiceChatPage';
+import { OutboundVoicePage, type TaskType } from './chat/OutboundVoicePage';
 import { T, type Lang } from './i18n';
-import { fetchMockUsers, fetchInboundUsers, type MockUser } from './mockUsers';
-import { broadcastUserSwitch } from './userSync';
-import { fetchOutboundTasks, type OutboundTask } from './outboundData';
-import { CardMessage, type CardData } from './components/CardMessage';
-import { clearSession } from './api/chat';
+import { fetchMockUsers, fetchInboundUsers, type MockUser } from './chat/mockUsers';
+import { broadcastUserSwitch } from './chat/userSync';
+import { fetchOutboundTasks, type OutboundTask } from './chat/outboundData';
+import { CardMessage, type CardData } from './chat/CardMessage';
+import { clearSession } from './chat/api';
 
 // Re-export for consumers that imported from App.tsx
-export type { CardData } from './components/CardMessage';
+export type { CardData } from './chat/CardMessage';
 
 // ── 消息类型 ──────────────────────────────────────────────────────────────────
 export interface TextMessage {
@@ -71,7 +71,7 @@ function makeInitialMessages(lang: Lang = 'zh'): Message[] {
 }
 
 // Re-export for consumers that imported from App.tsx
-export { sendChatMessageWS, DEFAULT_USER_PHONE } from './api/chat';
+export { sendChatMessageWS, DEFAULT_USER_PHONE } from './chat/api';
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────────
 export function nowTime() {

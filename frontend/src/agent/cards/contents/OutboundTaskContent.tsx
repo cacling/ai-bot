@@ -6,7 +6,7 @@
 
 import { memo } from 'react';
 import { T, type Lang } from '../../../i18n';
-import type { OutboundTaskData as OutboundTaskCardData } from '../../../outboundData';
+import type { OutboundTaskData as OutboundTaskCardData } from '../../../chat/outboundData';
 
 function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (

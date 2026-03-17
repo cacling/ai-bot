@@ -2,7 +2,7 @@
  * mockUsers.ts — user profile types + API fetch helpers
  * Data is loaded from the backend DB via /api/mock-users
  */
-import type { Lang } from './i18n';
+import type { Lang } from '../i18n';
 
 export interface MockUser {
   id: string;
