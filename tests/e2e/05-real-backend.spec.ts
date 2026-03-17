@@ -7,7 +7,7 @@
  */
 import { test, expect } from '@playwright/test';
 
-const BACKEND = 'http://localhost:8000';
+const BACKEND = 'http://localhost:18472';
 
 // ── 辅助 ─────────────────────────────────────────────────────────────────────
 interface FileNode {
@@ -42,23 +42,28 @@ test.describe('真实后端 文件树 API', () => {
     const skills = tree.find((n) => n.name === 'skills');
     expect(skills).toBeDefined();
 
-    const childNames = skills?.children?.map((c) => c.name) ?? [];
+    const bizSkills = skills?.children?.find((c) => c.name === 'biz-skills');
+    expect(bizSkills).toBeDefined();
+    const childNames = bizSkills?.children?.map((c) => c.name) ?? [];
     expect(childNames).toContain('bill-inquiry');
     expect(childNames).toContain('fault-diagnosis');
     expect(childNames).toContain('plan-inquiry');
     expect(childNames).toContain('service-cancel');
+    expect(childNames).toContain('outbound-collection');
+    expect(childNames).toContain('outbound-marketing');
+    expect(childNames).toContain('telecom-app');
   });
 
-  test('TC-BE-03 tree 包含 4 个 SKILL.md 文件', async ({ request }) => {
+  test('TC-BE-03 tree 包含 SKILL.md 文件', async ({ request }) => {
     const res = await request.get(`${BACKEND}/api/files/tree`);
     const { tree } = await res.json() as { tree: FileNode[] };
     const all = flattenTree(tree);
     const skillMds = all.filter((n) => n.type === 'file' && n.name === 'SKILL.md');
-    expect(skillMds.length).toBe(4);
+    expect(skillMds.length).toBeGreaterThanOrEqual(7);
   });
 
   test('TC-BE-04 可读取 bill-inquiry/SKILL.md 内容', async ({ request }) => {
-    const res = await request.get(`${BACKEND}/api/files/content?path=skills/bill-inquiry/SKILL.md`);
+    const res = await request.get(`${BACKEND}/api/files/content?path=skills/biz-skills/bill-inquiry/SKILL.md`);
     expect(res.ok()).toBeTruthy();
     const { content } = await res.json() as { content: string };
     expect(content).toContain('账单');
