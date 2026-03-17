@@ -6,6 +6,7 @@ import App from './App.tsx'
 import { AgentWorkstationPage } from './pages/AgentWorkstationPage.tsx'
 
 const isAgent = window.location.pathname.startsWith('/agent');
+document.title = isAgent ? '坐席侧' : '客户侧';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
