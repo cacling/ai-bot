@@ -7,14 +7,14 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
-import { db } from '../db';
-import { skillVersions, changeRequests } from '../db/schema';
+import { db } from '../../../db';
+import { skillVersions, changeRequests } from '../../../db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { logger } from '../logger';
-import { detectHighRisk } from '../agent/km/skills/change-requests';
+import { logger } from '../../../logger';
+import { detectHighRisk } from './change-requests';
 
 // Project root for Skill files
-const PROJECT_ROOT = resolve(import.meta.dir, '../..');
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
 /**
  * 保存文件并创建版本快照（保存旧版本内容）

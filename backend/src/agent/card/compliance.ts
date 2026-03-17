@@ -16,7 +16,7 @@ import {
   reloadKeywords,
   checkCompliance,
   type RuleCategory,
-} from '../../compliance/keyword-filter';
+} from '../../services/keyword-filter';
 import { logger } from '../../logger';
 import { requireRole } from '../../middleware/auth';
 

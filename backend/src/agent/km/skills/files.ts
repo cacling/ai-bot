@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { resolve, join, relative, extname, basename } from 'node:path';
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { logger } from '../../../logger';
-import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { saveSkillWithVersion } from './version-manager';
 import { requireRole } from '../../../middleware/auth';
 
 const files = new Hono();

@@ -19,7 +19,7 @@ import { generateText, tool } from 'ai';
 import { z } from 'zod';
 import { skillCreatorModel } from '../../llm';
 import { logger } from '../../../logger';
-import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { saveSkillWithVersion } from './version-manager';
 import { refreshSkillsCache } from '../../skills';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';

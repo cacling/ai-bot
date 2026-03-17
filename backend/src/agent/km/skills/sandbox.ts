@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 import { type CoreMessage } from 'ai';
 import { eq } from 'drizzle-orm';
 import { runAgent } from '../../runner';
-import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { saveSkillWithVersion } from './version-manager';
 import { logger } from '../../../logger';
 import { requireRole } from '../../../middleware/auth';
 import { db } from '../../../db';

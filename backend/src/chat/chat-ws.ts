@@ -29,8 +29,8 @@ import { logger } from '../logger';
 import { setCustomerLang, getLangs } from '../lang-session';
 import { translateText, translateMermaid } from '../skills/translate-lang';
 import { t } from '../i18n';
-import { checkCompliance, maskPII, sanitizeText } from '../compliance/keyword-filter';
-import { detectHallucination } from '../compliance/hallucination-detector';
+import { checkCompliance, maskPII, sanitizeText } from '../services/keyword-filter';
+import { detectHallucination } from '../services/hallucination-detector';
 
 const chatWs = new Hono();
 

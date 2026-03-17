@@ -13,7 +13,7 @@ import {
   getVersionList,
   getVersionContent,
   rollbackToVersion,
-} from '../../../backend/src/compliance/version-manager.ts';
+} from '../../../backend/src/agent/km/skills/version-manager.ts';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../backend');
 const TEST_SKILL_PATH = 'skills/biz-skills/_test_version/SKILL.md';

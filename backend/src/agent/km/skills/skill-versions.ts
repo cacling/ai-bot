@@ -14,7 +14,7 @@ import {
   getVersionList,
   getVersionContent,
   rollbackToVersion,
-} from '../../../compliance/version-manager';
+} from './version-manager';
 import { logger } from '../../../logger';
 import { requireRole } from '../../../middleware/auth';
 

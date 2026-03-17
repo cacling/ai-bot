@@ -11,7 +11,7 @@ import { Hono } from 'hono';
 import { resolve, dirname, basename } from 'node:path';
 import { readFile, mkdir, cp, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { saveSkillWithVersion } from './version-manager';
 import { requireRole } from '../../../middleware/auth';
 import { logger } from '../../../logger';
 

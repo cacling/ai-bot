@@ -12,7 +12,7 @@ import {
   removeKeyword,
   reloadKeywords,
   type ComplianceResult,
-} from '../../../backend/src/compliance/keyword-filter.ts';
+} from '../../../backend/src/services/keyword-filter.ts';
 
 describe('checkCompliance — AC 自动机关键词匹配', () => {
   test('检测 banned 关键词', () => {

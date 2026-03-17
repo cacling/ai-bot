@@ -17,7 +17,7 @@ import { isNoDataResult } from '../utils/tool-result';
 import { logger } from '../logger';
 import { sessionBus } from '../session-bus';
 import { getLangs, setCustomerLang } from '../lang-session';
-import { checkCompliance } from '../compliance/keyword-filter';
+import { checkCompliance } from '../services/keyword-filter';
 import { VoiceSessionState, TRANSFER_PHRASE_RE, type HandoffContext } from '../services/voice-session';
 import { callMcpTool } from '../services/mcp-client';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
