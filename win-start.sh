@@ -16,6 +16,10 @@ PID_FILE="${BASE_DIR}/.win-pids"
 RESTART_DELAY=3
 HEALTH_TIMEOUT=30
 
+# ── 代理配置（外网走 Privoxy，本地直连）────────────────────────────────────
+PROXY_HTTP="http://127.0.0.1:18118"
+PROXY_NO_PROXY="localhost,127.0.0.1,::1,api.siliconflow.cn,dashscope.aliyuncs.com,open.bigmodel.cn"
+
 # ── 颜色 ────────────────────────────────────────────────────────────────────
 GRN='\033[0;32m'; RED='\033[0;31m'; YEL='\033[1;33m'; BLU='\033[0;34m'; NC='\033[0m'
 log()  { echo -e "${BLU}[$(date '+%H:%M:%S')]${NC} $*"; }
@@ -77,6 +81,17 @@ for bin in "$BUN" "$NODE" "$NPM"; do
     exit 1
   fi
 done
+
+# ── 设置代理环境变量（全脚本生效）──────────────────────────────────────────
+export HTTP_PROXY="$PROXY_HTTP"
+export HTTPS_PROXY="$PROXY_HTTP"
+export http_proxy="$PROXY_HTTP"
+export https_proxy="$PROXY_HTTP"
+export NO_PROXY="$PROXY_NO_PROXY"
+export no_proxy="$PROXY_NO_PROXY"
+
+log "代理已启用: HTTP_PROXY=$HTTP_PROXY"
+log "本地直连: NO_PROXY=$NO_PROXY"
 
 # ────────────────────────────────────────────────────────────────────────────
 # 1. 安装依赖
@@ -152,12 +167,6 @@ start_service() {
 }
 
 echo -e "\n${BLU}══════ 启动服务 ══════${NC}"
-
-unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
-NO_PROXY="localhost,127.0.0.1"
-no_proxy="localhost,127.0.0.1"
-export NO_PROXY no_proxy
-log "已清除代理环境变量"
 
 start_service "telecom-mcp" "$BASE_DIR/backend/mcp_servers/ts" \
   "node --import tsx/esm telecom_service.ts"

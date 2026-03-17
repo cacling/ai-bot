@@ -6,7 +6,7 @@
 
 /** Extract the first ```mermaid ... ``` block from markdown (with label sanitization). */
 export function extractMermaidFromContent(markdown: string): string | null {
-  const match = markdown.match(/```mermaid\n([\s\S]*?)```/);
+  const match = markdown.match(/```mermaid\r?\n([\s\S]*?)```/);
   return match ? sanitizeStateDiagramLabels(match[1].trim()) : null;
 }
 
