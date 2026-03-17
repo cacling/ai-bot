@@ -21,11 +21,9 @@ import {
   Send, Bot, User, FileText, Folder, FileCode,
   ChevronRight, Sparkles, CheckCircle2, Plus,
   ArrowLeft, AlertCircle,
-  Save, Mic, MicOff, History, Loader2,
-  FlaskConical,
+  Mic, MicOff, Loader2, FlaskConical,
 } from 'lucide-react';
-import { VersionPanel } from '../components/VersionPanel';
-import { SandboxPanel } from '../components/SandboxPanel';
+import { PipelinePanel, type PipelineStage } from '../components/PipelinePanel';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from '../components/SkillEditorWidgets';
 import {
   useSkillManager,
@@ -239,15 +237,82 @@ export function SkillManagerPage() {
 
   const { isRecording, toggle: toggleVoice } = useVoiceInput((text) => setInputValue(text));
 
-  // ── 版本历史面板 ─────────────────────────────────────────────────────────────
-  const [showVersions, setShowVersions] = useState(false);
-  const [showSandbox, setShowSandbox] = useState(false);
-  const handleRollbackDone = useCallback(() => {
-    // 回滚成功后重新选中当前文件以刷新编辑器内容
+  // ── 自动保存（debounce 3s）─────────────────────────────────────────────────
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autoSaved, setAutoSaved] = useState(true);
+
+  // 监听编辑器内容变化，3 秒无操作后自动保存
+  const handleEditorChangeWithAutoSave = useCallback((value: string) => {
+    handleEditorChange(value);
+    setAutoSaved(false);
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      if (canSave) {
+        await handleSave();
+        setAutoSaved(true);
+      }
+    }, 3000);
+  }, [handleEditorChange, handleSave, canSave]);
+
+  // ── 发布管道状态 ─────────────────────────────────────────────────────────────
+  const [pipelineStage, setPipelineStage] = useState<PipelineStage>('draft');
+  const [sandboxId, setSandboxId] = useState<string | null>(null);
+  const [pipelineSaving, setPipelineSaving] = useState(false);
+
+  // 从 SKILL.md 内容中解析 channels 和 version
+  const parseMetaFromContent = (content: string) => {
+    const chMatch = content.match(/channels:\s*\[([^\]]*)\]/);
+    const channels = chMatch
+      ? chMatch[1].split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
+      : ['online'];
+    const verMatch = content.match(/version:\s*"?([^"\n]+)"?/);
+    const version = verMatch?.[1] ?? '1.0.0';
+    return { channels, version };
+  };
+  const meta = parseMetaFromContent(editorContent);
+
+  const handlePublishToSandbox = useCallback(async () => {
+    if (!selectedFile?.path) return;
+    setPipelineSaving(true);
+    try {
+      // 先自动保存当前内容
+      if (isDirty && canSave) {
+        await handleSave();
+      }
+      // 再创建沙盒
+      const res = await fetch('/api/sandbox/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill_path: selectedFile.path }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSandboxId(data.sandbox_id);
+        setPipelineStage('sandbox');
+      }
+    } catch (e) {
+      console.error('创建沙盒失败:', e);
+    }
+    setPipelineSaving(false);
+  }, [selectedFile, isDirty, canSave, handleSave]);
+
+  const handlePublishDone = useCallback(() => {
+    setPipelineStage('production');
+    setSandboxId(null);
     if (selectedFile) handleSelectFile(selectedFile);
   }, [selectedFile, handleSelectFile]);
-  const handleApplyOrPublishDone = useCallback(() => {
+
+  const handleDiscardSandbox = useCallback(async () => {
+    if (sandboxId) {
+      try { await fetch(`/api/sandbox/${sandboxId}`, { method: 'DELETE' }); } catch {}
+    }
+    setSandboxId(null);
+    setPipelineStage('draft');
+  }, [sandboxId]);
+
+  const handleRollbackDone = useCallback(() => {
     if (selectedFile) handleSelectFile(selectedFile);
+    setPipelineStage('draft');
   }, [selectedFile, handleSelectFile]);
 
   // ── 列表视图 ────────────────────────────────────────────────────────────────
@@ -376,16 +441,20 @@ export function SkillManagerPage() {
 
         {/* 发布按钮（当有 draft 可发布时显示）*/}
         {canPublish && (
-          <div className="px-3 py-2 bg-green-50 border-t border-green-200">
+          <div className="px-3 py-2 bg-indigo-50 border-t border-indigo-200">
             <button
-              onClick={publishSkill}
-              disabled={saveStatus === 'saving'}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-40 transition"
+              onClick={async () => {
+                await publishSkill();
+                // 保存后自动进入沙盒验证
+                handlePublishToSandbox();
+              }}
+              disabled={saveStatus === 'saving' || pipelineSaving}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-40 transition"
             >
-              {saveStatus === 'saving' ? (
-                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 保存中…</>
+              {(saveStatus === 'saving' || pipelineSaving) ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 保存并创建沙盒…</>
               ) : (
-                <><CheckCircle2 className="w-3.5 h-3.5" /> 保存技能到磁盘</>
+                <><FlaskConical className="w-3.5 h-3.5" /> 保存并发布到沙盒</>
               )}
             </button>
           </div>
@@ -437,15 +506,15 @@ export function SkillManagerPage() {
         </div>
       </div>
 
-      {/* ── 右侧：文件树 + 编辑区 ── */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* ── 中间列：文件树 + 发布管道 ── */}
+      <div className="w-56 flex-shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col overflow-hidden">
 
         {/* 文件树 */}
-        <div className="w-52 flex-shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col overflow-hidden">
-          <div className="px-3 py-2 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider flex-shrink-0">
+        <div className="min-h-[25%]">
+          <div className="px-3 py-2 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
             文件
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="overflow-y-auto">
             {fileTreeLoading ? (
               <div className="flex items-center justify-center py-8 text-slate-400 gap-1.5">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -461,132 +530,98 @@ export function SkillManagerPage() {
           </div>
         </div>
 
-        {/* 编辑区 */}
-        <div className="flex-1 flex flex-col bg-white overflow-hidden">
+        {/* 发布管道 + 版本历史（文件树下方） */}
+        <div className="flex-1 overflow-y-auto border-t border-slate-200">
+          <PipelinePanel
+            filePath={selectedFile?.path ?? null}
+            stage={pipelineStage}
+            autoSaved={autoSaved}
+            channels={meta.channels}
+            version={meta.version}
+            onPublishToSandbox={handlePublishToSandbox}
+            onPublishDone={handlePublishDone}
+            onDiscardSandbox={handleDiscardSandbox}
+            onRollback={handleRollbackDone}
+            saving={pipelineSaving}
+            sandboxId={sandboxId}
+          />
+        </div>
+      </div>
 
-          {/* 工具栏 */}
-          <div className="h-10 border-b border-slate-200 flex items-center justify-between px-3 shrink-0">
-            <span className="text-xs text-slate-500 truncate flex items-center gap-1.5">
-              {selectedFile ? selectedFile.name : ''}
-              {isDirty && (
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" title="有未保存修改" />
-              )}
+      {/* ── 右侧：编辑区（全宽）── */}
+      <div className="flex-1 flex flex-col bg-white overflow-hidden">
+
+        {/* 工具栏 */}
+        <div className="h-10 border-b border-slate-200 flex items-center justify-between px-3 shrink-0">
+          <span className="text-xs text-slate-500 truncate flex items-center gap-1.5">
+            {selectedFile ? selectedFile.name : ''}
+            {!autoSaved && (
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" title="自动保存中…" />
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            <SaveIndicator status={saveStatus} />
+            {selectedIsMd && (
+              <ViewToggle viewMode={viewMode} onChange={setViewMode} />
+            )}
+            {/* 管道阶段标签 */}
+            <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
+              pipelineStage === 'draft' ? 'bg-amber-100 text-amber-700' :
+              pipelineStage === 'sandbox' ? 'bg-blue-100 text-blue-700' :
+              'bg-green-100 text-green-700'
+            }`}>
+              {pipelineStage === 'draft' ? '草稿' : pipelineStage === 'sandbox' ? '沙盒中' : '已发布'}
             </span>
-            <div className="flex items-center gap-2">
-              <SaveIndicator status={saveStatus} />
-              {selectedIsMd && (
-                <ViewToggle viewMode={viewMode} onChange={setViewMode} />
-              )}
-              {selectedIsMd && (
-                <button
-                  onClick={() => setShowVersions(!showVersions)}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition ${
-                    showVersions
-                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <History size={12} /> 版本
-                </button>
-              )}
-<button
-                onClick={() => setShowSandbox(!showSandbox)}
-                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition ${
-                  showSandbox
-                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                <FlaskConical size={12} /> 沙箱测试
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={!canSave}
-                className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
-              >
-                <Save size={12} /> 保存
-              </button>
-            </div>
           </div>
+        </div>
 
-          {/* 内容区 + 版本面板 */}
-          <div className="flex-1 overflow-hidden flex">
-            {/* 编辑器主区域 */}
-            <div className={`flex-1 overflow-hidden ${showVersions ? 'border-r border-gray-200' : ''}`}>
+        {/* 编辑器内容区 */}
+        <div className="flex-1 overflow-hidden">
 
-              {/* 加载中 */}
-              {fileLoading && (
-                <div className="flex items-center justify-center h-full text-slate-400 gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="text-sm">加载中…</span>
-                </div>
-              )}
-
-              {/* .md 文件 — 编辑模式（默认）*/}
-              {!fileLoading && selectedFile && selectedIsMd && viewMode === 'edit' && (
-                <textarea
-                  className="w-full h-full resize-none font-mono text-sm leading-relaxed p-4 outline-none bg-white text-slate-800"
-                  value={editorContent}
-                  onChange={(e) => handleEditorChange(e.target.value)}
-                  spellCheck={false}
-                />
-              )}
-
-              {/* .md 文件 — 预览模式 */}
-              {!fileLoading && selectedFile && selectedIsMd && viewMode === 'preview' && (
-                <div className="h-full overflow-y-auto px-6 py-4 prose prose-sm max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-                </div>
-              )}
-
-              {/* 代码文件 — CodeMirror 编辑器 */}
-              {!fileLoading && selectedFile && !selectedIsMd && isTextFile(selectedFile.name) && (
-                <div className="h-full overflow-auto">
-                  <CodeMirror
-                    value={editorContent}
-                    height="100%"
-                    theme={oneDark}
-                    extensions={getCodeMirrorLang(selectedFile.name)
-                      ? [getCodeMirrorLang(selectedFile.name)!]
-                      : []}
-                    onChange={handleEditorChange}
-                    basicSetup={{ lineNumbers: true, foldGutter: true }}
-                    style={{ fontSize: '13px', height: '100%' }}
-                  />
-                </div>
-              )}
-
-              {/* 不支持的文件类型 */}
-              {!fileLoading && selectedFile && !selectedIsMd && !isTextFile(selectedFile.name) && (
-                <div className="flex items-center justify-center h-full text-slate-400 text-sm gap-2">
-                  <AlertCircle size={16} />
-                  不支持预览此文件类型
-                </div>
-              )}
+          {fileLoading && (
+            <div className="flex items-center justify-center h-full text-slate-400 gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">加载中…</span>
             </div>
+          )}
 
-            {/* 版本历史侧栏 */}
-            {showVersions && (
-              <div className="w-72 shrink-0">
-                <VersionPanel
-                  filePath={selectedFile?.path ?? null}
-                  onClose={() => setShowVersions(false)}
-                  onRollback={handleRollbackDone}
-                />
-              </div>
-            )}
+          {!fileLoading && selectedFile && selectedIsMd && viewMode === 'edit' && (
+            <textarea
+              className="w-full h-full resize-none font-mono text-sm leading-relaxed p-4 outline-none bg-white text-slate-800"
+              value={editorContent}
+              onChange={(e) => handleEditorChangeWithAutoSave(e.target.value)}
+              spellCheck={false}
+            />
+          )}
 
-{/* 沙箱测试侧栏 */}
-            {showSandbox && (
-              <div className="w-80 shrink-0 border-l border-slate-200 relative">
-                <SandboxPanel
-                  filePath={selectedFile?.path ?? null}
-                  onPublishDone={handleApplyOrPublishDone}
-                  onClose={() => setShowSandbox(false)}
-                />
-              </div>
-            )}
-          </div>
+          {!fileLoading && selectedFile && selectedIsMd && viewMode === 'preview' && (
+            <div className="h-full overflow-y-auto px-6 py-4 prose prose-sm max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+            </div>
+          )}
+
+          {!fileLoading && selectedFile && !selectedIsMd && isTextFile(selectedFile.name) && (
+            <div className="h-full overflow-auto">
+              <CodeMirror
+                value={editorContent}
+                height="100%"
+                theme={oneDark}
+                extensions={getCodeMirrorLang(selectedFile.name)
+                  ? [getCodeMirrorLang(selectedFile.name)!]
+                  : []}
+                onChange={handleEditorChangeWithAutoSave}
+                basicSetup={{ lineNumbers: true, foldGutter: true }}
+                style={{ fontSize: '13px', height: '100%' }}
+              />
+            </div>
+          )}
+
+          {!fileLoading && selectedFile && !selectedIsMd && !isTextFile(selectedFile.name) && (
+            <div className="flex items-center justify-center h-full text-slate-400 text-sm gap-2">
+              <AlertCircle size={16} />
+              不支持预览此文件类型
+            </div>
+          )}
         </div>
       </div>
     </div>

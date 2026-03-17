@@ -54,6 +54,24 @@ export function extractStateNames(mermaid: string): string[] {
 }
 
 /**
+ * Extract transitions from a stateDiagram-v2 as "A --> B : label" lines.
+ * Used to give the progress tracker LLM the full flow structure.
+ */
+export function extractTransitions(mermaid: string): string[] {
+  if (!isStateDiagram(mermaid)) return [];
+  const result: string[] = [];
+  for (const line of mermaid.split('\n')) {
+    const m = line.match(/^\s*(\S+)\s*-->\s*([^:\s]+)\s*(?::\s*(.+?))?(?:\s*%%.*)?$/);
+    if (m) {
+      const [, from, to, label] = m;
+      if (from === '[*]' || to === '[*]') continue;
+      result.push(label ? `${from} → ${to}（${label.trim()}）` : `${from} → ${to}`);
+    }
+  }
+  return result;
+}
+
+/**
  * Highlight a specific state node by name (blue, for progress tracking).
  * Uses inline :::progressHL syntax on the FIRST transition that targets the state.
  */

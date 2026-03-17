@@ -25,12 +25,13 @@ interface MarketingData {
   campaign_en: string;
 }
 
+/** Raw API response shape — data contains both zh & en variants */
 export interface OutboundTask {
   id: string;
   phone: string;
   task_type: OutboundTaskType;
   label: Record<Lang, string>;
-  data: CollectionData | MarketingData;
+  data: Record<Lang, Record<string, unknown>>;
 }
 
 export type OutboundTaskData =
@@ -45,13 +46,29 @@ export async function fetchOutboundTasks(): Promise<OutboundTask[]> {
 
 /** Convert raw API task to the card-compatible OutboundTaskData shape */
 export function taskToCardData(task: OutboundTask): OutboundTaskData {
+  const zh = task.data.zh ?? {};
+  const en = task.data.en ?? zh;
+
   if (task.task_type === 'collection') {
-    const d = task.data as CollectionData;
-    return { taskType: 'collection', name: d.name, phone: task.phone, product: { zh: d.product_zh, en: d.product_en }, amount: d.amount, days: d.days };
+    return {
+      taskType: 'collection',
+      name: (zh.customer_name ?? '') as string,
+      phone: task.phone,
+      product: { zh: (zh.product_name ?? '') as string, en: (en.product_name ?? '') as string },
+      amount: (zh.overdue_amount ?? 0) as number,
+      days: (zh.overdue_days ?? 0) as number,
+    };
   }
   // marketing
-  const d = task.data as MarketingData;
-  return { taskType: 'marketing', name: d.name, phone: task.phone, currentPlan: { zh: d.current_plan_zh, en: d.current_plan_en }, targetPlan: { zh: d.target_plan_zh, en: d.target_plan_en }, targetFee: d.target_fee, campaignName: { zh: d.campaign_zh, en: d.campaign_en } };
+  return {
+    taskType: 'marketing',
+    name: (zh.customer_name ?? '') as string,
+    phone: task.phone,
+    currentPlan: { zh: (zh.current_plan ?? '') as string, en: (en.current_plan ?? '') as string },
+    targetPlan: { zh: (zh.target_plan_name ?? '') as string, en: (en.target_plan_name ?? '') as string },
+    targetFee: (zh.target_plan_fee ?? 0) as number,
+    campaignName: { zh: (zh.campaign_name ?? '') as string, en: (en.campaign_name ?? '') as string },
+  };
 }
 
 /** Find outbound task card data by phone from a pre-fetched task list */
