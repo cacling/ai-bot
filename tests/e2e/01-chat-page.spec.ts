@@ -128,26 +128,4 @@ test.describe('客服对话页', () => {
     await expect(page.locator('button.bg-blue-600.rounded-full')).toBeVisible();
   });
 
-  // ── 重置 & 转人工 ─────────────────────────────────────────────────────────
-
-  // Skip: the reset button ([title="重置对话"]) was removed from the chat UI;
-  // handleReset still exists in code but is not wired to any visible button.
-  test.skip('TC-CHAT-14 重置对话按钮清空消息', async ({ page }) => {
-    await sendMessage(page, '需要重置的消息');
-    await waitForBotReply(page);
-    await page.locator('[title="重置对话"]').click();
-    // 欢迎消息重新出现
-    await expect(page.getByText(/您好！我是智能客服小通/)).toBeVisible();
-    // 发送的消息消失（只检查用户气泡 bg-blue-600，避免 bot 回复中可能包含该文本）
-    await expect(page.locator('div.bg-blue-600', { hasText: '需要重置的消息' })).not.toBeVisible();
-  });
-
-  // Skip: the dedicated "转人工" button was removed from the chat UI;
-  // users can still reach human support via the "人工客服" quick-FAQ button,
-  // but that sends different text ("人工客服" not "我需要联系人工客服").
-  test.skip('TC-CHAT-15 转人工客服', async ({ page }) => {
-    await page.getByRole('button', { name: /转人工/ }).click();
-    await expect(page.getByText('我需要联系人工客服')).toBeVisible();
-    await waitForBotReply(page);
-  });
 });
