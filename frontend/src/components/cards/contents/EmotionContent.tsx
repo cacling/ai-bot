@@ -7,6 +7,7 @@
  * data shape: { label: string; emoji: string; color: string } | null
  */
 
+import { memo } from 'react';
 import { T, type Lang } from '../../../i18n';
 
 interface EmotionData {
@@ -23,7 +24,7 @@ const colorConfig: Record<string, { position: number; textClass: string; shadowC
   red:    { position: 88, textClass: 'text-red-500',    shadowColor: '#ef4444' },
 };
 
-export function EmotionContent({ data, lang }: { data: unknown; lang: Lang }) {
+export const EmotionContent = memo(function EmotionContent({ data, lang }: { data: unknown; lang: Lang }) {
   const emotion = data as EmotionData | null;
   const cfg = emotion ? (colorConfig[emotion.color] ?? colorConfig.amber) : null;
   const tc = T[lang];
@@ -62,4 +63,4 @@ export function EmotionContent({ data, lang }: { data: unknown; lang: Lang }) {
       </div>
     </div>
   );
-}
+});

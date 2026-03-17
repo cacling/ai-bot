@@ -5,7 +5,7 @@
  * data shape: { skill_name: string; mermaid: string } | null
  */
 
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { GitFork, Loader2, AlertTriangle } from 'lucide-react';
 import { renderMermaid } from '../../../utils/mermaid';
 import { T, type Lang } from '../../../i18n';
@@ -15,7 +15,7 @@ interface DiagramData {
   mermaid: string;
 }
 
-export function DiagramContent({ data, lang }: { data: unknown; lang: Lang }) {
+export const DiagramContent = memo(function DiagramContent({ data, lang }: { data: unknown; lang: Lang }) {
   const t = T[lang];
   const diagram = data as DiagramData | null;
 
@@ -26,12 +26,23 @@ export function DiagramContent({ data, lang }: { data: unknown; lang: Lang }) {
   useEffect(() => {
     if (!diagram?.mermaid) { setSvg(''); setError(''); setLoading(false); return; }
 
+    // Debug: log mermaid update and check for highlight syntax
+    const hlLines = diagram.mermaid.split('\n').filter((l: string) => l.includes(':::'));
+    console.log('[DiagramContent] mermaid update', { skill: diagram.skill_name, len: diagram.mermaid.length, hlLines });
+
     let cancelled = false;
     setSvg(''); setError(''); setLoading(true);
 
     renderMermaid(diagram.mermaid)
-      .then(result => { if (!cancelled) setSvg(result); })
-      .catch(err   => { if (!cancelled) setError(err instanceof Error ? err.message : t.diagram_error); })
+      .then(result => {
+        if (!cancelled) {
+          // Debug: check if SVG contains highlight class styles
+          const hasHL = result.includes('progressHL') || result.includes('toolHL') || result.includes('branchHL');
+          console.log('[DiagramContent] render done', { hasHL, svgLen: result.length });
+          setSvg(result);
+        }
+      })
+      .catch(err   => { if (!cancelled) { console.error('[DiagramContent] render error', err); setError(err instanceof Error ? err.message : t.diagram_error); } })
       .finally(()  => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
@@ -81,4 +92,4 @@ export function DiagramContent({ data, lang }: { data: unknown; lang: Lang }) {
       </p>
     </div>
   );
-}
+});

@@ -7,6 +7,7 @@
 | 测试类型 | 框架 | 位置 | 覆盖范围 |
 |---------|------|------|---------|
 | **单元测试** | Bun 内置测试运行器 | `backend/skills/fault-diagnosis/scripts/` | 故障诊断逻辑（纯函数） |
+| **单元测试（新功能）** | Bun 内置测试运行器 | `backend/src/compliance/`, `backend/src/routes/`, `backend/src/middleware/` | 合规拦截、版本管理、Diff 算法、语音指标、沙箱校验、权限控制 |
 | **端到端测试（E2E）** | Playwright | `testcase/e2e/` | 前端 UI、HTTP API、结构化卡片渲染、会话管理 |
 
 两套测试均需要先通过 `./win-start.sh` 启动所有服务（backend :18472、telecom-mcp :8003、frontend :5173）。
@@ -87,6 +88,11 @@ E2E 测试和单元测试均需要后端服务在线：
 ```bash
 cd backend
 bun test skills/fault-diagnosis/scripts/run_diagnosis.test.ts
+```
+
+```bash
+# 新增功能模块测试
+bun test src/compliance/keyword-filter.test.ts src/compliance/version-manager.test.ts src/routes/voice.metrics.test.ts src/routes/sandbox.test.ts src/routes/skill-versions.test.ts src/middleware/auth.test.ts
 ```
 
 预期输出（约 <1s）：
@@ -367,6 +373,64 @@ npx playwright test --grep "TC-FD"
 | TC-FD-03 | 13800000001 | 通话经常断线（call_drop） | 通话、VoLTE、基站、中断、诊断 |
 | TC-FD-04 | 13800000003 | 停机账号无法上网（no_network） | 停机、欠费、暂停、诊断 |
 | TC-FD-05 | 19900000099 | 不存在的手机号 | 未找到、不存在、查询不到 |
+
+---
+
+### 5.7 单元测试 — 新增功能模块
+
+**运行器：** Bun
+**运行命令：**
+```bash
+cd backend
+bun test src/compliance/keyword-filter.test.ts src/compliance/version-manager.test.ts src/routes/voice.metrics.test.ts src/routes/sandbox.test.ts src/routes/skill-versions.test.ts src/middleware/auth.test.ts
+```
+
+**总数：** 60 条，分布如下：
+
+#### 合规用语拦截（keyword-filter.test.ts）— 16 条
+
+| # | describe | 描述 |
+|---|----------|------|
+| 1-6 | AC 自动机关键词匹配 | banned 检测、warning 检测、正常文本、空文本、催收违规、混合类型 |
+| 7-9 | PII 检测 | 身份证号、银行卡号、手机号不误报 |
+| 10-11 | PII 脱敏 | 身份证脱敏、无 PII 原文返回 |
+| 12-13 | 违规词替换 | banned 替换为 ***、warning 不替换 |
+| 14-16 | 词库管理 | 添加/删除/热重载 |
+
+#### 版本管理（version-manager.test.ts）— 8 条
+
+| # | describe | 描述 |
+|---|----------|------|
+| 1-2 | saveSkillWithVersion | 保存并记录旧版本、连续多版本 |
+| 3-4 | getVersionList | 时间倒序、不存在路径返回空 |
+| 5-6 | getVersionContent | 获取存在/不存在的版本 |
+| 7-8 | rollbackToVersion | 回滚并验证文件内容、不存在版本报错 |
+
+#### Diff 算法（skill-versions.test.ts）— 9 条
+
+| # | describe | 描述 |
+|---|----------|------|
+| 1-9 | 行级 Diff | 相同内容、完全不同、单行修改、新增行、删除行、空文件、SKILL.md 场景 |
+
+#### 语音会话指标（voice.metrics.test.ts）— 12 条
+
+| # | describe | 描述 |
+|---|----------|------|
+| 1-4 | 基础功能 | 初始化、轮次、工具记录、连续失败 |
+| 5-12 | 可观测指标 | 首包时延、非等待返回null、重复调用、打断计数、冷场检测、getMetrics、空数据边界 |
+
+#### 沙箱校验（sandbox.test.ts）— 6 条
+
+| # | describe | 描述 |
+|---|----------|------|
+| 1-6 | 校验逻辑 | 合法文件、缺 frontmatter、Mermaid 缺类型、未知工具、内容过短、已知工具 |
+
+#### 权限控制（auth.test.ts）— 9 条
+
+| # | describe | 描述 |
+|---|----------|------|
+| 1-5 | 角色层级 | admin 全权限、flow_manager 权限、config_editor 限制、auditor 最低 |
+| 6-9 | 完整性 | 5 角色定义、层级递增、未知角色、同级权限 |
 
 ---
 

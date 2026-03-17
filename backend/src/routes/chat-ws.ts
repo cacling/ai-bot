@@ -27,7 +27,10 @@ import { upgradeWebSocket } from './voice';
 import { sessionBus } from '../session-bus';
 import { logger } from '../logger';
 import { setCustomerLang, getLangs } from '../lang-session';
-import { translateText } from '../skills/translate-lang';
+import { translateText, translateMermaid } from '../skills/translate-lang';
+import { t } from '../i18n';
+import { checkCompliance, maskPII, sanitizeText } from '../compliance/keyword-filter';
+import { detectHallucination } from '../compliance/hallucination-detector';
 
 const chatWs = new Hono();
 
@@ -40,6 +43,13 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
   let botEnabled = true;
   let cachedSubscriberName: string | undefined;
   let cachedPlanName: string | undefined;
+  // ── 会话级指标 ────────────────────────────────────────────────────────────
+  const sessionStartTs = Date.now();
+  let messageCount = 0;
+  let toolCallCount = 0;
+  let toolSuccessCount = 0;
+  let transferTriggered = false;
+  let lastEmotionLabel: string | null = null;
 
   return {
     onOpen: async (_, ws) => {
@@ -100,13 +110,9 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           cachedPlanName = planRows[0]?.name ?? '';
           const name = cachedSubscriberName;
           const planName = cachedPlanName;
-          greetingText = langParam === 'en'
-            ? `Hello, ${name}! I'm Xiaotong from customer service. You're currently on the ${planName} plan. How can I help you today?`
-            : `您好，${name}！我是客服小通，您当前使用的是${planName}，请问今天有什么可以帮您？`;
+          greetingText = t('greeting_with_subscriber', langParam, name, planName);
         } else {
-          greetingText = langParam === 'en'
-            ? "Hello! I'm Xiaotong from customer service. How can I help you today?"
-            : '您好！我是客服小通，请问今天有什么可以帮您？';
+          greetingText = t('greeting_generic', langParam);
         }
 
         // 持久化问候到 DB
@@ -180,10 +186,16 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           history,
           phone,
           agentLang,
-          (skillName, mermaid) => {
-            const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid, msg_id: crypto.randomUUID() };
-            try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
-            sessionBus.publish(phone, ev);
+          (skillName, rawMermaid) => {
+            translateMermaid(rawMermaid, langParam).then(mermaid => {
+              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid, msg_id: crypto.randomUUID() };
+              try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
+              sessionBus.publish(phone, ev);
+            }).catch(() => {
+              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid: rawMermaid, msg_id: crypto.randomUUID() };
+              try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
+              sessionBus.publish(phone, ev);
+            });
           },
           undefined,
           cachedSubscriberName,
@@ -195,10 +207,72 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
         return;
       }
 
+      // 统计指标
+      messageCount += 2; // user + assistant
+      if (result.card) toolCallCount++;
+      if (result.transferData) { transferTriggered = true; }
+      // 从 steps 提取工具调用统计
+      for (const step of (result as any).steps ?? []) {
+        for (const tc of step.toolCalls ?? []) {
+          toolCallCount++;
+          const tr = (step.toolResults ?? []).find((r: any) => r.toolCallId === tc.toolCallId);
+          if (tr && !String(tr.result).includes('"error"')) toolSuccessCount++;
+        }
+      }
+
       logger.info('chat-ws', 'agent_done', {
         session: sessionId, ms: Date.now() - t0,
         text_len: result.text?.length ?? 0, card: result.card?.type ?? null,
       });
+
+      // ── 合规拦截：bot 回复发送前检查 ──────────────────────────────────
+      const compliance = checkCompliance(result.text);
+      if (compliance.hasBlock) {
+        result.text = sanitizeText(result.text, compliance.matches);
+        logger.warn('chat-ws', 'compliance_blocked', {
+          session: sessionId, phone,
+          keywords: compliance.matches.filter(m => m.category === 'banned').map(m => m.keyword),
+        });
+        sessionBus.publish(phone, {
+          source: 'voice', type: 'compliance_alert',
+          data: { source: 'bot', keywords: compliance.matches.filter(m => m.category === 'banned').map(m => m.keyword), text: result.text.slice(0, 100) },
+          msg_id: crypto.randomUUID(),
+        });
+      }
+      if (compliance.hasWarning) {
+        logger.info('chat-ws', 'compliance_warning', {
+          session: sessionId, phone,
+          keywords: compliance.matches.filter(m => m.category === 'warning').map(m => m.keyword),
+        });
+      }
+      if (compliance.hasPII) {
+        result.text = maskPII(result.text, compliance.piiMatches);
+      }
+
+      // ── 幻觉检测（异步，不阻塞回复）──────────────────────────
+      const toolResultsForCheck: Array<{ tool: string; result: string }> = [];
+      for (const step of (result as any).steps ?? []) {
+        for (const tr of step.toolResults ?? []) {
+          toolResultsForCheck.push({
+            tool: tr.toolName ?? 'unknown',
+            result: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
+          });
+        }
+      }
+      if (toolResultsForCheck.length > 0) {
+        detectHallucination(result.text, toolResultsForCheck)
+          .then(hr => {
+            if (hr.has_hallucination) {
+              logger.warn('chat-ws', 'hallucination_detected', { session: sessionId, evidence: hr.evidence });
+              sessionBus.publish(phone, {
+                source: 'voice', type: 'compliance_alert',
+                data: { source: 'hallucination', keywords: [hr.evidence], text: result.text.slice(0, 100) },
+                msg_id: crypto.randomUUID(),
+              });
+            }
+          })
+          .catch(() => {});
+      }
 
       // Persist messages
       await db.insert(messages).values([
@@ -232,13 +306,21 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
         } catch { /* no translation on failure, customer sees original */ }
       }
 
+      // Translate skill_diagram mermaid if needed
+      let finalSkillDiagram = result.skill_diagram ?? null;
+      if (finalSkillDiagram && langParam !== 'zh') {
+        try {
+          finalSkillDiagram = { ...finalSkillDiagram, mermaid: await translateMermaid(finalSkillDiagram.mermaid, langParam) };
+        } catch { /* keep original */ }
+      }
+
       // Final response (no handoff_card on customer side)
       const responseEv = {
         source: 'user' as const,
         type: 'response' as const,
         text: result.text,
         card: result.card ?? null,
-        skill_diagram: result.skill_diagram ?? null,
+        skill_diagram: finalSkillDiagram,
         msg_id: crypto.randomUUID(),
       };
       // Customer gets translated_text if available; agent (via bus) sees original agentLang text
@@ -259,6 +341,15 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
 
     onClose: () => {
       unsubscribe?.();
+      logger.info('chat-ws', 'session_summary', {
+        phone, session: sessionId, channel: 'chat',
+        message_count: messageCount,
+        tool_call_count: toolCallCount,
+        tool_success_rate: toolCallCount > 0 ? Math.round((toolSuccessCount / toolCallCount) * 100) / 100 : null,
+        transfer_triggered: transferTriggered,
+        auto_resolved: !transferTriggered,
+        duration_ms: Date.now() - sessionStartTs,
+      });
       logger.info('chat-ws', 'closed', { phone, session: sessionId });
     },
   };

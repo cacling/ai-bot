@@ -33,7 +33,7 @@ metadata:
 - 已逾期天数
 - 最迟还款日期
 
-然后直接问：**"请问您打算什么时候还款呢？"**
+然后直接询问客户打算什么时候还款。
 
 ### 第二步：根据客户回复判断意向
 
@@ -60,8 +60,7 @@ metadata:
   → 感谢，礼貌挂断
 ```
 
-话术示例：
-> "好的，那我记录您 [日期] 还款，我这边给您发一条还款链接的短信方便您操作，好吗？……感谢您，再见！"
+要点：确认还款日期 → 告知将发送还款链接短信 → 感谢并道别。
 
 ---
 
@@ -70,7 +69,7 @@ metadata:
 ```
 询问客户期望的回呼时间
   → 询问是否用当前手机号回呼：
-      "好的，请问我们届时回呼您当前这个号码方便吗？"
+      询问是否用当前号码回呼
       - 方便 → 使用当前号码
       - 不方便 / 换一个 → 请客户报出希望回呼的号码
   → 创建回呼任务（create_callback_task, preferred_time=..., callback_phone=...）
@@ -78,11 +77,7 @@ metadata:
   → 礼貌挂断
 ```
 
-话术示例：
-> "好的，那我们到时候再联系您。请问您大概什么时候方便接听呢？……好的，请问届时回呼您这个号码方便吗？……好的，已帮您预约，我们 [时间] 再联系您，再见！"
-
-若客户要换号：
-> "好的，请问您希望我们回呼哪个号码呢？……已记录，届时我们会拨打 [新号码]，再见！"
+要点：询问客户方便接听的时间 → 确认回呼号码（当前号码是否方便） → 若换号则记录新号码 → 告知预约成功并道别。
 
 ---
 
@@ -95,8 +90,7 @@ metadata:
   → 否则告知后续仍会联系，礼貌挂断
 ```
 
-话术示例：
-> "好的，我理解。需要提醒您，持续逾期可能会影响您的账号正常使用。如果后续有需要，欢迎随时联系我们。再见！"
+要点：表示理解 → 提醒一次逾期可能影响账号正常使用 → 告知后续仍会联系 → 礼貌道别。
 
 ---
 
@@ -139,57 +133,49 @@ metadata:
 - 节奏：说完一件事，等客户回应再继续
 - 结束语：无论结果如何，礼貌道别
 
-## 客户引导时序图
+## 客户引导状态图
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant Task as 催收任务平台
-    participant Bot as 外呼机器人
-    actor Customer as 客户
-    participant SMS as 短信服务
-    participant Agent as 人工坐席
+stateDiagram-v2
+    [*] --> 任务下发: 催收任务平台下发客户信息、欠款金额、逾期天数、最迟还款日
+    任务下发 --> 开场说明: 告知录音 + 直接说明欠款金额、逾期天数、最迟还款日
+    开场说明 --> 客户回复意向: 询问：您打算什么时候还款呢？
 
-    Task->>Bot: 下发外呼任务（客户信息/欠款金额/逾期天数/最迟还款日）
-    Bot->>Customer: 开场白：告知录音 + 直接说明欠款金额/逾期天数/最迟还款日
-    Bot->>Customer: 询问：您打算什么时候还款呢？
-    Customer->>Bot: 回复还款意向
+    state 意向判断 <<choice>>
+    客户回复意向 --> 意向判断
+    意向判断 --> 承诺还款: 表示会还、说出日期
+    意向判断 --> 预约回呼: 现在不方便、要求晚点再打
+    意向判断 --> 明确拒绝: 拒绝还款、不配合
+    意向判断 --> 提出异议: 已还款、金额有误、非本人欠款
+    意向判断 --> 转人工: 要求转人工
 
-    alt 承诺还款（PTP）
-        Bot->>Customer: 确认具体还款日期
-        Bot->>SMS: 发送还款链接短信 %% tool:send_followup_sms
-        SMS-->>Customer: 短信送达
-        Bot->>Task: 记录 PTP 结果（承诺日期） %% tool:record_call_result
-        Bot->>Customer: 感谢接听，礼貌挂断
-    else 预约回呼（callback）
-        Bot->>Customer: 询问期望回呼时间
-        Bot->>Customer: 确认回呼号码（当前号码是否方便？）
-        alt 客户要换号
-            Customer->>Bot: 提供新手机号
-        end
-        Bot->>Task: 创建回呼任务（preferred_time, callback_phone） %% tool:create_callback_task
-        Bot->>Task: 记录结果（ptp, ptp_date=回呼时间） %% tool:record_call_result
-        Bot->>Customer: 告知预约成功，礼貌挂断
-    else 明确拒绝
-        Bot->>Customer: 提醒一次逾期后果（仅一次）
-        alt 情绪激烈 / 投诉意向
-            Bot->>Agent: 转人工处理 %% tool:transfer_to_human
-            Agent-->>Customer: 人工继续沟通
-        else 普通拒绝
-            Bot->>Task: 记录拒绝结果
-            Bot->>Customer: 告知后续仍会联系，礼貌挂断
-        end
-    else 提出异议（已还款/金额有误/非本人欠款）
-        Bot->>Customer: 收集异议详情
-        Bot->>Task: 记录异议，生成复核工单
-        alt 情况复杂需人工
-            Bot->>Agent: 转人工复核 %% tool:transfer_to_human
-            Agent-->>Customer: 人工处理
-        else 可自动回复
-            Bot->>Customer: 告知核查时限，礼貌挂断
-        end
-    else 要求转人工
-        Bot->>Agent: 发起转人工 %% tool:transfer_to_human
-        Agent-->>Customer: 人工接通处理
-    end
+    承诺还款 --> 发送还款短信: 确认还款日期 ▸ send_followup_sms(payment_link) %% tool:send_followup_sms
+    发送还款短信 --> 记录承诺: record_call_result(ptp) %% tool:record_call_result
+    记录承诺 --> [*]: 感谢挂断
+
+    预约回呼 --> 确认回呼信息: 询问期望回呼时间 + 确认回呼号码
+    state 号码确认 <<choice>>
+    确认回呼信息 --> 号码确认
+    号码确认 --> 回呼已预约: 使用当前号码
+    号码确认 --> 回呼已预约: 客户提供新手机号
+    回呼已预约 --> 创建回访任务: create_callback_task %% tool:create_callback_task
+    创建回访任务 --> 记录回呼: record_call_result(ptp) %% tool:record_call_result
+    记录回呼 --> [*]: 礼貌挂断
+
+    明确拒绝 --> 提醒后果: 提醒一次逾期后果（仅一次）
+    state 拒绝情绪 <<choice>>
+    提醒后果 --> 拒绝情绪
+    拒绝情绪 --> 转人工: 情绪激烈或投诉意向
+    拒绝情绪 --> 记录拒绝: 普通拒绝 ▸ record_call_result(refusal) %% tool:record_call_result
+    记录拒绝 --> [*]: 告知后续仍会联系，礼貌挂断
+
+    提出异议 --> 收集异议详情: 收集详情（已还款时间渠道、金额差异、非本人说明）
+    收集异议详情 --> 记录异议: record_call_result(dispute) %% tool:record_call_result
+    state 异议复杂度 <<choice>>
+    记录异议 --> 异议复杂度
+    异议复杂度 --> 转人工: 情况复杂需人工复核
+    异议复杂度 --> [*]: 简单情况，告知核查时限，礼貌挂断
+
+    转人工 --> 转接坐席: transfer_to_human %% tool:transfer_to_human
+    转接坐席 --> [*]: 人工接通处理
 ```

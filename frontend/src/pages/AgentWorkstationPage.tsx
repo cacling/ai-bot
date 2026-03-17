@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Bot, Send, Headset, User, Radio, MessageSquare, BookOpen, PlusCircle, Smile, Library, Wrench } from 'lucide-react';
-import { nowTime, CardMessage, DEFAULT_USER_PHONE, type CardData } from '../App';
+import { nowTime } from '../App';
+import { CardMessage, type CardData } from '../components/CardMessage';
+import { DEFAULT_USER_PHONE } from '../api/chat';
 import { T, type Lang } from '../i18n';
 import { fetchMockUsers, type MockUser } from '../mockUsers';
 import { useAgentUserSync } from '../userSync';
@@ -12,6 +14,7 @@ import { buildInitialCardStates, findCardByEvent, type CardState } from '../comp
 import { CardPanel } from '../components/cards/CardPanel';
 import { EditorPage } from './EditorPage';
 import { SkillManagerPage } from './SkillManagerPage';
+import { KnowledgeManagementPage } from './km/KnowledgeManagementPage';
 
 interface AgentMessage {
   id: number;
@@ -83,6 +86,8 @@ export function AgentWorkstationPage() {
       // Guard: ignore events from a stale WS (React StrictMode double-invoke)
       if (agentWsRef.current !== ws) return;
       const msg = JSON.parse(evt.data as string) as { source?: string; type: string; msg_id?: string; [k: string]: unknown };
+      // Debug: log all incoming WS events
+      console.log('[AgentWS] received', msg.type, msg.source, msg);
       // Dedup: skip if this msg_id was already processed
       if (msg.msg_id) {
         if (processedMsgIds.current.has(msg.msg_id)) return;
@@ -96,7 +101,17 @@ export function AgentWorkstationPage() {
         botModeRef.current = 'bot';
         pendingBotRef.current = null;
         setIsTyping(false);
-        setCardStates(buildInitialCardStates());
+        // Reset card states but preserve user_detail & outbound_task data
+        // (they are driven by userPhone, not by session lifecycle)
+        setCardStates(prev => {
+          const fresh = buildInitialCardStates();
+          const keep = new Set(['user_detail', 'outbound_task']);
+          return fresh.map(c => {
+            if (!keep.has(c.id)) return c;
+            const old = prev.find(p => p.id === c.id);
+            return old ? { ...c, data: old.data, isOpen: old.isOpen } : c;
+          });
+        });
         processedMsgIds.current.clear();
         return;
       }
@@ -160,6 +175,22 @@ export function AgentWorkstationPage() {
       } else if (msg.type === 'agent_message') {
         // Echo of agent's own message (for confirmation) → skip, already added locally
 
+      } else if (msg.type === 'compliance_block') {
+        // 坐席发言被合规拦截 — 显示为系统提示
+        setMessages(prev => [...prev, {
+          id: nextMsgId(), sender: 'bot',
+          text: `\u26d4 ${msg.message as string}`,
+          time: nowTime(),
+        }]);
+
+      } else if (msg.type === 'compliance_warning') {
+        // 坐席发言合规软告警 — 显示为系统提示
+        setMessages(prev => [...prev, {
+          id: nextMsgId(), sender: 'bot',
+          text: `\u26a0\ufe0f ${msg.message as string}`,
+          time: nowTime(),
+        }]);
+
       } else if (msg.type === 'error') {
         const id = pendingBotRef.current;
         if (id != null) {
@@ -188,10 +219,18 @@ export function AgentWorkstationPage() {
         // Route all other events to the card system
         const def = findCardByEvent(msg.type);
         if (def) {
-          const data = def.dataExtractor(msg);
-          setCardStates(prev => prev.map(c =>
-            c.id === def.id ? { ...c, data, isOpen: true } : c
-          ));
+          const extracted = def.dataExtractor(msg);
+          setCardStates(prev => prev.map(c => {
+            if (c.id !== def.id) return c;
+            // Compliance card uses cumulative mode (append to array)
+            if (c.id === 'compliance') {
+              const arr = Array.isArray(c.data) ? c.data : [];
+              return { ...c, data: [...arr, extracted], isOpen: true };
+            }
+            // Skip update if data is identical (avoids unnecessary re-renders)
+            if (c.isOpen && JSON.stringify(c.data) === JSON.stringify(extracted)) return c;
+            return { ...c, data: extracted, isOpen: true };
+          }));
         }
       }
     };
@@ -344,7 +383,7 @@ export function AgentWorkstationPage() {
             </button>
           </div>
           <div className="flex-1 overflow-hidden">
-            {knowledgeSubTab === 'knowledge' ? <EditorPage /> : <SkillManagerPage />}
+            {knowledgeSubTab === 'knowledge' ? <KnowledgeManagementPage /> : <SkillManagerPage />}
           </div>
         </div>
       )}

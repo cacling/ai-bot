@@ -6,9 +6,12 @@
  * - colSpan:1 cards occupy one column (e.g. emotion, handoff)
  *
  * Drag-to-reorder: swaps order values when a card is dropped onto another.
+ *
+ * Wrapped with React.memo + useMemo for sorted/visible arrays to avoid
+ * unnecessary re-renders of unchanged cards.
  */
 
-import { useState } from 'react';
+import { memo, useState, useMemo, useCallback } from 'react';
 import { CardShell } from './CardShell';
 import { getCardDef, getAllCardDefs, type CardState } from './registry';
 import type { Lang } from '../../i18n';
@@ -19,24 +22,27 @@ interface Props {
   onUpdate: (cards: CardState[]) => void;
 }
 
-export function CardPanel({ cards, lang, onUpdate }: Props) {
+export const CardPanel = memo(function CardPanel({ cards, lang, onUpdate }: Props) {
   const [draggingId, setDraggingId]   = useState<string | null>(null);
   const [dragOverId,  setDragOverId]  = useState<string | null>(null);
 
-  const sorted = [...cards].sort((a, b) => a.order - b.order);
-  const visible = sorted.filter(s => s.isOpen);
+  const sorted  = useMemo(() => [...cards].sort((a, b) => a.order - b.order), [cards]);
+  const visible = useMemo(() => sorted.filter(s => s.isOpen), [sorted]);
+  const closed  = useMemo(() => sorted.filter(s => !s.isOpen), [sorted]);
 
-  const handleDragStart = (id: string) => (e: React.DragEvent) => {
+  const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
     setDraggingId(id);
     e.dataTransfer.effectAllowed = 'move';
-  };
+  }, []);
 
-  const handleDragOver = (id: string) => (e: React.DragEvent) => {
+  const handleDragOver = useCallback((id: string) => (e: React.DragEvent) => {
     e.preventDefault();
     if (id !== draggingId) setDragOverId(id);
-  };
+  }, [draggingId]);
 
-  const handleDrop = (targetId: string) => (e: React.DragEvent) => {
+  const resetDrag = useCallback(() => { setDraggingId(null); setDragOverId(null); }, []);
+
+  const handleDrop = useCallback((targetId: string) => (e: React.DragEvent) => {
     e.preventDefault();
     if (!draggingId || draggingId === targetId) { resetDrag(); return; }
 
@@ -53,20 +59,19 @@ export function CardPanel({ cards, lang, onUpdate }: Props) {
       return c;
     }));
     resetDrag();
-  };
+  }, [draggingId, cards, onUpdate, resetDrag]);
 
-  const resetDrag = () => { setDraggingId(null); setDragOverId(null); };
-
-  const toggleCollapse = (id: string) => {
+  const toggleCollapse = useCallback((id: string) => {
     onUpdate(cards.map(c => c.id === id ? { ...c, isCollapsed: !c.isCollapsed } : c));
-  };
+  }, [cards, onUpdate]);
 
-  const closeCard = (id: string) => {
+  const closeCard = useCallback((id: string) => {
     onUpdate(cards.map(c => c.id === id ? { ...c, isOpen: false } : c));
-  };
+  }, [cards, onUpdate]);
 
-  // Cards that are closed can be re-opened via a small button row at bottom
-  const closed = sorted.filter(s => !s.isOpen);
+  const reopenCard = useCallback((id: string) => {
+    onUpdate(cards.map(c => c.id === id ? { ...c, isOpen: true } : c));
+  }, [cards, onUpdate]);
 
   return (
     <div className="flex flex-col gap-2 w-full">
@@ -106,7 +111,7 @@ export function CardPanel({ cards, lang, onUpdate }: Props) {
             return (
               <button
                 key={state.id}
-                onClick={() => onUpdate(cards.map(c => c.id === state.id ? { ...c, isOpen: true } : c))}
+                onClick={() => reopenCard(state.id)}
                 className="flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-gray-200 shadow-sm text-[11px] text-gray-500 hover:text-gray-700 hover:border-gray-300 transition"
               >
                 <def.Icon size={11} />
@@ -123,7 +128,7 @@ export function CardPanel({ cards, lang, onUpdate }: Props) {
       )}
     </div>
   );
-}
+});
 
 // Re-export for convenience
 export { getAllCardDefs };

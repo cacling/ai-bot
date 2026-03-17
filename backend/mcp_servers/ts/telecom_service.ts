@@ -84,11 +84,36 @@ const bills = sqliteTable("bills", {
   status: text("status").notNull(),
 });
 
-const db = drizzle(client, { schema: { plans, valueAddedServices, subscribers, subscriberSubscriptions, bills } });
+const deviceContexts = sqliteTable("device_contexts", {
+  phone:                  text("phone").primaryKey(),
+  installed_app_version:  text("installed_app_version").notNull(),
+  latest_app_version:     text("latest_app_version").notNull(),
+  device_os:              text("device_os").notNull(),
+  os_version:             text("os_version").notNull(),
+  device_rooted:          integer("device_rooted", { mode: "boolean" }).notNull(),
+  developer_mode_on:      integer("developer_mode_on", { mode: "boolean" }).notNull(),
+  running_on_emulator:    integer("running_on_emulator", { mode: "boolean" }).notNull(),
+  has_vpn_active:         integer("has_vpn_active", { mode: "boolean" }).notNull(),
+  has_fake_gps:           integer("has_fake_gps", { mode: "boolean" }).notNull(),
+  has_remote_access_app:  integer("has_remote_access_app", { mode: "boolean" }).notNull(),
+  has_screen_share_active: integer("has_screen_share_active", { mode: "boolean" }).notNull(),
+  flagged_apps:           text("flagged_apps").notNull(),
+  login_location_changed: integer("login_location_changed", { mode: "boolean" }).notNull(),
+  new_device:             integer("new_device", { mode: "boolean" }).notNull(),
+  otp_delivery_issue:     integer("otp_delivery_issue", { mode: "boolean" }).notNull(),
+});
+
+const db = drizzle(client, { schema: { plans, valueAddedServices, subscribers, subscriberSubscriptions, bills, deviceContexts } });
 
 // ── 日志 ───────────────────────────────────────────────────────────────────────
 function mcpLog(tool: string, extra: Record<string, unknown>): void {
   console.log(JSON.stringify({ ts: new Date().toISOString(), mod: "telecom", tool, ...extra }));
+}
+
+/** "2026-03" → "2026年3月" — 避免模型将 YYYY-MM 格式误读为错误月份 */
+function monthLabel(yyyymm: string): string {
+  const [y, m] = yyyymm.split("-");
+  return `${y}年${parseInt(m, 10)}月`;
 }
 
 // ── 工具注册工厂 ───────────────────────────────────────────────────────────────
@@ -173,7 +198,8 @@ function createMcpServer(): McpServer {
           };
         }
         mcpLog("query_bill", { phone, month, found: true, ms: Math.round(performance.now() - t0) });
-        return { content: [{ type: "text", text: JSON.stringify({ found: true, bill }) }] };
+        const label = monthLabel(bill.month);
+        return { content: [{ type: "text", text: JSON.stringify({ found: true, note: `本结果为${label}账单，请核对是否为用户所查询的月份`, bill: { ...bill, month_label: label } }) }] };
       }
 
       // 返回最近3条账单（real 类型直接返回 number，无需转换）
@@ -185,7 +211,8 @@ function createMcpServer(): McpServer {
         .limit(3)
         .all();
       mcpLog("query_bill", { phone, month: null, found: true, count: recentBills.length, ms: Math.round(performance.now() - t0) });
-      return { content: [{ type: "text", text: JSON.stringify({ found: true, bills: recentBills }) }] };
+      const labeled = recentBills.map(b => ({ ...b, month_label: monthLabel(b.month) }));
+      return { content: [{ type: "text", text: JSON.stringify({ found: true, note: `以下为最近${labeled.length}个月账单，请根据用户需求选择对应月份回复`, bills: labeled }) }] };
     }
   );
 
@@ -346,28 +373,29 @@ function createMcpServer(): McpServer {
         };
       }
 
-      // 构造安全诊断上下文（设备状态使用模拟数据，账号状态映射自真实数据）
+      // 构造安全诊断上下文（设备状态从 DB 查询，账号状态映射自用户数据）
       const accountStatus = sub.status === "active" ? "active" : sub.status === "suspended" ? "temp_locked" : "active";
+      const deviceRow = db.select().from(deviceContexts).where(eq(deviceContexts.phone, phone)).get();
       const ctx: AppUserContext = {
         account_status: accountStatus as AppUserContext["account_status"],
         lock_reason: "unknown",
         failed_attempts: 0,
         last_successful_login_days: 1,
-        installed_app_version: "3.2.1",
-        latest_app_version: "3.5.0",
-        device_os: "android",
-        os_version: "Android 13",
-        device_rooted: false,
-        developer_mode_on: false,
-        running_on_emulator: false,
-        has_vpn_active: false,
-        has_fake_gps: false,
-        has_remote_access_app: false,
-        has_screen_share_active: false,
-        flagged_apps: [],
-        login_location_changed: false,
-        new_device: false,
-        otp_delivery_issue: false,
+        installed_app_version:  deviceRow?.installed_app_version ?? "3.2.1",
+        latest_app_version:     deviceRow?.latest_app_version ?? "3.5.0",
+        device_os:              deviceRow?.device_os ?? "android",
+        os_version:             deviceRow?.os_version ?? "Android 13",
+        device_rooted:          deviceRow?.device_rooted ?? false,
+        developer_mode_on:      deviceRow?.developer_mode_on ?? false,
+        running_on_emulator:    deviceRow?.running_on_emulator ?? false,
+        has_vpn_active:         deviceRow?.has_vpn_active ?? false,
+        has_fake_gps:           deviceRow?.has_fake_gps ?? false,
+        has_remote_access_app:  deviceRow?.has_remote_access_app ?? false,
+        has_screen_share_active: deviceRow?.has_screen_share_active ?? false,
+        flagged_apps:           deviceRow ? JSON.parse(deviceRow.flagged_apps) : [],
+        login_location_changed: deviceRow?.login_location_changed ?? false,
+        new_device:             deviceRow?.new_device ?? false,
+        otp_delivery_issue:     deviceRow?.otp_delivery_issue ?? false,
       };
 
       const result = runSecurityDiagnosis(ctx, issue_type as SecurityIssueType);
@@ -377,6 +405,60 @@ function createMcpServer(): McpServer {
         content: [{
           type: "text",
           text: JSON.stringify({ success: true, phone, ...result }),
+        }],
+      };
+    }
+  );
+
+  // 7. 开具电子发票
+  server.tool(
+    "issue_invoice",
+    "为指定用户的指定月份账单开具电子发票并发送到邮箱",
+    {
+      phone: z.string().describe("用户手机号"),
+      month: z.string().describe('账单月份，格式 YYYY-MM，如 "2026-02"'),
+      email: z.string().describe("发票接收邮箱地址"),
+    },
+    async ({ phone, month, email }) => {
+      const t0 = performance.now();
+
+      // 验证用户存在
+      const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
+      if (!sub) {
+        mcpLog("issue_invoice", { phone, month, success: false, reason: "no_subscriber", ms: Math.round(performance.now() - t0) });
+        return {
+          content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到手机号 ${phone} 的用户信息` }) }],
+        };
+      }
+
+      // 查询对应月份账单
+      const bill = await db.select().from(bills).where(and(eq(bills.phone, phone), eq(bills.month, month))).get();
+      if (!bill) {
+        mcpLog("issue_invoice", { phone, month, success: false, reason: "no_bill", ms: Math.round(performance.now() - t0) });
+        return {
+          content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到 ${phone} 用户 ${month} 的账单记录，无法开具发票` }) }],
+        };
+      }
+
+      // 生成发票号（模拟）
+      const invoiceNo = `INV-${month.replace('-', '')}-${phone.slice(-4)}-${Date.now().toString(36).toUpperCase().slice(-4)}`;
+      const maskedEmail = email.replace(/^(.{2})(.*)(@.*)$/, (_, a, b, c) => a + '*'.repeat(Math.min(b.length, 4)) + c);
+
+      mcpLog("issue_invoice", { phone, month, email: maskedEmail, invoiceNo, total: bill.total, success: true, ms: Math.round(performance.now() - t0) });
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            invoice_no: invoiceNo,
+            phone,
+            month,
+            total: bill.total,
+            email: maskedEmail,
+            status: "已发送",
+            message: `${month} 账单电子发票（金额 ¥${bill.total}）已发送至 ${maskedEmail}，发票号：${invoiceNo}，预计 3-5 个工作日内送达。`,
+          }),
         }],
       };
     }

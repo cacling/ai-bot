@@ -33,45 +33,7 @@ describe('TRANSFER_PHRASE_RE', () => {
   });
 });
 
-// ── VoiceSessionState ─────────────────────────────────────────────────────────
-
-describe('VoiceSessionState', () => {
-  test('初始 transferTriggered = false', () => {
-    const s = new VoiceSessionState('13800000001', 'session-1');
-    expect(s.transferTriggered).toBe(false);
-  });
-
-  test('手动置位后 transferTriggered = true', () => {
-    const s = new VoiceSessionState('13800000001', 'session-2');
-    s.transferTriggered = true;
-    expect(s.transferTriggered).toBe(true);
-  });
-
-  test('addUserTurn / addAssistantTurn 正确追加对话', () => {
-    const s = new VoiceSessionState('13800000001', 'session-3');
-    s.addUserTurn('帮我查话费');
-    s.addAssistantTurn('您本月费用 58 元。');
-    expect(s.turns.length).toBe(2);
-    expect(s.turns[0].role).toBe('user');
-    expect(s.turns[1].role).toBe('assistant');
-  });
-
-  test('recordTool 记录成功调用并重置连续失败计数', () => {
-    const s = new VoiceSessionState('13800000001', 'session-4');
-    s.consecutiveToolFails = 2;
-    s.recordTool('query_bill', { phone: '13800000001' }, '{"total":58}', true);
-    expect(s.toolCalls.length).toBe(1);
-    expect(s.consecutiveToolFails).toBe(0);
-    expect(s.collectedSlots.phone).toBe('13800000001');
-  });
-
-  test('recordTool 失败时累加 consecutiveToolFails', () => {
-    const s = new VoiceSessionState('13800000001', 'session-5');
-    s.recordTool('query_bill', {}, '错误', false);
-    s.recordTool('query_bill', {}, '错误', false);
-    expect(s.consecutiveToolFails).toBe(2);
-  });
-});
+// VoiceSessionState 基础功能测试已移至 voice.metrics.test.ts
 
 // ── 防止重复触发：模拟 triggerHandoff 幂等性 ──────────────────────────────────
 

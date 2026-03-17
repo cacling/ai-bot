@@ -33,9 +33,19 @@ export function DiagramPanel({ diagram, onClose, lang = 'zh' }: Props) {
     setError('');
     setLoading(true);
 
+    // Debug: log mermaid update
+    const hlLines = diagram.mermaid.split('\n').filter((l: string) => l.includes(':::'));
+    console.log('[DiagramPanel] mermaid update', { skill: diagram.skill_name, len: diagram.mermaid.length, hlLines });
+
     renderMermaid(diagram.mermaid)
-      .then((result) => { if (!cancelled) setSvg(result); })
-      .catch((err)   => { if (!cancelled) setError(err instanceof Error ? err.message : t.diagram_error); })
+      .then((result) => {
+        if (!cancelled) {
+          const hasHL = result.includes('progressHL') || result.includes('toolHL') || result.includes('branchHL');
+          console.log('[DiagramPanel] render done', { hasHL, svgLen: result.length });
+          setSvg(result);
+        }
+      })
+      .catch((err)   => { if (!cancelled) { console.error('[DiagramPanel] render error', err); setError(err instanceof Error ? err.message : t.diagram_error); } })
       .finally(()    => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };

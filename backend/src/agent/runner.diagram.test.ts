@@ -1,7 +1,7 @@
 /**
  * runner.diagram.test.ts
  * 验证流程图高亮能力：highlightMermaidTool + extractMermaidFromContent
- * 以及真实 SKILL.md 中的 %% tool: 标记是否正确可被高亮
+ * 支持 sequenceDiagram（rect 高亮）和 stateDiagram（classDef 高亮）
  *
  * 运行：cd backend && bun test src/agent/runner.diagram.test.ts
  */
@@ -9,12 +9,11 @@ import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { highlightMermaidTool, highlightMermaidBranch, determineBranch, extractMermaidFromContent } from './runner.ts';
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
 
-const SKILLS_DIR = resolve(import.meta.dir, '../..', 'skills', 'biz-skills');
+// ── highlightMermaidTool · sequenceDiagram ───────────────────────────────────
 
-// ── highlightMermaidTool ──────────────────────────────────────────────────────
-
-describe('highlightMermaidTool', () => {
+describe('highlightMermaidTool · sequenceDiagram', () => {
   const rawMermaid = `sequenceDiagram
     participant C as 客户
     participant A as AI 客服
@@ -70,31 +69,128 @@ describe('highlightMermaidTool', () => {
   });
 });
 
+// ── highlightMermaidTool · stateDiagram ──────────────────────────────────────
+
+describe('highlightMermaidTool · stateDiagram', () => {
+  const rawMermaid = `stateDiagram-v2
+    [*] --> 接收问题: 客户反映问题
+    接收问题 --> 系统诊断: 确定类型
+    系统诊断 --> 分析诊断结果: diagnose_network(phone, issue_type) %% tool:diagnose_network
+    state 分析诊断结果 <<choice>>
+    分析诊断结果 --> 账号停机: error`;
+
+  test('使用 classDef 高亮目标状态节点', () => {
+    const result = highlightMermaidTool(rawMermaid, 'diagnose_network');
+    expect(result).toContain('classDef toolHL fill:#fff3b0,stroke:#ffc800,stroke-width:2px');
+    expect(result).toContain('分析诊断结果:::toolHL');
+  });
+
+  test('classDef 插入在第一行之后', () => {
+    const result = highlightMermaidTool(rawMermaid, 'diagnose_network');
+    const lines = result.split('\n');
+    expect(lines[0]).toBe('stateDiagram-v2');
+    expect(lines[1]).toContain('classDef toolHL');
+  });
+
+  test('内联 :::className 语法应用在标记行', () => {
+    const result = highlightMermaidTool(rawMermaid, 'diagnose_network');
+    expect(result).toContain('--> 分析诊断结果:::toolHL :');
+  });
+
+  test('没有匹配标记时原样返回', () => {
+    const result = highlightMermaidTool(rawMermaid, 'nonexistent');
+    expect(result).toBe(rawMermaid);
+  });
+
+  test('不使用 rect 语法', () => {
+    const result = highlightMermaidTool(rawMermaid, 'diagnose_network');
+    expect(result).not.toContain('rect ');
+  });
+});
+
+// ── highlightMermaidBranch · stateDiagram ────────────────────────────────────
+
+describe('highlightMermaidBranch · stateDiagram', () => {
+  const rawMermaid = `stateDiagram-v2
+    state 分析诊断结果 <<choice>>
+    分析诊断结果 --> 账号停机: error — 账号欠费 %% branch:account_error
+    分析诊断结果 --> 流量耗尽: error — 流量用完 %% branch:data_exhausted
+    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok`;
+
+  test('使用 classDef 高亮目标分支状态', () => {
+    const result = highlightMermaidBranch(rawMermaid, 'account_error');
+    expect(result).toContain('classDef branchHL fill:#d4f5d4,stroke:#64dc78,stroke-width:2px');
+    expect(result).toContain('账号停机:::branchHL');
+  });
+
+  test('只高亮匹配的分支，不影响其他分支', () => {
+    const result = highlightMermaidBranch(rawMermaid, 'account_error');
+    expect(result).toContain('账号停机:::branchHL');
+    expect(result).not.toContain('流量耗尽:::branchHL');
+    expect(result).not.toContain('用户自查:::branchHL');
+  });
+
+  test('没有匹配标记时原样返回', () => {
+    const result = highlightMermaidBranch(rawMermaid, 'nonexistent');
+    expect(result).toBe(rawMermaid);
+  });
+
+  test('不使用 rect 语法', () => {
+    const result = highlightMermaidBranch(rawMermaid, 'account_error');
+    expect(result).not.toContain('rect ');
+  });
+});
+
+// ── highlightMermaidBranch · sequenceDiagram ─────────────────────────────────
+
+describe('highlightMermaidBranch · sequenceDiagram', () => {
+  const rawMermaid = `sequenceDiagram
+    participant C as 客户
+    participant A as AI 客服
+    alt 账号停机（error）
+        A->>C: 告知账号欠费停机 %% branch:account_error
+    else 所有项均正常（ok）
+        A->>C: 引导用户自查 %% branch:all_ok
+    end`;
+
+  test('将带有匹配标记的行包裹进 rect 块（绿色）', () => {
+    const result = highlightMermaidBranch(rawMermaid, 'account_error');
+    expect(result).toContain('rect rgba(100, 220, 120, 0.4)');
+    expect(result).toContain('告知账号欠费停机');
+    expect(result).toContain('end\n');
+  });
+
+  test('只高亮匹配的 branch，不影响其他行', () => {
+    const result = highlightMermaidBranch(rawMermaid, 'account_error');
+    expect(result).toContain('rect rgba(100, 220, 120, 0.4)');
+    // all_ok 行未被包裹
+    const lines = result.split('\n');
+    const allOkIdx = lines.findIndex((l) => l.includes('all_ok'));
+    const rectBeforeAllOk = lines.slice(0, allOkIdx).some((l) => l.includes('rect rgba(100'));
+    expect(rectBeforeAllOk).toBe(true); // rect is before account_error line, not all_ok
+    // Verify all_ok line itself is not wrapped
+    expect(lines[allOkIdx - 1]?.includes('rect rgba(100')).toBe(false);
+  });
+
+  test('没有匹配标记时原样返回', () => {
+    const result = highlightMermaidBranch(rawMermaid, 'data_exhausted');
+    expect(result).toBe(rawMermaid);
+  });
+
+  test('空字符串不报错', () => {
+    expect(() => highlightMermaidBranch('', 'account_error')).not.toThrow();
+    expect(highlightMermaidBranch('', 'account_error')).toBe('');
+  });
+});
+
 // ── extractMermaidFromContent ─────────────────────────────────────────────────
 
 describe('extractMermaidFromContent', () => {
   const zhOnly = `# 标题\n\`\`\`mermaid\nsequenceDiagram\n    A->>B: 你好\n\`\`\`\n`;
-  const bilingualMd = `# 标题\n\`\`\`mermaid\nsequenceDiagram\n    A->>B: 你好\n\`\`\`\n\n<!-- lang:en -->\n\`\`\`mermaid\nsequenceDiagram\n    A->>B: Hello\n\`\`\`\n`;
   const noMermaid = `# 普通文档\n没有代码块\n`;
 
-  test('lang=zh 时提取第一个 mermaid 块', () => {
-    const result = extractMermaidFromContent(zhOnly, 'zh');
-    expect(result).toContain('A->>B: 你好');
-  });
-
-  test('lang=en，存在 <!-- lang:en --> 块时提取英文块', () => {
-    const result = extractMermaidFromContent(bilingualMd, 'en');
-    expect(result).toContain('A->>B: Hello');
-    expect(result).not.toContain('你好');
-  });
-
-  test('lang=en，无英文块时回退到第一个块', () => {
-    const result = extractMermaidFromContent(zhOnly, 'en');
-    expect(result).toContain('A->>B: 你好');
-  });
-
-  test('lang=zh 时忽略 <!-- lang:en --> 块，取第一个', () => {
-    const result = extractMermaidFromContent(bilingualMd, 'zh');
+  test('提取第一个 mermaid 块', () => {
+    const result = extractMermaidFromContent(zhOnly);
     expect(result).toContain('A->>B: 你好');
   });
 
@@ -111,62 +207,96 @@ describe('extractMermaidFromContent', () => {
 
 // ── 真实 SKILL.md 文件验证 ───────────────────────────────────────────────────
 
-describe('fault-diagnosis SKILL.md — 高亮管线集成验证', () => {
+describe('fault-diagnosis SKILL.md — stateDiagram 高亮集成验证', () => {
   const skillPath = resolve(SKILLS_DIR, 'fault-diagnosis', 'SKILL.md');
   const skillContent = readFileSync(skillPath, 'utf-8');
 
-  test('SKILL.md 包含中文 mermaid 块', () => {
-    const mermaid = extractMermaidFromContent(skillContent, 'zh');
+  test('SKILL.md 包含 mermaid 块', () => {
+    const mermaid = extractMermaidFromContent(skillContent);
     expect(mermaid).not.toBeNull();
-    expect(mermaid).toContain('sequenceDiagram');
+    expect(mermaid).toContain('stateDiagram-v2');
   });
 
-  test('SKILL.md 包含英文 mermaid 块（lang:en 标记后）', () => {
-    const mermaid = extractMermaidFromContent(skillContent, 'en');
-    expect(mermaid).not.toBeNull();
-    // 英文块有英文参与者标签
-    expect(mermaid).toContain('Customer');
-  });
-
-  test('中文 mermaid 块包含 %% tool:diagnose_network 标记', () => {
-    const mermaid = extractMermaidFromContent(skillContent, 'zh')!;
+  test('mermaid 块包含 %% tool:diagnose_network 标记', () => {
+    const mermaid = extractMermaidFromContent(skillContent)!;
     expect(mermaid).toContain('%% tool:diagnose_network');
   });
 
-  test('英文 mermaid 块包含 %% tool:diagnose_network 标记', () => {
-    const mermaid = extractMermaidFromContent(skillContent, 'en')!;
-    expect(mermaid).toContain('%% tool:diagnose_network');
+  test('mermaid 块包含 %% branch: 标记', () => {
+    const mermaid = extractMermaidFromContent(skillContent)!;
+    expect(mermaid).toContain('%% branch:account_error');
+    expect(mermaid).toContain('%% branch:data_exhausted');
+    expect(mermaid).toContain('%% branch:apn_warning');
+    expect(mermaid).toContain('%% branch:signal_weak');
+    expect(mermaid).toContain('%% branch:congestion');
+    expect(mermaid).toContain('%% branch:all_ok');
   });
 
-  test('highlightMermaidTool 对中文 mermaid 正确高亮 diagnose_network 行', () => {
-    const raw = extractMermaidFromContent(skillContent, 'zh')!;
+  test('tool 高亮生成 classDef + class（非 rect）', () => {
+    const raw = extractMermaidFromContent(skillContent)!;
     const highlighted = highlightMermaidTool(raw, 'diagnose_network');
-
-    expect(highlighted).toContain('rect rgba(255, 200, 0, 0.35)');
-    // 高亮行包含原始工具调用内容
-    expect(highlighted).toContain('diagnose_network');
-    // 产生了 end 块（带缩进）
-    expect(highlighted).toContain('end\n');
+    expect(highlighted).toContain('classDef toolHL');
+    expect(highlighted).toContain('分析诊断结果:::toolHL');
+    expect(highlighted).not.toContain('rect ');
   });
 
-  test('highlightMermaidTool 对英文 mermaid 正确高亮 diagnose_network 行', () => {
-    const raw = extractMermaidFromContent(skillContent, 'en')!;
-    const highlighted = highlightMermaidTool(raw, 'diagnose_network');
-
-    expect(highlighted).toContain('rect rgba(255, 200, 0, 0.35)');
-    expect(highlighted).toContain('diagnose_network');
+  test('branch 高亮生成 classDef + class（非 rect）', () => {
+    const raw = extractMermaidFromContent(skillContent)!;
+    const highlighted = highlightMermaidBranch(raw, 'account_error');
+    expect(highlighted).toContain('classDef branchHL');
+    expect(highlighted).toContain('账号停机:::branchHL');
+    expect(highlighted).not.toContain('rect ');
   });
 
   test('对不存在的工具名高亮后内容不变', () => {
-    const raw = extractMermaidFromContent(skillContent, 'zh')!;
+    const raw = extractMermaidFromContent(skillContent)!;
     const highlighted = highlightMermaidTool(raw, 'nonexistent_tool');
     expect(highlighted).toBe(raw);
   });
 
-  test('高亮后的 mermaid 仍是合法的 sequenceDiagram（以 sequenceDiagram 开头）', () => {
-    const raw = extractMermaidFromContent(skillContent, 'zh')!;
+  test('高亮后的 mermaid 仍以 stateDiagram 开头', () => {
+    const raw = extractMermaidFromContent(skillContent)!;
     const highlighted = highlightMermaidTool(raw, 'diagnose_network');
-    expect(highlighted.trimStart()).toMatch(/^sequenceDiagram/);
+    expect(highlighted.trimStart()).toMatch(/^stateDiagram/);
+  });
+
+  test('组合高亮 tool + branch 同时生效', () => {
+    const raw = extractMermaidFromContent(skillContent)!;
+    const highlighted = highlightMermaidBranch(
+      highlightMermaidTool(raw, 'diagnose_network'),
+      'account_error',
+    );
+    expect(highlighted).toContain('classDef toolHL');
+    expect(highlighted).toContain('classDef branchHL');
+    expect(highlighted).toContain('分析诊断结果:::toolHL');
+    expect(highlighted).toContain('账号停机:::branchHL');
+  });
+});
+
+// ── telecom-app SKILL.md — stateDiagram tool 高亮验证 ────────────────────────
+
+describe('telecom-app SKILL.md — stateDiagram tool 高亮验证', () => {
+  const skillPath = resolve(SKILLS_DIR, 'telecom-app', 'SKILL.md');
+  const skillContent = readFileSync(skillPath, 'utf-8');
+
+  test('SKILL.md 包含 stateDiagram mermaid 块', () => {
+    const mermaid = extractMermaidFromContent(skillContent);
+    expect(mermaid).not.toBeNull();
+    expect(mermaid).toContain('stateDiagram-v2');
+  });
+
+  test('mermaid 块包含 %% tool:diagnose_app 标记', () => {
+    const mermaid = extractMermaidFromContent(skillContent)!;
+    expect(mermaid).toContain('%% tool:diagnose_app');
+  });
+
+  test('tool 高亮生成 classDef + class', () => {
+    const raw = extractMermaidFromContent(skillContent)!;
+    const highlighted = highlightMermaidTool(raw, 'diagnose_app');
+    expect(highlighted).toContain('classDef toolHL');
+    // diagnose_app 在 TC2 和 TC5 中各出现一次，应高亮两个目标状态
+    expect(highlighted).toContain('按诊断引导:::toolHL');
+    expect(highlighted).toContain('安全诊断_5:::toolHL');
   });
 });
 
@@ -180,7 +310,6 @@ describe('onDiagramUpdate 回调管线（模拟 onStepFinish）', () => {
    */
   function simulateStepFinish(
     toolCalls: Array<{ toolName: string; args: Record<string, unknown> }>,
-    lang: 'zh' | 'en',
     onDiagramUpdate: (skillName: string, mermaid: string) => void,
   ) {
     const SKILL_TOOL_MAP: Record<string, string> = {
@@ -195,7 +324,7 @@ describe('onDiagramUpdate 回调管线（模拟 onStepFinish）', () => {
         if (skillName) {
           try {
             const content = readFileSync(resolve(SKILLS_DIR, skillName, 'SKILL.md'), 'utf-8');
-            const raw = extractMermaidFromContent(content, lang);
+            const raw = extractMermaidFromContent(content);
             if (raw) onDiagramUpdate(skillName, raw);
           } catch { /* ignore */ }
         }
@@ -205,40 +334,37 @@ describe('onDiagramUpdate 回调管线（模拟 onStepFinish）', () => {
       if (skillName) {
         try {
           const content = readFileSync(resolve(SKILLS_DIR, skillName, 'SKILL.md'), 'utf-8');
-          const raw = extractMermaidFromContent(content, lang);
+          const raw = extractMermaidFromContent(content);
           if (raw) onDiagramUpdate(skillName, highlightMermaidTool(raw, tc.toolName));
         } catch { /* ignore */ }
       }
     }
   }
 
-  test('get_skill_instructions 触发回调，传入无高亮的 mermaid', () => {
+  test('get_skill_instructions 触发回调，传入原始 mermaid（无高亮）', () => {
     const updates: Array<{ skillName: string; mermaid: string }> = [];
     simulateStepFinish(
       [{ toolName: 'get_skill_instructions', args: { skill_name: 'fault-diagnosis' } }],
-      'zh',
       (skillName, mermaid) => updates.push({ skillName, mermaid }),
     );
 
     expect(updates).toHaveLength(1);
     expect(updates[0].skillName).toBe('fault-diagnosis');
-    expect(updates[0].mermaid).toContain('sequenceDiagram');
-    // 无高亮
-    expect(updates[0].mermaid).not.toContain('rect rgba');
+    expect(updates[0].mermaid).toContain('stateDiagram-v2');
+    expect(updates[0].mermaid).not.toContain('classDef');
   });
 
-  test('diagnose_network 触发回调，传入高亮版 mermaid', () => {
+  test('diagnose_network 触发回调，传入高亮后的 mermaid', () => {
     const updates: Array<{ skillName: string; mermaid: string }> = [];
     simulateStepFinish(
       [{ toolName: 'diagnose_network', args: { phone: '13800000001', issue_type: 'slow_data' } }],
-      'zh',
       (skillName, mermaid) => updates.push({ skillName, mermaid }),
     );
 
     expect(updates).toHaveLength(1);
     expect(updates[0].skillName).toBe('fault-diagnosis');
-    expect(updates[0].mermaid).toContain('rect rgba(255, 200, 0, 0.35)');
-    expect(updates[0].mermaid).toContain('diagnose_network');
+    expect(updates[0].mermaid).toContain('classDef toolHL');
+    expect(updates[0].mermaid).toContain('分析诊断结果:::toolHL');
   });
 
   test('同一步骤同时调用 get_skill_instructions + diagnose_network，回调被触发两次', () => {
@@ -248,37 +374,16 @@ describe('onDiagramUpdate 回调管线（模拟 onStepFinish）', () => {
         { toolName: 'get_skill_instructions', args: { skill_name: 'fault-diagnosis' } },
         { toolName: 'diagnose_network', args: { phone: '13800000001', issue_type: 'slow_data' } },
       ],
-      'zh',
       (skillName, mermaid) => updates.push({ skillName, mermaid }),
     );
 
     expect(updates).toHaveLength(2);
-    // 第一次：无高亮
-    expect(updates[0].mermaid).not.toContain('rect rgba');
-    // 第二次：有高亮
-    expect(updates[1].mermaid).toContain('rect rgba(255, 200, 0, 0.35)');
-  });
-
-  test('lang=en 时回调中的 mermaid 来自英文块，高亮仍正确', () => {
-    const updates: Array<{ skillName: string; mermaid: string }> = [];
-    simulateStepFinish(
-      [{ toolName: 'diagnose_network', args: {} }],
-      'en',
-      (skillName, mermaid) => updates.push({ skillName, mermaid }),
-    );
-
-    expect(updates).toHaveLength(1);
-    // 英文块包含英文参与者
-    expect(updates[0].mermaid).toContain('Customer');
-    // 高亮仍然生效
-    expect(updates[0].mermaid).toContain('rect rgba(255, 200, 0, 0.35)');
   });
 
   test('未知工具不触发回调', () => {
     const updates: Array<{ skillName: string; mermaid: string }> = [];
     simulateStepFinish(
       [{ toolName: 'query_subscriber', args: {} }],
-      'zh',
       (skillName, mermaid) => updates.push({ skillName, mermaid }),
     );
     expect(updates).toHaveLength(0);
@@ -352,93 +457,5 @@ describe('determineBranch', () => {
 
   test('空数组 → all_ok', () => {
     expect(determineBranch([])).toBe('all_ok');
-  });
-});
-
-// ── highlightMermaidBranch ────────────────────────────────────────────────────
-
-describe('highlightMermaidBranch', () => {
-  const rawMermaid = `sequenceDiagram
-    participant C as 客户
-    participant A as AI 客服
-    alt 账号停机（error）
-        A->>C: 告知账号欠费停机 %% branch:account_error
-    else 所有项均正常（ok）
-        A->>C: 引导用户自查 %% branch:all_ok
-    end`;
-
-  test('将带有匹配标记的行包裹进 rect 块（绿色）', () => {
-    const result = highlightMermaidBranch(rawMermaid, 'account_error');
-    expect(result).toContain('rect rgba(100, 220, 120, 0.4)');
-    expect(result).toContain('告知账号欠费停机');
-    expect(result).toContain('end\n');
-  });
-
-  test('只高亮匹配的 branch，不影响其他行', () => {
-    const result = highlightMermaidBranch(rawMermaid, 'account_error');
-    expect(result).toContain('rect rgba(100, 220, 120, 0.4)');
-    // all_ok 行未被包裹
-    const lines = result.split('\n');
-    const allOkIdx = lines.findIndex((l) => l.includes('all_ok'));
-    const rectBeforeAllOk = lines.slice(0, allOkIdx).some((l) => l.includes('rect rgba(100'));
-    expect(rectBeforeAllOk).toBe(true); // rect is before account_error line, not all_ok
-    // Verify all_ok line itself is not wrapped
-    expect(lines[allOkIdx - 1]?.includes('rect rgba(100')).toBe(false);
-  });
-
-  test('没有匹配标记时原样返回', () => {
-    const result = highlightMermaidBranch(rawMermaid, 'data_exhausted');
-    expect(result).toBe(rawMermaid);
-  });
-
-  test('空字符串不报错', () => {
-    expect(() => highlightMermaidBranch('', 'account_error')).not.toThrow();
-    expect(highlightMermaidBranch('', 'account_error')).toBe('');
-  });
-});
-
-// ── 组合高亮（tool + branch）─────────────────────────────────────────────────
-
-describe('combined tool + branch highlight', () => {
-  const skillPath = resolve(SKILLS_DIR, 'fault-diagnosis', 'SKILL.md');
-  const skillContent = readFileSync(skillPath, 'utf-8');
-
-  test('中文 mermaid：同时高亮 diagnose_network 和 account_error', () => {
-    const raw = extractMermaidFromContent(skillContent, 'zh')!;
-    const highlighted = highlightMermaidBranch(highlightMermaidTool(raw, 'diagnose_network'), 'account_error');
-    expect(highlighted).toContain('rect rgba(255, 200, 0, 0.35)');   // tool highlight
-    expect(highlighted).toContain('rect rgba(100, 220, 120, 0.4)');  // branch highlight
-    expect(highlighted).toContain('diagnose_network');
-    expect(highlighted).toContain('account_error');
-  });
-
-  test('英文 mermaid：同时高亮 diagnose_network 和 account_error', () => {
-    const raw = extractMermaidFromContent(skillContent, 'en')!;
-    const highlighted = highlightMermaidBranch(highlightMermaidTool(raw, 'diagnose_network'), 'account_error');
-    expect(highlighted).toContain('rect rgba(255, 200, 0, 0.35)');
-    expect(highlighted).toContain('rect rgba(100, 220, 120, 0.4)');
-    expect(highlighted).toContain('Customer');
-  });
-
-  test('英文 mermaid 包含所有 %% branch: 标记', () => {
-    const raw = extractMermaidFromContent(skillContent, 'en')!;
-    const branches = ['account_error', 'data_exhausted', 'apn_warning', 'signal_weak', 'congestion', 'all_ok'];
-    for (const b of branches) {
-      expect(raw).toContain(`%% branch:${b}`);
-    }
-  });
-
-  test('中文 mermaid 包含所有 %% branch: 标记', () => {
-    const raw = extractMermaidFromContent(skillContent, 'zh')!;
-    const branches = ['account_error', 'data_exhausted', 'apn_warning', 'signal_weak', 'congestion', 'all_ok'];
-    for (const b of branches) {
-      expect(raw).toContain(`%% branch:${b}`);
-    }
-  });
-
-  test('高亮后的 mermaid 仍以 sequenceDiagram 开头', () => {
-    const raw = extractMermaidFromContent(skillContent, 'zh')!;
-    const highlighted = highlightMermaidBranch(highlightMermaidTool(raw, 'diagnose_network'), 'congestion');
-    expect(highlighted.trimStart()).toMatch(/^sequenceDiagram/);
   });
 });

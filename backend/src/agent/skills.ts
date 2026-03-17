@@ -1,27 +1,90 @@
 import { tool } from 'ai';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { readFileSync, readdirSync, existsSync } from 'fs';
+import { resolve, join } from 'path';
 import { z } from 'zod';
 import { logger } from '../logger';
 
-// Resolve biz-skills directory (src/agent/ → ../../skills/biz-skills → backend/skills/biz-skills/)
-const SKILLS_DIR = resolve(
-  process.env.SKILLS_DIR
-    ? resolve(process.cwd(), process.env.SKILLS_DIR, 'biz-skills')
-    : resolve(import.meta.dir, '../..', 'skills', 'biz-skills')
-);
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
+
+// ── 动态扫描可用技能 ──────────────────────────────────────────────────────────
+
+interface SkillEntry {
+  name: string;
+  description: string;
+}
+
+function scanAvailableSkills(): SkillEntry[] {
+  const entries: SkillEntry[] = [];
+  try {
+    const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true }).filter(d => d.isDirectory());
+    for (const dir of dirs) {
+      const mdPath = join(SKILLS_DIR, dir.name, 'SKILL.md');
+      if (existsSync(mdPath)) {
+        const content = readFileSync(mdPath, 'utf-8');
+        const descMatch = content.match(/^description:\s*(.+)$/m);
+        entries.push({
+          name: dir.name,
+          description: descMatch?.[1]?.trim() ?? dir.name,
+        });
+      }
+    }
+  } catch { /* ignore */ }
+  return entries;
+}
+
+// 缓存 + 定时刷新（每 30 秒），避免每次请求都扫描磁盘
+let _cachedSkills: SkillEntry[] = scanAvailableSkills();
+let _cachedSkillDesc = '';
+let _lastScan = Date.now();
+
+function getAvailableSkills(): SkillEntry[] {
+  if (Date.now() - _lastScan > 30_000) {
+    _cachedSkills = scanAvailableSkills();
+    _cachedSkillDesc = '';
+    _lastScan = Date.now();
+  }
+  return _cachedSkills;
+}
+
+/** 强制刷新技能缓存（新建/删除技能后调用） */
+export function refreshSkillsCache(): void {
+  _cachedSkills = scanAvailableSkills();
+  _cachedSkillDesc = '';
+  _lastScan = Date.now();
+}
+
+function buildSkillDescription(): string {
+  if (_cachedSkillDesc) return _cachedSkillDesc;
+  const skills = getAvailableSkills();
+  _cachedSkillDesc = skills.map(s => `${s.name}（${s.description}）`).join(', ');
+  return _cachedSkillDesc;
+}
+
+/** 获取可用技能描述（用于 system prompt 注入） */
+export function getAvailableSkillsDescription(): string {
+  const skills = getAvailableSkills();
+  return skills.map(s => `${s.description}→${s.name}`).join('；');
+}
+
+function getSkillNames(): string[] {
+  return getAvailableSkills().map(s => s.name);
+}
 
 export const skillsTools = {
   get_skill_instructions: tool({
     description:
-      '加载指定 Skill 的操作指南（SKILL.md）。当客户问题属于特定领域时，先调用此工具了解处理流程。' +
-      '可用 skill_name: bill-inquiry（账单/费用/发票）, service-cancel（退订增值业务）, plan-inquiry（套餐咨询/推荐）, fault-diagnosis（网络故障/无信号/网速慢）, telecom-app（营业厅App所有问题：登录/闪退/功能异常/安装更新/账号安全）, outbound-collection（外呼催收：身份核验/逾期告知/还款意向收集/结果记录）, outbound-marketing（外呼营销：套餐推介/异议处理/转化跟进）, outbound-marketing-bank（银行外呼营销：贷款/理财/信用卡推介/免打扰登记/预约回访）',
+      '加载指定 Skill 的操作指南（SKILL.md）。当客户问题属于特定领域时，先调用此工具了解处理流程。',
     parameters: z.object({
       skill_name: z
-        .enum(['bill-inquiry', 'service-cancel', 'plan-inquiry', 'fault-diagnosis', 'telecom-app', 'outbound-collection', 'outbound-marketing', 'outbound-marketing-bank'])
+        .string()
         .describe('Skill 名称'),
     }),
     execute: async ({ skill_name }) => {
+      const available = getSkillNames();
+      if (!available.includes(skill_name)) {
+        const desc = buildSkillDescription();
+        return `Error: Skill "${skill_name}" not found. Available skills: ${desc}`;
+      }
       const t0 = performance.now();
       const path = `${SKILLS_DIR}/${skill_name}/SKILL.md`;
       try {
@@ -56,13 +119,18 @@ export const skillsTools = {
     description: '加载 Skill 的参考文档（如计费规则、套餐详情、退订政策、故障排查手册）',
     parameters: z.object({
       skill_name: z
-        .enum(['bill-inquiry', 'service-cancel', 'plan-inquiry', 'fault-diagnosis', 'telecom-app', 'outbound-collection', 'outbound-marketing'])
+        .string()
         .describe('Skill 名称'),
       reference_path: z
         .string()
         .describe('参考文档文件名，如 "refund-policy.md" 或 "feature-comparison.md"'),
     }),
     execute: async ({ skill_name, reference_path }) => {
+      const available = getSkillNames();
+      if (!available.includes(skill_name)) {
+        const desc = buildSkillDescription();
+        return `Error: Skill "${skill_name}" not found. Available skills: ${desc}`;
+      }
       const t0 = performance.now();
       const path = `${SKILLS_DIR}/${skill_name}/references/${reference_path}`;
       try {

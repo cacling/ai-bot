@@ -4,6 +4,7 @@
  * data shape: HandoffData | null
  */
 
+import { memo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { T, type Lang } from '../../../i18n';
 
@@ -17,7 +18,7 @@ interface HandoffData {
   risk_flags?:        string[];
 }
 
-export function HandoffContent({ data, lang }: { data: unknown; lang: Lang }) {
+export const HandoffContent = memo(function HandoffContent({ data, lang }: { data: unknown; lang: Lang }) {
   const d = data as HandoffData | null;
   const tc = T[lang];
 
@@ -69,4 +70,4 @@ export function HandoffContent({ data, lang }: { data: unknown; lang: Lang }) {
       )}
     </div>
   );
-}
+});

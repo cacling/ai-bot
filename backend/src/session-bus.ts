@@ -26,7 +26,9 @@ export type BusEvent =
   | { source: 'voice'; type: 'response';              text: string;        msg_id: string }
   | { source: 'voice'; type: 'emotion_update';        label: string; emoji: string; color: string; msg_id: string }
   | { source: 'voice'; type: 'skill_diagram_update';  skill_name: string; mermaid: string; msg_id: string }
-  | { source: 'voice'; type: 'handoff_card';          data: Record<string, unknown>; msg_id: string };
+  | { source: 'voice'; type: 'handoff_card';          data: Record<string, unknown>; msg_id: string }
+  | { source: 'voice'; type: 'compliance_alert';      data: Record<string, unknown>; msg_id: string }
+  | { source: 'system'; type: 'new_session';          channel: string; msg_id: string };
 
 /** Event types stored in per-phone history ring buffer (excludes streaming deltas and internal data). */
 const HISTORY_TYPES = new Set(['user_message', 'response', 'agent_message']);

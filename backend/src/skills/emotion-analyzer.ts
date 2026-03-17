@@ -20,10 +20,10 @@ const MODEL = siliconflow(
 );
 
 // ── Skill 文件加载 ─────────────────────────────────────────────────────────────
-const SKILLS_DIR = resolve(import.meta.dir, '../../skills');
+import { TECH_SKILLS_DIR } from '../config/paths';
 
 function loadSkill(name: string): string {
-  const raw = readFileSync(`${SKILLS_DIR}/tech-skills/${name}/SKILL.md`, 'utf-8');
+  const raw = readFileSync(`${TECH_SKILLS_DIR}/${name}/SKILL.md`, 'utf-8');
   return raw.replace(/^---[\s\S]*?---\n/, '').trim();
 }
 

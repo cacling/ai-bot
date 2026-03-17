@@ -11,6 +11,7 @@
 import { generateText } from 'ai';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { NO_DATA_RE } from '../utils/tool-result';
 import { siliconflow } from '../agent/llm';
 
 // ── 模型 ──────────────────────────────────────────────────────────────────────
@@ -19,10 +20,10 @@ const MODEL = siliconflow(
 );
 
 // ── Skill 加载 ─────────────────────────────────────────────────────────────────
-const SKILLS_DIR = resolve(import.meta.dir, '../../skills');
+import { TECH_SKILLS_DIR } from '../config/paths';
 
 const SKILL_SYSTEM = (() => {
-  const raw = readFileSync(`${SKILLS_DIR}/tech-skills/handoff-analysis/SKILL.md`, 'utf-8');
+  const raw = readFileSync(`${TECH_SKILLS_DIR}/handoff-analysis/SKILL.md`, 'utf-8');
   return raw.replace(/^---[\s\S]*?---\n/, '').trim();
 })();
 
@@ -120,7 +121,7 @@ function buildPrompt(turns: TurnRecord[], toolCalls: ToolRecord[], lang: 'zh' | 
     .map(t => `${t.role === 'user' ? '用户' : '客服'}：${t.text}`)
     .join('\n');
 
-  const NO_DATA_RE = /没找到|未找到|不存在|没有.*记录|无记录|null|not.?found/i;
+  // NO_DATA_RE imported at top from utils/tool-result
   const tools = toolCalls
     .slice(-8)
     .map(tc => {

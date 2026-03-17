@@ -4,11 +4,12 @@
  * data shape: MockUser | null
  */
 
+import { memo } from 'react';
 import { User } from 'lucide-react';
 import type { Lang } from '../../../i18n';
 import type { MockUser } from '../../../mockUsers';
 
-export function UserDetailContent({ data, lang }: { data: unknown; lang: Lang }) {
+export const UserDetailContent = memo(function UserDetailContent({ data, lang }: { data: unknown; lang: Lang }) {
   const user = data as MockUser | null;
 
   if (!user) {
@@ -56,4 +57,4 @@ export function UserDetailContent({ data, lang }: { data: unknown; lang: Lang })
       </div>
     </div>
   );
-}
+});

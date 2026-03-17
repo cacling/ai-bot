@@ -9,7 +9,7 @@
  *  - 未选中文件   → 空白编辑区（进入技能后自动选中 SKILL.md）
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import CodeMirror from '@uiw/react-codemirror';
@@ -20,18 +20,28 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import {
   Send, Bot, User, FileText, Folder, FileCode,
   ChevronRight, Sparkles, CheckCircle2, Plus,
-  ArrowLeft, Book, Clock, Loader2, AlertCircle,
-  Save, AlertTriangle, Eye, Mic, MicOff,
+  ArrowLeft, AlertCircle,
+  Save, Mic, MicOff, History, Loader2,
+  FlaskConical,
 } from 'lucide-react';
+import { VersionPanel } from '../components/VersionPanel';
+import { SandboxPanel } from '../components/SandboxPanel';
+import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from '../components/SkillEditorWidgets';
 import {
   useSkillManager,
-  relativeTime,
   isMdFile,
   isTextFile,
   type SkillFileNode,
-  type Skill,
   type ViewMode,
 } from '../hooks/useSkillManager';
+
+// Phase 标签配色映射
+const PHASE_LABELS: Record<string, { label: string; color: string }> = {
+  interview: { label: '需求访谈',  color: 'bg-purple-100 text-purple-700' },
+  draft:     { label: '生成草稿',  color: 'bg-amber-100 text-amber-700' },
+  confirm:   { label: '待确认',   color: 'bg-orange-100 text-orange-700' },
+  done:      { label: '已完成',   color: 'bg-green-100 text-green-700' },
+};
 
 // ── CodeMirror 语言选择 ───────────────────────────────────────────────────────
 
@@ -137,155 +147,6 @@ function FileTree({ nodes, selectedPath, onSelect }: FileTreeProps) {
   );
 }
 
-// ── 对话气泡内联 Markdown ─────────────────────────────────────────────────────
-
-function InlineMarkdown({ text }: { text: string }) {
-  return (
-    <>
-      {text.split('\n').map((line, i) => {
-        const parts = line.split(/(\*\*.*?\*\*|`.*?`)/g);
-        return (
-          <p key={i} className="mb-1 last:mb-0">
-            {parts.map((part, j) => {
-              if (part.startsWith('**') && part.endsWith('**'))
-                return <strong key={j} className="font-semibold">{part.slice(2, -2)}</strong>;
-              if (part.startsWith('`') && part.endsWith('`'))
-                return (
-                  <code key={j} className="px-1 py-0.5 rounded bg-black/10 text-xs font-mono">
-                    {part.slice(1, -1)}
-                  </code>
-                );
-              return part;
-            })}
-          </p>
-        );
-      })}
-    </>
-  );
-}
-
-// ── 技能卡片 ──────────────────────────────────────────────────────────────────
-
-function SkillCard({ skill, onClick }: { skill: Skill; onClick: () => void }) {
-  return (
-    <div
-      onClick={onClick}
-      className="bg-white rounded-xl border border-slate-200 p-5 hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer group flex flex-col h-48"
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg group-hover:bg-indigo-100 transition-colors">
-          <Book className="w-5 h-5" />
-        </div>
-        <h3 className="font-semibold text-slate-800 truncate">{skill.name}</h3>
-      </div>
-      <p className="text-sm text-slate-600 line-clamp-3 flex-1">{skill.description}</p>
-      <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-        <div className="flex items-center gap-1">
-          <Clock className="w-3.5 h-3.5" />
-          更新于 {relativeTime(skill.updatedAt)}
-        </div>
-        <span className="text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-          打开 <ChevronRight className="w-3 h-3" />
-        </span>
-      </div>
-    </div>
-  );
-}
-
-// ── 保存状态指示 ──────────────────────────────────────────────────────────────
-
-function SaveIndicator({ status }: { status: string }) {
-  if (status === 'saving')
-    return (
-      <span className="flex items-center text-xs text-slate-400 gap-1">
-        <Loader2 size={12} className="animate-spin" /> 保存中…
-      </span>
-    );
-  if (status === 'saved')
-    return (
-      <span className="flex items-center text-xs text-green-600 gap-1">
-        <CheckCircle2 size={12} /> 已保存
-      </span>
-    );
-  if (status === 'error')
-    return (
-      <span className="flex items-center text-xs text-red-500 gap-1">
-        <AlertTriangle size={12} /> 保存失败
-      </span>
-    );
-  return null;
-}
-
-// ── 视图模式切换 ──────────────────────────────────────────────────────────────
-
-function ViewToggle({
-  viewMode,
-  onChange,
-}: {
-  viewMode: ViewMode;
-  onChange: (m: ViewMode) => void;
-}) {
-  return (
-    <button
-      onClick={() => onChange(viewMode === 'preview' ? 'edit' : 'preview')}
-      title="切换预览"
-      className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border transition ${
-        viewMode === 'preview'
-          ? 'bg-slate-100 border-slate-300 text-slate-800'
-          : 'border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-      }`}
-    >
-      <Eye size={12} /> 预览
-    </button>
-  );
-}
-
-// ── 未保存离开对话框 ──────────────────────────────────────────────────────────
-
-function UnsavedDialog({
-  onCancel,
-  onDiscard,
-  onSave,
-}: {
-  onCancel: () => void;
-  onDiscard: () => void;
-  onSave: () => void;
-}) {
-  return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-80 flex flex-col gap-4">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold text-slate-800 text-sm">有未保存的修改</p>
-            <p className="text-xs text-slate-500 mt-1">离开后当前编辑内容将丢失，是否先保存？</p>
-          </div>
-        </div>
-        <div className="flex flex-col gap-2">
-          <button
-            onClick={onSave}
-            className="w-full px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition"
-          >
-            保存并离开
-          </button>
-          <button
-            onClick={onDiscard}
-            className="w-full px-4 py-2 bg-white text-slate-700 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition"
-          >
-            不保存直接离开
-          </button>
-          <button
-            onClick={onCancel}
-            className="w-full px-4 py-2 text-slate-400 text-sm hover:text-slate-600 transition"
-          >
-            取消
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── 主页面 ────────────────────────────────────────────────────────────────────
 
 // ── 语音输入 Hook ─────────────────────────────────────────────────────────────
@@ -370,9 +231,24 @@ export function SkillManagerPage() {
     openSkill,
     requestCloseEditor,
     createNewSkill,
+    // skill-creator
+    phase,
+    canPublish,
+    publishSkill,
   } = useSkillManager();
 
   const { isRecording, toggle: toggleVoice } = useVoiceInput((text) => setInputValue(text));
+
+  // ── 版本历史面板 ─────────────────────────────────────────────────────────────
+  const [showVersions, setShowVersions] = useState(false);
+  const [showSandbox, setShowSandbox] = useState(false);
+  const handleRollbackDone = useCallback(() => {
+    // 回滚成功后重新选中当前文件以刷新编辑器内容
+    if (selectedFile) handleSelectFile(selectedFile);
+  }, [selectedFile, handleSelectFile]);
+  const handleApplyOrPublishDone = useCallback(() => {
+    if (selectedFile) handleSelectFile(selectedFile);
+  }, [selectedFile, handleSelectFile]);
 
   // ── 列表视图 ────────────────────────────────────────────────────────────────
   if (view === 'list') {
@@ -455,6 +331,11 @@ export function SkillManagerPage() {
           <span className="font-semibold text-slate-800 text-sm truncate">
             {activeSkill?.name ?? '技能编辑'}
           </span>
+          {PHASE_LABELS[phase] && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${PHASE_LABELS[phase].color}`}>
+              {PHASE_LABELS[phase].label}
+            </span>
+          )}
         </div>
 
         {/* 对话消息 */}
@@ -492,6 +373,23 @@ export function SkillManagerPage() {
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* 发布按钮（当有 draft 可发布时显示）*/}
+        {canPublish && (
+          <div className="px-3 py-2 bg-green-50 border-t border-green-200">
+            <button
+              onClick={publishSkill}
+              disabled={saveStatus === 'saving'}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 disabled:opacity-40 transition"
+            >
+              {saveStatus === 'saving' ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 保存中…</>
+              ) : (
+                <><CheckCircle2 className="w-3.5 h-3.5" /> 保存技能到磁盘</>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* 输入框 */}
         <div className="p-3 bg-white border-t border-slate-200">
@@ -579,6 +477,28 @@ export function SkillManagerPage() {
               {selectedIsMd && (
                 <ViewToggle viewMode={viewMode} onChange={setViewMode} />
               )}
+              {selectedIsMd && (
+                <button
+                  onClick={() => setShowVersions(!showVersions)}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition ${
+                    showVersions
+                      ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <History size={12} /> 版本
+                </button>
+              )}
+<button
+                onClick={() => setShowSandbox(!showSandbox)}
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition ${
+                  showSandbox
+                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <FlaskConical size={12} /> 沙箱测试
+              </button>
               <button
                 onClick={handleSave}
                 disabled={!canSave}
@@ -589,56 +509,81 @@ export function SkillManagerPage() {
             </div>
           </div>
 
-          {/* 内容区 */}
-          <div className="flex-1 overflow-hidden">
+          {/* 内容区 + 版本面板 */}
+          <div className="flex-1 overflow-hidden flex">
+            {/* 编辑器主区域 */}
+            <div className={`flex-1 overflow-hidden ${showVersions ? 'border-r border-gray-200' : ''}`}>
 
-            {/* 加载中 */}
-            {fileLoading && (
-              <div className="flex items-center justify-center h-full text-slate-400 gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="text-sm">加载中…</span>
-              </div>
-            )}
+              {/* 加载中 */}
+              {fileLoading && (
+                <div className="flex items-center justify-center h-full text-slate-400 gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">加载中…</span>
+                </div>
+              )}
 
-            {/* .md 文件 — 编辑模式（默认）*/}
-            {!fileLoading && selectedFile && selectedIsMd && viewMode === 'edit' && (
-              <textarea
-                className="w-full h-full resize-none font-mono text-sm leading-relaxed p-4 outline-none bg-white text-slate-800"
-                value={editorContent}
-                onChange={(e) => handleEditorChange(e.target.value)}
-                spellCheck={false}
-              />
-            )}
-
-            {/* .md 文件 — 预览模式 */}
-            {!fileLoading && selectedFile && selectedIsMd && viewMode === 'preview' && (
-              <div className="h-full overflow-y-auto px-6 py-4 prose prose-sm max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-              </div>
-            )}
-
-            {/* 代码文件 — CodeMirror 编辑器 */}
-            {!fileLoading && selectedFile && !selectedIsMd && isTextFile(selectedFile.name) && (
-              <div className="h-full overflow-auto">
-                <CodeMirror
+              {/* .md 文件 — 编辑模式（默认）*/}
+              {!fileLoading && selectedFile && selectedIsMd && viewMode === 'edit' && (
+                <textarea
+                  className="w-full h-full resize-none font-mono text-sm leading-relaxed p-4 outline-none bg-white text-slate-800"
                   value={editorContent}
-                  height="100%"
-                  theme={oneDark}
-                  extensions={getCodeMirrorLang(selectedFile.name)
-                    ? [getCodeMirrorLang(selectedFile.name)!]
-                    : []}
-                  onChange={handleEditorChange}
-                  basicSetup={{ lineNumbers: true, foldGutter: true }}
-                  style={{ fontSize: '13px', height: '100%' }}
+                  onChange={(e) => handleEditorChange(e.target.value)}
+                  spellCheck={false}
+                />
+              )}
+
+              {/* .md 文件 — 预览模式 */}
+              {!fileLoading && selectedFile && selectedIsMd && viewMode === 'preview' && (
+                <div className="h-full overflow-y-auto px-6 py-4 prose prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                </div>
+              )}
+
+              {/* 代码文件 — CodeMirror 编辑器 */}
+              {!fileLoading && selectedFile && !selectedIsMd && isTextFile(selectedFile.name) && (
+                <div className="h-full overflow-auto">
+                  <CodeMirror
+                    value={editorContent}
+                    height="100%"
+                    theme={oneDark}
+                    extensions={getCodeMirrorLang(selectedFile.name)
+                      ? [getCodeMirrorLang(selectedFile.name)!]
+                      : []}
+                    onChange={handleEditorChange}
+                    basicSetup={{ lineNumbers: true, foldGutter: true }}
+                    style={{ fontSize: '13px', height: '100%' }}
+                  />
+                </div>
+              )}
+
+              {/* 不支持的文件类型 */}
+              {!fileLoading && selectedFile && !selectedIsMd && !isTextFile(selectedFile.name) && (
+                <div className="flex items-center justify-center h-full text-slate-400 text-sm gap-2">
+                  <AlertCircle size={16} />
+                  不支持预览此文件类型
+                </div>
+              )}
+            </div>
+
+            {/* 版本历史侧栏 */}
+            {showVersions && (
+              <div className="w-72 shrink-0">
+                <VersionPanel
+                  filePath={selectedFile?.path ?? null}
+                  onClose={() => setShowVersions(false)}
+                  onRollback={handleRollbackDone}
                 />
               </div>
             )}
 
-            {/* 不支持的文件类型 */}
-            {!fileLoading && selectedFile && !selectedIsMd && !isTextFile(selectedFile.name) && (
-              <div className="flex items-center justify-center h-full text-slate-400 text-sm gap-2">
-                <AlertCircle size={16} />
-                不支持预览此文件类型
+{/* 沙箱测试侧栏 */}
+            {showSandbox && (
+              <div className="w-80 shrink-0 border-l border-slate-200 relative">
+                <SandboxPanel
+                  filePath={selectedFile?.path ?? null}
+                  onPublishDone={handleApplyOrPublishDone}
+                  onClose={() => setShowSandbox(false)}
+                />
               </div>
             )}
           </div>

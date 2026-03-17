@@ -5,29 +5,26 @@
 import { Hono } from 'hono';
 import { createBunWebSocket } from 'hono/bun';
 import NodeWebSocket from 'ws';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { subscribers, plans } from '../db/schema';
-import { analyzeHandoff } from '../skills/handoff-analyzer';
-import { analyzeEmotion } from '../skills/emotion-analyzer';
 import { textToSpeech } from '../skills/tts';
 import { translateText } from '../skills/translate-lang';
+import { t, TOOL_LABELS } from '../i18n';
+import { isNoDataResult } from '../utils/tool-result';
 import { logger } from '../logger';
 import { sessionBus } from '../session-bus';
-import { getLangs } from '../lang-session';
+import { getLangs, setCustomerLang } from '../lang-session';
+import { checkCompliance } from '../compliance/keyword-filter';
+import { VoiceSessionState, TRANSFER_PHRASE_RE, type HandoffContext } from '../services/voice-session';
+import { callMcpTool } from '../services/mcp-client';
+import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
-// Resolve biz-skills directory (mirrors logic in skills.ts)
-const SKILLS_DIR = resolve(
-  process.env.SKILLS_DIR
-    ? resolve(process.cwd(), process.env.SKILLS_DIR, 'biz-skills')
-    : resolve(import.meta.dir, '../..', 'skills', 'biz-skills')
-);
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
 
 /** Tool → skill name mapping: used to send skill_diagram_update to the frontend */
 const SKILL_TOOL_MAP: Record<string, string> = {
@@ -35,37 +32,9 @@ const SKILL_TOOL_MAP: Record<string, string> = {
   diagnose_app: 'telecom-app',
 };
 
-/** Extract a ```mermaid ... ``` block from markdown. When lang='en', prefers the block after <!-- lang:en -->, falls back to first block. */
-function extractMermaidFromContent(markdown: string, lang: 'zh' | 'en' = 'zh'): string | null {
-  if (lang === 'en') {
-    const enMatch = markdown.match(/<!--\s*lang:en\s*-->\s*```mermaid\n([\s\S]*?)```/);
-    if (enMatch) return enMatch[1].trim();
-  }
-  const match = markdown.match(/```mermaid\n([\s\S]*?)```/);
-  return match ? match[1].trim() : null;
-}
-
-/**
- * Wrap the line annotated with `%% tool:<toolName>` inside a mermaid `rect` block.
- * Always rebuilds from rawMermaid so only the current tool's step is highlighted.
- */
-function highlightMermaidTool(rawMermaid: string, toolName: string): string {
-  const HIGHLIGHT_COLOR = 'rgba(255, 200, 0, 0.35)';
-  const marker = `%% tool:${toolName}`;
-  return rawMermaid
-    .split('\n')
-    .map((line) => {
-      if (!line.includes(marker)) return line;
-      const indent = line.match(/^(\s*)/)?.[1] ?? '';
-      return `${indent}rect ${HIGHLIGHT_COLOR}\n${indent}  ${line.trimStart()}\n${indent}end`;
-    })
-    .join('\n');
-}
-
 const ZHIPU_API_KEY      = process.env.ZHIPU_API_KEY ?? '';
 const GLM_REALTIME_URL   = process.env.GLM_REALTIME_URL ?? 'wss://open.bigmodel.cn/api/paas/v4/realtime';
 const GLM_REALTIME_MODEL = process.env.GLM_REALTIME_MODEL ?? 'glm-realtime-flash';
-const TELECOM_MCP_URL    = process.env.TELECOM_MCP_URL ?? 'http://localhost:8003/mcp';
 const DEFAULT_PHONE      = '13800000001';
 
 // ── 语音 system prompt ────────────────────────────────────────────────────────
@@ -74,12 +43,8 @@ const VOICE_PROMPT_TEMPLATE =
   '\n\n' +
   readFileSync(resolve(import.meta.dir, '../agent/inbound-voice-system-prompt.md'), 'utf-8');
 
-const ENGLISH_LANG_INSTRUCTION = `
-
----
-
-**LANGUAGE REQUIREMENT (MANDATORY)**
-You MUST respond ONLY in English for this entire conversation. All spoken responses must be in English. Do not switch to Chinese under any circumstances, even if the user speaks Chinese.
+const ENGLISH_LANG_INSTRUCTION = `**LANGUAGE REQUIREMENT (MANDATORY — HIGHEST PRIORITY)**
+You MUST respond ONLY in English for this entire conversation. All spoken responses must be in English. Do not switch to Chinese under any circumstances, even if the user speaks Chinese or tool results contain Chinese data. Always translate any Chinese data from tool results into English before including it in your response.
 When calling tools that accept a \`lang\` parameter (such as diagnose_network, diagnose_app), always pass \`lang: "en"\` to receive English diagnostic output.`;
 
 async function fetchSubscriberInfo(phone: string): Promise<{ name: string; planName: string } | null> {
@@ -102,76 +67,22 @@ async function fetchSubscriberInfo(phone: string): Promise<{ name: string; planN
 }
 
 function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberName?: string, planName?: string): string {
-  const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const locale = lang === 'en' ? 'en-US' : 'zh-CN';
+  const today = new Date().toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const defaultName = lang === 'en' ? 'Customer' : '用户';
+  const defaultPlan = lang === 'en' ? 'Unknown Plan' : '未知套餐';
   const base = VOICE_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
-    .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? '用户')
-    .replace('{{PLAN_NAME}}', planName ?? '未知套餐')
+    .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? defaultName)
+    .replace('{{PLAN_NAME}}', planName ?? defaultPlan)
     .replace('{{CURRENT_DATE}}', today);
-  return lang === 'en' ? base + ENGLISH_LANG_INSTRUCTION : base;
+  return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 
-// ── 会话状态跟踪 ──────────────────────────────────────────────────────────────
-interface TurnRecord   { role: 'user' | 'assistant'; text: string; ts: number; }
-interface ToolRecord   { tool: string; args: Record<string, unknown>; result_summary: string; success: boolean; ts: number; }
-interface HandoffContext {
-  user_phone:            string;
-  session_id:            string;
-  timestamp:             string;
-  transfer_reason:       string;
-  customer_intent:       string;
-  main_issue:            string;
-  business_object:       string[];
-  confirmed_information: string[];
-  actions_taken:         string[];
-  current_status:        string;
-  handoff_reason:        string;
-  next_action:           string;
-  priority:              string;
-  risk_flags:            string[];
-  session_summary:       string;
-}
-
-export const TRANSFER_PHRASE_RE = /转接人工|为您转接|转人工客服|正在为您转接/;
-
-export class VoiceSessionState {
-  turns: TurnRecord[]  = [];
-  toolCalls: ToolRecord[] = [];
-  consecutiveToolFails  = 0;
-  currentBotAccum       = '';    // 累积当前 bot 回复
-  collectedSlots: Record<string, unknown> = {};
-  transferTriggered     = false; // 防止重复触发转人工
-  farewellDone          = false; // 告别语播完后为 true，之后才拦截 GLM 响应
-
-  constructor(readonly phone: string, readonly sessionId: string) {}
-
-  addUserTurn(text: string)      { this.turns.push({ role: 'user',      text, ts: Date.now() }); }
-  addAssistantTurn(text: string) { this.turns.push({ role: 'assistant', text, ts: Date.now() }); this.currentBotAccum = ''; }
-
-  recordTool(tool: string, args: Record<string, unknown>, result: string, success: boolean) {
-    this.toolCalls.push({ tool, args, result_summary: result.slice(0, 300), success, ts: Date.now() });
-    this.consecutiveToolFails = success ? 0 : this.consecutiveToolFails + 1;
-    // 从参数里提取槽位
-    if (args.phone)      this.collectedSlots.phone      = args.phone;
-    if (args.service_id) this.collectedSlots.service_id = args.service_id;
-    if (args.plan_id)    this.collectedSlots.plan_id    = args.plan_id;
-    if (args.issue_type) this.collectedSlots.issue_type = args.issue_type;
-  }
-
-}
-
-// ── 工具名中文映射（用于 handoff 卡片显示） ────────────────────────────────────
-const TOOL_LABEL: Record<string, string> = {
-  query_subscriber: '查询账户信息',
-  query_bill:       '查询账单',
-  query_plans:      '查询套餐',
-  cancel_service:   '退订业务',
-  diagnose_network: '网络诊断',
-  diagnose_app: 'App问题诊断',
-};
+// Re-export for outbound.ts and test files
+export { VoiceSessionState, TRANSFER_PHRASE_RE } from '../services/voice-session';
 
 // ── GLM 工具定义 ──────────────────────────────────────────────────────────────
-// 格式：Realtime API 扁平格式；不传 tool_choice（GLM 不支持该字段）
 const VOICE_TOOLS = [
   {
     type: 'function',
@@ -254,6 +165,20 @@ const VOICE_TOOLS = [
   },
   {
     type: 'function',
+    name: 'issue_invoice',
+    description: '为用户指定月份的账单开具电子发票并发送到邮箱',
+    parameters: {
+      type: 'object',
+      properties: {
+        phone: { type: 'string', description: '用户手机号' },
+        month: { type: 'string', description: '账单月份，格式 YYYY-MM' },
+        email: { type: 'string', description: '发票接收邮箱地址' },
+      },
+      required: ['phone', 'month', 'email'],
+    },
+  },
+  {
+    type: 'function',
     name: 'transfer_to_human',
     description: '将用户转接给人工客服。触发条件：用户明确要求人工、连续两轮无法识别意图、用户情绪激烈或投诉、高风险操作需人工确认、工具连续失败、身份校验未通过、置信度不足。',
     parameters: {
@@ -273,28 +198,6 @@ const VOICE_TOOLS = [
   },
 ];
 
-// ── MCP 工具调用 ──────────────────────────────────────────────────────────────
-async function callMcpTool(
-  sessionId: string,
-  name: string,
-  args: Record<string, unknown>,
-): Promise<{ text: string; success: boolean }> {
-  const client = new Client({ name: 'voice-agent', version: '1.0' });
-  try {
-    await client.connect(new StreamableHTTPClientTransport(new URL(TELECOM_MCP_URL)));
-    const result = await client.callTool({ name, arguments: args });
-    const text = (result.content as Array<{ type: string; text: string }>)
-      .filter(c => c.type === 'text').map(c => c.text).join('\n');
-    logger.info('voice', 'mcp_tool_result', { session: sessionId, tool: name, preview: text.slice(0, 200) });
-    return { text, success: true };
-  } catch (e) {
-    const msg = `工具调用失败: ${String(e)}`;
-    logger.error('voice', 'mcp_tool_error', { session: sessionId, tool: name, error: String(e) });
-    return { text: JSON.stringify({ error: msg }), success: false };
-  } finally {
-    await client.close().catch(() => {});
-  }
-}
 
 // ── Bun WebSocket 适配器 ──────────────────────────────────────────────────────
 export const { upgradeWebSocket, websocket: voiceWebsocket } = createBunWebSocket();
@@ -313,82 +216,40 @@ voice.get(
     const state = new VoiceSessionState(userPhone, sessionId);
     let pendingHandoff: Promise<void> | null = null;
     let unsubscribeAgent: (() => void) | null = null;
+    let activeSkillName: string | null = null; // 当前活跃 skill，用于进度追踪
 
-    // ── 转人工触发器（工具调用路径 / 语音检测路径共用） ──────────────────────
-    function triggerHandoff(
+    // ── 转人工触发器 ──────────────────────────────────────────────────────────
+    function doTriggerHandoff(
       ws: { send: (data: string) => void },
       reason: string,
       toolArgs: Record<string, unknown> = {},
     ) {
-      if (state.transferTriggered) return;
-      state.transferTriggered = true;
-
-      // 从工具调用历史推断真实意图（用于超时 fallback）
-      const toolFreq = state.toolCalls.reduce<Record<string, number>>((acc, tc) => {
-        acc[tc.tool] = (acc[tc.tool] ?? 0) + 1; return acc;
-      }, {});
-      const topTool = Object.entries(toolFreq).sort((a, b) => b[1] - a[1])[0]?.[0];
-      const inferredIntent = (toolArgs.current_intent as string)
-        ?? (topTool ? TOOL_LABEL[topTool] : undefined)
-        ?? '用户咨询';
-      const toolNames = [...new Set(state.toolCalls.map(tc => TOOL_LABEL[tc.tool] ?? tc.tool))].join('、');
-      const inferredSummary = `用户本次咨询${inferredIntent}，机器人${toolNames ? `已查询${toolNames}` : '暂未执行查询'}，最终要求转人工客服处理。`;
-
-      const fallback = {
-        customer_intent:       inferredIntent,
-        main_issue:            `${inferredIntent}相关问题，AI 分析未完成，请查看对话记录`,
-        business_object:       [] as string[],
-        confirmed_information: Object.entries(state.collectedSlots).map(([k, v]) => `${k}: ${v}`),
-        actions_taken:         state.toolCalls.slice(-5).map(tc => {
-          const label = TOOL_LABEL[tc.tool] ?? tc.tool;
-          if (!tc.success) return `${label}（失败）`;
-          const noData = /没找到|未找到|不存在|没有.*记录|无记录|null|not.?found/i.test(tc.result_summary);
-          return `${label}（${noData ? '无数据' : '成功'}）`;
-        }),
-        current_status:        '处理中',
-        handoff_reason:        reason,
-        next_action:           (toolArgs.recommended_action as string) ?? '请主动问候用户，了解具体需求',
-        priority:              '中',
-        risk_flags:            (toolArgs.risk_tags as string[]) ?? [],
-        session_summary:       inferredSummary,
-      };
-
       const agentLang = getLangs(userPhone).agent;
-      const analysisWithTimeout = Promise.race([
-        analyzeHandoff(state.turns, state.toolCalls, agentLang),
-        new Promise<typeof fallback>(resolve => setTimeout(() => resolve(fallback), 20000)),
-      ]);
-
-      pendingHandoff = analysisWithTimeout
-        .catch(() => fallback)
-        .then(analysis => {
-          const ctx: HandoffContext = {
-            user_phone:            state.phone,
-            session_id:            state.sessionId,
-            timestamp:             new Date().toISOString(),
-            transfer_reason:       reason,
-            customer_intent:       analysis.customer_intent,
-            main_issue:            analysis.main_issue,
-            business_object:       analysis.business_object,
-            confirmed_information: analysis.confirmed_information,
-            actions_taken:         analysis.actions_taken,
-            current_status:        analysis.current_status,
-            handoff_reason:        analysis.handoff_reason,
-            next_action:           analysis.next_action,
-            priority:              analysis.priority,
-            risk_flags:            analysis.risk_flags,
-            session_summary:       analysis.session_summary,
-          };
-          logger.info('voice', 'transfer_to_human_done', { session: sessionId, intent: ctx.customer_intent, via: reason });
-          try { ws.send(JSON.stringify({ type: 'transfer_to_human', context: ctx })); } catch {}
-          sessionBus.publish(userPhone, { source: 'voice', type: 'handoff_card', data: ctx as Record<string, unknown>, msg_id: crypto.randomUUID() });
-        });
+      const toolLabel = TOOL_LABELS[lang];
+      pendingHandoff = triggerHandoff(state, ws, sessionId, reason, toolArgs, {
+        toolLabels: toolLabel,
+        defaultIntent: t('handoff_default_inquiry', lang),
+        buildSummary: (intent, tools) => t('handoff_summary_inferred', lang, intent, tools),
+        buildMainIssue: (intent) => t('handoff_issue_incomplete', lang, intent),
+        businessObject: [],
+        buildActionLabel: (tc, label) => {
+          if (!tc.success) return t('tool_failed', lang, label);
+          const noData = isNoDataResult(tc.result_summary);
+          return noData ? t('tool_no_data', lang, label) : t('tool_success', lang, label);
+        },
+        defaultNextAction: t('handoff_next_action_greet', lang),
+        defaultPriority: t('priority_medium', lang),
+        analysisLang: agentLang as 'zh' | 'en',
+        channel: 'voice',
+        lang,
+      }) ?? null;
     }
 
     return {
       // ── 前端连接建立 ──────────────────────────────────────────────────────
       async onOpen(_evt, ws) {
-        logger.info('voice', 'client_connected', { session: sessionId, phone: userPhone, resume });
+        logger.info('voice', 'client_connected', { session: sessionId, phone: userPhone, lang, resume });
+        setCustomerLang(userPhone, lang);
         if (!resume) {
           sessionBus.clearHistory(userPhone);
           sessionBus.publish(userPhone, { source: 'system', type: 'new_session', channel: 'voice', msg_id: crypto.randomUUID() });
@@ -397,7 +258,7 @@ voice.get(
         logger.info('voice', 'subscriber_info', { session: sessionId, name: subInfo?.name ?? null, plan: subInfo?.planName ?? null });
 
         if (!ZHIPU_API_KEY) {
-          ws.send(JSON.stringify({ type: 'error', message: 'ZHIPU_API_KEY 未配置' }));
+          ws.send(JSON.stringify({ type: 'error', message: 'ZHIPU_API_KEY not configured' }));
           ws.close();
           return;
         }
@@ -409,6 +270,9 @@ voice.get(
 
         glmWs.on('open', () => {
           logger.info('voice', 'glm_connected', { session: sessionId, model: GLM_REALTIME_MODEL });
+          const instructions = buildVoicePrompt(userPhone, lang, subInfo?.name, subInfo?.planName);
+          const hasEnInstruction = instructions.includes('LANGUAGE REQUIREMENT');
+          logger.info('voice', 'lang_chain_prompt', { session: sessionId, lang, hasEnInstruction, promptLen: instructions.length, promptHead: instructions.slice(0, 120) });
           glmWs!.send(JSON.stringify({
             event_id: crypto.randomUUID(),
             client_timestamp: Date.now(),
@@ -416,7 +280,7 @@ voice.get(
             session: {
               beta_fields: { chat_mode: 'audio' },
               modalities: ['text', 'audio'],
-              instructions: buildVoicePrompt(userPhone, lang, subInfo?.name, subInfo?.planName),
+              instructions,
               voice: 'tongtong',
               input_audio_format: 'pcm',
               output_audio_format: 'mp3',
@@ -424,13 +288,60 @@ voice.get(
                 type: 'server_vad',
                 silence_duration_ms: 1500,
                 threshold: 0.6,
-                interrupt_response: false,  // 防止 VAD 把机器人回声误判为用户说话后打断自己
+                interrupt_response: false,
               },
               temperature: 0.2,
               tools: VOICE_TOOLS,
             },
           }));
         });
+
+        // ── 非中文 TTS 覆盖：拦截 GLM 中文音频，按句翻译 + TTS 生成目标语言语音 ──
+        const ttsOverride = lang !== 'zh';
+        /** 累积当前回合的 transcript delta 片段 */
+        let ttsAccum = '';
+        /** 已处理的字符偏移量（用于按句切分） */
+        let ttsFlushed = 0;
+        /** 当前回合的 TTS 分句 Promise 队列（保证顺序播放） */
+        let ttsQueue: Promise<void> = Promise.resolve();
+
+        /** 按句切分并异步翻译 + TTS，流式发给前端 */
+        function ttsSendSentence(sentence: string) {
+          ttsQueue = ttsQueue.then(async () => {
+            try {
+              const translated = await translateText(sentence, lang);
+              const audio = await textToSpeech(translated, lang);
+              logger.info('voice', 'tts_override_sentence', { session: sessionId, zhLen: sentence.length, enPreview: translated.slice(0, 60) });
+              ws.send(JSON.stringify({ type: 'tts_override', text: translated, audio }));
+            } catch (e) {
+              logger.warn('voice', 'tts_override_error', { session: sessionId, error: String(e), sentence: sentence.slice(0, 40) });
+              // 降级：发送未翻译文本（无音频）
+              ws.send(JSON.stringify({ type: 'tts_override', text: sentence, audio: null }));
+            }
+          });
+        }
+
+        /** 检查累积文本中是否有完整句子可以发送 */
+        function ttsFlushSentences() {
+          // 按中文句号/问号/感叹号/分号 或 连续逗号后的长段 切分
+          const pending = ttsAccum.slice(ttsFlushed);
+          const re = /[。？！；\n]/g;
+          let match: RegExpExecArray | null;
+          while ((match = re.exec(pending)) !== null) {
+            const end = ttsFlushed + match.index + match[0].length;
+            const sentence = ttsAccum.slice(ttsFlushed, end).trim();
+            if (sentence) ttsSendSentence(sentence);
+            ttsFlushed = end;
+          }
+        }
+
+        /** 回合结束时，发送剩余未切分的尾部文本 */
+        function ttsFlushRemainder() {
+          const remainder = ttsAccum.slice(ttsFlushed).trim();
+          if (remainder) ttsSendSentence(remainder);
+          ttsAccum = '';
+          ttsFlushed = 0;
+        }
 
         // GLM → 前端：拦截工具调用和转人工，其余透传
         glmWs.on('message', async (data: Buffer) => {
@@ -455,40 +366,73 @@ voice.get(
               const transcript = (msg.transcript ?? '') as string;
               if (transcript) {
                 state.addUserTurn(transcript);
-                // 同步给坐席工作台
+                state.markUserEnd();
                 const umId = crypto.randomUUID();
                 logger.info('voice', 'bus_publish_user_message', { session: sessionId, phone: userPhone, preview: transcript.slice(0, 40), msg_id: umId });
                 sessionBus.publish(userPhone, { source: 'voice', type: 'user_message', text: transcript, msg_id: umId });
-                // 并行情绪分析，完成后推给前端；不阻塞语音回复
-                analyzeEmotion(transcript, state.turns.slice(-5))
-                  .then(emotion => {
-                    try { ws.send(JSON.stringify({ type: 'emotion_update', text: transcript, emotion })); } catch {}
-                    sessionBus.publish(userPhone, { source: 'voice', type: 'emotion_update', label: emotion.label, emoji: emotion.emoji, color: emotion.color, msg_id: crypto.randomUUID() });
-                  })
-                  .catch(() => {});
+                runEmotionAnalysis(ws, userPhone, transcript, state.turns.slice(-5));
               }
             }
 
+            // ── 非中文模式：拦截 transcript delta，按句切分翻译 + TTS ──────
+            if (ttsOverride && msg.type === 'response.audio_transcript.delta') {
+              const delta = (msg.delta ?? '') as string;
+              if (delta) {
+                ttsAccum += delta;
+                ttsFlushSentences();
+              }
+              return; // 不透传中文字幕给前端
+            }
+
             // ── bot 回复完整文本 → 记录助手话语 + 检测转人工兜底 ──────────
-            // 告别语播完后忽略 GLM 回复，由人工坐席接管
             if (msg.type === 'response.audio_transcript.done') {
               if (state.transferTriggered && state.farewellDone) return;
               const transcript = (msg.transcript ?? '') as string;
               if (transcript) {
+                // 非中文模式：发送剩余未切分的尾句
+                if (ttsOverride) {
+                  ttsFlushRemainder();
+                  logger.info('voice', 'tts_override_done', { session: sessionId, zhLen: transcript.length });
+                }
+                // 检测 GLM 回复语言是否与用户设置一致
+                const hasChinese = /[\u4e00-\u9fff]/.test(transcript);
+                const expectedEn = lang === 'en';
+                if (expectedEn && hasChinese) {
+                  logger.warn('voice', 'lang_chain_mismatch', { session: sessionId, lang, transcript: transcript.slice(0, 80), turn: state.turns.length });
+                }
                 state.addAssistantTurn(transcript);
-                // 同步给坐席工作台
                 const respId = crypto.randomUUID();
-                logger.info('voice', 'bus_publish_response', { session: sessionId, phone: userPhone, preview: transcript.slice(0, 40), msg_id: respId, turn: state.turns.length });
+                logger.info('voice', 'bus_publish_response', { session: sessionId, phone: userPhone, lang, preview: transcript.slice(0, 40), msg_id: respId, turn: state.turns.length });
                 sessionBus.publish(userPhone, { source: 'voice', type: 'response', text: transcript, msg_id: respId });
-                // GLM-Realtime Flash 有时说告别语但不调用工具，在此兜底检测
+
+                // ── 合规异步检查 ──
+                const voiceCompliance = checkCompliance(transcript);
+                if (voiceCompliance.hasBlock || voiceCompliance.hasWarning) {
+                  const alertKeywords = voiceCompliance.matches.map(m => m.keyword);
+                  logger.warn('voice', 'compliance_alert', { session: sessionId, phone: userPhone, keywords: alertKeywords });
+                  sessionBus.publish(userPhone, {
+                    source: 'voice', type: 'compliance_alert',
+                    data: { source: 'bot_voice', keywords: alertKeywords, text: transcript.slice(0, 100) },
+                    msg_id: crypto.randomUUID(),
+                  });
+                }
+
                 if (
                   !state.transferTriggered &&
                   TRANSFER_PHRASE_RE.test(transcript)
                 ) {
                   logger.info('voice', 'transfer_detected_via_speech', { session: sessionId, transcript });
-                  triggerHandoff(ws, 'user_request');
+                  doTriggerHandoff(ws, 'user_request');
+                }
+
+                // ── 异步流程进度追踪 ──
+                logger.info('voice', 'progress_check', { session: sessionId, activeSkillName, turnsLen: state.turns.length });
+                if (activeSkillName) {
+                  runProgressTracking(ws, userPhone, activeSkillName, state.turns.slice(-6), lang, sessionId, 'voice');
                 }
               }
+              // 非中文模式：不透传 GLM 的 transcript.done 事件（前端由 tts_override 驱动）
+              if (ttsOverride) return;
             }
 
             // ── 拦截工具调用（MCP 工具 + 转人工） ────────────────────────
@@ -502,7 +446,6 @@ voice.get(
                 const reason = (toolArgs.reason ?? 'user_request') as string;
                 logger.info('voice', 'transfer_to_human_tool_called', { session: sessionId, reason });
 
-                // 立即回复 GLM 工具结果，让它说告别语
                 try {
                   glmWs!.send(JSON.stringify({
                     event_id: crypto.randomUUID(),
@@ -519,8 +462,7 @@ voice.get(
                   logger.warn('voice', 'transfer_glm_send_error', { session: sessionId, error: String(e) });
                 }
 
-                // 触发 SiliconFlow 深度分析并推卡片（triggerHandoff 内部设 transferTriggered = true）
-                triggerHandoff(ws, reason, toolArgs);
+                doTriggerHandoff(ws, reason, toolArgs);
                 return;
               }
 
@@ -528,37 +470,37 @@ voice.get(
               logger.info('voice', 'tool_call_start', { session: sessionId, tool: toolName, args: toolArgs });
               const { text: result, success } = await callMcpTool(sessionId, toolName, toolArgs);
               state.recordTool(toolName, toolArgs, result, success);
+              logger.info('voice', 'lang_chain_mcp_result', { session: sessionId, tool: toolName, lang, resultPreview: result.slice(0, 150) });
 
-              // 若该工具对应某个 skill，推送高亮版 skill_diagram_update 给前端
+              // 若该工具对应某个 skill，推送高亮版 skill_diagram_update
               if (SKILL_TOOL_MAP[toolName]) {
-                const skillName = SKILL_TOOL_MAP[toolName];
-                try {
-                  const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
-                  if (existsSync(skillPath)) {
-                    const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'), lang);
-                    if (rawMermaid) {
-                      const mermaid = highlightMermaidTool(rawMermaid, toolName);
-                      ws.send(JSON.stringify({ type: 'skill_diagram_update', skill_name: skillName, mermaid }));
-                      sessionBus.publish(userPhone, { source: 'voice', type: 'skill_diagram_update', skill_name: skillName, mermaid, msg_id: crypto.randomUUID() });
-                    }
-                  }
-                } catch (e) {
-                  logger.warn('voice', 'skill_diagram_error', { session: sessionId, skill: skillName, error: String(e) });
-                }
+                activeSkillName = SKILL_TOOL_MAP[toolName];
+                await sendSkillDiagram(ws, userPhone, activeSkillName, toolName, lang, sessionId, 'voice');
               }
 
+              // Translate tool result to English before feeding back to GLM
+              let toolOutput = result;
+              if (lang === 'en') {
+                try {
+                  toolOutput = await translateText(result, 'en');
+                  logger.info('voice', 'lang_chain_translated', { session: sessionId, tool: toolName, ok: true, translatedPreview: toolOutput.slice(0, 150) });
+                } catch (e) {
+                  logger.warn('voice', 'lang_chain_translated', { session: sessionId, tool: toolName, ok: false, error: String(e) });
+                }
+              }
+              logger.info('voice', 'lang_chain_to_glm', { session: sessionId, tool: toolName, lang, outputPreview: toolOutput.slice(0, 150) });
               glmWs!.send(JSON.stringify({
                 event_id: crypto.randomUUID(),
                 client_timestamp: Date.now(),
                 type: 'conversation.item.create',
-                item: { type: 'function_call_output', call_id: msg.call_id, output: result },
+                item: { type: 'function_call_output', call_id: msg.call_id, output: toolOutput },
               }));
               glmWs!.send(JSON.stringify({
                 event_id: crypto.randomUUID(),
                 client_timestamp: Date.now(),
                 type: 'response.create',
               }));
-              return; // 不透传给前端
+              return;
             }
 
             // 转人工后：告别语的 response.done 到达后标记完成
@@ -566,12 +508,51 @@ voice.get(
               state.farewellDone = true;
             }
 
-            // 转人工且告别语已播完：拦截后续 GLM 响应/音频，仅放行用户转写
+            // 转人工且告别语已播完：拦截后续 GLM 响应/音频
             if (state.transferTriggered && state.farewellDone && (
               msg.type.startsWith('response.') ||
               msg.type.startsWith('output_audio_buffer.')
             )) {
               return;
+            }
+
+            // ── GLM 敏感内容拦截（code 1301 等） ────────────────────
+            if (msg.type === 'error') {
+              const errCode = msg.error?.code ?? '';
+              const errMsg  = msg.error?.message ?? '';
+              logger.warn('voice', 'glm_error', { session: sessionId, code: errCode, message: errMsg });
+
+              // 向前端发送友好提示（替换原始技术性错误信息）
+              const friendly = t('sensitive_content_error', lang);
+              ws.send(JSON.stringify({ type: 'error', message: friendly }));
+
+              // 向坐席工作台推送合规告警
+              sessionBus.publish(userPhone, {
+                source: 'voice', type: 'compliance_alert',
+                data: {
+                  source: 'model_filter',
+                  keywords: [`GLM-${errCode}`],
+                  text: t('sensitive_content_alert', lang) + ` [${errCode}] ${errMsg.slice(0, 80)}`,
+                },
+                msg_id: crypto.randomUUID(),
+              });
+              return;                 // 不再透传原始 error
+            }
+
+            // ── 首包时延检测 ──────────────────────
+            if (msg.type === 'response.audio.delta') {
+              const latency = state.markFirstAudioPack();
+              if (latency !== null) {
+                logger.info('voice', 'first_pack_latency', { session: sessionId, latency_ms: latency });
+              }
+              // 非中文模式：拦截 GLM 中文音频，不发给前端
+              if (ttsOverride) return;
+            }
+
+            // ── 打断检测 ────────────────────────────────────────────────
+            if (msg.type === 'input_audio_buffer.speech_started') {
+              state.markBargeIn();
+              logger.info('voice', 'barge_in', { session: sessionId, count: state.bargeInCount });
             }
 
             // 其余事件正常透传
@@ -581,19 +562,7 @@ voice.get(
           }
         });
 
-        glmWs.on('close', async (code: number, reason: Buffer) => {
-          logger.info('voice', 'glm_closed', { session: sessionId, code, reason: reason?.toString('utf8') || '(none)' });
-          // 若 SiliconFlow 分析仍在进行（最多 8 秒），等待完成后再关闭前端 WS
-          if (pendingHandoff) {
-            try { await pendingHandoff; } catch {}
-          }
-          try { ws.close(); } catch {}
-        });
-
-        glmWs.on('error', (err: Error) => {
-          logger.error('voice', 'glm_ws_error', { session: sessionId, error: err.message });
-          try { ws.send(JSON.stringify({ type: 'error', message: `GLM 连接错误: ${err.message}` })); ws.close(); } catch {}
-        });
+        setupGlmCloseHandlers(glmWs, ws, () => pendingHandoff, sessionId, 'voice');
 
         // Subscribe to agent messages and play TTS to customer
         unsubscribeAgent = sessionBus.subscribe(userPhone, async (event) => {
@@ -610,7 +579,6 @@ voice.get(
           const { agent: agentLang, customer: customerLang } = getLangs(userPhone);
           let textForTts = agentText;
 
-          // Translate agent message to customer language if needed
           if (agentLang !== customerLang) {
             try {
               textForTts = await translateText(agentText, customerLang);
@@ -620,14 +588,12 @@ voice.get(
             }
           }
 
-          // Convert to speech and send to customer
           try {
             const audio = await textToSpeech(textForTts, customerLang);
             logger.info('voice', 'agent_tts_done', { session: sessionId, lang: customerLang, chars: textForTts.length });
             try { ws.send(JSON.stringify({ type: 'agent_audio', audio, text: textForTts, original_text: agentText })); } catch { /* ws closed */ }
           } catch (e) {
             logger.error('voice', 'agent_tts_error', { session: sessionId, error: String(e) });
-            // Fallback: send text only so customer can read it
             try { ws.send(JSON.stringify({ type: 'agent_message', text: textForTts, original_text: agentText })); } catch { /* ws closed */ }
           }
         });
@@ -640,6 +606,8 @@ voice.get(
       },
 
       onClose() {
+        if (state.silenceTimer) clearTimeout(state.silenceTimer);
+        logger.info('voice', 'session_metrics', { session: sessionId, phone: userPhone, ...state.getMetrics() });
         logger.info('voice', 'client_disconnected', { session: sessionId });
         unsubscribeAgent?.();
         unsubscribeAgent = null;

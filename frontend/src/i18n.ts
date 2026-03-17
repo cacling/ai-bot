@@ -56,10 +56,8 @@ interface Translations {
   outbound_bot_subtitle:   string;
   outbound_task_collection: string;
   outbound_task_marketing:  string;
-  outbound_task_bank:       string;
   outbound_detail_collection: string;
   outbound_detail_marketing:  string;
-  outbound_detail_bank:       string;
   outbound_row_name:        string;
   outbound_row_product:     string;
   outbound_row_amount:      string;
@@ -67,10 +65,6 @@ interface Translations {
   outbound_row_current_plan: string;
   outbound_row_target_plan:  string;
   outbound_row_campaign:     string;
-  outbound_row_segment:      string;
-  outbound_row_product_name: string;
-  outbound_row_headline:     string;
-  outbound_row_expiry:       string;
   outbound_hint_idle:        string;
   outbound_hint_active:      string;
   outbound_state:            Record<string, string>;
@@ -218,10 +212,8 @@ export const T: Record<Lang, Translations> = {
     outbound_bot_subtitle:   '主动外呼对话',
     outbound_task_collection: '欠款催收',
     outbound_task_marketing:  '外呼营销',
-    outbound_task_bank:       '银行营销',
     outbound_detail_collection: '催收案件详情',
     outbound_detail_marketing:  '营销任务详情',
-    outbound_detail_bank:       '银行营销任务详情',
     outbound_row_name:         '客户姓名',
     outbound_row_product:      '逾期产品',
     outbound_row_amount:       '逾期金额',
@@ -229,10 +221,6 @@ export const T: Record<Lang, Translations> = {
     outbound_row_current_plan: '当前套餐',
     outbound_row_target_plan:  '推介套餐',
     outbound_row_campaign:     '活动名称',
-    outbound_row_segment:      '客群标签',
-    outbound_row_product_name: '推介产品',
-    outbound_row_headline:     '核心卖点',
-    outbound_row_expiry:       '活动截止',
     outbound_hint_idle:        '选择任务后点击拨号按钮，机器人将主动开口',
     outbound_hint_active:      '点击方块按钮结束通话',
     outbound_state: {
@@ -276,7 +264,6 @@ export const T: Record<Lang, Translations> = {
       'plan-inquiry':    '套餐咨询流程',
       'outbound-collection':      '外呼催收流程',
       'outbound-marketing':       '外呼营销流程',
-      'outbound-marketing-bank':  '银行营销流程',
     },
     diagram_clear: '清除',
 
@@ -405,10 +392,8 @@ export const T: Record<Lang, Translations> = {
     outbound_bot_subtitle:   'Outbound Calls',
     outbound_task_collection: 'Debt Collection',
     outbound_task_marketing:  'Telecom Marketing',
-    outbound_task_bank:       'Bank Marketing',
     outbound_detail_collection: 'Collection Case',
     outbound_detail_marketing:  'Marketing Task',
-    outbound_detail_bank:       'Bank Marketing Task',
     outbound_row_name:         'Customer',
     outbound_row_product:      'Product',
     outbound_row_amount:       'Amount due',
@@ -416,10 +401,6 @@ export const T: Record<Lang, Translations> = {
     outbound_row_current_plan: 'Current plan',
     outbound_row_target_plan:  'Recommended plan',
     outbound_row_campaign:     'Campaign',
-    outbound_row_segment:      'Segment',
-    outbound_row_product_name: 'Product',
-    outbound_row_headline:     'Key benefit',
-    outbound_row_expiry:       'Offer expires',
     outbound_hint_idle:        'Select a task and click dial — the bot will open the conversation',
     outbound_hint_active:      'Click the square button to end the call',
     outbound_state: {
@@ -463,7 +444,6 @@ export const T: Record<Lang, Translations> = {
       'plan-inquiry':    'Plan Inquiry',
       'outbound-collection':      'Debt Collection',
       'outbound-marketing':       'Telecom Marketing',
-      'outbound-marketing-bank':  'Bank Marketing',
     },
     diagram_clear: 'Clear',
 

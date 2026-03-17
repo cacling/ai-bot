@@ -16,74 +16,13 @@ import type { ActiveDiagram } from '../components/DiagramPanel';
 import { T, type Lang } from '../i18n';
 import { broadcastUserSwitch } from '../userSync';
 import type { OutboundTask } from '../outboundData';
+import { useVoiceEngine, type HandoffContext } from '../hooks/useVoiceEngine';
 
 // ── 类型 ──────────────────────────────────────────────────────────────────────
 
-export type TaskType = 'collection' | 'marketing' | 'bank-marketing';
-
-type ConnState =
-  | 'idle'          // 未发起外呼（任务选择阶段）
-  | 'connecting'    // 连接中
-  | 'ringing'       // 已连接，机器人正在说开场白
-  | 'listening'     // 等待客户回复
-  | 'thinking'      // 等待模型回复
-  | 'responding'    // 模型输出中
-  | 'transferred'   // 已转人工
-  | 'ended';        // 通话结束
-
-interface VoiceMessage {
-  id:      number;
-  role:    'bot' | 'user';
-  text:    string;
-  time:    string;
-}
-
-interface HandoffContext {
-  user_phone:            string;
-  session_id:            string;
-  timestamp:             string;
-  transfer_reason:       string;
-  customer_intent:       string;
-  main_issue:            string;
-  business_object:       string[];
-  confirmed_information: string[];
-  actions_taken:         string[];
-  current_status:        string;
-  handoff_reason:        string;
-  next_action:           string;
-  priority:              string;
-  risk_flags:            string[];
-  session_summary:       string;
-}
-
-
-// ── 音频工具（与 VoiceChatPage 相同）────────────────────────────────────────
-
-function float32ToInt16(input: Float32Array): Int16Array {
-  const out = new Int16Array(input.length);
-  for (let i = 0; i < input.length; i++) {
-    const s = Math.max(-1, Math.min(1, input[i]));
-    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-  }
-  return out;
-}
-
-function arrayBufferToBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  return btoa(bin);
-}
-
-function base64ToUint8(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
+export type TaskType = 'collection' | 'marketing';
 
 // ── 主组件 ────────────────────────────────────────────────────────────────────
-
 
 interface OutboundVoicePageProps {
   onDiagramUpdate?: (diagram: ActiveDiagram) => void;
@@ -96,38 +35,29 @@ interface OutboundVoicePageProps {
 
 export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'collection', tasks = [], selectedId = 'C001', onSelectedIdChange }: OutboundVoicePageProps = {}) {
   const t = T[lang];
-  const [connState,      setConnState]      = useState<ConnState>('idle');
-  const [messages,       setMessages]       = useState<VoiceMessage[]>([]);
-  const [errorMsg,       setErrorMsg]       = useState<string>('');
-  const [handoffCtx,     setHandoffCtx]     = useState<HandoffContext | null>(null);
 
-  // 当前外呼任务对应的客户手机号（用于 session bus 和坐席侧同步）
+  // ── 共享 Hook ──
+  const {
+    connState, setConnState,
+    messages, setMessages,
+    errorMsg, setErrorMsg,
+    handoffCtx, setHandoffCtx,
+    wsRef, messagesEndRef,
+    pendingUserIdRef, botMsgIdRef, botTextRef,
+    transferToBotRef, disconnectRef, connectRef,
+    upsertMsg, nextMsgId,
+    playChunk, stopPlayback, stopMic,
+    connectWs, disconnect, reset,
+  } = useVoiceEngine('idle');
+
+  // ── 页面特有状态 ──
+  const micReadyRef = useRef(false);
+  const prevLangRef = useRef(lang);
+
+  // 当前外呼任务对应的客户手机号
   const selectedPhone = tasks.find(t => t.id === selectedId)?.phone ?? '';
 
-  const wsRef             = useRef<WebSocket | null>(null);
-  const captureCtxRef     = useRef<AudioContext | null>(null);
-  const streamRef         = useRef<MediaStream | null>(null);
-  const processorRef      = useRef<ScriptProcessorNode | null>(null);
-  const pendingUserIdRef  = useRef<number | null>(null);
-  const botMsgIdRef       = useRef<number | null>(null);
-  const botTextRef        = useRef<string>('');
-  const msgIdCounter      = useRef(0);
-  const nextMsgId         = useRef(() => ++msgIdCounter.current);
-  const messagesEndRef    = useRef<HTMLDivElement>(null);
-  const disconnectRef     = useRef<() => void>(() => {});
-  const transferToBotRef  = useRef(false);
-  const micReadyRef       = useRef(false);  // bot 开场白结束后才开始发送麦克风音频
-  const connectRef        = useRef<() => Promise<void>>(async () => {});
-  const audioElemRef      = useRef<HTMLAudioElement | null>(null);
-  const mediaSourceRef    = useRef<MediaSource | null>(null);
-  const sourceBufferRef   = useRef<SourceBuffer | null>(null);
-  const mp3QueueRef       = useRef<ArrayBuffer[]>([]);
-  const sourceOpenRef     = useRef<boolean>(false);
-
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-  useEffect(() => () => disconnectRef.current(), []);
-
-  // 切换任务类型或案件时，断开当前通话并清空对话，同步坐席侧
+  // 切换任务类型或案件时，断开当前通话并清空对话
   useEffect(() => {
     disconnectRef.current();
     setMessages([]);
@@ -135,58 +65,6 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
     setHandoffCtx(null);
     if (selectedPhone) broadcastUserSwitch(selectedPhone);
   }, [taskType, selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const upsertMsg = useCallback((msg: VoiceMessage) => {
-    setMessages(prev => {
-      const idx = prev.findIndex(m => m.id === msg.id);
-      if (idx >= 0) { const next = [...prev]; next[idx] = msg; return next; }
-      return [...prev, msg];
-    });
-  }, []);
-
-  // ── MP3 播放 ───────────────────────────────────────────────────────────────
-  const flushMp3Queue = useCallback(() => {
-    const sb = sourceBufferRef.current;
-    if (!sb || sb.updating || mp3QueueRef.current.length === 0) return;
-    sb.appendBuffer(mp3QueueRef.current.shift()!);
-  }, []);
-
-  const playChunk = useCallback((b64: string) => {
-    const bytes = base64ToUint8(b64);
-    if (bytes.length === 0) return;
-    if (!mediaSourceRef.current) {
-      const ms = new MediaSource();
-      const audio = new Audio();
-      audio.src = URL.createObjectURL(ms);
-      mediaSourceRef.current = ms; audioElemRef.current = audio; sourceOpenRef.current = false;
-      ms.addEventListener('sourceopen', () => {
-        const sb = ms.addSourceBuffer('audio/mpeg');
-        sourceBufferRef.current = sb; sourceOpenRef.current = true;
-        sb.addEventListener('updateend', flushMp3Queue);
-        flushMp3Queue();
-      }, { once: true });
-      audio.play().catch(() => {});
-    }
-    mp3QueueRef.current.push(bytes.buffer);
-    if (sourceOpenRef.current) flushMp3Queue();
-  }, [flushMp3Queue]);
-
-  const stopPlayback = useCallback(() => {
-    audioElemRef.current?.pause(); audioElemRef.current = null;
-    if (mediaSourceRef.current?.readyState === 'open') { try { mediaSourceRef.current.endOfStream(); } catch {} }
-    mediaSourceRef.current = null; sourceBufferRef.current = null;
-    mp3QueueRef.current = []; sourceOpenRef.current = false;
-  }, []);
-
-  // ── 停止麦克风（不关闭 WS，用于转人工时保留连接）──────────────────────────
-  const stopMic = useCallback(() => {
-    processorRef.current?.disconnect();
-    processorRef.current = null;
-    captureCtxRef.current?.close().catch(() => {});
-    captureCtxRef.current = null;
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
-  }, []);
 
   // ── GLM 事件处理 ───────────────────────────────────────────────────────────
   const handleGlmEvent = useCallback((msg: Record<string, unknown>) => {
@@ -201,7 +79,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
       setConnState('listening');
       if (connState !== 'responding') stopPlayback();
       botMsgIdRef.current = null; botTextRef.current = '';
-      const id = nextMsgId.current();
+      const id = nextMsgId();
       pendingUserIdRef.current = id;
       upsertMsg({ id, role: 'user', text: '...', time: nowTime() });
       return;
@@ -224,7 +102,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
       setConnState('responding');
       const delta = msg.delta as string;
       if (!botMsgIdRef.current) {
-        const id = nextMsgId.current();
+        const id = nextMsgId();
         botMsgIdRef.current = id; botTextRef.current = delta;
         upsertMsg({ id, role: 'bot', text: delta, time: nowTime() });
       } else {
@@ -240,8 +118,26 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
       return;
     }
 
+    // 非中文模式：后端翻译 + TTS 生成的分句音频
+    if (type === 'tts_override') {
+      setConnState('responding');
+      const text = (msg.text ?? '') as string;
+      if (text) {
+        if (!botMsgIdRef.current) {
+          const id = nextMsgId();
+          botMsgIdRef.current = id;
+          botTextRef.current = text;
+          upsertMsg({ id, role: 'bot', text, time: nowTime() });
+        } else {
+          botTextRef.current += text;
+          upsertMsg({ id: botMsgIdRef.current, role: 'bot', text: botTextRef.current, time: nowTime() });
+        }
+      }
+      if (msg.audio) playChunk(msg.audio as string);
+      return;
+    }
+
     if (type === 'response.done') {
-      // 第一个 response.done = bot 开场白结束，此后才允许发送麦克风音频
       if (!micReadyRef.current) {
         micReadyRef.current = true;
       }
@@ -274,105 +170,53 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
     // 坐席消息：播放 TTS 音频并显示文字气泡
     if (type === 'agent_audio') {
       const text = (msg.text ?? msg.original_text ?? '') as string;
-      if (text) upsertMsg({ id: nextMsgId.current(), role: 'bot', text, time: nowTime() });
+      if (text) upsertMsg({ id: nextMsgId(), role: 'bot', text, time: nowTime() });
       if (msg.audio) playChunk(msg.audio as string);
       return;
     }
 
-    // 坐席消息（TTS 失败降级）：仅显示文字
+    // 坐席消息（TTS 失败降级）
     if (type === 'agent_message') {
       const text = (msg.text ?? '') as string;
-      if (text) upsertMsg({ id: nextMsgId.current(), role: 'bot', text, time: nowTime() });
+      if (text) upsertMsg({ id: nextMsgId(), role: 'bot', text, time: nowTime() });
       return;
     }
 
     if (type === 'error') {
       console.error('[GLM outbound error]', msg);
-      setErrorMsg((msg.message ?? JSON.stringify(msg)) as string);
+      const errText = (msg.message ?? (msg.error as Record<string, unknown>)?.message ?? JSON.stringify(msg)) as string;
+      setErrorMsg(errText);
       disconnectRef.current();
     }
   }, [upsertMsg, playChunk, stopPlayback, onDiagramUpdate, connState, stopMic]);
 
-  // ── 断开连接 ───────────────────────────────────────────────────────────────
-  const disconnect = useCallback(() => {
-    processorRef.current?.disconnect(); processorRef.current = null;
-    captureCtxRef.current?.close().catch(() => {}); captureCtxRef.current = null;
-    streamRef.current?.getTracks().forEach(t => t.stop()); streamRef.current = null;
-    stopPlayback();
-    wsRef.current?.close(); wsRef.current = null;
-    setConnState('idle');
-  }, [stopPlayback]);
-
-  useEffect(() => { disconnectRef.current = disconnect; }, [disconnect]);
-
   // ── 开始外呼 ───────────────────────────────────────────────────────────────
-
   const startCall = useCallback(async () => {
-    micReadyRef.current = false;  // 每次新通话重置，等 bot 开场白结束
-    setErrorMsg('');
-    setConnState('connecting');
-
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-      });
-    } catch {
-      setErrorMsg(t.outbound_mic_denied);
-      setConnState('idle');
-      return;
-    }
-    streamRef.current = stream;
-
+    micReadyRef.current = false;
     const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/outbound?task=${taskType}&id=${selectedId}&lang=${lang}&phone=${selectedPhone}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      const ctx = new AudioContext({ sampleRate: 16000 });
-      captureCtxRef.current = ctx;
-      const source    = ctx.createMediaStreamSource(stream);
-      const processor = ctx.createScriptProcessor(2048, 1, 1);
-      const mute = ctx.createGain(); mute.gain.value = 0;
-      processor.connect(mute); mute.connect(ctx.destination);
-      processor.onaudioprocess = (e) => {
-        // 等 bot 开场白播完（第一个 response.done）再发送麦克风音频，避免回声污染 VAD
-        if (!micReadyRef.current || ws.readyState !== WebSocket.OPEN) return;
-        const pcm16 = float32ToInt16(e.inputBuffer.getChannelData(0));
-        ws.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'input_audio_buffer.append', audio: arrayBufferToBase64(pcm16.buffer as ArrayBuffer) }));
-      };
-      source.connect(processor);
-      processorRef.current = processor;
-    };
-
-    ws.onmessage = (e) => {
-      try { handleGlmEvent(JSON.parse(e.data)); }
-      catch { console.error('Failed to parse WS message', e.data); }
-    };
-
-    ws.onclose = () => {
-      disconnect();
-      if (transferToBotRef.current) {
-        transferToBotRef.current = false;
-        connectRef.current();
-      }
-    };
-    ws.onerror = () => disconnect();
-  }, [taskType, selectedId, handleGlmEvent, disconnect]);
+    await connectWs(wsUrl, handleGlmEvent, { micGateRef: micReadyRef, micDeniedLabel: t.outbound_mic_denied });
+  }, [taskType, selectedId, handleGlmEvent, connectWs, lang, selectedPhone, t]);
 
   useEffect(() => { connectRef.current = startCall; }, [startCall]);
 
+  // 语言切换时：若通话进行中，自动断开并以新语言重连
+  useEffect(() => {
+    if (lang === prevLangRef.current) return;
+    prevLangRef.current = lang;
+    const inCall = connState !== 'idle' && connState !== 'connecting';
+    if (inCall) {
+      disconnect();
+      setTimeout(() => { connectRef.current(); }, 300);
+    }
+  }, [lang, connState, disconnect]);
+
   const handleReset = () => {
-    disconnect();
-    setMessages([]);
-    setErrorMsg('');
-    setHandoffCtx(null);
+    reset();
     setConnState('idle');
   };
 
   const isInCall = connState !== 'idle' && connState !== 'connecting' && connState !== 'transferred' && connState !== 'ended';
 
-  // 当前选中的任务信息（用于面板展示）
   const statusColor =
     connState === 'ringing'    ? 'text-blue-500' :
     connState === 'listening'  ? 'text-red-500'  :
@@ -463,7 +307,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
               </div>
             )}
 
-            {/* 转人工状态提示（详细摘要仅在坐席侧展示） */}
+            {/* 转人工状态提示 */}
             {handoffCtx && (
               <div className="mx-1 mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-50 border border-orange-200 text-sm text-orange-700">
                 <Headset size={15} className="flex-shrink-0" />

@@ -143,8 +143,10 @@ GET /api/files/content?path=bill-inquiry/SKILL.md
 **响应（200）：**
 
 ```json
-{ "ok": true }
+{ "ok": true, "versionId": 12 }
 ```
+
+> Skill 文件写入时会自动创建版本快照，响应中新增 `versionId` 字段。
 
 ---
 
@@ -329,6 +331,48 @@ MCP Server 通过 `StreamableHTTP` 协议暴露工具，Agent 通过 `@modelcont
 ```
 
 > `status` 取值：`"ok"` / `"warning"` / `"error"`
+
+---
+
+### 2.6 `diagnose_app`
+
+对用户手机号执行营业厅 App 安全诊断。
+
+**输入参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `phone` | `string` | 是 | 用户手机号 |
+| `issue_type` | `enum` | 是 | `"app_locked"` / `"login_failed"` / `"device_incompatible"` / `"suspicious_activity"` |
+
+从 `device_contexts` 表查询设备上下文，调用 `runSecurityDiagnosis()` 返回安全诊断结果。
+
+---
+
+### 2.7 `issue_invoice`
+
+开具电子发票并发送到指定邮箱。
+
+**输入参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `phone` | `string` | 是 | 用户手机号 |
+| `month` | `string` | 是 | 账单月份，格式 `"YYYY-MM"` |
+| `email` | `string` | 是 | 收件邮箱 |
+
+**成功响应：**
+
+```json
+{
+  "success": true,
+  "invoice_no": "INV-202602-0001-1710000000",
+  "month": "2026-02",
+  "total": 68.0,
+  "email": "z***@example.com",
+  "status": "已发送"
+}
+```
 
 ---
 
@@ -576,6 +620,324 @@ ws://localhost:18472/ws/agent?phone=13800000001&lang=zh
 
 ---
 
-## 7. 环境变量配置
+## 8. 合规管理 API
+
+### 8.1 `GET /api/compliance/keywords`
+获取全部合规关键词库。
+
+**响应（200）：**
+```json
+{
+  "keywords": [
+    { "id": "b01", "keyword": "这不是我负责的", "category": "banned", "description": "推诿责任" },
+    { "id": "w01", "keyword": "保证能", "category": "warning", "description": "过度承诺" }
+  ],
+  "total": 18
+}
+```
+
+### 8.2 `POST /api/compliance/keywords`
+新增关键词。
+
+**请求体：**
+```json
+{ "keyword": "不关我事", "category": "banned", "description": "推诿" }
+```
+
+### 8.3 `DELETE /api/compliance/keywords/:id`
+删除指定关键词。
+
+### 8.4 `POST /api/compliance/keywords/reload`
+热重载 AC 自动机。
+
+### 8.5 `POST /api/compliance/check`
+在线检测文本（调试用）。
+
+---
+
+## 9. 版本管理 API
+
+### 9.1 `GET /api/skill-versions?path=<relative-path>`
+获取指定文件的版本列表。
+
+### 9.2 `GET /api/skill-versions/:id`
+获取指定版本的完整内容。
+
+### 9.3 `GET /api/skill-versions/diff?from=x&to=y`
+生成两个版本的行级 Diff（LCS 算法）。to 省略时与当前文件对比。
+
+### 9.4 `POST /api/skill-versions/rollback`
+回滚到指定版本。
+
+**请求体：**
+```json
+{ "version_id": 3, "operator": "admin" }
+```
+
+---
+
+## 10. 沙箱验证 API
+
+### 10.1 `POST /api/sandbox/create`
+创建沙箱环境。
+
+### 10.2 `PUT /api/sandbox/:id/content`
+编辑沙箱中的文件。
+
+### 10.3 `POST /api/sandbox/:id/test`
+在沙箱中运行 Agent 对话测试。
+
+### 10.4 `POST /api/sandbox/:id/validate`
+静态校验（Mermaid 语法、工具引用、必填字段、内容长度）。
+
+### 10.5 `POST /api/sandbox/:id/publish`
+发布到生产环境（同时创建版本记录）。
+
+### 10.6 `DELETE /api/sandbox/:id`
+删除沙箱。
+
+---
+
+## 11. 自然语言配置 API
+
+### 11.1 `POST /api/skill-edit/clarify`
+多轮需求澄清。
+
+**请求体：**
+```json
+{ "instruction": "把发票开具时效改为3-5个工作日", "history": [] }
+```
+
+**响应（需要澄清）：**
+```json
+{ "status": "need_clarify", "question": "这是修改话术口径还是业务规则？", "missing": ["变更类型"] }
+```
+
+**响应（需求完整）：**
+```json
+{ "status": "ready", "parsed_intent": { "target_skill": "bill-inquiry", "change_type": "wording", "details": "...", "risk_level": "low" } }
+```
+
+### 11.2 `POST /api/skill-edit/`
+LLM 生成修改 Diff。
+
+### 11.3 `POST /api/skill-edit/apply`
+确认写入（验证 old_fragment 仍存在后替换，创建版本记录）。
+
+---
+
+## 12. WebSocket 外呼接口（/ws/outbound）
+
+### `GET /ws/outbound`（WebSocket 升级）
+
+外呼语音 GLM-Realtime 代理端点，连接后机器人自动发起开场白。
+
+**连接 URL：**
+
+```
+ws://localhost:18472/ws/outbound?task=collection&id=C001&lang=zh&phone=13800000001
+```
+
+| 查询参数 | 必填 | 说明 |
+|---------|------|------|
+| `task` | 否 | `collection` / `marketing`，默认 `marketing` |
+| `id` | 否 | 任务 ID，默认按 task 类型取 `C001` / `M001` |
+| `lang` | 否 | `zh` / `en`，默认 `zh` |
+| `phone` | 否 | 客户手机号，默认 `13800000001` |
+
+#### 外呼专用工具（本地 mock，不走 MCP）
+
+| 工具名 | 参数 | 说明 |
+|--------|------|------|
+| `record_call_result` | `result`（枚举 10 种）、`remark?`、`callback_time?`、`ptp_date?` | 记录通话结果 |
+| `send_followup_sms` | `sms_type`（4 种） | 发送跟进短信 |
+| `transfer_to_human` | `reason`、`current_intent`、`recommended_action?` | 转人工 |
+| `create_callback_task` | `callback_phone?`、`preferred_time` | 创建回访任务 |
+
+#### 后端 → 前端事件
+
+GLM 透传事件与 `/ws/voice` 相同，另增：
+
+| type | 说明 |
+|------|------|
+| `transfer_to_human` | 转人工上下文（同 `/ws/voice`） |
+| `emotion_update` | 情感分析结果 |
+| `skill_diagram_update` | 外呼流程图（含工具高亮） |
+
+---
+
+## 13. AI 技能创建 API
+
+### 13.1 `POST /api/skill-creator/chat`
+
+多轮对话式技能创建。
+
+**请求体：**
+```json
+{ "session_id": "uuid", "message": "我想创建一个宽带报修的技能" }
+```
+
+**响应：**
+```json
+{
+  "reply": "好的，请问这个技能需要调用哪些工具？",
+  "phase": "interview",
+  "draft": null
+}
+```
+
+`phase` 取值：`interview` → `draft` → `confirm` → `done`。`draft` 阶段返回 `{ skill_name, description, skill_md, references }` 预览。
+
+### 13.2 `POST /api/skill-creator/save`
+
+保存创建的技能到磁盘。
+
+**请求体：**
+```json
+{ "session_id": "uuid" }
+```
+
+---
+
+## 14. 灰度发布 API
+
+### 14.1 `POST /api/canary/deploy`
+部署灰度。
+
+**请求体：**
+```json
+{ "skill_path": "biz-skills/bill-inquiry", "percentage": 30 }
+```
+
+### 14.2 `GET /api/canary/status`
+查询灰度状态。
+
+### 14.3 `POST /api/canary/promote`
+灰度转正式（含版本记录）。
+
+### 14.4 `DELETE /api/canary`
+回滚灰度部署。
+
+---
+
+## 15. 变更审批 API
+
+### 15.1 `GET /api/change-requests`
+列出待审批变更。
+
+### 15.2 `GET /api/change-requests/:id`
+查看变更详情（含 Diff）。
+
+### 15.3 `POST /api/change-requests/:id/approve`
+批准变更并应用（含版本记录）。
+
+### 15.4 `POST /api/change-requests/:id/reject`
+驳回变更。
+
+---
+
+## 16. 回归测试 API
+
+### 16.1 `GET /api/test-cases?skill=<name>`
+列出测试用例（按 Skill 过滤）。
+
+### 16.2 `POST /api/test-cases`
+创建测试用例。
+
+**请求体：**
+```json
+{ "skill_name": "bill-inquiry", "input_message": "查话费", "expected_keywords": ["账单", "费用"], "phone": "13800000001" }
+```
+
+### 16.3 `DELETE /api/test-cases/:id`
+删除测试用例。
+
+---
+
+## 17. 知识管理 API（/km/*）
+
+### 17.1 文档管理（/km/documents）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/km/documents` | 列表（分页，支持 keyword/classification/status 过滤） |
+| GET | `/km/documents/:id` | 详情（含版本列表） |
+| POST | `/km/documents` | 创建文档 |
+| PUT | `/km/documents/:id` | 更新元数据 |
+| POST | `/km/documents/:id/versions` | 创建新版本 |
+| POST | `/km/documents/versions/:vid/parse` | 触发解析管线（parse→chunk→generate→validate） |
+
+### 17.2 候选 QA（/km/candidates）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/km/candidates` | 列表（支持 status/source_type/gate_evidence 过滤） |
+| GET | `/km/candidates/:id` | 详情（含证据、冲突、三门状态卡） |
+| POST | `/km/candidates` | 创建候选 |
+| PUT | `/km/candidates/:id` | 更新字段 |
+| POST | `/km/candidates/:id/gate-check` | 重新执行三门验证 |
+
+### 17.3 证据引用（/km/evidence）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/km/evidence` | 列表（按 candidate_id/asset_id 过滤） |
+| POST | `/km/evidence` | 创建证据引用 |
+| PUT | `/km/evidence/:id` | 审核（pass/fail） |
+
+### 17.4 冲突管理（/km/conflicts）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/km/conflicts` | 列表 |
+| GET | `/km/conflicts/:id` | 详情 |
+| POST | `/km/conflicts` | 创建冲突记录 |
+| PUT | `/km/conflicts/:id/resolve` | 仲裁（keep_a/keep_b/coexist/split） |
+
+### 17.5 审核包（/km/review-packages）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/km/review-packages` | 列表 |
+| GET | `/km/review-packages/:id` | 详情（含候选列表） |
+| POST | `/km/review-packages` | 创建审核包 |
+| POST | `/km/review-packages/:id/submit` | 提交审核（触发三门检查，失败返回 blockers） |
+| POST | `/km/review-packages/:id/approve` | 批准 |
+| POST | `/km/review-packages/:id/reject` | 驳回 |
+
+### 17.6 动作执行（/km/action-drafts）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/km/action-drafts` | 列表 |
+| GET | `/km/action-drafts/:id` | 详情 |
+| POST | `/km/action-drafts` | 创建动作（publish/rollback/rescope/unpublish/downgrade/renew） |
+| POST | `/km/action-drafts/:id/execute` | 执行动作（创建资产/回滚 + 回归窗口 + 审计日志） |
+
+### 17.7 已发布资产（/km/assets）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/km/assets` | 列表（支持 status/asset_type/keyword 过滤） |
+| GET | `/km/assets/:id` | 资产详情 |
+| GET | `/km/assets/:id/versions` | 版本历史 |
+
+### 17.8 治理任务（/km/tasks）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/km/tasks` | 列表（支持 status/task_type/assignee/priority 过滤） |
+| POST | `/km/tasks` | 创建任务 |
+| PUT | `/km/tasks/:id` | 更新状态/指派/结论 |
+
+### 17.9 审计日志（/km/audit-logs）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/km/audit-logs` | 列表（支持 action/object_type/operator/risk_level 过滤，只读） |
+
+---
+
+## 18. 环境变量配置
 
 完整变量说明及 `.env` 示例见 **[06-deployment.md § 2](06-deployment.md)**。

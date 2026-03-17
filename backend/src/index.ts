@@ -8,6 +8,15 @@ import skillsRoutes from './routes/skills';
 import voiceRoutes, { voiceWebsocket } from './routes/voice';
 import outboundRoutes from './routes/outbound';
 import mockDataRoutes from './routes/mock-data';
+import complianceRoutes from './routes/compliance';
+import skillVersionsRoute from './routes/skill-versions';
+import sandboxRoutes from './routes/sandbox';
+import skillEditRoutes from './routes/skill-edit';
+import canaryRoutes from './routes/canary';
+import changeRequestRoutes from './routes/change-requests';
+import testCaseRoutes from './routes/test-cases';
+import skillCreatorRoutes from './routes/skill-creator';
+import kmRoutes from './routes/km';
 import { logger } from './logger';
 import { runAgent } from './agent/runner';
 
@@ -34,6 +43,33 @@ app.route('/api/files', filesRoutes);
 
 // Mount skills routes: GET /api/skills
 app.route('/api/skills', skillsRoutes);
+
+// Mount compliance routes: GET/POST/DELETE /api/compliance/keywords, POST /api/compliance/check
+app.route('/api/compliance', complianceRoutes);
+
+// Mount skill version routes: GET/POST /api/skill-versions
+app.route('/api/skill-versions', skillVersionsRoute);
+
+// Mount sandbox routes: POST/PUT/GET/DELETE /api/sandbox
+app.route('/api/sandbox', sandboxRoutes);
+
+// Mount skill-edit routes: POST /api/skill-edit/clarify, /api/skill-edit, /api/skill-edit/apply
+app.route('/api/skill-edit', skillEditRoutes);
+
+// Mount canary routes: POST/GET/DELETE /api/canary
+app.route('/api/canary', canaryRoutes);
+
+// Mount change-request routes: GET/POST /api/change-requests
+app.route('/api/change-requests', changeRequestRoutes);
+
+// Mount test-case routes: GET/POST/DELETE /api/test-cases
+app.route('/api/test-cases', testCaseRoutes);
+
+// Mount skill-creator routes: POST /api/skill-creator/chat, /api/skill-creator/save
+app.route('/api/skill-creator', skillCreatorRoutes);
+
+// Mount knowledge management routes: /api/km/*
+app.route('/api/km', kmRoutes);
 
 // Mount voice WebSocket route: GET /ws/voice
 app.route('/', voiceRoutes);

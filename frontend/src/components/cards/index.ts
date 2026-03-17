@@ -9,13 +9,14 @@
  *   2. Call registerCard() here
  */
 
-import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle } from 'lucide-react';
+import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle, ShieldAlert } from 'lucide-react';
 import { registerCard } from './registry';
 import { DiagramContent      } from './contents/DiagramContent';
 import { EmotionContent      } from './contents/EmotionContent';
 import { HandoffContent      } from './contents/HandoffContent';
 import { OutboundTaskContent } from './contents/OutboundTaskContent';
 import { UserDetailContent   } from './contents/UserDetailContent';
+import { ComplianceContent   } from './contents/ComplianceContent';
 
 // Registration order determines default layout.
 // col-span-1 cards first → they pair side-by-side in row 1.
@@ -65,6 +66,24 @@ registerCard({
     color: msg.color,
   }),
   component: EmotionContent,
+});
+
+// ── 合规监控卡片 (col-span-1) ─────────────────────────────────────────────────
+registerCard({
+  id: 'compliance',
+  title: { zh: '合规监控', en: 'Compliance' },
+  Icon: ShieldAlert,
+  headerClass: 'bg-gradient-to-r from-red-600 to-red-500',
+  colSpan: 1,
+  defaultOpen: true,
+  defaultCollapsed: false,
+  wsEvents: ['compliance_alert'],
+  dataExtractor: (msg) => {
+    // 累积模式：返回新告警，CardPanel 负责追加到数组
+    const d = msg.data as Record<string, unknown> | undefined;
+    return { ...d, ts: Date.now() };
+  },
+  component: ComplianceContent,
 });
 
 // ── 转人工摘要卡片 (col-span-1, right) ────────────────────────────────────────

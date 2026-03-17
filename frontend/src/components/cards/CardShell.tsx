@@ -3,8 +3,11 @@
  *
  * Provides: gradient header, grip handle, collapse/close, drag-and-drop hooks.
  * The specific card content is rendered via `def.component`.
+ *
+ * Wrapped with React.memo — only re-renders when its own props change.
  */
 
+import { memo, useMemo } from 'react';
 import { GripVertical, ChevronDown, ChevronUp, X } from 'lucide-react';
 import type { CardDef, CardState } from './registry';
 import type { Lang } from '../../i18n';
@@ -22,7 +25,7 @@ interface Props {
   isDragOver: boolean;
 }
 
-export function CardShell({
+export const CardShell = memo(function CardShell({
   def,
   state,
   lang,
@@ -90,4 +93,4 @@ export function CardShell({
       )}
     </div>
   );
-}
+});

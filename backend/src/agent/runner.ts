@@ -4,17 +4,21 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { type CoreMessage, generateText } from 'ai';
 import { experimental_createMCPClient as createMCPClient } from 'ai';
 import { chatModel } from './llm';
-import { skillsTools } from './skills';
+import { skillsTools, getAvailableSkillsDescription } from './skills';
 import { logger } from '../logger';
 import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../skills/handoff-analyzer';
+import { t } from '../i18n';
+import { translateText } from '../skills/translate-lang';
+import { isNoDataResult } from '../utils/tool-result';
+import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../utils/mermaid';
+import { analyzeProgress } from '../skills/progress-tracker';
+
+// Re-export for test file and other consumers
+export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };
 
 const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://localhost:8003/mcp';
 
-const SKILLS_DIR = resolve(
-  process.env.SKILLS_DIR
-    ? resolve(process.cwd(), process.env.SKILLS_DIR, 'biz-skills')
-    : resolve(import.meta.dir, '../..', 'skills', 'biz-skills')
-);
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
 
 /** Tool → skill name mapping for diagram highlighting */
 const SKILL_TOOL_MAP: Record<string, string> = {
@@ -22,66 +26,26 @@ const SKILL_TOOL_MAP: Record<string, string> = {
   diagnose_app: 'telecom-app',
 };
 
-/** Wrap the line annotated with `%% tool:<toolName>` inside a mermaid `rect` block (yellow). */
-export function highlightMermaidTool(rawMermaid: string, toolName: string): string {
-  const marker = `%% tool:${toolName}`;
-  return rawMermaid
-    .split('\n')
-    .map((line) => {
-      if (!line.includes(marker)) return line;
-      const indent = line.match(/^(\s*)/)?.[1] ?? '';
-      return `${indent}rect rgba(255, 200, 0, 0.35)\n${indent}  ${line.trimStart()}\n${indent}end`;
-    })
-    .join('\n');
-}
-
-/** Wrap the line annotated with `%% branch:<branchName>` inside a mermaid `rect` block (green). */
-export function highlightMermaidBranch(rawMermaid: string, branchName: string): string {
-  const marker = `%% branch:${branchName}`;
-  return rawMermaid
-    .split('\n')
-    .map((line) => {
-      if (!line.includes(marker)) return line;
-      const indent = line.match(/^(\s*)/)?.[1] ?? '';
-      return `${indent}rect rgba(100, 220, 120, 0.4)\n${indent}  ${line.trimStart()}\n${indent}end`;
-    })
-    .join('\n');
-}
-
-/**
- * Determine which mermaid branch to highlight based on diagnostic_steps returned by diagnose_network.
- * Returns a branch name matching the `%% branch:<name>` markers in SKILL.md.
- */
-export function determineBranch(
-  diagnosticSteps: Array<{ step: string; status: 'ok' | 'warning' | 'error' }>
-): string {
-  for (const s of diagnosticSteps) {
-    if (s.status === 'ok') continue;
-    const name = s.step;
-    if (name === '账号状态检查' || name === 'Account Status') return 'account_error';
-    if ((name === '流量余额检查' || name === 'Data Balance') && s.status === 'error') return 'data_exhausted';
-    if (name === 'APN 配置检查' || name === 'APN Configuration') return 'apn_warning';
-    if (name === '基站信号检测' || name === 'Base Station Signal') return 'signal_weak';
-    if (name === '网络拥塞检测' || name === 'Network Congestion') return 'congestion';
-  }
-  return 'all_ok';
-}
 
 const SYSTEM_PROMPT_TEMPLATE =
   readFileSync(resolve(import.meta.dir, 'inbound-base-system-prompt.md'), 'utf-8') +
   '\n\n' +
   readFileSync(resolve(import.meta.dir, 'inbound-online-system-prompt.md'), 'utf-8');
 
-const ENGLISH_LANG_INSTRUCTION = `\n\n---\n\n**LANGUAGE REQUIREMENT (MANDATORY)**\nYou MUST reply ONLY in English for this entire conversation. All responses must be in English. Do not switch to Chinese under any circumstances, even if the user writes in Chinese.\nWhen calling tools that accept a \`lang\` parameter (such as diagnose_network, diagnose_app), always pass \`lang: "en"\` to receive English diagnostic output.`;
+const ENGLISH_LANG_INSTRUCTION = `**LANGUAGE REQUIREMENT (MANDATORY — HIGHEST PRIORITY)**\nYou MUST reply ONLY in English for this entire conversation. All responses must be in English. Do not switch to Chinese under any circumstances, even if the user writes in Chinese or tool results contain Chinese data. Always translate any Chinese data from tool results into English before including it in your response.\nWhen calling tools that accept a \`lang\` parameter (such as diagnose_network, diagnose_app), always pass \`lang: "en"\` to receive English diagnostic output.`;
 
 function buildSystemPrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberName?: string, planName?: string): string {
-  const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const locale = lang === 'en' ? 'en-US' : 'zh-CN';
+  const today = new Date().toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const defaultName = lang === 'en' ? 'Customer' : '用户';
+  const defaultPlan = lang === 'en' ? 'Unknown Plan' : '未知套餐';
   const base = SYSTEM_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
-    .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? '用户')
-    .replace('{{PLAN_NAME}}', planName ?? '未知套餐')
-    .replace('{{CURRENT_DATE}}', today);
-  return lang === 'en' ? base + ENGLISH_LANG_INSTRUCTION : base;
+    .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? defaultName)
+    .replace('{{PLAN_NAME}}', planName ?? defaultPlan)
+    .replace('{{CURRENT_DATE}}', today)
+    .replace('{{AVAILABLE_SKILLS}}', getAvailableSkillsDescription());
+  return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 
 // Persistent MCP client — created once and reused across requests.
@@ -129,15 +93,6 @@ export interface AgentResult {
   transferData?: TransferData;
 }
 
-/** Extract a ```mermaid ... ``` block from markdown. When lang='en', prefers the block after <!-- lang:en -->, falls back to first block. */
-export function extractMermaidFromContent(markdown: string, lang: 'zh' | 'en' = 'zh'): string | null {
-  if (lang === 'en') {
-    const enMatch = markdown.match(/<!--\s*lang:en\s*-->\s*```mermaid\n([\s\S]*?)```/);
-    if (enMatch) return enMatch[1].trim();
-  }
-  const match = markdown.match(/```mermaid\n([\s\S]*?)```/);
-  return match ? match[1].trim() : null;
-}
 
 export type { HandoffAnalysis };
 
@@ -193,9 +148,40 @@ export async function runAgent(
   onTextDelta?: TextDeltaCallback,
   subscriberName?: string,
   planName?: string,
+  overrideSkillsDir?: string,
 ): Promise<AgentResult> {
+  const effectiveSkillsDir = overrideSkillsDir ?? SKILLS_DIR;
   const t_run_start = Date.now();
-  const { tools: mcpTools } = await getMCPTools();
+  const { tools: rawMcpTools } = await getMCPTools();
+  // Wrap MCP tools to translate results when lang !== 'zh'
+  const mcpTools = lang === 'zh' ? rawMcpTools : Object.fromEntries(
+    Object.entries(rawMcpTools as Record<string, any>).map(([name, tool]) => [
+      name,
+      {
+        ...tool,
+        execute: async (...args: any[]) => {
+          const result = await tool.execute(...args);
+          if (typeof result === 'string') {
+            try { return await translateText(result, lang); } catch { return result; }
+          }
+          if (result && typeof result === 'object' && 'content' in result && Array.isArray(result.content)) {
+            try {
+              const translated = await Promise.all(
+                result.content.map(async (c: any) => {
+                  if (c.type === 'text' && c.text) {
+                    try { return { ...c, text: await translateText(c.text, lang) }; } catch { return c; }
+                  }
+                  return c;
+                }),
+              );
+              return { ...result, content: translated };
+            } catch { return result; }
+          }
+          return result;
+        },
+      },
+    ]),
+  );
   const t_mcp_ready = Date.now();
   logger.info('agent', 'mcp_ready', { mcp_init_ms: t_mcp_ready - t_run_start });
 
@@ -212,6 +198,7 @@ export async function runAgent(
   const t0 = t_mcp_ready; // LLM 阶段计时起点（MCP 初始化结束后）
   let stepCount = 0;
   let prevStepEnd = t_mcp_ready; // 用于计算每步增量耗时
+  let lastActiveSkill: string | undefined; // 追踪当前活跃 skill，用于通用工具的流程图高亮
 
   try {
     const result = await generateText({
@@ -245,22 +232,24 @@ export async function runAgent(
               const args = tc.args as { skill_name?: string };
               const skillName = args.skill_name;
               if (skillName) {
+                lastActiveSkill = skillName;
                 try {
                   const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
                   if (existsSync(skillPath)) {
-                    const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'), lang);
-                    if (rawMermaid) onDiagramUpdate(skillName, rawMermaid);
+                    const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
+                    if (rawMermaid) onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid));
                   }
                 } catch { /* ignore */ }
               }
             }
             // MCP skill tools: push tool-highlighted diagram, then branch-highlighted if result available
-            const skillName = SKILL_TOOL_MAP[tc.toolName];
+            // Explicit map takes priority; fall back to the last loaded skill
+            const skillName = SKILL_TOOL_MAP[tc.toolName] ?? lastActiveSkill;
             if (skillName) {
               try {
                 const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
                 if (existsSync(skillPath)) {
-                  const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'), lang);
+                  const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
                   if (rawMermaid) {
                     // Try to find the tool result to determine branch
                     const toolResult = (toolResults as Array<{ toolCallId: string; toolName: string; result: unknown }> ?? [])
@@ -283,7 +272,7 @@ export async function runAgent(
                     const highlighted = branchName
                       ? highlightMermaidBranch(highlightMermaidTool(rawMermaid, tc.toolName), branchName)
                       : highlightMermaidTool(rawMermaid, tc.toolName);
-                    onDiagramUpdate(skillName, highlighted);
+                    onDiagramUpdate(skillName, stripMermaidMarkers(highlighted));
                   }
                 }
               } catch { /* ignore */ }
@@ -335,20 +324,19 @@ export async function runAgent(
           // Extract mermaid diagram from get_skill_instructions results (markdown, not JSON)
           if (toolResult.toolName === 'get_skill_instructions') {
             const skillName = skillCallMap.get(toolResult.toolCallId);
-            const mermaid = extractMermaidFromContent(content, lang);
-            if (skillName && mermaid) skillDiagram = { skill_name: skillName, mermaid };
+            const mermaid = extractMermaidFromContent(content);
+            if (skillName && mermaid) skillDiagram = { skill_name: skillName, mermaid: stripMermaidMarkers(mermaid) };
             continue;
           }
 
           // Collect tool records for handoff analysis
           const toolCallForRecord = (step.toolCalls ?? []).find(tc => tc.toolCallId === toolResult.toolCallId);
-          const NO_DATA_RE = /没找到|未找到|不存在|没有.*记录|无记录|null|not.?found/i;
           const success = !content.includes('"error"') && !content.startsWith('Error:');
           collectedToolRecords.push({
             tool: toolResult.toolName as string,
             args: (toolCallForRecord?.args as Record<string, unknown>) ?? {},
             result_summary: content.slice(0, 150),
-            success: success && !NO_DATA_RE.test(content),
+            success: success && !isNoDataResult(content),
           });
 
           const parsed = JSON.parse(content);
@@ -388,12 +376,12 @@ export async function runAgent(
             try {
               const skillPath = resolve(SKILLS_DIR, 'fault-diagnosis', 'SKILL.md');
               if (existsSync(skillPath)) {
-                const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'), lang);
+                const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
                 if (rawMermaid) {
                   const branchName = determineBranch(parsed.diagnostic_steps);
                   skillDiagram = {
                     skill_name: 'fault-diagnosis',
-                    mermaid: highlightMermaidBranch(highlightMermaidTool(rawMermaid, 'diagnose_network'), branchName),
+                    mermaid: stripMermaidMarkers(highlightMermaidBranch(highlightMermaidTool(rawMermaid, 'diagnose_network'), branchName)),
                   };
                 }
               }
@@ -445,13 +433,38 @@ export async function runAgent(
     // When the model generates its response alongside a tool call (in an intermediate step),
     // that text is lost from result.text. Fall back to the last non-empty step text.
     // For transfer_to_human, the model-generated farewell text is often lost; use a default.
-    const transferDefault = lang === 'en'
-      ? 'Please hold on, I\'m transferring you to a human agent now.'
-      : '好的，我这就为您转接人工客服，请稍候。';
+    const transferDefault = t('transfer_default', lang);
     const text =
       result.text ||
       [...(result.steps ?? [])].reverse().find((s) => s.text)?.text ||
       (transferRequested ? transferDefault : '');
+
+    // ── 异步流程进度追踪（text chat 通道） ──
+    // 如果有活跃 skill 且有 onDiagramUpdate 回调，异步判断当前进度并推送高亮
+    if (lastActiveSkill && onDiagramUpdate && text) {
+      const progressSkill = lastActiveSkill;
+      const progressCallback = onDiagramUpdate;
+      const recentTurns = [
+        ...history.slice(-4).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', text: typeof m.content === 'string' ? m.content : '' })),
+        { role: 'user', text: userMessage },
+        { role: 'assistant', text },
+      ];
+      // Fire-and-forget: don't block response
+      (async () => {
+        try {
+          const skillPath = resolve(SKILLS_DIR, progressSkill, 'SKILL.md');
+          if (!existsSync(skillPath)) return;
+          const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
+          if (!rawMermaid) return;
+          const stateNames = extractStateNames(rawMermaid);
+          const stateName = await analyzeProgress(recentTurns, stateNames);
+          if (!stateName) return;
+          logger.info('agent', 'progress_tracked', { skill: progressSkill, state: stateName });
+          const highlighted = highlightMermaidProgress(rawMermaid, stateName);
+          progressCallback(progressSkill, stripMermaidMarkers(highlighted));
+        } catch { /* ignore */ }
+      })();
+    }
 
     return { text, card, skill_diagram: skillDiagram, transferData };
   } finally {

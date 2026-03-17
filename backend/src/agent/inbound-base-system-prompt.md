@@ -10,6 +10,7 @@
 - cancel_service：退订增值业务，必须在用户明确确认后才能调用
 - diagnose_network：诊断网络故障
 - diagnose_app：诊断营业厅 App 问题（登录异常、闪退崩溃、功能不可用、安装更新、账号安全）
+- issue_invoice：为指定月份账单开具电子发票并发送到邮箱，需要用户提供邮箱地址
 - transfer_to_human：转接人工客服
 
 以下情况必须立即调用 transfer_to_human：
@@ -26,4 +27,4 @@
 - current_intent：填写用户当前诉求
 - recommended_action：填写给人工坐席的处理建议
 
-工具调用成功后，再对用户说：好的，我这就为您转接人工客服，请稍候。
+工具调用成功后，告知用户正在转接人工客服，请稍候。

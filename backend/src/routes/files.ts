@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { resolve, join, relative, extname, basename } from 'node:path';
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { logger } from '../logger';
+import { saveSkillWithVersion } from '../compliance/version-manager';
+import { requireRole } from '../middleware/auth';
 
 const files = new Hono();
 
@@ -109,7 +111,7 @@ files.get('/content', async (c) => {
 });
 
 // PUT /api/files/content
-files.put('/content', async (c) => {
+files.put('/content', requireRole('config_editor'), async (c) => {
   const body = await c.req.json<{ path?: string; content?: string }>();
   const filePath = body.path;
   const content = body.content;
@@ -128,11 +130,19 @@ files.put('/content', async (c) => {
     return c.json({ error: '路径不合法' }, 403);
   }
 
+  // Skill 文件（.md）走版本管理；其他文件直接写入
+  const isSkillFile = filePath.endsWith('.md') && (filePath.includes('skills/') || filePath.includes('agent/'));
   const absPath = resolve(PROJECT_ROOT, filePath);
   try {
-    await writeFile(absPath, content, 'utf-8');
-    logger.info('files', 'write_ok', { path: filePath, bytes: Buffer.byteLength(content) });
-    return c.json({ ok: true, path: filePath });
+    if (isSkillFile) {
+      const { versionId } = await saveSkillWithVersion(filePath, content, '手动编辑', 'editor');
+      logger.info('files', 'write_ok_versioned', { path: filePath, versionId, bytes: Buffer.byteLength(content) });
+      return c.json({ ok: true, path: filePath, versionId });
+    } else {
+      await writeFile(absPath, content, 'utf-8');
+      logger.info('files', 'write_ok', { path: filePath, bytes: Buffer.byteLength(content) });
+      return c.json({ ok: true, path: filePath });
+    }
   } catch (err) {
     logger.warn('files', 'write_error', { path: filePath, error: String(err) });
     return c.json({ error: `写入失败: ${String(err)}` }, 500);

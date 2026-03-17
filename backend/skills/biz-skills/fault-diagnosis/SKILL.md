@@ -18,109 +18,47 @@ metadata:
 
 ## 处理流程
 
-### 客户引导时序图
+### 客户引导状态图
 
 ```mermaid
-sequenceDiagram
-    participant C as 客户
-    participant A as AI 客服
-    participant S as 后端系统
+stateDiagram-v2
+    [*] --> 接收问题: 客户反映网络问题（无信号/网速慢/掉线/上不了网）
+    接收问题 --> 安抚与采集: 安抚客户，询问具体故障现象
+    安抚与采集 --> 判断故障类型: 客户描述问题详情
+    判断故障类型 --> 系统诊断: 确定 issue_type（no_signal/slow_data/call_drop/no_network）
+    系统诊断 --> 分析诊断结果: diagnose_network(phone, issue_type) 返回 diagnostic_steps[] %% tool:diagnose_network
 
-    C->>A: 反映网络问题（无信号/网速慢/掉线/上不了网）
+    state 分析诊断结果 <<choice>>
+    分析诊断结果 --> 账号停机: error — 账号欠费 %% branch:account_error
+    分析诊断结果 --> 流量耗尽: error — 流量用完 %% branch:data_exhausted
+    分析诊断结果 --> APN异常: warning — APN 配置问题 %% branch:apn_warning
+    分析诊断结果 --> 基站异常: warning或error — 基站信号问题 %% branch:signal_weak
+    分析诊断结果 --> 网络拥塞: warning — 高峰期拥塞 %% branch:congestion
+    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok
 
-    A->>C: 安抚客户，表示理解，<br/>询问具体故障现象
+    账号停机 --> 已解决: 告知充值方式及恢复时间
+    流量耗尽 --> 已解决: 推荐加油包或升级套餐
 
-    C->>A: 描述问题详情
+    APN异常 --> 等待APN操作结果: 引导重置 APN（设置→移动网络→APN→重置为默认）
+    state 等待APN操作结果 <<choice>>
+    等待APN操作结果 --> 已解决: 问题解决
+    等待APN操作结果 --> 已解决: 问题未解决，建议重启手机后重试
 
-    A->>A: 判断 issue_type<br/>（no_signal / slow_data / call_drop / no_network）
-    A->>S: diagnose_network(phone, issue_type) %% tool:diagnose_network
-    S-->>A: 返回诊断结果（diagnostic_steps[]）
+    基站异常 --> 工单已提交: 告知信号弱，建议换位置；提交基站覆盖投诉工单
+    工单已提交 --> 已解决: 告知工单号及预计处理时效
 
-    alt 账号停机（error）
-        A->>C: 告知账号欠费停机，<br/>引导充值并说明恢复时间 %% branch:account_error
-    else 流量耗尽（error）
-        A->>C: 告知流量已用尽，<br/>推荐购买加油包或升级套餐 %% branch:data_exhausted
-    else APN 配置异常（warning）
-        A->>C: 引导操作：设置 → 移动网络 → APN → 重置为默认 %% branch:apn_warning
-        C->>A: 已操作，反馈结果
-        alt 问题解决
-            A->>C: 确认恢复，询问是否还有其他问题
-        else 问题未解决
-            A->>C: 建议重启手机后重试
-        end
-    else 基站信号异常（warning/error）
-        A->>C: 告知所在区域信号较弱，<br/>建议换到户外或窗边重试 %% branch:signal_weak
-        A->>S: 提交基站覆盖投诉工单
-        S-->>A: 工单号确认
-        A->>C: 告知工单已提交，预计处理时效
-    else 网络拥塞（warning）
-        A->>C: 说明当前为高峰期，<br/>建议等待或切换至 Wi-Fi %% branch:congestion
-    else 所有项均正常（ok）
-        A->>C: 引导用户自查：<br/>① 确认未开飞行模式<br/>② 重新插拔 SIM 卡<br/>③ 重启手机 %% branch:all_ok
-        C->>A: 已操作，反馈结果
-        alt 问题解决
-            A->>C: 确认恢复正常
-        else 问题仍未解决
-            A->>A: 判断是否需要升级处理
-            A->>C: 告知升级路径（人工客服 / 营业厅补卡 / 漫游核查）
-        end
-    end
+    网络拥塞 --> 已解决: 说明高峰期，建议等待或切换 Wi-Fi
 
-    alt 满足升级条件<br/>（基站故障 / 连续重启无信号 / 漫游失效 / SIM 卡损坏）
-        A->>C: 问题超出自助范围，<br/>为您转接人工客服 / 引导前往营业厅
-    end
-```
+    用户自查 --> 等待自查结果: 引导：①确认未开飞行模式 ②重新插拔SIM卡 ③重启手机
+    state 等待自查结果 <<choice>>
+    等待自查结果 --> 已解决: 问题解决
+    等待自查结果 --> 升级处理: 问题仍未解决
 
-<!-- lang:en -->
-```mermaid
-sequenceDiagram
-    participant C as Customer
-    participant A as AI Agent
-    participant S as Backend
-
-    C->>A: Reports network issue (no signal / slow data / call drop / no network)
-
-    A->>C: Acknowledge issue,<br/>ask for details
-
-    C->>A: Describes the problem
-
-    A->>A: Determine issue_type<br/>(no_signal / slow_data / call_drop / no_network)
-    A->>S: diagnose_network(phone, issue_type, lang="en") %% tool:diagnose_network
-    S-->>A: Returns diagnostic result (diagnostic_steps[])
-
-    alt Account suspended (error)
-        A->>C: Inform account is suspended due to unpaid balance,<br/>guide to top up %% branch:account_error
-    else Data exhausted (error)
-        A->>C: Inform data allowance is used up,<br/>recommend add-on or plan upgrade %% branch:data_exhausted
-    else APN misconfigured (warning)
-        A->>C: Guide: Settings → Mobile Network → APN → Reset to default %% branch:apn_warning
-        C->>A: Done, feedback provided
-        alt Issue resolved
-            A->>C: Confirm restored, ask if anything else needed
-        else Still not working
-            A->>C: Suggest restart phone and retry
-        end
-    else Base station issue (warning/error)
-        A->>C: Inform signal is weak in area,<br/>suggest moving outdoors or near window %% branch:signal_weak
-        A->>S: Submit coverage complaint ticket
-        S-->>A: Ticket number confirmed
-        A->>C: Inform ticket submitted with expected resolution time
-    else Network congestion (warning)
-        A->>C: Explain peak-hour congestion,<br/>suggest wait or switch to Wi-Fi %% branch:congestion
-    else All checks passed (ok)
-        A->>C: Guide self-check:<br/>① Confirm airplane mode is off<br/>② Re-insert SIM card<br/>③ Restart phone %% branch:all_ok
-        C->>A: Done, feedback provided
-        alt Issue resolved
-            A->>C: Confirm normal
-        else Still not resolved
-            A->>A: Evaluate if escalation is needed
-            A->>C: Provide escalation path (human agent / store visit / roaming check)
-        end
-    end
-
-    alt Escalation criteria met<br/>(station fault / repeated restarts / roaming failure / SIM damaged)
-        A->>C: Issue beyond self-service scope,<br/>transfer to human agent / guide to service center
-    end
+    state 升级判断 <<choice>>
+    已解决 --> 升级判断
+    升级判断 --> [*]: 未满足升级条件，流程结束
+    升级判断 --> 升级处理: 满足升级条件（基站故障/连续重启无信号/漫游失效/SIM卡损坏）
+    升级处理 --> [*]: 转接人工客服或引导前往营业厅
 ```
 
 ### 网络故障诊断流程

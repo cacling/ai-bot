@@ -17,49 +17,9 @@ import type { ActiveDiagram } from '../components/DiagramPanel';
 import { T, type Lang } from '../i18n';
 import type { MockUser } from '../mockUsers';
 import { broadcastUserSwitch } from '../userSync';
+import { useVoiceEngine, type VoiceMessage, type HandoffContext, type EmotionResult } from '../hooks/useVoiceEngine';
 
-// ── 类型 ──────────────────────────────────────────────────────────────────────
-type ConnState =
-  | 'disconnected'   // 未连接
-  | 'connecting'     // 连接中
-  | 'idle'           // 已连接，等待用户说话
-  | 'listening'      // server_vad 检测到用户在说话
-  | 'thinking'       // 用户停止说话，等待模型回复
-  | 'responding'     // 模型正在输出音频/文字
-  | 'transferred';   // 已转人工
-
-interface EmotionResult {
-  label: string;
-  emoji: string;
-  color: string;
-}
-
-interface VoiceMessage {
-  id: number;
-  role: 'user' | 'bot' | 'agent' | 'handoff';
-  text: string;
-  time: string;
-  emotion?: EmotionResult;
-  handoffCtx?: HandoffContext;
-}
-
-interface HandoffContext {
-  user_phone:            string;
-  session_id:            string;
-  timestamp:             string;
-  transfer_reason:       string;
-  customer_intent:       string;
-  main_issue:            string;
-  business_object:       string[];
-  confirmed_information: string[];
-  actions_taken:         string[];
-  current_status:        string;
-  handoff_reason:        string;
-  next_action:           string;
-  priority:              string;
-  risk_flags:            string[];
-  session_summary:       string;
-}
+// ── 常量 ──────────────────────────────────────────────────────────────────────
 
 const EMOTION_CLASS: Record<string, string> = {
   gray:   'text-gray-500   bg-gray-100',
@@ -68,34 +28,6 @@ const EMOTION_CLASS: Record<string, string> = {
   orange: 'text-orange-600 bg-orange-50',
   red:    'text-red-600    bg-red-50',
 };
-
-// ── 常量（仅保留非文字部分） ───────────────────────────────────────────────────
-
-// ── 音频工具 ──────────────────────────────────────────────────────────────────
-function float32ToInt16(input: Float32Array): Int16Array {
-  const out = new Int16Array(input.length);
-  for (let i = 0; i < input.length; i++) {
-    const s = Math.max(-1, Math.min(1, input[i]));
-    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-  }
-  return out;
-}
-
-function arrayBufferToBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 8192) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  }
-  return btoa(bin);
-}
-
-function base64ToUint8(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
 
 // ── 组件 ──────────────────────────────────────────────────────────────────────
 interface VoiceChatPageProps {
@@ -108,38 +40,26 @@ interface VoiceChatPageProps {
 
 export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], selectedPhone, onPhoneChange }: VoiceChatPageProps = {}) {
   const t = T[lang];
-  const [connState, setConnState]       = useState<ConnState>('disconnected');
-  const [messages, setMessages]         = useState<VoiceMessage[]>([]);
-  const [errorMsg, setErrorMsg]         = useState<string>('');
-  const [handoffCtx, setHandoffCtx]     = useState<HandoffContext | null>(null);
+
+  // ── 共享 Hook ──
+  const {
+    connState, setConnState,
+    messages, setMessages,
+    errorMsg, setErrorMsg,
+    handoffCtx, setHandoffCtx,
+    wsRef, messagesEndRef,
+    pendingUserIdRef, botMsgIdRef, botTextRef,
+    transferToBotRef, disconnectRef, connectRef,
+    upsertMsg, nextMsgId,
+    playChunk, stopPlayback, stopMic,
+    connectWs, disconnect, reset,
+  } = useVoiceEngine('disconnected');
+
+  // ── 页面特有状态 ──
   const [selectedUserPhone, setSelectedUserPhone] = useState<string>(selectedPhone ?? users[0]?.phone ?? '');
-
-  // ── refs ───────────────────────────────────────────────────────────────────
-  const wsRef             = useRef<WebSocket | null>(null);
-  const captureCtxRef     = useRef<AudioContext | null>(null);
-  const streamRef         = useRef<MediaStream | null>(null);
-  const processorRef      = useRef<ScriptProcessorNode | null>(null);
-  const pendingUserIdRef  = useRef<number | null>(null);   // 当前用户话语的消息 ID
-  const botMsgIdRef       = useRef<number | null>(null);   // 当前 bot 消息 ID
-  const botTextRef        = useRef<string>('');            // 累积 bot 文字
-  const msgIdCounter      = useRef(0);
-  const nextMsgId         = useRef(() => ++msgIdCounter.current);
-  const messagesEndRef    = useRef<HTMLDivElement>(null);
-  const disconnectRef     = useRef<() => void>(() => {});  // 避免循环依赖
-  const transferToBotRef  = useRef(false);
-  const transferredRef    = useRef(false);  // 转人工后为 true，用于回调闭包内判断
-  const needResumeRef     = useRef(false);  // 转回机器人时标记需要 resume=true 重连
-  const connectRef        = useRef<() => Promise<void>>(async () => {});
-  // MP3 流式播放
-  const audioElemRef      = useRef<HTMLAudioElement | null>(null);
-  const mediaSourceRef    = useRef<MediaSource | null>(null);
-  const sourceBufferRef   = useRef<SourceBuffer | null>(null);
-  const mp3QueueRef       = useRef<ArrayBuffer[]>([]);
-  const sourceOpenRef     = useRef<boolean>(false);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  const transferredRef    = useRef(false);
+  const needResumeRef     = useRef(false);
+  const prevLangRef       = useRef(lang);
 
   // 当 users 列表从空变为有值时，设定默认选中用户
   useEffect(() => {
@@ -158,79 +78,6 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
     }
   }, [selectedPhone]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 卸载时清理
-  useEffect(() => () => disconnectRef.current(), []);
-
-  // ── 消息更新（按 ID upsert）────────────────────────────────────────────────
-  const upsertMsg = useCallback((msg: VoiceMessage) => {
-    setMessages(prev => {
-      const idx = prev.findIndex(m => m.id === msg.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = msg;
-        return next;
-      }
-      return [...prev, msg];
-    });
-  }, []);
-
-  // ── MP3 流式播放 ──────────────────────────────────────────────────────────
-  const flushMp3Queue = useCallback(() => {
-    const sb = sourceBufferRef.current;
-    if (!sb || sb.updating || mp3QueueRef.current.length === 0) return;
-    sb.appendBuffer(mp3QueueRef.current.shift()!);
-  }, []);
-
-  const playChunk = useCallback((b64: string) => {
-    const bytes = base64ToUint8(b64);
-    if (bytes.length === 0) return;
-
-    // 首次调用：初始化 MediaSource + Audio 元素
-    if (!mediaSourceRef.current) {
-      const ms = new MediaSource();
-      const audio = new Audio();
-      audio.src = URL.createObjectURL(ms);
-      mediaSourceRef.current = ms;
-      audioElemRef.current = audio;
-      sourceOpenRef.current = false;
-
-      ms.addEventListener('sourceopen', () => {
-        const sb = ms.addSourceBuffer('audio/mpeg');
-        sourceBufferRef.current = sb;
-        sourceOpenRef.current = true;
-        sb.addEventListener('updateend', flushMp3Queue);
-        flushMp3Queue();
-      }, { once: true });
-
-      audio.play().catch(() => {});
-    }
-
-    mp3QueueRef.current.push(bytes.buffer);
-    if (sourceOpenRef.current) flushMp3Queue();
-  }, [flushMp3Queue]);
-
-  const stopPlayback = useCallback(() => {
-    audioElemRef.current?.pause();
-    audioElemRef.current = null;
-    if (mediaSourceRef.current?.readyState === 'open') {
-      try { mediaSourceRef.current.endOfStream(); } catch {}
-    }
-    mediaSourceRef.current = null;
-    sourceBufferRef.current = null;
-    mp3QueueRef.current = [];
-    sourceOpenRef.current = false;
-  }, []);
-
-  // ── 停止麦克风（不关闭 WS，用于转人工时保留连接）──────────────────────────
-  const stopMic = useCallback(() => {
-    processorRef.current?.disconnect();
-    processorRef.current = null;
-    captureCtxRef.current?.close().catch(() => {});
-    captureCtxRef.current = null;
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
-  }, []);
-
   // ── 处理 GLM 事件 ─────────────────────────────────────────────────────────
   const handleGlmEvent = useCallback((msg: Record<string, unknown>) => {
     const type = (msg.type as string) ?? '';
@@ -242,13 +89,12 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
     }
 
     // VAD：用户开始说话
-    // 机器人播音时不打断自己（回声消除不完美，VAD 可能误判）
     if (type === 'input_audio_buffer.speech_started') {
       setConnState('listening');
       if (connState !== 'responding') stopPlayback();
       botMsgIdRef.current = null;
       botTextRef.current = '';
-      const id = nextMsgId.current();
+      const id = nextMsgId();
       pendingUserIdRef.current = id;
       upsertMsg({ id, role: 'user', text: '...', time: nowTime() });
       return;
@@ -256,12 +102,11 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
 
     // VAD：用户停止说话
     if (type === 'input_audio_buffer.speech_stopped') {
-      // 转人工后不显示机器人思考状态
       if (!transferredRef.current) setConnState('thinking');
       return;
     }
 
-    // 输入音频转写（更新用户话语文字）
+    // 输入音频转写
     if (type.includes('transcription')) {
       const transcript = (msg.transcript ?? msg.delta ?? '') as string;
       if (transcript && pendingUserIdRef.current != null) {
@@ -270,12 +115,12 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
       return;
     }
 
-    // Bot 音频字幕增量（文字，不是 PCM）
+    // Bot 音频字幕增量
     if (type === 'response.audio_transcript.delta' && msg.delta != null) {
       setConnState('responding');
       const delta = msg.delta as string;
       if (!botMsgIdRef.current) {
-        const id = nextMsgId.current();
+        const id = nextMsgId();
         botMsgIdRef.current = id;
         botTextRef.current = delta;
         upsertMsg({ id, role: 'bot', text: delta, time: nowTime() });
@@ -286,10 +131,29 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
       return;
     }
 
-    // Bot 音频增量（base64 PCM，精确匹配避免误判 audio_transcript）
+    // Bot 音频增量
     if (type === 'response.audio.delta' && msg.delta) {
       setConnState('responding');
       playChunk(msg.delta as string);
+      return;
+    }
+
+    // 非中文模式：后端翻译 + TTS 生成的分句音频（替代 GLM 中文音频）
+    if (type === 'tts_override') {
+      setConnState('responding');
+      const text = (msg.text ?? '') as string;
+      if (text) {
+        if (!botMsgIdRef.current) {
+          const id = nextMsgId();
+          botMsgIdRef.current = id;
+          botTextRef.current = text;
+          upsertMsg({ id, role: 'bot', text, time: nowTime() });
+        } else {
+          botTextRef.current += text;
+          upsertMsg({ id: botMsgIdRef.current, role: 'bot', text: botTextRef.current, time: nowTime() });
+        }
+      }
+      if (msg.audio) playChunk(msg.audio as string);
       return;
     }
 
@@ -323,15 +187,14 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
       const ctx = msg.context as HandoffContext;
       setConnState('transferred');
       setHandoffCtx(ctx);
-      // 把 banner 插入消息流，后续消息自然排在 banner 下方
-      setMessages(prev => [...prev, { id: nextMsgId.current(), role: 'handoff', text: '', time: nowTime(), handoffCtx: ctx }]);
+      setMessages(prev => [...prev, { id: nextMsgId(), role: 'handoff', text: '', time: nowTime(), handoffCtx: ctx }]);
       return;
     }
 
     // 转回机器人
     if (type === 'transfer_to_bot') {
       transferToBotRef.current = true;
-      needResumeRef.current = true;   // 标记：下次 connect 应携带 resume=true
+      needResumeRef.current = true;
       transferredRef.current = false;
       console.log('[VoiceChat] transfer_to_bot: needResumeRef=true, will reconnect with resume=true');
       setHandoffCtx(null);
@@ -342,117 +205,48 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
     // 坐席消息：播放 TTS 音频并显示文字气泡
     if (type === 'agent_audio') {
       const text = (msg.text ?? msg.original_text ?? '') as string;
-      if (text) upsertMsg({ id: nextMsgId.current(), role: 'agent', text, time: nowTime() });
+      if (text) upsertMsg({ id: nextMsgId(), role: 'agent', text, time: nowTime() });
       if (msg.audio) playChunk(msg.audio as string);
       return;
     }
 
-    // 坐席消息（TTS 失败降级）：仅显示文字
+    // 坐席消息（TTS 失败降级）
     if (type === 'agent_message') {
       const text = (msg.text ?? '') as string;
-      if (text) upsertMsg({ id: nextMsgId.current(), role: 'agent', text, time: nowTime() });
+      if (text) upsertMsg({ id: nextMsgId(), role: 'agent', text, time: nowTime() });
       return;
     }
 
     // 错误
     if (type === 'error') {
       console.error('[GLM error]', msg);
-      setErrorMsg((msg.message ?? JSON.stringify(msg)) as string);
+      const errText = (msg.message ?? (msg.error as Record<string, unknown>)?.message ?? JSON.stringify(msg)) as string;
+      setErrorMsg(errText);
       disconnectRef.current();
     }
   }, [upsertMsg, playChunk, stopPlayback, onDiagramUpdate, stopMic]);
 
-  // ── 断开连接 ──────────────────────────────────────────────────────────────
-  const disconnect = useCallback(() => {
-    processorRef.current?.disconnect();
-    processorRef.current = null;
-    captureCtxRef.current?.close().catch(() => {});
-    captureCtxRef.current = null;
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
-    stopPlayback();
-    wsRef.current?.close();
-    wsRef.current = null;
-    setConnState('disconnected');
-  }, [stopPlayback]);
-
-  // 保持 ref 同步
-  useEffect(() => { disconnectRef.current = disconnect; }, [disconnect]);
-
   // ── 建立连接 ──────────────────────────────────────────────────────────────
   const connect = useCallback(async () => {
-    // 在任何 await 之前捕获 resume 标志，避免异步后 ref 已被清除
     const resumeFlag = needResumeRef.current ? '&resume=true' : '';
     needResumeRef.current = false;
     console.log('[VoiceChat] connect: resumeFlag=', resumeFlag || '(none)', 'phone=', selectedUserPhone);
-
-    setErrorMsg('');
-    setConnState('connecting');
-
-    // 申请麦克风权限
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-      });
-    } catch {
-      setErrorMsg(t.outbound_mic_denied); // shared string with outbound page
-      setConnState('disconnected');
-      return;
-    }
-    streamRef.current = stream;
-
-    // 连接后端 WebSocket 代理
     const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws/voice?lang=${lang}&phone=${selectedUserPhone}${resumeFlag}`;
-    console.log('[VoiceChat] ws connecting to:', wsUrl);
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      // 建立 16kHz PCM 采集管道
-      const ctx = new AudioContext({ sampleRate: 16000 });
-      captureCtxRef.current = ctx;
-
-      const source    = ctx.createMediaStreamSource(stream);
-      const processor = ctx.createScriptProcessor(2048, 1, 1); // ~128ms @ 16kHz，必须是 2 的幂
-
-      // 静音输出，防止麦克风回声
-      const mute = ctx.createGain();
-      mute.gain.value = 0;
-      processor.connect(mute);
-      mute.connect(ctx.destination);
-
-      processor.onaudioprocess = (e) => {
-        if (ws.readyState !== WebSocket.OPEN) return;
-        const pcm16 = float32ToInt16(e.inputBuffer.getChannelData(0));
-        ws.send(JSON.stringify({
-          event_id: crypto.randomUUID(),
-          client_timestamp: Date.now(),
-          type: 'input_audio_buffer.append',
-          audio: arrayBufferToBase64(pcm16.buffer as ArrayBuffer),
-        }));
-      };
-
-      source.connect(processor);
-      processorRef.current = processor;
-    };
-
-    ws.onmessage = (e) => {
-      try { handleGlmEvent(JSON.parse(e.data)); }
-      catch { console.error('Failed to parse WS message', e.data); }
-    };
-
-    ws.onclose  = () => {
-      disconnect();
-      if (transferToBotRef.current) {
-        transferToBotRef.current = false;
-        connectRef.current();
-      }
-    };
-    ws.onerror  = () => disconnect();
-  }, [handleGlmEvent, disconnect, lang, selectedUserPhone]);
+    await connectWs(wsUrl, handleGlmEvent, { micDeniedLabel: t.outbound_mic_denied });
+  }, [connectWs, handleGlmEvent, lang, selectedUserPhone, t]);
 
   useEffect(() => { connectRef.current = connect; }, [connect]);
+
+  // 语言切换时：若语音通话进行中，自动断开并以新语言重连
+  useEffect(() => {
+    if (lang === prevLangRef.current) return;
+    prevLangRef.current = lang;
+    if (connState !== 'disconnected' && connState !== 'connecting') {
+      disconnect();
+      // 等断开完成后用新 lang 重连（connect 已通过 useCallback 绑定最新 lang）
+      setTimeout(() => { connectRef.current(); }, 300);
+    }
+  }, [lang, connState, disconnect]);
 
   // ── UI 交互 ───────────────────────────────────────────────────────────────
   const handleMainBtn = () => {
@@ -461,16 +255,13 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
   };
 
   const handleReset = () => {
-    disconnect();
-    setMessages([]);
-    setErrorMsg('');
+    reset();
     setHandoffCtx(null);
   };
 
   const handleManualTransfer = () => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    // 向 GLM 注入一条用户消息，触发 transfer_to_human 工具调用
     ws.send(JSON.stringify({
       event_id: crypto.randomUUID(),
       client_timestamp: Date.now(),

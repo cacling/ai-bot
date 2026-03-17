@@ -158,11 +158,11 @@ OTP 未收到 → 检查手机号/勿扰模式 → 等待重发 → 切换验证
 
 **App 被锁定**：TC5-A 四问排查（版本 → 近期应用 → 不熟悉应用 → 设备安全）
 
-**TC5-A 四问话术**（按顺序向客户确认）：
-1. "您是否已安装/更新至最新版本的 App？"
-2. "在上次成功登录与 App 被锁定之间，您是否安装过任何新的应用？"
-3. "您的设备上是否有任何不熟悉、不记得安装的应用？"
-4. "我可以确认您没有安装'虚假'的 GPS、VPN 或远程访问类应用吗？"
+**TC5-A 四问排查**（按顺序向客户确认）：
+1. 是否已安装或更新至最新版本的 App
+2. 在上次成功登录与 App 被锁定之间，是否安装过任何新的应用
+3. 设备上是否有任何不熟悉、不记得安装的应用
+4. 确认没有安装虚假的 GPS、VPN 或远程访问类应用
 
 **反诈优先规则**：
 - 检测到屏幕共享进行中 → **立即升级 security_team**，告知反诈提醒话术
@@ -189,63 +189,86 @@ OTP 未收到 → 检查手机号/勿扰模式 → 等待重发 → 切换验证
 - **需升级时**：告知客户下一步由谁处理、预计等待时间
 - **反诈场景**：语气适当提高紧迫感，保持冷静专业
 
-## 客户引导时序图
+## 客户引导状态图
 
 ```mermaid
-sequenceDiagram
-    participant C as 客户
-    participant A as AI客服
-    participant S as 后端系统
+stateDiagram-v2
+    [*] --> 接收问题: 客户反映营业厅 App 使用问题
+    接收问题 --> 加载手册: get_skill_reference("telecom-app", "troubleshoot-guide.md")
+    加载手册 --> 判断问题类型: 根据客户描述确定 issue_type
 
-    C->>A: 反映营业厅 App 使用问题
-    A->>S: get_skill_reference("telecom-app", "troubleshoot-guide.md") %% tool:get_skill_reference
-    S-->>A: 返回排查手册
+    state 问题分类 <<choice>>
+    判断问题类型 --> 问题分类
+    问题分类 --> TC1_闪退: app_crash
+    问题分类 --> TC2_登录: login_issue
+    问题分类 --> TC3_功能异常: feature_error
+    问题分类 --> TC4_安装更新: install_update
+    问题分类 --> TC5_安全: security_check
 
-    A->>A: 判断 issue_type（TC1~TC5）
+    state TC1_闪退 {
+        [*] --> 检查版本_1
+        state 版本结果_1 <<choice>>
+        检查版本_1 --> 版本结果_1
+        版本结果_1 --> 引导更新App: 版本过旧
+        版本结果_1 --> 清缓存_重启_清存储: 版本正常
+        引导更新App --> [*]
+        state 自助结果_1 <<choice>>
+        清缓存_重启_清存储 --> 自助结果_1
+        自助结果_1 --> [*]: 问题解决
+        自助结果_1 --> 升级frontline_1: 以上无效，提交设备信息工单
+        升级frontline_1 --> [*]
+    }
 
-    alt TC1 · 闪退 / 无法打开
-        A->>C: 确认 App 版本是否最新
-        alt 版本过旧
-            A->>C: 引导应用商店更新
-        else 版本正常
-            A->>C: 引导清除缓存 → 重启 → 清理存储
-            alt 以上无效
-                A->>C: 升级 frontline，提交设备信息工单
-            end
-        end
-    else TC2 · 登录问题
-        alt 账号被锁 / 风控限制
-            A->>S: diagnose_app(phone, app_locked 或 login_failed) %% tool:diagnose_app
-            S-->>A: 返回诊断结果
-            A->>C: 按诊断结果逐步引导
-        else 密码错误
-            A->>C: 引导"忘记密码"重置
-        else OTP 未送达
-            A->>C: 核验手机号 → 等待重发 → 切换验证方式
-        end
-    else TC3 · 功能异常
-        A->>C: 检查网络 → 检查版本 → 清缓存
-        alt 账户状态异常
-            A->>C: 告知欠费/停机影响，引导缴费
-        else 以上无效
-            A->>C: 升级 frontline，记录问题截图提交工单
-        end
-    else TC4 · 安装 / 更新失败
-        A->>C: 检查系统版本 → 检查空间 → 切换网络
-        alt 仍失败
-            A->>C: 提供官方应用商店或直链下载渠道
-        end
-    else TC5 · 设备 / 账号安全
-        A->>S: diagnose_app(phone, issue_type) %% tool:diagnose_app
-        S-->>A: 返回安全诊断结果
-        alt 高风险（屏幕共享 / flagged / 异地登录否认）
-            A->>C: 立即告知反诈提醒，升级 security_team
-        else 设备问题（Root / 模拟器）
-            A->>C: 告知硬性限制，须使用正常设备
-        else 可修复问题
-            A->>C: 逐项引导操作（删除应用 / 关闭VPN / 更新版本）
-        end
-    end
+    state TC2_登录 {
+        [*] --> 登录分类
+        state 登录类型 <<choice>>
+        登录分类 --> 登录类型
+        登录类型 --> 安全诊断: 账号被锁或风控限制
+        登录类型 --> 引导重置密码: 密码错误，引导"忘记密码"
+        登录类型 --> OTP排查: OTP 未送达，核验手机号 ▸ 等待重发 ▸ 切换验证方式
+        安全诊断 --> 按诊断引导: diagnose_app(phone, issue_type) %% tool:diagnose_app
+        引导重置密码 --> [*]
+        OTP排查 --> [*]
+        按诊断引导 --> [*]
+    }
+
+    state TC3_功能异常 {
+        [*] --> 逐项排查: 检查网络 ▸ 检查版本 ▸ 清缓存
+        state 排查结果_3 <<choice>>
+        逐项排查 --> 排查结果_3
+        排查结果_3 --> 引导缴费: 账户欠费或停机
+        排查结果_3 --> 升级frontline_3: 以上无效，记录问题截图提交工单
+        排查结果_3 --> [*]: 问题解决
+        引导缴费 --> [*]
+        升级frontline_3 --> [*]
+    }
+
+    state TC4_安装更新 {
+        [*] --> 基础排查: 检查系统版本 ▸ 检查空间 ▸ 切换网络
+        state 排查结果_4 <<choice>>
+        基础排查 --> 排查结果_4
+        排查结果_4 --> [*]: 问题解决
+        排查结果_4 --> 提供下载渠道: 仍失败，引导官方应用商店或直链下载
+        提供下载渠道 --> [*]
+    }
+
+    state TC5_安全 {
+        [*] --> 安全诊断_5: diagnose_app(phone, issue_type) %% tool:diagnose_app
+        state 风险等级 <<choice>>
+        安全诊断_5 --> 风险等级
+        风险等级 --> 升级security_team: 高风险（屏幕共享、flagged、异地登录否认），反诈提醒
+        风险等级 --> 告知硬性限制: 设备问题（Root或模拟器），须使用正常设备
+        风险等级 --> 逐项引导修复: 可修复，删除应用、关闭VPN、更新版本
+        升级security_team --> [*]
+        告知硬性限制 --> [*]
+        逐项引导修复 --> [*]
+    }
+
+    TC1_闪退 --> [*]
+    TC2_登录 --> [*]
+    TC3_功能异常 --> [*]
+    TC4_安装更新 --> [*]
+    TC5_安全 --> [*]
 ```
 
 ## 重要提醒
