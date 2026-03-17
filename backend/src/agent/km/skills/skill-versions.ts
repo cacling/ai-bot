@@ -16,7 +16,7 @@ import {
   rollbackToVersion,
 } from './version-manager';
 import { logger } from '../../../logger';
-import { requireRole } from '../../../middleware/auth';
+import { requireRole } from '../../../services/auth';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 

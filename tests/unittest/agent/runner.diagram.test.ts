@@ -9,7 +9,7 @@ import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { highlightMermaidTool, highlightMermaidBranch, determineBranch, extractMermaidFromContent } from '../../../backend/src/engine/runner.ts';
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../../../backend/src/config/paths';
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../../../backend/src/services/paths';
 
 // ── highlightMermaidTool · sequenceDiagram ───────────────────────────────────
 
@@ -254,7 +254,7 @@ describe('fault-diagnosis SKILL.md — stateDiagram 高亮集成验证', () => {
 
   test('progressHL 高亮真实状态节点', () => {
     const raw = extractMermaidFromContent(skillContent)!;
-    const { highlightMermaidProgress } = require('../../../backend/src/utils/mermaid');
+    const { highlightMermaidProgress } = require('../../../backend/src/services/mermaid');
     const highlighted = highlightMermaidProgress(raw, '网络拥塞');
     expect(highlighted).toContain('classDef progressHL');
     expect(highlighted).toContain('网络拥塞:::progressHL');
@@ -262,7 +262,7 @@ describe('fault-diagnosis SKILL.md — stateDiagram 高亮集成验证', () => {
 
   test('progressHL 不高亮 <<choice>> 节点', () => {
     const raw = extractMermaidFromContent(skillContent)!;
-    const { extractStateNames } = require('../../../backend/src/utils/mermaid');
+    const { extractStateNames } = require('../../../backend/src/services/mermaid');
     const states = extractStateNames(raw);
     // <<choice>> nodes like 已尝试自查, 诊断结果判断 should be excluded
     expect(states).not.toContain('已尝试自查');

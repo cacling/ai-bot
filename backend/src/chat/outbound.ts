@@ -18,13 +18,13 @@ import { VoiceSessionState, TRANSFER_PHRASE_RE } from '../services/voice-session
 import { sessionBus } from '../session-bus';
 import { setCustomerLang } from '../lang-session';
 import { t, OUTBOUND_TOOL_LABELS, SMS_LABELS } from '../i18n';
-import { type CollectionCase, type MarketingTask, type CallbackTask, CALLBACK_TASKS } from '../data/outbound-mock';
+import { type CollectionCase, type MarketingTask, type CallbackTask, CALLBACK_TASKS } from './outbound-mock';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { outboundTasks } from '../db/schema';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
-import { textToSpeech } from '../skills/tts';
-import { translateText } from '../skills/translate-lang';
+import { textToSpeech } from '../services/tts';
+import { translateText } from '../services/translate-lang';
 import { getSkillContentByChannel } from '../engine/skills';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
@@ -493,5 +493,5 @@ outbound.get(
 export default outbound;
 
 // Re-export types and callback tasks for other route files
-export { CALLBACK_TASKS } from '../data/outbound-mock';
-export type { CollectionCase, MarketingTask, CallbackTask } from '../data/outbound-mock';
+export { CALLBACK_TASKS } from './outbound-mock';
+export type { CollectionCase, MarketingTask, CallbackTask } from './outbound-mock';

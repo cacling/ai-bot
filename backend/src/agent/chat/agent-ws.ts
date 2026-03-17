@@ -30,7 +30,7 @@ import { logger } from '../../logger';
 import { analyzeEmotion } from '../card/emotion-analyzer';
 import { analyzeHandoff, type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../card/handoff-analyzer';
 import { setAgentLang, getLangs } from '../../lang-session';
-import { translateText } from '../../skills/translate-lang';
+import { translateText } from '../../services/translate-lang';
 import { checkCompliance } from '../../services/keyword-filter';
 import { t, TOOL_LABELS } from '../../i18n';
 

@@ -12,7 +12,7 @@ import { eq, desc } from 'drizzle-orm';
 import { db } from '../../../db';
 import { changeRequests } from '../../../db/schema';
 import { saveSkillWithVersion } from './version-manager';
-import { requireRole } from '../../../middleware/auth';
+import { requireRole } from '../../../services/auth';
 import { logger } from '../../../logger';
 
 const changeRequestRoutes = new Hono();

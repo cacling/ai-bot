@@ -24,7 +24,7 @@ import { refreshSkillsCache } from '../../../engine/skills';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR } from '../../../config/paths';
+import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR } from '../../../services/paths';
 import { db } from '../../../db';
 import { testCases } from '../../../db/schema';
 

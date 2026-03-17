@@ -8,9 +8,9 @@ import { skillsTools, getSkillsDescriptionByChannel } from './skills';
 import { logger } from '../logger';
 import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../agent/card/handoff-analyzer';
 import { t } from '../i18n';
-import { translateText } from '../skills/translate-lang';
-import { isNoDataResult } from '../utils/tool-result';
-import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../utils/mermaid';
+import { translateText } from '../services/translate-lang';
+import { isNoDataResult } from '../services/tool-result';
+import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
 
 // Re-export for test file
@@ -18,7 +18,7 @@ export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch
 
 const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://localhost:8003/mcp';
 
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
 /** Tool → skill name mapping for diagram highlighting */
 const SKILL_TOOL_MAP: Record<string, string> = {

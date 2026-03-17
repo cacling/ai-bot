@@ -4,7 +4,7 @@
  * 当客户侧与坐席侧语言不同时，由接收方 WebSocket handler 调用，
  * 将消息翻译为接收方语言后再推送给前端。
  *
- * Skill 定义从 backend/skills/translate-lang/SKILL.md 加载。
+ * Skill 定义从 backend/services/translate-lang/SKILL.md 加载。
  */
 
 import { generateText } from 'ai';
@@ -16,7 +16,7 @@ const MODEL = siliconflow(
   process.env.SILICONFLOW_CHAT_MODEL ?? 'stepfun-ai/Step-3.5-Flash'
 );
 
-import { TECH_SKILLS_DIR } from '../config/paths';
+import { TECH_SKILLS_DIR } from '../services/paths';
 
 function loadSkill(name: string): string {
   const raw = readFileSync(`${TECH_SKILLS_DIR}/${name}/SKILL.md`, 'utf-8');

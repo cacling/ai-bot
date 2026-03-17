@@ -31,7 +31,7 @@ export interface HandoffContext {
 // ── 转人工话术检测（从 SKILL 加载短语，构建正则） ──────────────────────────────
 
 import { readFileSync } from 'fs';
-import { TECH_SKILLS_DIR } from '../config/paths';
+import { TECH_SKILLS_DIR } from '../services/paths';
 
 function buildTransferPhraseRE(): RegExp {
   const fallback = /转接人工|为您转接|转人工客服|正在为您转接|transfer(?:ring)?\s*(?:you\s*)?to\s*(?:a\s*)?human|connecting\s*you\s*to\s*an?\s*agent/i;

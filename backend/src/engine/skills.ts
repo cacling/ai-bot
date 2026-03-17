@@ -4,7 +4,7 @@ import { resolve, join } from 'path';
 import { z } from 'zod';
 import { logger } from '../logger';
 
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
 // ── 动态扫描可用技能 ──────────────────────────────────────────────────────────
 

@@ -19,7 +19,7 @@ import { eq } from 'drizzle-orm';
 import { runAgent } from '../../../engine/runner';
 import { saveSkillWithVersion } from './version-manager';
 import { logger } from '../../../logger';
-import { requireRole } from '../../../middleware/auth';
+import { requireRole } from '../../../services/auth';
 import { db } from '../../../db';
 import { testCases } from '../../../db/schema';
 

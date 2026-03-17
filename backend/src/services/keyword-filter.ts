@@ -12,7 +12,7 @@
 
 import { readFileSync } from 'fs';
 import { logger } from '../logger';
-import { TECH_SKILLS_DIR } from '../config/paths';
+import { TECH_SKILLS_DIR } from '../services/paths';
 
 // ── 规则类型 ───────────────────────────────────────────────────────────────────
 

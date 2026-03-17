@@ -14,9 +14,9 @@ import { generateText } from 'ai';
 import { chatModel } from '../../../engine/llm';
 import { saveSkillWithVersion } from './version-manager';
 import { logger } from '../../../logger';
-import { requireRole } from '../../../middleware/auth';
+import { requireRole } from '../../../services/auth';
 
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../../../config/paths';
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../../../services/paths';
 
 // ── 构建技能索引 ──────────────────────────────────────────────────────────────
 

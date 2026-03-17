@@ -10,10 +10,10 @@ import { resolve } from 'path';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { subscribers, plans } from '../db/schema';
-import { textToSpeech } from '../skills/tts';
-import { translateText } from '../skills/translate-lang';
+import { textToSpeech } from '../services/tts';
+import { translateText } from '../services/translate-lang';
 import { t, TOOL_LABELS } from '../i18n';
-import { isNoDataResult } from '../utils/tool-result';
+import { isNoDataResult } from '../services/tool-result';
 import { logger } from '../logger';
 import { sessionBus } from '../session-bus';
 import { getLangs, setCustomerLang } from '../lang-session';
@@ -25,7 +25,7 @@ import { getSkillsDescriptionByChannel } from '../engine/skills';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
 /** Tool → skill name mapping: used to send skill_diagram_update to the frontend */
 const SKILL_TOOL_MAP: Record<string, string> = {

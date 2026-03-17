@@ -27,7 +27,7 @@ import { upgradeWebSocket } from './voice';
 import { sessionBus } from '../session-bus';
 import { logger } from '../logger';
 import { setCustomerLang, getLangs } from '../lang-session';
-import { translateText, translateMermaid } from '../skills/translate-lang';
+import { translateText, translateMermaid } from '../services/translate-lang';
 import { t } from '../i18n';
 import { checkCompliance, maskPII, sanitizeText } from '../services/keyword-filter';
 import { detectHallucination } from '../services/hallucination-detector';

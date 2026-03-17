@@ -12,7 +12,7 @@ import { resolve, dirname, basename } from 'node:path';
 import { readFile, mkdir, cp, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { saveSkillWithVersion } from './version-manager';
-import { requireRole } from '../../../middleware/auth';
+import { requireRole } from '../../../services/auth';
 import { logger } from '../../../logger';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');

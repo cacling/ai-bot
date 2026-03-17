@@ -15,7 +15,7 @@ const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
 const skills = new Hono();
 
-import { BIZ_SKILLS_DIR } from '../../../config/paths';
+import { BIZ_SKILLS_DIR } from '../../../services/paths';
 
 /**
  * 极简 YAML frontmatter 解析器。

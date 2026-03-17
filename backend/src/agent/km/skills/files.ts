@@ -3,7 +3,7 @@ import { resolve, join, relative, extname, basename } from 'node:path';
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { logger } from '../../../logger';
 import { saveSkillWithVersion } from './version-manager';
-import { requireRole } from '../../../middleware/auth';
+import { requireRole } from '../../../services/auth';
 
 const files = new Hono();
 

@@ -10,9 +10,9 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
-import { extractMermaidFromContent, stripMermaidMarkers, extractStateNames, extractTransitions, highlightMermaidProgress } from '../utils/mermaid';
-import { translateMermaid } from '../skills/translate-lang';
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
+import { extractMermaidFromContent, stripMermaidMarkers, extractStateNames, extractTransitions, highlightMermaidProgress } from '../services/mermaid';
+import { translateMermaid } from '../services/translate-lang';
 import { analyzeHandoff } from '../agent/card/handoff-analyzer';
 import { analyzeEmotion } from '../agent/card/emotion-analyzer';
 import { analyzeProgress } from '../agent/card/progress-tracker';
