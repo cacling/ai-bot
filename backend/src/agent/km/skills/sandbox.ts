@@ -16,14 +16,14 @@ import { readFile, writeFile, mkdir, rm, cp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { type CoreMessage } from 'ai';
 import { eq } from 'drizzle-orm';
-import { runAgent } from '../agent/runner';
-import { saveSkillWithVersion } from '../compliance/version-manager';
-import { logger } from '../logger';
-import { requireRole } from '../middleware/auth';
-import { db } from '../db';
-import { testCases } from '../db/schema';
+import { runAgent } from '../../runner';
+import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { logger } from '../../../logger';
+import { requireRole } from '../../../middleware/auth';
+import { db } from '../../../db';
+import { testCases } from '../../../db/schema';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../..');
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 const SANDBOX_ROOT = resolve(PROJECT_ROOT, 'skills', '.sandbox');
 
 // In-memory sandbox registry

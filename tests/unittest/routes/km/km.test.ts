@@ -15,15 +15,15 @@ let testDb: ReturnType<typeof drizzle>;
 
 // 我们直接测试 HTTP API，通过 Hono app.fetch
 import { Hono } from 'hono';
-import documents from '../../../../backend/src/routes/km/documents';
-import candidates from '../../../../backend/src/routes/km/candidates';
-import evidence from '../../../../backend/src/routes/km/evidence';
-import conflicts from '../../../../backend/src/routes/km/conflicts';
-import reviewPackages from '../../../../backend/src/routes/km/review-packages';
-import actionDrafts from '../../../../backend/src/routes/km/action-drafts';
-import assets from '../../../../backend/src/routes/km/assets';
-import tasks from '../../../../backend/src/routes/km/tasks';
-import audit from '../../../../backend/src/routes/km/audit';
+import documents from '../../../../backend/src/agent/km/kms/documents';
+import candidates from '../../../../backend/src/agent/km/kms/candidates';
+import evidence from '../../../../backend/src/agent/km/kms/evidence';
+import conflicts from '../../../../backend/src/agent/km/kms/conflicts';
+import reviewPackages from '../../../../backend/src/agent/km/kms/review-packages';
+import actionDrafts from '../../../../backend/src/agent/km/kms/action-drafts';
+import assets from '../../../../backend/src/agent/km/kms/assets';
+import tasks from '../../../../backend/src/agent/km/kms/tasks';
+import audit from '../../../../backend/src/agent/km/kms/audit';
 
 const app = new Hono();
 app.route('/documents', documents);

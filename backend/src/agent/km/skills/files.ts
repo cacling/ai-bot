@@ -1,14 +1,14 @@
 import { Hono } from 'hono';
 import { resolve, join, relative, extname, basename } from 'node:path';
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
-import { logger } from '../logger';
-import { saveSkillWithVersion } from '../compliance/version-manager';
-import { requireRole } from '../middleware/auth';
+import { logger } from '../../../logger';
+import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { requireRole } from '../../../middleware/auth';
 
 const files = new Hono();
 
 // Project root is the backend/ directory itself (skills/ and mcp_servers/ now live inside it)
-const PROJECT_ROOT = resolve(import.meta.dir, '../..');
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
 // Directories to exclude from scanning
 const EXCLUDED_DIRS = new Set([

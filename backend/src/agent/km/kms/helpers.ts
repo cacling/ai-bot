@@ -1,9 +1,9 @@
 /**
  * helpers.ts — 知识管理模块通用工具
  */
-import { nanoid } from '../../db/nanoid';
-import { db } from '../../db';
-import { kmAuditLogs } from '../../db/schema';
+import { nanoid } from '../../../db/nanoid';
+import { db } from '../../../db';
+import { kmAuditLogs } from '../../../db/schema';
 
 export { nanoid };
 

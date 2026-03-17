@@ -11,12 +11,12 @@ import { readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 import { generateText } from 'ai';
-import { chatModel } from '../agent/llm';
-import { saveSkillWithVersion } from '../compliance/version-manager';
-import { logger } from '../logger';
-import { requireRole } from '../middleware/auth';
+import { chatModel } from '../../llm';
+import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { logger } from '../../../logger';
+import { requireRole } from '../../../middleware/auth';
 
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../../../config/paths';
 
 // ── 构建技能索引 ──────────────────────────────────────────────────────────────
 
@@ -179,7 +179,7 @@ skillEdit.post('/', async (c) => {
     // 验证 old_fragment 存在于文件中
     if (result.skill_path && result.old_fragment) {
       const fullPath = resolve(
-        import.meta.dir, '../..', result.skill_path,
+        import.meta.dir, '../../../..', result.skill_path,
       );
       try {
         const content = await readFile(fullPath, 'utf-8');
@@ -219,7 +219,7 @@ skillEdit.post('/apply', requireRole('config_editor'), async (c) => {
     return c.json({ error: '参数不完整' }, 400);
   }
 
-  const fullPath = resolve(import.meta.dir, '../..', body.skill_path);
+  const fullPath = resolve(import.meta.dir, '../../../..', body.skill_path);
   let content: string;
   try {
     content = await readFile(fullPath, 'utf-8');

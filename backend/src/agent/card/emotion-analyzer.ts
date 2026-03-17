@@ -12,7 +12,7 @@
 import { generateText } from 'ai';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { siliconflow } from '../agent/llm';
+import { siliconflow } from '../llm';
 
 // ── 模型 ──────────────────────────────────────────────────────────────────────
 const MODEL = siliconflow(
@@ -20,7 +20,7 @@ const MODEL = siliconflow(
 );
 
 // ── Skill 文件加载 ─────────────────────────────────────────────────────────────
-import { TECH_SKILLS_DIR } from '../config/paths';
+import { TECH_SKILLS_DIR } from '../../config/paths';
 
 function loadSkill(name: string): string {
   const raw = readFileSync(`${TECH_SKILLS_DIR}/${name}/SKILL.md`, 'utf-8');

@@ -10,9 +10,9 @@
 
 import { Hono } from 'hono';
 import { eq, desc } from 'drizzle-orm';
-import { db } from '../db';
-import { testCases } from '../db/schema';
-import { logger } from '../logger';
+import { db } from '../../../db';
+import { testCases } from '../../../db/schema';
+import { logger } from '../../../logger';
 
 const testCaseRoutes = new Hono();
 

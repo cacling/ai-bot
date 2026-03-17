@@ -11,11 +11,11 @@ import { Hono } from 'hono';
 import { resolve, dirname, basename } from 'node:path';
 import { readFile, mkdir, cp, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { saveSkillWithVersion } from '../compliance/version-manager';
-import { requireRole } from '../middleware/auth';
-import { logger } from '../logger';
+import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { requireRole } from '../../../middleware/auth';
+import { logger } from '../../../logger';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../..');
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 const CANARY_ROOT = resolve(PROJECT_ROOT, 'skills', '.canary');
 
 interface CanaryConfig {

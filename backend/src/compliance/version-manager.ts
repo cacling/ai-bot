@@ -11,7 +11,7 @@ import { db } from '../db';
 import { skillVersions, changeRequests } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { logger } from '../logger';
-import { detectHighRisk } from '../routes/change-requests';
+import { detectHighRisk } from '../agent/km/skills/change-requests';
 
 // Project root for Skill files
 const PROJECT_ROOT = resolve(import.meta.dir, '../..');

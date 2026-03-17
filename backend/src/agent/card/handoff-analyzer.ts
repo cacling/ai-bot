@@ -11,8 +11,8 @@
 import { generateText } from 'ai';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { NO_DATA_RE } from '../utils/tool-result';
-import { siliconflow } from '../agent/llm';
+import { NO_DATA_RE } from '../../utils/tool-result';
+import { siliconflow } from '../llm';
 
 // ── 模型 ──────────────────────────────────────────────────────────────────────
 const MODEL = siliconflow(
@@ -20,7 +20,7 @@ const MODEL = siliconflow(
 );
 
 // ── Skill 加载 ─────────────────────────────────────────────────────────────────
-import { TECH_SKILLS_DIR } from '../config/paths';
+import { TECH_SKILLS_DIR } from '../../config/paths';
 
 const SKILL_SYSTEM = (() => {
   const raw = readFileSync(`${TECH_SKILLS_DIR}/handoff-analysis/SKILL.md`, 'utf-8');

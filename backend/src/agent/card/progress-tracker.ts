@@ -6,7 +6,7 @@
  */
 
 import { generateText } from 'ai';
-import { siliconflow } from '../agent/llm';
+import { siliconflow } from '../llm';
 
 const MODEL = siliconflow(
   process.env.SILICONFLOW_CHAT_MODEL ?? 'stepfun-ai/Step-3.5-Flash'

@@ -16,9 +16,9 @@ import {
   reloadKeywords,
   checkCompliance,
   type RuleCategory,
-} from '../compliance/keyword-filter';
-import { logger } from '../logger';
-import { requireRole } from '../middleware/auth';
+} from '../../compliance/keyword-filter';
+import { logger } from '../../logger';
+import { requireRole } from '../../middleware/auth';
 
 const compliance = new Hono();
 

@@ -8,14 +8,14 @@
 import { Hono } from 'hono';
 import { resolve, join, relative } from 'node:path';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { logger } from '../logger';
+import { logger } from '../../../logger';
 
 // PROJECT_ROOT 与 files.ts 保持一致（backend/ 目录）
-const PROJECT_ROOT = resolve(import.meta.dir, '../..');
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
 const skills = new Hono();
 
-import { BIZ_SKILLS_DIR } from '../config/paths';
+import { BIZ_SKILLS_DIR } from '../../../config/paths';
 
 /**
  * 极简 YAML frontmatter 解析器。

@@ -3,8 +3,8 @@
  */
 import { Hono } from 'hono';
 import { eq, desc, and, SQL } from 'drizzle-orm';
-import { db } from '../../db';
-import { kmConflictRecords } from '../../db/schema';
+import { db } from '../../../db';
+import { kmConflictRecords } from '../../../db/schema';
 import { nanoid, writeAudit } from './helpers';
 
 const app = new Hono();

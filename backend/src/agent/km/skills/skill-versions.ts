@@ -14,11 +14,11 @@ import {
   getVersionList,
   getVersionContent,
   rollbackToVersion,
-} from '../compliance/version-manager';
-import { logger } from '../logger';
-import { requireRole } from '../middleware/auth';
+} from '../../../compliance/version-manager';
+import { logger } from '../../../logger';
+import { requireRole } from '../../../middleware/auth';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../..');
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 
 const skillVersionsRoute = new Hono();
 

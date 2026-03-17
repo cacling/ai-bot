@@ -9,11 +9,11 @@
 
 import { Hono } from 'hono';
 import { eq, desc } from 'drizzle-orm';
-import { db } from '../db';
-import { changeRequests } from '../db/schema';
-import { saveSkillWithVersion } from '../compliance/version-manager';
-import { requireRole } from '../middleware/auth';
-import { logger } from '../logger';
+import { db } from '../../../db';
+import { changeRequests } from '../../../db/schema';
+import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { requireRole } from '../../../middleware/auth';
+import { logger } from '../../../logger';
 
 const changeRequestRoutes = new Hono();
 

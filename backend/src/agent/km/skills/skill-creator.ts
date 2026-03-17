@@ -17,16 +17,16 @@
 import { Hono } from 'hono';
 import { generateText, tool } from 'ai';
 import { z } from 'zod';
-import { skillCreatorModel } from '../agent/llm';
-import { logger } from '../logger';
-import { saveSkillWithVersion } from '../compliance/version-manager';
-import { refreshSkillsCache } from '../agent/skills';
+import { skillCreatorModel } from '../../llm';
+import { logger } from '../../../logger';
+import { saveSkillWithVersion } from '../../../compliance/version-manager';
+import { refreshSkillsCache } from '../../skills';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR } from '../config/paths';
-import { db } from '../db';
-import { testCases } from '../db/schema';
+import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR } from '../../../config/paths';
+import { db } from '../../../db';
+import { testCases } from '../../../db/schema';
 
 // ── 类型定义 ──────────────────────────────────────────────────────────────────
 
