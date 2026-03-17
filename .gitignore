@@ -26,6 +26,8 @@ build/
 .vite/
 
 # 测试产物
-testcase/test-results/
-testcase/playwright-report/
+tests/e2e/test-results/
+tests/e2e/playwright-report/
+tests/e2e/node_modules/
 tests/node_modules
+tests/scripts/.service-pids
