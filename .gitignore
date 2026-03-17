@@ -28,3 +28,4 @@ build/
 # 测试产物
 testcase/test-results/
 testcase/playwright-report/
+tests/node_modules

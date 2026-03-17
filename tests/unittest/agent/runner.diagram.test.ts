@@ -8,8 +8,8 @@
 import { describe, test, expect } from 'bun:test';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { highlightMermaidTool, highlightMermaidBranch, determineBranch, extractMermaidFromContent } from './runner.ts';
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
+import { highlightMermaidTool, highlightMermaidBranch, determineBranch, extractMermaidFromContent } from '../../../backend/src/agent/runner.ts';
+import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../../../backend/src/config/paths';
 
 // ── highlightMermaidTool · sequenceDiagram ───────────────────────────────────
 
@@ -232,19 +232,17 @@ describe('fault-diagnosis SKILL.md — stateDiagram 高亮集成验证', () => {
     expect(mermaid).toContain('%% branch:all_ok');
   });
 
-  test('tool 高亮生成 classDef + class（非 rect）', () => {
+  test('toolHL 函数仍可工作（虽然运行时不再使用）', () => {
     const raw = extractMermaidFromContent(skillContent)!;
     const highlighted = highlightMermaidTool(raw, 'diagnose_network');
     expect(highlighted).toContain('classDef toolHL');
-    expect(highlighted).toContain('分析诊断结果:::toolHL');
     expect(highlighted).not.toContain('rect ');
   });
 
-  test('branch 高亮生成 classDef + class（非 rect）', () => {
+  test('branchHL 函数仍可工作（虽然运行时不再使用）', () => {
     const raw = extractMermaidFromContent(skillContent)!;
     const highlighted = highlightMermaidBranch(raw, 'account_error');
     expect(highlighted).toContain('classDef branchHL');
-    expect(highlighted).toContain('账号停机:::branchHL');
     expect(highlighted).not.toContain('rect ');
   });
 
@@ -254,22 +252,26 @@ describe('fault-diagnosis SKILL.md — stateDiagram 高亮集成验证', () => {
     expect(highlighted).toBe(raw);
   });
 
-  test('高亮后的 mermaid 仍以 stateDiagram 开头', () => {
+  test('progressHL 高亮真实状态节点', () => {
     const raw = extractMermaidFromContent(skillContent)!;
-    const highlighted = highlightMermaidTool(raw, 'diagnose_network');
-    expect(highlighted.trimStart()).toMatch(/^stateDiagram/);
+    const { highlightMermaidProgress } = require('../../../backend/src/utils/mermaid');
+    const highlighted = highlightMermaidProgress(raw, '网络拥塞');
+    expect(highlighted).toContain('classDef progressHL');
+    expect(highlighted).toContain('网络拥塞:::progressHL');
   });
 
-  test('组合高亮 tool + branch 同时生效', () => {
+  test('progressHL 不高亮 <<choice>> 节点', () => {
     const raw = extractMermaidFromContent(skillContent)!;
-    const highlighted = highlightMermaidBranch(
-      highlightMermaidTool(raw, 'diagnose_network'),
-      'account_error',
-    );
-    expect(highlighted).toContain('classDef toolHL');
-    expect(highlighted).toContain('classDef branchHL');
-    expect(highlighted).toContain('分析诊断结果:::toolHL');
-    expect(highlighted).toContain('账号停机:::branchHL');
+    const { extractStateNames } = require('../../../backend/src/utils/mermaid');
+    const states = extractStateNames(raw);
+    // <<choice>> nodes like 已尝试自查, 诊断结果判断 should be excluded
+    expect(states).not.toContain('已尝试自查');
+    expect(states).not.toContain('诊断结果判断');
+    expect(states).not.toContain('分析诊断结果');
+    // Real nodes should be included
+    expect(states).toContain('接收问题');
+    expect(states).toContain('网络拥塞');
+    expect(states).toContain('系统诊断');
   });
 });
 
@@ -329,13 +331,13 @@ describe('onDiagramUpdate 回调管线（模拟 onStepFinish）', () => {
           } catch { /* ignore */ }
         }
       }
-      // MCP tool: push highlighted diagram
+      // MCP tool: push raw diagram (progressHL is applied async by progress tracker)
       const skillName = SKILL_TOOL_MAP[tc.toolName];
       if (skillName) {
         try {
           const content = readFileSync(resolve(SKILLS_DIR, skillName, 'SKILL.md'), 'utf-8');
           const raw = extractMermaidFromContent(content);
-          if (raw) onDiagramUpdate(skillName, highlightMermaidTool(raw, tc.toolName));
+          if (raw) onDiagramUpdate(skillName, raw);
         } catch { /* ignore */ }
       }
     }
@@ -354,7 +356,7 @@ describe('onDiagramUpdate 回调管线（模拟 onStepFinish）', () => {
     expect(updates[0].mermaid).not.toContain('classDef');
   });
 
-  test('diagnose_network 触发回调，传入高亮后的 mermaid', () => {
+  test('diagnose_network 触发回调，传入无高亮的原始 mermaid', () => {
     const updates: Array<{ skillName: string; mermaid: string }> = [];
     simulateStepFinish(
       [{ toolName: 'diagnose_network', args: { phone: '13800000001', issue_type: 'slow_data' } }],
@@ -363,8 +365,8 @@ describe('onDiagramUpdate 回调管线（模拟 onStepFinish）', () => {
 
     expect(updates).toHaveLength(1);
     expect(updates[0].skillName).toBe('fault-diagnosis');
-    expect(updates[0].mermaid).toContain('classDef toolHL');
-    expect(updates[0].mermaid).toContain('分析诊断结果:::toolHL');
+    expect(updates[0].mermaid).toContain('stateDiagram-v2');
+    expect(updates[0].mermaid).not.toContain('classDef toolHL');
   });
 
   test('同一步骤同时调用 get_skill_instructions + diagnose_network，回调被触发两次', () => {

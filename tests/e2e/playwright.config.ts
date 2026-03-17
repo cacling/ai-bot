@@ -8,7 +8,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   globalSetup: './global-setup.ts',
-  testDir: './e2e',
+  testDir: '.',
   timeout: 90_000,        // 真实 LLM 响应最长 90s
   expect: { timeout: 30_000 },
   retries: 1,              // 真实 LLM 响应偶发超时，允许重试一次

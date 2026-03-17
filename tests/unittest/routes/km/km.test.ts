@@ -8,22 +8,22 @@
 import { describe, test, expect, beforeAll } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
-import * as schema from '../../db/schema';
+import * as schema from '../../../../backend/src/db/schema';
 
 // ── 测试用独立内存数据库 ──────────────────────────────────────────────────────
 let testDb: ReturnType<typeof drizzle>;
 
 // 我们直接测试 HTTP API，通过 Hono app.fetch
 import { Hono } from 'hono';
-import documents from './documents';
-import candidates from './candidates';
-import evidence from './evidence';
-import conflicts from './conflicts';
-import reviewPackages from './review-packages';
-import actionDrafts from './action-drafts';
-import assets from './assets';
-import tasks from './tasks';
-import audit from './audit';
+import documents from '../../../../backend/src/routes/km/documents';
+import candidates from '../../../../backend/src/routes/km/candidates';
+import evidence from '../../../../backend/src/routes/km/evidence';
+import conflicts from '../../../../backend/src/routes/km/conflicts';
+import reviewPackages from '../../../../backend/src/routes/km/review-packages';
+import actionDrafts from '../../../../backend/src/routes/km/action-drafts';
+import assets from '../../../../backend/src/routes/km/assets';
+import tasks from '../../../../backend/src/routes/km/tasks';
+import audit from '../../../../backend/src/routes/km/audit';
 
 const app = new Hono();
 app.route('/documents', documents);

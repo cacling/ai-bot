@@ -7,7 +7,7 @@ import { execSync } from 'child_process';
 import path from 'path';
 
 export default function globalSetup() {
-  const backendDir = path.resolve(__dirname, '../backend');
+  const backendDir = path.resolve(__dirname, '../../backend');
   console.log('[global-setup] Re-seeding database...');
   try {
     execSync('bun run db:seed', { cwd: backendDir, stdio: 'pipe' });
