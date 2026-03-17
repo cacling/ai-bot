@@ -385,8 +385,10 @@ export const mcpServers = sqliteTable('mcp_servers', {
   env_prod_json:   text('env_prod_json'),           // JSON object
   env_test_json:   text('env_test_json'),           // JSON object
   // 工具元数据
-  tools_cache:     text('tools_cache'),             // JSON: [{name, description, inputSchema}]
+  tools_cache:     text('tools_cache'),             // JSON: [{name, description, inputSchema, responseExample?, source?}]
+  tools_manual:    text('tools_manual'),             // JSON: 手动定义的工具 [{name, description, parameters[], responseExample}]
   disabled_tools:  text('disabled_tools'),           // JSON array of tool names
+  mock_rules:      text('mock_rules'),              // JSON: [{tool_name, match, response}]
   // 时间戳
   last_connected_at: text('last_connected_at'),
   created_at:      text('created_at').$defaultFn(() => new Date().toISOString()),

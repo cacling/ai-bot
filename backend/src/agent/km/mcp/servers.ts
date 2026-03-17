@@ -1,5 +1,5 @@
 /**
- * mcp/servers.ts — MCP Server CRUD + discover + invoke
+ * mcp/servers.ts — MCP Server CRUD + discover + invoke + mock
  */
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
@@ -51,7 +51,9 @@ app.post('/', async (c) => {
     env_prod_json: body.env_prod_json ?? null,
     env_test_json: body.env_test_json ?? null,
     tools_cache: body.tools_cache ?? null,
+    tools_manual: body.tools_manual ?? null,
     disabled_tools: body.disabled_tools ?? null,
+    mock_rules: body.mock_rules ?? null,
     created_at: now(),
     updated_at: now(),
   }).run();
@@ -80,7 +82,9 @@ app.put('/:id', async (c) => {
     env_json: body.env_json ?? existing.env_json,
     env_prod_json: body.env_prod_json ?? existing.env_prod_json,
     env_test_json: body.env_test_json ?? existing.env_test_json,
+    tools_manual: body.tools_manual ?? existing.tools_manual,
     disabled_tools: body.disabled_tools ?? existing.disabled_tools,
+    mock_rules: body.mock_rules ?? existing.mock_rules,
     updated_at: now(),
   }).where(eq(mcpServers.id, id)).run();
   logger.info('mcp', 'server_updated', { id });
@@ -115,7 +119,6 @@ app.post('/:id/discover', async (c) => {
 
     await mcpClient.close();
 
-    // Update cache
     db.update(mcpServers).set({
       tools_cache: JSON.stringify(toolsInfo),
       last_connected_at: now(),
@@ -130,7 +133,7 @@ app.post('/:id/discover', async (c) => {
   }
 });
 
-// ── Invoke a tool (for testing) ──────────────────────────────────────────────
+// ── Invoke a tool (real MCP call) ────────────────────────────────────────────
 app.post('/:id/invoke', async (c) => {
   const row = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
   if (!row) return c.json({ error: 'Not found' }, 404);
@@ -155,6 +158,65 @@ app.post('/:id/invoke', async (c) => {
     logger.error('mcp', 'invoke_error', { id: row.id, tool: tool_name, error: String(err) });
     return c.json({ error: `Invoke failed: ${String(err)}` }, 502);
   }
+});
+
+// ── Mock invoke (match rules, return mock data) ──────────────────────────────
+app.post('/:id/mock-invoke', async (c) => {
+  const row = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
+  if (!row) return c.json({ error: 'Not found' }, 404);
+
+  const { tool_name, arguments: toolArgs } = await c.req.json();
+  if (!tool_name) return c.json({ error: 'tool_name is required' }, 400);
+
+  const rules: Array<{ tool_name: string; match: string; response: string }> =
+    row.mock_rules ? JSON.parse(row.mock_rules) : [];
+  const toolRules = rules.filter(r => r.tool_name === tool_name);
+
+  if (toolRules.length === 0) {
+    return c.json({ error: `No mock rules defined for tool "${tool_name}"` }, 404);
+  }
+
+  // Find matching rule: evaluate match expression against args
+  const args = toolArgs ?? {};
+  let matched: typeof toolRules[0] | undefined;
+
+  for (const rule of toolRules) {
+    if (!rule.match || rule.match.trim() === '' || rule.match.trim() === '*') {
+      // Default/fallback rule
+      if (!matched) matched = rule;
+      continue;
+    }
+    try {
+      // Simple match: evaluate as JS expression with args in scope
+      // e.g. "phone == '13800000001'" or "issue_type == 'slow_data'"
+      const fn = new Function(...Object.keys(args), `return (${rule.match})`);
+      if (fn(...Object.values(args))) {
+        matched = rule;
+        break; // First specific match wins
+      }
+    } catch {
+      // Invalid expression, skip
+    }
+  }
+
+  if (!matched) {
+    return c.json({ error: 'No matching mock rule found', args }, 404);
+  }
+
+  let response: unknown;
+  try {
+    response = JSON.parse(matched.response);
+  } catch {
+    response = matched.response;
+  }
+
+  logger.info('mcp', 'mock_invoked', { id: row.id, tool: tool_name, match: matched.match ?? '(default)' });
+  return c.json({
+    result: { content: [{ type: 'text', text: typeof response === 'string' ? response : JSON.stringify(response) }] },
+    elapsed_ms: 0,
+    mock: true,
+    matched_rule: matched.match || '(default)',
+  });
 });
 
 export default app;

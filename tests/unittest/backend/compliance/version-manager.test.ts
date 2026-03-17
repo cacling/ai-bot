@@ -5,17 +5,17 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { writeFile, readFile, mkdir, rm } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
-import { db } from '../../../backend/src/db/index.ts';
-import { skillVersions } from '../../../backend/src/db/schema.ts';
+import { db } from '../../../../backend/src/db/index.ts';
+import { skillVersions } from '../../../../backend/src/db/schema.ts';
 import { eq } from 'drizzle-orm';
 import {
   saveSkillWithVersion,
   getVersionList,
   getVersionContent,
   rollbackToVersion,
-} from '../../../backend/src/agent/km/skills/version-manager.ts';
+} from '../../../../backend/src/agent/km/skills/version-manager.ts';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../../../backend');
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../../backend');
 const TEST_SKILL_PATH = 'skills/biz-skills/_test_version/SKILL.md';
 const TEST_SKILL_ABS = resolve(PROJECT_ROOT, TEST_SKILL_PATH);
 

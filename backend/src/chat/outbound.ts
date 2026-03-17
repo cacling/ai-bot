@@ -5,7 +5,7 @@
  * 1. 连接建立后立即触发 response.create，让机器人先说开场白
  * 2. 使用外呼专用 system prompt（含任务信息注入）
  * 3. 使用外呼专用工具集（record_call_result / send_followup_sms / transfer_to_human）
- * 4. 工具调用在本地处理（mock），不走 MCP
+ * 4. 工具调用通过 outbound-service MCP Server 处理（端口 8004）
  */
 
 import { Hono } from 'hono';
@@ -19,6 +19,7 @@ import { sessionBus } from '../services/session-bus';
 import { setCustomerLang } from '../services/lang-session';
 import { t, OUTBOUND_TOOL_LABELS, SMS_LABELS } from '../services/i18n';
 import { type CollectionCase, type MarketingTask, type CallbackTask, CALLBACK_TASKS } from './outbound-mock';
+import { callMcpTool } from '../services/mcp-client';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { outboundTasks } from '../db/schema';
@@ -395,40 +396,28 @@ outbound.get(
                 return;
               }
 
-              // 本地 mock 处理其他工具
+              // 通过 MCP 调用外呼工具
               let toolResult = '';
 
-              if (toolName === 'record_call_result') {
-                const result = toolArgs.result as string;
-                const remark = toolArgs.remark ? t('outbound_record_remark', lang, toolArgs.remark) : '';
-                const extra = toolArgs.ptp_date ? t('outbound_record_ptp', lang, toolArgs.ptp_date) : (toolArgs.callback_time ? t('outbound_record_callback', lang, toolArgs.callback_time) : '');
-                toolResult = JSON.stringify({ success: true, message: t('outbound_record_result', lang, result, extra, remark) });
-                logger.info('outbound', 'record_call_result', { session: sessionId, result, remark: toolArgs.remark, taskId });
-              } else if (toolName === 'send_followup_sms') {
-                const smsType = toolArgs.sms_type as string;
-                const smsLabel = SMS_LABELS[lang][smsType] ?? smsType;
-                toolResult = JSON.stringify({ success: true, message: t('outbound_sms_sent', lang, smsLabel, userPhone) });
-                logger.info('outbound', 'send_followup_sms', { session: sessionId, smsType, phone: userPhone });
-              } else if (toolName === 'create_callback_task') {
-                const cbPhone = (toolArgs.callback_phone ?? userPhone) as string;
-                const cbTime  = (toolArgs.preferred_time ?? '') as string;
+              // 补充上下文参数（MCP server 可能需要）
+              if (toolName === 'create_callback_task') {
                 const customerName = (resolvedTask as Record<string, unknown>).customer_name as string ?? '';
                 const productName  = (resolvedTask as Record<string, unknown>).product_name as string ?? '';
-                const cbTask: CallbackTask = {
-                  task_id:          crypto.randomUUID(),
-                  original_task_id: taskId,
-                  customer_name:    customerName,
-                  callback_phone:   cbPhone,
-                  preferred_time:   cbTime,
-                  product_name:     productName,
-                  created_at:       new Date().toISOString(),
-                  status:           'pending',
-                };
-                CALLBACK_TASKS.push(cbTask);
-                logger.info('outbound', 'create_callback_task', { session: sessionId, taskId, cbPhone, cbTime });
-                toolResult = JSON.stringify({ success: true, message: t('outbound_callback_created', lang, cbPhone, cbTime), callback_task_id: cbTask.task_id });
+                if (!toolArgs.original_task_id) toolArgs.original_task_id = taskId;
+                if (!toolArgs.callback_phone) toolArgs.callback_phone = userPhone;
+                if (!toolArgs.customer_name) toolArgs.customer_name = customerName;
+                if (!toolArgs.product_name) toolArgs.product_name = productName;
+              } else if (toolName === 'send_followup_sms') {
+                if (!toolArgs.phone) toolArgs.phone = userPhone;
+              }
+
+              const mcpResult = await callMcpTool(sessionId, toolName, toolArgs);
+              if (mcpResult.success) {
+                toolResult = mcpResult.text;
+                logger.info('outbound', 'mcp_tool_ok', { session: sessionId, tool: toolName, preview: toolResult.slice(0, 120) });
               } else {
-                toolResult = JSON.stringify({ error: t('tool_unknown', lang, toolName) });
+                toolResult = JSON.stringify({ error: `Tool call failed: ${mcpResult.text}` });
+                logger.warn('outbound', 'mcp_tool_fail', { session: sessionId, tool: toolName, error: mcpResult.text });
               }
 
               // 推送无高亮版流程图（progressHL 由后续 progress tracker 异步添加）

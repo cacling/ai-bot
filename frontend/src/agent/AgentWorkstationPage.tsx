@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot, Send, Headset, User, Radio, MessageSquare, BookOpen, PlusCircle, Smile, Library, Wrench } from 'lucide-react';
+import { Bot, Send, Headset, User, Radio, MessageSquare, BookOpen, PlusCircle, Smile, Library, Wrench, Server } from 'lucide-react';
 import { nowTime } from '../App';
 import { CardMessage, type CardData } from '../chat/CardMessage';
 import { DEFAULT_USER_PHONE } from '../chat/api';
@@ -15,6 +15,7 @@ import { CardPanel } from './cards/CardPanel';
 import { EditorPage } from '../km/EditorPage';
 import { SkillManagerPage } from '../km/SkillManagerPage';
 import { KnowledgeManagementPage } from '../km/KnowledgeManagementPage';
+import { McpManagementPage } from '../km/mcp/McpManagementPage';
 
 interface AgentMessage {
   id: number;
@@ -28,7 +29,7 @@ interface AgentMessage {
 }
 
 type AgentTab = 'chat' | 'editor';
-type KnowledgeSubTab = 'knowledge' | 'skill';
+type KnowledgeSubTab = 'knowledge' | 'skill' | 'mcp';
 
 export function AgentWorkstationPage() {
   const [agentTab, setAgentTab] = useState<AgentTab>('chat');
@@ -381,9 +382,20 @@ export function AgentWorkstationPage() {
               <Wrench size={13} />
               技能管理
             </button>
+            <button
+              onClick={() => setKnowledgeSubTab('mcp')}
+              className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
+                knowledgeSubTab === 'mcp'
+                  ? 'border-blue-600 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Server size={13} />
+              MCP管理
+            </button>
           </div>
           <div className="flex-1 overflow-hidden">
-            {knowledgeSubTab === 'knowledge' ? <KnowledgeManagementPage /> : <SkillManagerPage />}
+            {knowledgeSubTab === 'knowledge' ? <KnowledgeManagementPage /> : knowledgeSubTab === 'skill' ? <SkillManagerPage /> : <McpManagementPage />}
           </div>
         </div>
       )}

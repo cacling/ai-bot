@@ -76,16 +76,24 @@ app.get('/', async (c) => {
       }
       continue;
     }
+    // Merge discovered tools + manual tools (manual takes precedence for description)
     const cached = server.tools_cache ? JSON.parse(server.tools_cache) as Array<{ name: string; description: string }> : [];
+    const manual = server.tools_manual ? JSON.parse(server.tools_manual) as Array<{ name: string; description: string }> : [];
+    const manualMap = new Map(manual.map(t => [t.name, t]));
+    const allToolNames = new Set([...cached.map(t => t.name), ...manual.map(t => t.name)]);
     const disabledTools: string[] = server.disabled_tools ? JSON.parse(server.disabled_tools) : [];
-    for (const tool of cached) {
+
+    for (const toolName of allToolNames) {
+      const manualDef = manualMap.get(toolName);
+      const cachedDef = cached.find(t => t.name === toolName);
+      const desc = manualDef?.description || cachedDef?.description || '';
       items.push({
-        name: tool.name,
-        description: tool.description,
+        name: toolName,
+        description: desc,
         source: server.name,
         source_type: 'mcp',
-        status: !server.enabled || disabledTools.includes(tool.name) ? 'disabled' : 'available',
-        skills: skillRefs.get(tool.name) ?? [],
+        status: !server.enabled || disabledTools.includes(toolName) ? 'disabled' : 'available',
+        skills: skillRefs.get(toolName) ?? [],
       });
     }
   }

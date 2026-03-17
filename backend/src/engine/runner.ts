@@ -16,6 +16,9 @@ import { analyzeProgress } from '../agent/card/progress-tracker';
 // Re-export for test file
 export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };
 
+import { db } from '../db';
+import { mcpServers } from '../db/schema';
+
 const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://localhost:8003/mcp';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
@@ -49,27 +52,58 @@ function buildSystemPrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberNa
 }
 
 // Persistent MCP client — created once and reused across requests.
-// The client stays open; we never close it after individual requests.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let persistentMCPClient: any | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let persistentMCPTools: Record<string, any> | null = null;
 
+/** Resolve MCP URL: prefer DB-registered server, fall back to env/default */
+function resolveMcpUrl(): string {
+  try {
+    const row = db.select().from(mcpServers).all()
+      .find(s => s.enabled && s.status === 'active' && s.url);
+    if (row?.url) return row.url;
+  } catch { /* DB not ready yet */ }
+  return TELECOM_MCP_URL;
+}
+
+/** Get disabled tools from DB */
+function getDisabledTools(): string[] {
+  try {
+    const row = db.select().from(mcpServers).all()
+      .find(s => s.enabled && s.status === 'active');
+    if (row?.disabled_tools) return JSON.parse(row.disabled_tools);
+  } catch { /* ignore */ }
+  return [];
+}
+
 async function getMCPTools() {
   if (persistentMCPClient && persistentMCPTools) {
     return { tools: persistentMCPTools };
   }
+
+  const mcpUrl = resolveMcpUrl();
   try {
     persistentMCPClient = await createMCPClient({
-      transport: new StreamableHTTPClientTransport(new URL(TELECOM_MCP_URL)),
+      transport: new StreamableHTTPClientTransport(new URL(mcpUrl)),
     });
   } catch (err) {
-    logger.error('agent', 'mcp_connect_error', { url: TELECOM_MCP_URL, error: String(err) });
+    logger.error('agent', 'mcp_connect_error', { url: mcpUrl, error: String(err) });
     throw err;
   }
 
-  persistentMCPTools = await persistentMCPClient.tools();
-  logger.info('agent', 'mcp_connected', { url: TELECOM_MCP_URL, tools: Object.keys(persistentMCPTools as object).length });
+  const allTools = await persistentMCPClient.tools();
+
+  // Filter out disabled tools
+  const disabled = getDisabledTools();
+  if (disabled.length > 0) {
+    for (const name of disabled) {
+      delete (allTools as Record<string, unknown>)[name];
+    }
+  }
+
+  persistentMCPTools = allTools;
+  logger.info('agent', 'mcp_connected', { url: mcpUrl, tools: Object.keys(persistentMCPTools as object).length });
 
   return { tools: persistentMCPTools };
 }

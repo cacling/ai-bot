@@ -1,7 +1,8 @@
 /**
  * mcp-client.ts — MCP 工具调用客户端
  *
- * 封装对 Telecom MCP 服务器的工具调用，被 voice.ts 使用。
+ * 封装对 MCP 服务器的工具调用，被 voice.ts / outbound.ts 使用。
+ * 所有工具统一由 telecom-service MCP Server 提供。
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';

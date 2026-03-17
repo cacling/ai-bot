@@ -29,7 +29,9 @@ export interface McpServer {
   env_prod_json: string | null;
   env_test_json: string | null;
   tools_cache: string | null;
+  tools_manual: string | null;
   disabled_tools: string | null;
+  mock_rules: string | null;
   last_connected_at: string | null;
   created_at: string;
   updated_at: string;
@@ -39,6 +41,28 @@ export interface McpToolInfo {
   name: string;
   description: string;
   inputSchema?: unknown;
+  source?: 'discovered' | 'manual';
+}
+
+export interface ToolParam {
+  name: string;
+  type: 'string' | 'number' | 'boolean';
+  required: boolean;
+  description: string;
+  enum?: string[];
+}
+
+export interface ManualTool {
+  name: string;
+  description: string;
+  parameters: ToolParam[];
+  responseExample: string;
+}
+
+export interface MockRule {
+  tool_name: string;
+  match: string;      // JS expression or '' for default
+  response: string;   // JSON string
 }
 
 export interface ToolOverviewItem {
@@ -65,6 +89,11 @@ export const mcpApi = {
     request<{ tools: McpToolInfo[] }>(`/servers/${id}/discover`, { method: 'POST' }),
   invokeTool: (id: string, toolName: string, args: Record<string, unknown>) =>
     request<{ result: unknown; elapsed_ms: number }>(`/servers/${id}/invoke`, {
+      method: 'POST',
+      body: JSON.stringify({ tool_name: toolName, arguments: args }),
+    }),
+  mockInvokeTool: (id: string, toolName: string, args: Record<string, unknown>) =>
+    request<{ result: unknown; elapsed_ms: number; mock: boolean; matched_rule: string }>(`/servers/${id}/mock-invoke`, {
       method: 'POST',
       body: JSON.stringify({ tool_name: toolName, arguments: args }),
     }),

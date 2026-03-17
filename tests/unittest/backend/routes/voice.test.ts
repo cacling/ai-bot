@@ -3,7 +3,7 @@
  * 运行：cd backend && bun test src/routes/voice.test.ts
  */
 import { describe, test, expect } from 'bun:test';
-import { TRANSFER_PHRASE_RE, VoiceSessionState } from '../../../backend/src/chat/voice';
+import { TRANSFER_PHRASE_RE, VoiceSessionState } from '../../../../backend/src/chat/voice';
 
 // ── TRANSFER_PHRASE_RE ─────────────────────────────────────────────────────────
 

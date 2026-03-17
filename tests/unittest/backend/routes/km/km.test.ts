@@ -8,22 +8,22 @@
 import { describe, test, expect, beforeAll } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
-import * as schema from '../../../../backend/src/db/schema';
+import * as schema from '../../../../../backend/src/db/schema';
 
 // ── 测试用独立内存数据库 ──────────────────────────────────────────────────────
 let testDb: ReturnType<typeof drizzle>;
 
 // 我们直接测试 HTTP API，通过 Hono app.fetch
 import { Hono } from 'hono';
-import documents from '../../../../backend/src/agent/km/kms/documents';
-import candidates from '../../../../backend/src/agent/km/kms/candidates';
-import evidence from '../../../../backend/src/agent/km/kms/evidence';
-import conflicts from '../../../../backend/src/agent/km/kms/conflicts';
-import reviewPackages from '../../../../backend/src/agent/km/kms/review-packages';
-import actionDrafts from '../../../../backend/src/agent/km/kms/action-drafts';
-import assets from '../../../../backend/src/agent/km/kms/assets';
-import tasks from '../../../../backend/src/agent/km/kms/tasks';
-import audit from '../../../../backend/src/agent/km/kms/audit';
+import documents from '../../../../../backend/src/agent/km/kms/documents';
+import candidates from '../../../../../backend/src/agent/km/kms/candidates';
+import evidence from '../../../../../backend/src/agent/km/kms/evidence';
+import conflicts from '../../../../../backend/src/agent/km/kms/conflicts';
+import reviewPackages from '../../../../../backend/src/agent/km/kms/review-packages';
+import actionDrafts from '../../../../../backend/src/agent/km/kms/action-drafts';
+import assets from '../../../../../backend/src/agent/km/kms/assets';
+import tasks from '../../../../../backend/src/agent/km/kms/tasks';
+import audit from '../../../../../backend/src/agent/km/kms/audit';
 
 const app = new Hono();
 app.route('/documents', documents);

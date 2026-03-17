@@ -103,7 +103,26 @@ const deviceContexts = sqliteTable("device_contexts", {
   otp_delivery_issue:     integer("otp_delivery_issue", { mode: "boolean" }).notNull(),
 });
 
-const db = drizzle(client, { schema: { plans, valueAddedServices, subscribers, subscriberSubscriptions, bills, deviceContexts } });
+const callbackTasks = sqliteTable("callback_tasks", {
+  task_id:          text("task_id").primaryKey(),
+  original_task_id: text("original_task_id").notNull(),
+  customer_name:    text("customer_name").notNull(),
+  callback_phone:   text("callback_phone").notNull(),
+  preferred_time:   text("preferred_time").notNull(),
+  product_name:     text("product_name").notNull(),
+  created_at:       text("created_at"),
+  status:           text("status").notNull().default("pending"),
+});
+
+const db = drizzle(client, { schema: { plans, valueAddedServices, subscribers, subscriberSubscriptions, bills, deviceContexts, callbackTasks } });
+
+// ── Mock 合约数据（account-service 工具使用）──────────────────────────────────
+const MOCK_CONTRACTS: Record<string, Array<{ contract_id: string; name: string; end_date: string; penalty: number; risk_level: string }>> = {
+  "13800000001": [
+    { contract_id: "CT001", name: "24个月合约套餐", end_date: "2027-06-30", penalty: 200, risk_level: "high" },
+  ],
+  "13800000002": [],
+};
 
 // ── 日志 ───────────────────────────────────────────────────────────────────────
 function mcpLog(tool: string, extra: Record<string, unknown>): void {
@@ -462,6 +481,183 @@ function createMcpServer(): McpServer {
         }],
       };
     }
+  );
+
+  // ── 外呼工具 ─────────────────────────────────────────────────────────────────
+
+  // 8. 记录通话结果
+  server.tool(
+    "record_call_result",
+    "记录本次外呼通话结果。通话结束前必须调用。",
+    {
+      result: z.enum([
+        "ptp", "refusal", "dispute", "no_answer", "busy",
+        "converted", "callback", "not_interested", "non_owner", "verify_failed",
+      ]).describe("通话结果"),
+      remark: z.string().optional().describe("备注信息"),
+      callback_time: z.string().optional().describe("约定回访时间，result=callback 时填写"),
+      ptp_date: z.string().optional().describe("承诺还款日期，result=ptp 时填写"),
+    },
+    async ({ result, remark, callback_time, ptp_date }) => {
+      mcpLog("record_call_result", { result, remark, callback_time, ptp_date });
+      const extra = ptp_date
+        ? `，承诺还款日期：${ptp_date}`
+        : callback_time
+          ? `，约定回访时间：${callback_time}`
+          : "";
+      const remarkStr = remark ? `，备注：${remark}` : "";
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, message: `通话结果已记录：${result}${extra}${remarkStr}` }) }],
+      };
+    },
+  );
+
+  // 9. 发送跟进短信
+  server.tool(
+    "send_followup_sms",
+    "向客户发送跟进短信（还款链接、套餐详情、回访提醒等）",
+    {
+      phone: z.string().describe("客户手机号"),
+      sms_type: z.enum(["payment_link", "plan_detail", "callback_reminder", "product_detail"]).describe("短信类型"),
+    },
+    async ({ phone, sms_type }) => {
+      mcpLog("send_followup_sms", { phone, sms_type });
+      const labels: Record<string, string> = { payment_link: "还款链接", plan_detail: "套餐详情", callback_reminder: "回访提醒", product_detail: "产品详情" };
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, message: `${labels[sms_type] ?? sms_type}短信已发送至 ${phone}` }) }],
+      };
+    },
+  );
+
+  // 10. 创建回访任务
+  server.tool(
+    "create_callback_task",
+    "创建回访任务。客户感兴趣但当前不方便时，约定下次回访时间。",
+    {
+      original_task_id: z.string().describe("原始外呼任务 ID"),
+      callback_phone: z.string().describe("回访电话号码"),
+      preferred_time: z.string().describe("客户期望的回访时间"),
+      customer_name: z.string().optional().describe("客户姓名"),
+      product_name: z.string().optional().describe("关联产品名称"),
+    },
+    async ({ original_task_id, callback_phone, preferred_time, customer_name, product_name }) => {
+      const taskId = `CB-${Date.now().toString(36)}`;
+      mcpLog("create_callback_task", { taskId, original_task_id, callback_phone, preferred_time });
+      await db.insert(callbackTasks).values({
+        task_id: taskId, original_task_id, customer_name: customer_name ?? "",
+        callback_phone, preferred_time, product_name: product_name ?? "",
+        created_at: new Date().toISOString(), status: "pending",
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, callback_task_id: taskId, message: `回访任务已创建，将于 ${preferred_time} 回访 ${callback_phone}` }) }],
+      };
+    },
+  );
+
+  // 11. 记录营销结果
+  server.tool(
+    "record_marketing_result",
+    "记录营销外呼的通话结果。通话结束前必须调用。",
+    {
+      campaign_id: z.string().describe("营销活动 ID"),
+      phone: z.string().describe("客户手机号"),
+      result: z.enum(["converted", "callback", "not_interested", "no_answer", "busy", "wrong_number", "dnd"]).describe("营销结果"),
+      callback_time: z.string().optional().describe("约定回访时间"),
+    },
+    async ({ campaign_id, phone, result, callback_time }) => {
+      mcpLog("record_marketing_result", { campaign_id, phone, result, callback_time });
+      const extra = callback_time ? `，约定回访时间：${callback_time}` : "";
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: true, message: `营销结果已记录：${result}${extra}` }) }],
+      };
+    },
+  );
+
+  // ── 账户操作工具 ─────────────────────────────────────────────────────────────
+
+  // 12. 身份验证
+  server.tool(
+    "verify_identity",
+    "验证用户身份（通过短信验证码或其他方式）。停机等高风险操作前必须先验证身份。",
+    {
+      phone: z.string().describe("用户手机号"),
+      otp: z.string().describe("用户输入的验证码"),
+    },
+    async ({ phone, otp }) => {
+      mcpLog("verify_identity", { phone, otp: "***" });
+      const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
+      if (!sub) return { content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到手机号 ${phone}` }) }] };
+      const valid = otp === "1234" || otp === "0000" || otp.length === 6;
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: valid, verified: valid, customer_name: sub.name, message: valid ? `身份验证通过，用户：${sub.name}` : "验证码错误，请重新输入" }) }],
+      };
+    },
+  );
+
+  // 13. 查询账户余额
+  server.tool(
+    "check_account_balance",
+    "查询用户账户余额和欠费状态",
+    { phone: z.string().describe("用户手机号") },
+    async ({ phone }) => {
+      mcpLog("check_account_balance", { phone });
+      const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
+      if (!sub) return { content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到手机号 ${phone}` }) }] };
+      const hasArrears = sub.balance < 0;
+      return {
+        content: [{ type: "text", text: JSON.stringify({
+          success: true, phone, balance: sub.balance, has_arrears: hasArrears,
+          arrears_amount: hasArrears ? Math.abs(sub.balance) : 0, status: sub.status,
+          message: hasArrears ? `账户存在欠费 ¥${Math.abs(sub.balance).toFixed(2)}，需先缴清欠费才能办理停机` : `账户余额 ¥${sub.balance.toFixed(2)}，无欠费`,
+        }) }],
+      };
+    },
+  );
+
+  // 14. 查询合约
+  server.tool(
+    "check_contracts",
+    "查询用户当前有效合约列表，判断是否有高风险合约阻止停机",
+    { phone: z.string().describe("用户手机号") },
+    async ({ phone }) => {
+      mcpLog("check_contracts", { phone });
+      const contracts = MOCK_CONTRACTS[phone] ?? [];
+      const hasHighRisk = contracts.some(c => c.risk_level === "high");
+      return {
+        content: [{ type: "text", text: JSON.stringify({
+          success: true, phone, contracts, has_active_contracts: contracts.length > 0, has_high_risk: hasHighRisk,
+          message: hasHighRisk
+            ? `用户存在 ${contracts.length} 个有效合约，其中包含高风险合约，停机需支付违约金`
+            : contracts.length > 0 ? `用户存在 ${contracts.length} 个有效合约，但不影响停机操作` : "用户无有效合约，可直接办理停机",
+        }) }],
+      };
+    },
+  );
+
+  // 15. 申请停机
+  server.tool(
+    "apply_service_suspension",
+    "执行停机操作。需在身份验证、余额检查、合约检查全部通过后调用。",
+    {
+      phone: z.string().describe("用户手机号"),
+      suspension_type: z.enum(["temporary", "permanent"]).optional().describe("停机类型：temporary=临时停机，permanent=永久停机"),
+    },
+    async ({ phone, suspension_type = "temporary" }) => {
+      mcpLog("apply_service_suspension", { phone, suspension_type });
+      const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
+      if (!sub) return { content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到手机号 ${phone}` }) }] };
+      if (sub.status === "suspended") return { content: [{ type: "text", text: JSON.stringify({ success: false, message: "该号码已处于停机状态" }) }] };
+      const suspendDate = new Date().toISOString().slice(0, 10);
+      const resumeDeadline = suspension_type === "temporary" ? new Date(Date.now() + 90 * 86400_000).toISOString().slice(0, 10) : null;
+      return {
+        content: [{ type: "text", text: JSON.stringify({
+          success: true, phone, suspension_type, effective_date: suspendDate, resume_deadline: resumeDeadline,
+          message: suspension_type === "temporary"
+            ? `临时停机已生效，请在 ${resumeDeadline} 前办理复机，逾期将自动销号`
+            : "永久停机已生效，号码将在 90 天后释放",
+        }) }],
+      };
+    },
   );
 
   return server;

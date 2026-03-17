@@ -3,7 +3,7 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { VoiceSessionState } from '../../../backend/src/chat/voice.ts';
+import { VoiceSessionState } from '../../../../backend/src/chat/voice.ts';
 
 describe('VoiceSessionState — 基础功能', () => {
   test('初始化状态', () => {

@@ -10,7 +10,7 @@ import {
   checkCompliance,
   sanitizeText,
   maskPII,
-} from '../../../backend/src/services/keyword-filter.ts';
+} from '../../../../backend/src/services/keyword-filter.ts';
 
 describe('合规拦截集成 — Bot 回复处理流程', () => {
   test('banned 回复经过 sanitizeText 后违规词被替换', () => {
