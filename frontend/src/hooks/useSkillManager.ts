@@ -70,7 +70,7 @@ const NEW_SKILL_TREE: SkillFileNode[] = [
     type: 'file',
     path: null,
     content:
-      '---\nname: new-skill\ndescription: 待定义\nmetadata:\n  version: "1.0.0"\n  tags: []\n  mode: inbound\n  trigger: user_intent\n  channels: ["online"]\n---\n# 新技能\n\n通过左侧对话描述你的需求，AI 将自动生成技能定义。',
+      '---\nname: new-skill\ndescription: 待定义\nmetadata:\n  version: "1.0.0"\n  tags: []\n---\n# 新技能\n\n通过左侧对话描述你的需求，AI 将自动生成技能定义。',
   },
   { name: 'references', type: 'dir', path: null, children: [] },
   { name: 'scripts', type: 'dir', path: null, children: [] },

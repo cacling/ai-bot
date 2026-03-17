@@ -11,7 +11,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
-import { extractMermaidFromContent, highlightMermaidTool, stripMermaidMarkers, extractStateNames, extractTransitions, highlightMermaidProgress } from '../utils/mermaid';
+import { extractMermaidFromContent, highlightMermaidTool, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../utils/mermaid';
 import { translateMermaid } from '../skills/translate-lang';
 import { analyzeHandoff } from '../skills/handoff-analyzer';
 import { analyzeEmotion } from '../skills/emotion-analyzer';
@@ -107,10 +107,9 @@ export function runProgressTracking(
     logger.warn(channel, 'progress_tracking_skip', { session: sessionId, reason: 'no_states' });
     return;
   }
-  const transitions = extractTransitions(rawMermaid);
-  logger.info(channel, 'progress_tracking_states', { session: sessionId, states: stateNames, count: stateNames.length, transitionCount: transitions.length });
+  logger.info(channel, 'progress_tracking_states', { session: sessionId, states: stateNames, count: stateNames.length });
 
-  analyzeProgress(recentTurns, stateNames, transitions)
+  analyzeProgress(recentTurns, stateNames)
     .then(async (stateName) => {
       if (!stateName) {
         logger.warn(channel, 'progress_tracking_no_match', { session: sessionId });

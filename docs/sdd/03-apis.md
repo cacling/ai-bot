@@ -402,41 +402,6 @@ Agent 在推理过程中通过以下两个内置工具加载 Skills 知识：
 | `get_skill_reference("service-cancel", "cancellation-policy.md")` | 退订政策细则 |
 | `get_skill_reference("fault-diagnosis", "troubleshoot-guide.md")` | 故障排查指南 |
 
-### `GET /api/skills`
-
-返回所有已加载技能的列表，包含 `channels` 字段。
-
-**响应：**
-```json
-[
-  {
-    "name": "bill-inquiry",
-    "description": "账单查询处理规范",
-    "channels": ["chat", "voice"]
-  }
-]
-```
-
-> `channels` 字段来源于 `SKILL.md` frontmatter 中的 `channels` 配置，决定该技能被哪些 bot 加载。
-
-### Skill 按渠道路由
-
-通过以下函数实现按渠道加载技能：
-
-| 函数 | 说明 |
-|------|------|
-| `getSkillsByChannel(channel)` | 返回指定渠道的技能对象列表 |
-| `getSkillsDescriptionByChannel(channel)` | 返回指定渠道所有技能的描述拼接文本（用于 system prompt） |
-| `getSkillContentByChannel(channel)` | 返回指定渠道所有技能的完整 SKILL.md 内容 |
-
-`SKILL.md` frontmatter 示例：
-```yaml
----
-name: bill-inquiry
-channels: [chat, voice, outbound]
----
-```
-
 ---
 
 ## 4. WebSocket 语音接口（后端 :18472）
@@ -728,29 +693,7 @@ ws://localhost:18472/ws/agent?phone=13800000001&lang=zh
 ### 10.5 `POST /api/sandbox/:id/publish`
 发布到生产环境（同时创建版本记录）。
 
-### 10.6 `POST /api/sandbox/:id/regression`
-在沙箱中运行回归测试，支持 6 种富断言类型（`contains`、`not_contains`、`tool_called`、`tool_not_called`、`skill_loaded`、`regex`）。
-
-**响应：**
-```json
-{
-  "results": [
-    {
-      "test_case_id": "tc-001",
-      "passed": true,
-      "assertions": [
-        { "type": "contains", "value": "账单", "passed": true, "detail": "文本中找到 '账单'" },
-        { "type": "tool_called", "value": "query_bill", "passed": true, "detail": "工具 query_bill 已被调用" }
-      ],
-      "tools_called": ["query_subscriber", "query_bill"],
-      "skills_loaded": ["bill-inquiry"]
-    }
-  ],
-  "summary": { "total": 5, "passed": 5, "failed": 0 }
-}
-```
-
-### 10.7 `DELETE /api/sandbox/:id`
+### 10.6 `DELETE /api/sandbox/:id`
 删除沙箱。
 
 ---
@@ -827,21 +770,7 @@ GLM 透传事件与 `/ws/voice` 相同，另增：
 
 ### 13.1 `POST /api/skill-creator/chat`
 
-多轮对话式技能创建。System prompt 从 `tech-skills/skill-creator-spec/SKILL.md` 加载，包含 3 个占位符：
-
-| 占位符 | 说明 |
-|--------|------|
-| `{{CONTEXT}}` | JSON 对象，包含 `mode`、`phase`、`skill_id`、`existing_skill`、`existing_refs` |
-| `{{SPEC}}` | 技能规范模板内容 |
-| `{{SKILL_INDEX}}` | 当前所有技能的索引列表 |
-
-LLM 可使用 3 个工具：
-
-| 工具名 | 说明 |
-|--------|------|
-| `read_skill` | 读取已有技能的 SKILL.md 内容 |
-| `read_reference` | 读取已有技能的参考文档 |
-| `list_skills` | 列出所有可用技能 |
+多轮对话式技能创建。
 
 **请求体：**
 ```json
@@ -851,7 +780,6 @@ LLM 可使用 3 个工具：
 **响应：**
 ```json
 {
-  "session_id": "uuid",
   "reply": "好的，请问这个技能需要调用哪些工具？",
   "phase": "interview",
   "draft": null
@@ -862,20 +790,11 @@ LLM 可使用 3 个工具：
 
 ### 13.2 `POST /api/skill-creator/save`
 
-保存创建的技能到磁盘，写入文件并将测试用例存入数据库，完成后调用 `refreshSkillsCache()` 刷新缓存。
+保存创建的技能到磁盘。
 
 **请求体：**
 ```json
-{
-  "skill_name": "broadband-repair",
-  "skill_md": "---\nname: broadband-repair\n...",
-  "references": [
-    { "filename": "repair-guide.md", "content": "..." }
-  ],
-  "test_cases": [
-    { "input_message": "宽带报修", "expected_keywords": ["报修", "宽带"], "phone": "13800000001" }
-  ]
-}
+{ "session_id": "uuid" }
 ```
 
 ---
@@ -927,60 +846,10 @@ LLM 可使用 3 个工具：
 
 **请求体：**
 ```json
-{
-  "skill_name": "bill-inquiry",
-  "input_message": "查话费",
-  "expected_keywords": ["账单", "费用"],
-  "assertions": [
-    { "type": "contains", "value": "账单" },
-    { "type": "not_contains", "value": "无法查询" },
-    { "type": "tool_called", "value": "query_bill" },
-    { "type": "skill_loaded", "value": "bill-inquiry" }
-  ],
-  "phone": "13800000001"
-}
+{ "skill_name": "bill-inquiry", "input_message": "查话费", "expected_keywords": ["账单", "费用"], "phone": "13800000001" }
 ```
 
-> `assertions` 数组与 `expected_keywords` 可并存。支持的断言类型见下表：
-
-| 断言类型 | 说明 |
-|----------|------|
-| `contains` | 回复文本包含指定字符串 |
-| `not_contains` | 回复文本不包含指定字符串 |
-| `tool_called` | 验证指定工具被调用 |
-| `tool_not_called` | 验证指定工具未被调用 |
-| `skill_loaded` | 验证指定技能被加载 |
-| `regex` | 回复文本匹配指定正则表达式 |
-
-### 16.3 `POST /api/test-cases/batch`
-批量创建测试用例（供 skill-creator 使用）。
-
-**请求体：**
-```json
-{
-  "test_cases": [
-    { "skill_name": "bill-inquiry", "input_message": "查话费", "expected_keywords": ["账单"], "assertions": [...] },
-    { "skill_name": "bill-inquiry", "input_message": "这个月花了多少钱", "expected_keywords": ["费用"], "assertions": [...] }
-  ]
-}
-```
-
-### 16.4 `PUT /api/test-cases/:id`
-更新指定测试用例。
-
-**请求体：**
-```json
-{
-  "input_message": "查上个月话费",
-  "expected_keywords": ["账单", "上月"],
-  "assertions": [
-    { "type": "contains", "value": "账单" },
-    { "type": "tool_called", "value": "query_bill" }
-  ]
-}
-```
-
-### 16.5 `DELETE /api/test-cases/:id`
+### 16.3 `DELETE /api/test-cases/:id`
 删除测试用例。
 
 ---

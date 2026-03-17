@@ -1,6 +1,6 @@
 # 智能电信客服系统 — 软件设计文档（SDD）
 
-> 版本：5.0.0 | 日期：2026-03-17 | 作者：Chenjun
+> 版本：4.0.0 | 日期：2026-03-16 | 作者：Chenjun
 
 ---
 
@@ -42,16 +42,14 @@
 | 退订增值业务 | 文字/语音 | service-cancel Skill + cancel_service MCP | 串行 |
 | 套餐咨询 | 文字/语音 | plan-inquiry Skill + query_plans MCP | 并行 |
 | 网络故障诊断 | 文字/语音 | fault-diagnosis Skill + diagnose_network MCP | 串行 |
-| App 使用支持 | 文字/语音 | telecom-app Skill + diagnose_app MCP | 串行 |
 | 转人工客服 | 文字/语音 | handoff-analyzer（坐席侧触发）+ transfer_to_human | 异步分析 |
 | 坐席辅助 | 坐席工作台 | Session Bus + emotion-analyzer + handoff-analyzer | 实时同步 |
 | 外呼营销 | 语音 | outbound-marketing Skill + record_call_result / send_followup_sms | 串行 |
 | 外呼催收 | 语音 | outbound-collection Skill + record_call_result / send_followup_sms | 串行 |
+| 银行外呼营销 | 语音 | outbound-marketing-bank Skill + add_to_dnd / create_callback_task | 串行 |
 | 合规监控 | 坐席工作台 | keyword-filter（AC 自动机）+ compliance 卡片 | 同步拦截 |
-| 技能创建 | 知识库编辑器 | skill-creator-spec（system prompt 模板）+ AI 多轮对话 | 对话式 |
-| 技能渠道绑定 | 知识库编辑器 | channels 字段 → getSkillsByChannel() → 各机器人热加载 | 动态路由 |
 | 版本管理 | 知识库编辑器 | skill_versions 表 + VersionPanel | Diff + 回滚 |
-| 沙箱验证 | 知识库编辑器 | sandbox API + runAgent(overrideSkillsDir) + 回归测试（6 种断言） | 隔离测试 |
+| 沙箱验证 | 知识库编辑器 | sandbox API + runAgent(overrideSkillsDir) | 隔离测试 |
 | 自然语言配置 | 知识库编辑器 | skill-clarify + skill-edit API（LLM 驱动） | 多轮澄清 |
 
 ---
@@ -124,20 +122,15 @@ ai-bot/
 │   ├── mcp_servers/ts/
 │   │   └── telecom_service.ts          # Telecom MCP Server（:8003，7 个工具）
 │   └── skills/                         # Skills 知识层
-│       ├── biz-skills/                 # 业务技能（状态图驱动，v3 规范）
-│       │   ├── _shared/                    # 共享类型定义（BaseCheckStep 等）
-│       │   ├── bill-inquiry/               # 账单查询 [online, voice]
-│       │   ├── plan-inquiry/               # 套餐咨询 [online, voice]
-│       │   ├── service-cancel/             # 业务退订 [online, voice]
-│       │   ├── fault-diagnosis/            # 故障诊断 [online, voice]（含诊断脚本）
-│       │   ├── telecom-app/                # App 使用支持 [online, voice]
-│       │   ├── outbound-collection/        # 外呼催收 [outbound-collection]
-│       │   └── outbound-marketing/         # 外呼营销 [outbound-marketing]
+│       ├── biz-skills/                 # 业务技能
+│       │   ├── bill-inquiry/               # 账单查询
+│       │   ├── plan-inquiry/               # 套餐咨询
+│       │   ├── service-cancel/             # 业务退订
+│       │   ├── fault-diagnosis/            # 故障诊断（含诊断脚本）
+│       │   ├── outbound-collection/        # 外呼催收
+│       │   ├── outbound-marketing/         # 外呼营销
+│       │   └── telecom-app/                # App 安全诊断
 │       └── tech-skills/                # 技术技能
-│           ├── skill-creator-spec/         # 技能创建器 system prompt + 编写规范
-│           │   ├── SKILL.md                    # 完整的对话引导指令
-│           │   └── references/
-│           │       └── biz-skill-spec.md       # 业务 Skill 编写规范 v2
 │           ├── compliance-rules/           # 合规规则
 │           ├── emotion-detection/          # 情感分类提示词
 │           ├── handoff-analysis/           # 转人工分析提示词

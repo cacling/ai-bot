@@ -129,8 +129,7 @@ export const testCases = sqliteTable('test_cases', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   skill_name: text('skill_name').notNull(),
   input_message: text('input_message').notNull(),
-  expected_keywords: text('expected_keywords').notNull(), // JSON array of strings（兼容旧格式）
-  assertions: text('assertions'),                        // JSON array of Assertion objects（新格式）
+  expected_keywords: text('expected_keywords').notNull(), // JSON array of strings
   phone: text('phone').default('13800000001'),
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
 });

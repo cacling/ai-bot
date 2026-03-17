@@ -12,27 +12,22 @@ const MODEL = siliconflow(
   process.env.SILICONFLOW_CHAT_MODEL ?? 'stepfun-ai/Step-3.5-Flash'
 );
 
-const SYSTEM_PROMPT = `你是一个对话流程状态分析器。根据客服对话的最近几轮内容和流程图结构，判断当前处于哪个状态节点。
+const SYSTEM_PROMPT = `你是一个对话流程分析器。根据客服对话的最近几轮内容，判断当前处于给定流程状态列表中的哪个状态。
 
 规则：
-1. 只输出一个状态名，必须是状态列表中的某一个，不要输出其他内容
-2. 重点关注最后1-2轮对话（尤其是最后一轮 bot 的回复内容和用户的最新回应）
-3. 参考流程图的转移关系来理解状态的先后顺序，对话只会向前推进
-4. 判断逻辑：看最后一轮 bot 在做什么（介绍方案？确认意向？处理异议？引导办理？安排回访？），以此确定当前状态
-5. 如果 bot 正在确认办理方式或引导下一步操作，说明已经超过了"反馈意向"阶段
-6. 如果 bot 正在安排回访时间或创建回访任务，状态应该是"待回访"相关节点`;
+- 只输出一个状态名，必须是列表中的某一个，不要输出其他内容
+- 根据对话的最新进展来判断，关注最后一轮 bot 的回复
+- 如果无法确定，输出列表中最接近的状态名`;
 
 /**
  * 分析当前对话处于流程图的哪个状态节点。
  * @param recentTurns 最近几轮对话
  * @param stateNames 流程图中的所有状态名列表
- * @param transitions 流程图中的转移关系（可选），格式如 "A → B（条件）"
  * @returns 匹配的状态名，无法判断时返回 null
  */
 export async function analyzeProgress(
   recentTurns: { role: string; text: string }[],
   stateNames: string[],
-  transitions?: string[],
 ): Promise<string | null> {
   if (stateNames.length === 0 || recentTurns.length === 0) return null;
 
@@ -40,11 +35,7 @@ export async function analyzeProgress(
     .map(t => `${t.role === 'user' ? '用户' : '客服'}：${t.text}`)
     .join('\n');
 
-  let userPrompt = `状态列表：${stateNames.join('、')}\n\n`;
-  if (transitions && transitions.length > 0) {
-    userPrompt += `流程转移关系（表示状态之间的先后顺序和触发条件）：\n${transitions.join('\n')}\n\n`;
-  }
-  userPrompt += `对话记录：\n${context}\n\n根据最后一轮 bot 的回复内容，当前处于哪个状态？`;
+  const userPrompt = `状态列表：${stateNames.join('、')}\n\n对话记录：\n${context}\n\n当前处于哪个状态？`;
 
   try {
     const { text: raw } = await generateText({

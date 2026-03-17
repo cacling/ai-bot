@@ -15,8 +15,6 @@ interface SandboxPanelProps {
   filePath: string | null;
   onPublishDone?: () => void;
   onClose: () => void;
-  /** 外部传入的 sandbox ID（由 PipelinePanel 管理时使用） */
-  externalSandboxId?: string;
 }
 
 interface ChatMessage {
@@ -30,8 +28,8 @@ interface ValidationIssue {
   message: string;
 }
 
-export function SandboxPanel({ filePath, onPublishDone, onClose, externalSandboxId }: SandboxPanelProps) {
-  const [sandboxId, setSandboxId] = useState<string | null>(externalSandboxId ?? null);
+export function SandboxPanel({ filePath, onPublishDone, onClose }: SandboxPanelProps) {
+  const [sandboxId, setSandboxId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');

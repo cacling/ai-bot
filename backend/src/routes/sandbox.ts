@@ -223,90 +223,17 @@ sandbox.post('/:id/publish', requireRole('flow_manager'), async (c) => {
   }
 });
 
-// ── 断言类型与执行 ──────────────────────────────────────────────────────────
-
-interface Assertion {
-  type: 'contains' | 'not_contains' | 'tool_called' | 'tool_not_called' | 'skill_loaded' | 'regex';
-  value: string;
-}
-
-interface AssertionResult {
-  type: string;
-  value: string;
-  passed: boolean;
-  detail: string;
-}
-
-/**
- * 从 test_case 行解析断言列表。
- * 优先使用新 assertions 字段，fallback 到旧 expected_keywords。
- */
-function parseAssertions(tc: { assertions: string | null; expected_keywords: string }): Assertion[] {
-  if (tc.assertions) {
-    try { return JSON.parse(tc.assertions) as Assertion[]; } catch { /* fall through */ }
-  }
-  // 兼容旧格式：expected_keywords → contains 断言
-  const keywords: string[] = JSON.parse(tc.expected_keywords);
-  return keywords.map(kw => ({ type: 'contains' as const, value: kw }));
-}
-
-/**
- * 运行一组断言，返回每条的结果。
- * @param responseText Agent 回复文本
- * @param toolsCalled Agent 调用过的工具名列表
- * @param skillsLoaded Agent 加载过的技能名列表
- */
-function runAssertions(
-  assertions: Assertion[],
-  responseText: string,
-  toolsCalled: string[],
-  skillsLoaded: string[],
-): AssertionResult[] {
-  return assertions.map(a => {
-    switch (a.type) {
-      case 'contains': {
-        const ok = responseText.includes(a.value);
-        return { ...a, passed: ok, detail: ok ? `回复包含 "${a.value}"` : `回复未包含 "${a.value}"` };
-      }
-      case 'not_contains': {
-        const ok = !responseText.includes(a.value);
-        return { ...a, passed: ok, detail: ok ? `回复不包含 "${a.value}"` : `回复错误地包含了 "${a.value}"` };
-      }
-      case 'tool_called': {
-        const ok = toolsCalled.includes(a.value);
-        return { ...a, passed: ok, detail: ok ? `调用了工具 ${a.value}` : `未调用工具 ${a.value}（已调用: ${toolsCalled.join(', ') || '无'}）` };
-      }
-      case 'tool_not_called': {
-        const ok = !toolsCalled.includes(a.value);
-        return { ...a, passed: ok, detail: ok ? `未调用工具 ${a.value}` : `错误地调用了工具 ${a.value}` };
-      }
-      case 'skill_loaded': {
-        const ok = skillsLoaded.includes(a.value);
-        return { ...a, passed: ok, detail: ok ? `加载了技能 ${a.value}` : `未加载技能 ${a.value}（已加载: ${skillsLoaded.join(', ') || '无'}）` };
-      }
-      case 'regex': {
-        try {
-          const ok = new RegExp(a.value).test(responseText);
-          return { ...a, passed: ok, detail: ok ? `匹配正则 /${a.value}/` : `未匹配正则 /${a.value}/` };
-        } catch {
-          return { ...a, passed: false, detail: `正则表达式无效: ${a.value}` };
-        }
-      }
-      default:
-        return { ...a, passed: false, detail: `未知断言类型: ${a.type}` };
-    }
-  });
-}
-
-// POST /api/sandbox/:id/regression — 沙箱回归测试（支持丰富断言）
+// POST /api/sandbox/:id/regression — 沙箱回归测试
 sandbox.post('/:id/regression', async (c) => {
   const id = c.req.param('id');
   const info = sandboxes.get(id);
   if (!info) return c.json({ error: '沙箱不存在' }, 404);
 
+  // Determine skill name from path
   const skillDirName = dirname(info.skillPath).split('/').pop()!;
   const skillsDir = resolve(info.sandboxDir, 'biz-skills');
 
+  // Load test cases for this skill
   const cases = await db
     .select()
     .from(testCases)
@@ -319,70 +246,47 @@ sandbox.post('/:id/regression', async (c) => {
   const results: Array<{
     test_id: number;
     input: string;
+    expected: string[];
     actual: string;
     passed: boolean;
-    assertions: AssertionResult[];
-    tools_called: string[];
-    skills_loaded: string[];
+    missing_keywords: string[];
   }> = [];
 
   for (const tc of cases) {
-    const assertions = parseAssertions(tc);
+    const expectedKeywords: string[] = JSON.parse(tc.expected_keywords);
     try {
-      // 收集工具调用和技能加载信息
-      const toolsCalled: string[] = [];
-      const skillsLoaded: string[] = [];
-
       const agentResult = await runAgent(
         tc.input_message,
         [],
         tc.phone ?? '13800000001',
         'zh',
-        undefined, // onDiagramUpdate
-        undefined, // onTextDelta
-        undefined, // subscriberName
-        undefined, // planName
-        skillsDir, // 沙箱 Skills 目录
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        skillsDir,
       );
 
-      // 从 agent result 的 steps 中提取工具调用信息
-      // runAgent 内部通过 onStepFinish 记录了工具调用，但这些信息不直接暴露在 AgentResult 中
-      // 我们通过解析回复文本和 card 信息来推断
       const responseText = agentResult.text ?? '';
-
-      // 从 card 推断工具调用
-      if (agentResult.card) {
-        switch (agentResult.card.type) {
-          case 'bill_card': toolsCalled.push('query_bill'); break;
-          case 'cancel_card': toolsCalled.push('cancel_service'); break;
-          case 'plan_card': toolsCalled.push('query_plans'); break;
-          case 'diagnostic_card': toolsCalled.push('diagnose_network'); break;
-        }
-      }
-      if (agentResult.transferData) toolsCalled.push('transfer_to_human');
-      if (agentResult.skill_diagram?.skillName) skillsLoaded.push(agentResult.skill_diagram.skillName);
-
-      const assertionResults = runAssertions(assertions, responseText, toolsCalled, skillsLoaded);
-      const allPassed = assertionResults.every(r => r.passed);
+      const missingKeywords = expectedKeywords.filter(kw => !responseText.includes(kw));
+      const passed = missingKeywords.length === 0;
 
       results.push({
         test_id: tc.id,
         input: tc.input_message,
+        expected: expectedKeywords,
         actual: responseText.slice(0, 500),
-        passed: allPassed,
-        assertions: assertionResults,
-        tools_called: toolsCalled,
-        skills_loaded: skillsLoaded,
+        passed,
+        missing_keywords: missingKeywords,
       });
     } catch (err) {
       results.push({
         test_id: tc.id,
         input: tc.input_message,
+        expected: expectedKeywords,
         actual: `Error: ${String(err)}`,
         passed: false,
-        assertions: assertions.map(a => ({ ...a, passed: false, detail: `执行异常: ${String(err)}` })),
-        tools_called: [],
-        skills_loaded: [],
+        missing_keywords: expectedKeywords,
       });
     }
   }

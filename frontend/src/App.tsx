@@ -407,7 +407,7 @@ export default function App() {
               className="ml-3 text-sm text-gray-500 bg-transparent outline-none cursor-pointer"
             >
               {outboundTasks.filter(t => t.task_type === outboundTaskType).map(t => (
-                <option key={t.id} value={t.id}>{(t.data[lang]?.customer_name ?? t.id) as string}</option>
+                <option key={t.id} value={t.id}>{(t.data as { name: string }).name}</option>
               ))}
             </select>
           )}
