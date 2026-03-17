@@ -13,7 +13,7 @@ import { isNoDataResult } from '../utils/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../utils/mermaid';
 import { analyzeProgress } from '../skills/progress-tracker';
 
-// Re-export for test file and other consumers
+// Re-export for test file
 export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };
 
 const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://localhost:8003/mcp';
@@ -242,8 +242,8 @@ export async function runAgent(
                 } catch { /* ignore */ }
               }
             }
-            // MCP skill tools: push tool-highlighted diagram, then branch-highlighted if result available
-            // Explicit map takes priority; fall back to the last loaded skill
+            // MCP skill tools: send un-highlighted diagram immediately;
+            // progressHL will be applied later by the async progress tracker.
             const skillName = SKILL_TOOL_MAP[tc.toolName] ?? lastActiveSkill;
             if (skillName) {
               try {
@@ -251,28 +251,7 @@ export async function runAgent(
                 if (existsSync(skillPath)) {
                   const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
                   if (rawMermaid) {
-                    // Try to find the tool result to determine branch
-                    const toolResult = (toolResults as Array<{ toolCallId: string; toolName: string; result: unknown }> ?? [])
-                      .find((tr) => tr.toolCallId === tc.toolCallId);
-                    const branchName = toolResult ? (() => {
-                      try {
-                        let raw: unknown = toolResult.result;
-                        if (raw && typeof raw === 'object' && 'content' in raw &&
-                          Array.isArray((raw as { content: unknown[] }).content)) {
-                          const first = (raw as { content: { type: string; text: string }[] }).content
-                            .find((c) => c.type === 'text');
-                          if (first?.text) raw = first.text;
-                        }
-                        const parsed = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
-                        if (parsed.diagnostic_steps) return determineBranch(parsed.diagnostic_steps);
-                      } catch { /* ignore */ }
-                      return null;
-                    })() : null;
-
-                    const highlighted = branchName
-                      ? highlightMermaidBranch(highlightMermaidTool(rawMermaid, tc.toolName), branchName)
-                      : highlightMermaidTool(rawMermaid, tc.toolName);
-                    onDiagramUpdate(skillName, stripMermaidMarkers(highlighted));
+                    onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid));
                   }
                 }
               } catch { /* ignore */ }
@@ -371,21 +350,10 @@ export async function runAgent(
                 conclusion: parsed.conclusion,
               },
             };
-            // Override skill diagram with branch+tool highlighted version so the final
-            // response doesn't downgrade the diagram back to un-highlighted.
-            try {
-              const skillPath = resolve(SKILLS_DIR, 'fault-diagnosis', 'SKILL.md');
-              if (existsSync(skillPath)) {
-                const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
-                if (rawMermaid) {
-                  const branchName = determineBranch(parsed.diagnostic_steps);
-                  skillDiagram = {
-                    skill_name: 'fault-diagnosis',
-                    mermaid: stripMermaidMarkers(highlightMermaidBranch(highlightMermaidTool(rawMermaid, 'diagnose_network'), branchName)),
-                  };
-                }
-              }
-            } catch { /* ignore */ }
+            // Branch highlight is already sent during streaming (line ~272).
+            // Do NOT override skillDiagram here — progress tracking (async) will
+            // send the final progressHL version, and we don't want this branchHL
+            // to overwrite it after the fact.
           } else if (toolName === 'transfer_to_human' && parsed.success) {
             transferRequested = true;
             // Capture args for fallback

@@ -475,10 +475,10 @@ voice.get(
               state.recordTool(toolName, toolArgs, result, success);
               logger.info('voice', 'lang_chain_mcp_result', { session: sessionId, tool: toolName, lang, resultPreview: result.slice(0, 150) });
 
-              // 若该工具对应某个 skill，推送高亮版 skill_diagram_update
+              // 若该工具对应某个 skill，推送无高亮版流程图（progressHL 由后续 progress tracker 异步添加）
               if (SKILL_TOOL_MAP[toolName]) {
                 activeSkillName = SKILL_TOOL_MAP[toolName];
-                await sendSkillDiagram(ws, userPhone, activeSkillName, toolName, lang, sessionId, 'voice');
+                await sendSkillDiagram(ws, userPhone, activeSkillName, null, lang, sessionId, 'voice');
               }
 
               // Translate tool result to English before feeding back to GLM

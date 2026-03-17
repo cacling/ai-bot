@@ -35,18 +35,24 @@ export function stripMermaidMarkers(mermaid: string): string {
  */
 export function extractStateNames(mermaid: string): string[] {
   if (!isStateDiagram(mermaid)) return [];
+  // Collect <<choice>> state names so we can exclude them
+  const choiceStates = new Set<string>();
+  for (const line of mermaid.split('\n')) {
+    const choiceMatch = line.match(/^\s*state\s+(\S+)\s+<<choice>>/);
+    if (choiceMatch) choiceStates.add(choiceMatch[1]);
+  }
   const names = new Set<string>();
   for (const line of mermaid.split('\n')) {
     // Transition: A --> B  or  A --> B: label
     const transMatch = line.match(/^\s*(\S+)\s*-->\s*([^:\s]+)/);
     if (transMatch) {
       for (const n of [transMatch[1], transMatch[2]]) {
-        if (n && n !== '[*]') names.add(n);
+        if (n && n !== '[*]' && !choiceStates.has(n)) names.add(n);
       }
     }
     // State declaration: state X <<choice>>  or  state X {
     const stateMatch = line.match(/^\s*state\s+(\S+)\s/);
-    if (stateMatch && !stateMatch[1].startsWith('<<')) {
+    if (stateMatch && !stateMatch[1].startsWith('<<') && !choiceStates.has(stateMatch[1])) {
       names.add(stateMatch[1]);
     }
   }

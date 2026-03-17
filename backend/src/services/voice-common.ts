@@ -11,7 +11,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../config/paths';
-import { extractMermaidFromContent, highlightMermaidTool, stripMermaidMarkers, extractStateNames, extractTransitions, highlightMermaidProgress } from '../utils/mermaid';
+import { extractMermaidFromContent, stripMermaidMarkers, extractStateNames, extractTransitions, highlightMermaidProgress } from '../utils/mermaid';
 import { translateMermaid } from '../skills/translate-lang';
 import { analyzeHandoff } from '../skills/handoff-analyzer';
 import { analyzeEmotion } from '../skills/emotion-analyzer';
@@ -48,8 +48,7 @@ export async function sendSkillDiagram(
     const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
     if (!rawMermaid) return;
     const translated = await translateMermaid(rawMermaid, lang);
-    const highlighted = toolName ? highlightMermaidTool(translated, toolName) : translated;
-    const mermaid = stripMermaidMarkers(highlighted);
+    const mermaid = stripMermaidMarkers(translated);
     ws.send(JSON.stringify({ type: 'skill_diagram_update', skill_name: skillName, mermaid }));
     sessionBus.publish(userPhone, { source: 'voice', type: 'skill_diagram_update', skill_name: skillName, mermaid, msg_id: crypto.randomUUID() });
   } catch (e) {

@@ -42,8 +42,6 @@ export const CardShell = memo(function CardShell({
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
       className={[
@@ -52,12 +50,16 @@ export const CardShell = memo(function CardShell({
         isDragOver ? 'ring-2 ring-blue-400 ring-offset-1' : '',
       ].join(' ')}
     >
-      {/* Header */}
-      <div className={`flex items-center px-3 py-2.5 flex-shrink-0 ${def.headerClass}`}>
+      {/* Header — only this bar is draggable */}
+      <div
+        draggable
+        onDragStart={onDragStart}
+        className={`flex items-center px-3 py-2.5 flex-shrink-0 cursor-grab active:cursor-grabbing ${def.headerClass}`}
+      >
         {/* Drag handle */}
         <GripVertical
           size={14}
-          className="text-white/50 hover:text-white/80 cursor-grab active:cursor-grabbing mr-1.5 flex-shrink-0"
+          className="text-white/50 hover:text-white/80 mr-1.5 flex-shrink-0"
         />
 
         {/* Icon + title */}

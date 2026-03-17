@@ -386,7 +386,7 @@ outbound.get(
               if (toolName === 'transfer_to_human') {
                 const reason = (toolArgs.reason ?? 'user_request') as string;
                 const currentSkillName = taskParam === 'collection' ? 'outbound-collection' : 'outbound-marketing';
-                await sendSkillDiagram(ws, userPhone, currentSkillName, 'transfer_to_human', lang, sessionId, 'outbound');
+                await sendSkillDiagram(ws, userPhone, currentSkillName, null, lang, sessionId, 'outbound');
                 try {
                   glmWs!.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'conversation.item.create', item: { type: 'function_call_output', call_id: msg.call_id, output: '{"ok":true}' } }));
                   glmWs!.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'response.create' }));
@@ -431,9 +431,9 @@ outbound.get(
                 toolResult = JSON.stringify({ error: t('tool_unknown', lang, toolName) });
               }
 
-              // 推送高亮版时序图
+              // 推送无高亮版流程图（progressHL 由后续 progress tracker 异步添加）
               const currentSkillName = taskParam === 'collection' ? 'outbound-collection' : 'outbound-marketing';
-              await sendSkillDiagram(ws, userPhone, currentSkillName, toolName, lang, sessionId, 'outbound');
+              await sendSkillDiagram(ws, userPhone, currentSkillName, null, lang, sessionId, 'outbound');
 
               glmWs!.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'conversation.item.create', item: { type: 'function_call_output', call_id: msg.call_id, output: toolResult } }));
               glmWs!.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'response.create' }));

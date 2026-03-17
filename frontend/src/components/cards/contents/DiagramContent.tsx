@@ -21,8 +21,8 @@ interface DiagramData {
 
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 5;
-const FOCUS_ZOOM_MIN = 1.5;
-const FOCUS_ZOOM_MAX = 2.5;
+const FOCUS_ZOOM_MIN = 0.8;
+const FOCUS_ZOOM_MAX = 1.5;
 
 /** Find the first highlighted node element inside a container */
 function findHighlightedEl(container: HTMLElement): SVGGraphicsElement | null {
