@@ -25,6 +25,10 @@ dist/
 build/
 .vite/
 
+# 测试产生的临时文件
+backend/skills/.sandbox/
+backend/skills/biz-skills/test-skill-*/
+
 # 测试产物
 tests/e2e/test-results/
 tests/e2e/playwright-report/
