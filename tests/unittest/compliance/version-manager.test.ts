@@ -15,7 +15,7 @@ import {
   rollbackToVersion,
 } from '../../../backend/src/compliance/version-manager.ts';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../..');
+const PROJECT_ROOT = resolve(import.meta.dir, '../../../backend');
 const TEST_SKILL_PATH = 'skills/biz-skills/_test_version/SKILL.md';
 const TEST_SKILL_ABS = resolve(PROJECT_ROOT, TEST_SKILL_PATH);
 

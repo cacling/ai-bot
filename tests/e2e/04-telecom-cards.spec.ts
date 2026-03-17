@@ -7,8 +7,34 @@
  */
 import { test, expect } from '@playwright/test';
 
+/**
+ * 等待 chat WebSocket 连接就绪。
+ *
+ * 页面加载后 React 以空 phone 建立第一个 WS；fetchInboundUsers 完成后
+ * chatUserPhone 更新，触发第二个 WS（带真实 phone）。
+ * 我们等第二个 /ws/chat WS 被创建并留 500ms 让 onopen 触发。
+ *
+ * 必须在 page.goto() 之前调用以注册监听器，否则可能错过事件。
+ */
+async function waitForChatWs(page: import('@playwright/test').Page): Promise<void> {
+  let wsCount = 0;
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 10_000); // 兜底
+    page.on('websocket', (ws) => {
+      if (!ws.url().includes('/ws/chat')) return;
+      wsCount++;
+      if (wsCount >= 2) {
+        // 第二个 WS 已创建（带真实 phone），等 onopen 触发
+        setTimeout(() => { clearTimeout(timer); resolve(); }, 500);
+      }
+    });
+  });
+}
+
 async function sendMessage(page: import('@playwright/test').Page, text: string) {
   const input = page.getByPlaceholder(/输入您的问题/);
+  // 确保 textarea 可交互（非 disabled）
+  await expect(input).toBeEnabled({ timeout: 5_000 });
   await input.fill(text);
   await input.press('Enter');
 }
@@ -29,8 +55,13 @@ test.describe('电信卡片渲染', () => {
   test.beforeEach(async ({ page }) => {
     // 含 LLM 调用的测试最长可能等 180s，这里留 200s 余量
     test.setTimeout(200_000);
+
+    // 注册 WS 监听 *先于* 导航，这样不会错过 WS 创建事件
+    const wsReady = waitForChatWs(page);
     await page.goto('/');
     await expect(page.getByRole('heading', { name: '智能客服小通' })).toBeVisible();
+    // 等带真实 phone 的第二个 WS 建连完成
+    await wsReady;
   });
 
   // ── Bill Card ──────────────────────────────────────────────────────────────

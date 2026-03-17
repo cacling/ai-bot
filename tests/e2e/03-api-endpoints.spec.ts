@@ -1,6 +1,6 @@
 /**
  * API 端点测试（通过 Playwright request fixture，无浏览器）
- * 电信客服版：4 个 skill 目录，真实后端
+ * 电信客服版：biz-skills + tech-skills 目录，真实后端
  * 所有请求发往 Vite proxy (localhost:5173) → backend (localhost:8000)
  */
 import { test, expect } from '@playwright/test';
@@ -36,23 +36,28 @@ test.describe('GET /api/files/tree', () => {
     expect(skills?.type).toBe('dir');
   });
 
-  test('TC-API-03 tree 包含四个电信 skill 子目录', async ({ request }) => {
+  test('TC-API-03 tree 包含 biz-skills 下所有 skill 子目录', async ({ request }) => {
     const res = await request.get('/api/files/tree');
     const { tree } = await res.json() as { tree: FileNode[] };
     const skills = tree.find((n) => n.name === 'skills');
-    const childNames = skills?.children?.map((c) => c.name) ?? [];
+    const bizSkills = skills?.children?.find((c) => c.name === 'biz-skills');
+    const childNames = bizSkills?.children?.map((c) => c.name) ?? [];
     expect(childNames).toContain('bill-inquiry');
     expect(childNames).toContain('fault-diagnosis');
+    expect(childNames).toContain('outbound-collection');
+    expect(childNames).toContain('outbound-marketing');
     expect(childNames).toContain('plan-inquiry');
     expect(childNames).toContain('service-cancel');
+    expect(childNames).toContain('service-suspension');
+    expect(childNames).toContain('telecom-app');
   });
 
-  test('TC-API-04 tree 包含 4 个 SKILL.md 文件', async ({ request }) => {
+  test('TC-API-04 tree 包含 15 个 SKILL.md 文件', async ({ request }) => {
     const res = await request.get('/api/files/tree');
     const { tree } = await res.json() as { tree: FileNode[] };
     const all = flattenTree(tree);
     const skillMds = all.filter((n) => n.type === 'file' && n.name === 'SKILL.md');
-    expect(skillMds.length).toBe(4);
+    expect(skillMds.length).toBe(15);
   });
 
   test('TC-API-05 tree 包含电信参考文档', async ({ request }) => {
@@ -70,16 +75,16 @@ test.describe('GET /api/files/tree', () => {
 
 test.describe('GET /api/files/content', () => {
   test('TC-API-06 正常读取 bill-inquiry/SKILL.md', async ({ request }) => {
-    const res = await request.get('/api/files/content?path=skills/bill-inquiry/SKILL.md');
+    const res = await request.get('/api/files/content?path=skills/biz-skills/bill-inquiry/SKILL.md');
     expect(res.ok()).toBeTruthy();
     const body = await res.json() as { path: string; content: string };
-    expect(body.path).toBe('skills/bill-inquiry/SKILL.md');
+    expect(body.path).toBe('skills/biz-skills/bill-inquiry/SKILL.md');
     expect(typeof body.content).toBe('string');
     expect(body.content.length).toBeGreaterThan(0);
   });
 
   test('TC-API-07 正常读取 billing-rules.md 参考文档', async ({ request }) => {
-    const res = await request.get('/api/files/content?path=skills/bill-inquiry/references/billing-rules.md');
+    const res = await request.get('/api/files/content?path=skills/biz-skills/bill-inquiry/references/billing-rules.md');
     expect(res.ok()).toBeTruthy();
     const { content } = await res.json() as { content: string };
     expect(content.length).toBeGreaterThan(0);
@@ -92,8 +97,8 @@ test.describe('GET /api/files/content', () => {
     expect(error).toContain('path');
   });
 
-  test('TC-API-09 非 .md 文件 → 400', async ({ request }) => {
-    const res = await request.get('/api/files/content?path=skills/bill-inquiry/script.ts');
+  test('TC-API-09 不支持的文件类型 → 400', async ({ request }) => {
+    const res = await request.get('/api/files/content?path=skills/biz-skills/bill-inquiry/binary.exe');
     expect(res.status()).toBe(400);
   });
 
@@ -103,14 +108,14 @@ test.describe('GET /api/files/content', () => {
   });
 
   test('TC-API-11 读取 fault-diagnosis 参考文档', async ({ request }) => {
-    const res = await request.get('/api/files/content?path=skills/fault-diagnosis/references/troubleshoot-guide.md');
+    const res = await request.get('/api/files/content?path=skills/biz-skills/fault-diagnosis/references/troubleshoot-guide.md');
     expect(res.ok()).toBeTruthy();
     const { content } = await res.json() as { content: string };
     expect(content).toContain('故障');
   });
 
   test('TC-API-12 读取 plan-inquiry 参考文档', async ({ request }) => {
-    const res = await request.get('/api/files/content?path=skills/plan-inquiry/references/plan-details.md');
+    const res = await request.get('/api/files/content?path=skills/biz-skills/plan-inquiry/references/plan-details.md');
     expect(res.ok()).toBeTruthy();
     const { content } = await res.json() as { content: string };
     expect(content).toContain('套餐');
@@ -121,41 +126,41 @@ test.describe('GET /api/files/content', () => {
 
 test.describe('PUT /api/files/content', () => {
   test('TC-API-13 保存文件内容（读后写回）', async ({ request }) => {
-    const readRes = await request.get('/api/files/content?path=skills/plan-inquiry/SKILL.md');
+    const readRes = await request.get('/api/files/content?path=skills/biz-skills/plan-inquiry/SKILL.md');
     const { content } = await readRes.json() as { content: string };
 
     const saveRes = await request.put('/api/files/content', {
-      data: { path: 'skills/plan-inquiry/SKILL.md', content },
+      data: { path: 'skills/biz-skills/plan-inquiry/SKILL.md', content },
     });
     expect(saveRes.ok()).toBeTruthy();
     const body = await saveRes.json() as { ok: boolean; path: string };
     expect(body.ok).toBe(true);
-    expect(body.path).toBe('skills/plan-inquiry/SKILL.md');
+    expect(body.path).toBe('skills/biz-skills/plan-inquiry/SKILL.md');
   });
 
   test('TC-API-14 写入后可重新读取验证', async ({ request }) => {
     const marker = `<!-- test-marker-${Date.now()} -->`;
-    const readRes = await request.get('/api/files/content?path=skills/service-cancel/SKILL.md');
+    const readRes = await request.get('/api/files/content?path=skills/biz-skills/service-cancel/SKILL.md');
     const { content: original } = await readRes.json() as { content: string };
 
     const modified = original + '\n' + marker;
     await request.put('/api/files/content', {
-      data: { path: 'skills/service-cancel/SKILL.md', content: modified },
+      data: { path: 'skills/biz-skills/service-cancel/SKILL.md', content: modified },
     });
 
-    const readRes2 = await request.get('/api/files/content?path=skills/service-cancel/SKILL.md');
+    const readRes2 = await request.get('/api/files/content?path=skills/biz-skills/service-cancel/SKILL.md');
     const { content: saved } = await readRes2.json() as { content: string };
     expect(saved).toContain(marker);
 
     // 还原原始内容
     await request.put('/api/files/content', {
-      data: { path: 'skills/service-cancel/SKILL.md', content: original },
+      data: { path: 'skills/biz-skills/service-cancel/SKILL.md', content: original },
     });
   });
 
   test('TC-API-15 缺少 content 参数 → 400', async ({ request }) => {
     const res = await request.put('/api/files/content', {
-      data: { path: 'skills/bill-inquiry/SKILL.md' },
+      data: { path: 'skills/biz-skills/bill-inquiry/SKILL.md' },
     });
     expect(res.status()).toBe(400);
   });
@@ -167,9 +172,9 @@ test.describe('PUT /api/files/content', () => {
     expect(res.status()).toBe(400);
   });
 
-  test('TC-API-17 非 .md 文件 → 400', async ({ request }) => {
+  test('TC-API-17 不支持的文件类型 → 400', async ({ request }) => {
     const res = await request.put('/api/files/content', {
-      data: { path: 'skills/bill-inquiry/script.ts', content: 'x' },
+      data: { path: 'skills/biz-skills/bill-inquiry/binary.exe', content: 'x' },
     });
     expect(res.status()).toBe(400);
   });
