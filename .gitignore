@@ -36,3 +36,4 @@ tests/e2e/node_modules/
 tests/node_modules
 tests/scripts/.service-pids
 tests/unittest/frontend/node_modules/
+tests/unittest/frontend/coverage/
