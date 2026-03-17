@@ -58,136 +58,120 @@
 
 ## 目录结构
 
+### Backend (backend/src/)
+
+```
+backend/src/
+├── index.ts                 ← 服务入口（唯一根级文件）
+├── db/                      ← 数据库（index.ts, schema.ts, seed.ts, nanoid.ts）
+├── engine/                  ← LLM Agent 引擎
+│   ├── runner.ts            （Agent 编排、工具调用）
+│   ├── llm.ts               （LLM 客户端配置 - SiliconFlow）
+│   ├── skills.ts            （工具定义、技能注册）
+│   └── *-system-prompt.md   （5 个系统提示词文件）
+├── chat/                    ← 客户侧路由
+│   ├── chat.ts              （REST 同步聊天：POST /api/chat）
+│   ├── chat-ws.ts           （WebSocket 实时聊天：/ws/chat）
+│   ├── voice.ts             （语音入呼：/ws/voice）
+│   ├── outbound.ts          （语音外呼：/ws/outbound）
+│   ├── mock-data.ts         （GET /api/mock-users, /api/outbound-tasks）
+│   ├── outbound-mock.ts     （mock 外呼任务数据）
+│   └── outbound-types.ts    （外呼类型定义）
+├── agent/                   ← 坐席工作台（人工客服侧）
+│   ├── chat/
+│   │   └── agent-ws.ts      （WebSocket: /ws/agent）
+│   ├── card/
+│   │   ├── emotion-analyzer.ts
+│   │   ├── handoff-analyzer.ts
+│   │   ├── progress-tracker.ts
+│   │   └── compliance.ts    （关键词管理 API）
+│   └── km/
+│       ├── kms/             （知识管理 - 11 个文件）
+│       │   ├── index.ts, documents.ts, candidates.ts, evidence.ts
+│       │   ├── conflicts.ts, review-packages.ts, action-drafts.ts
+│       │   ├── assets.ts, tasks.ts, audit.ts, helpers.ts
+│       └── skills/          （技能管理 - 10 个文件）
+│           ├── skills.ts, skill-creator.ts, skill-edit.ts
+│           ├── skill-versions.ts, version-manager.ts
+│           ├── sandbox.ts, canary.ts, files.ts
+│           ├── test-cases.ts, change-requests.ts
+└── services/                ← 共享服务（16 个文件）
+    ├── logger.ts, i18n.ts, session-bus.ts, lang-session.ts
+    ├── paths.ts, auth.ts
+    ├── keyword-filter.ts, hallucination-detector.ts
+    ├── translate-lang.ts, tts.ts
+    ├── mermaid.ts, tool-result.ts
+    ├── voice-common.ts, voice-session.ts, mcp-client.ts
+```
+
+### Frontend (frontend/src/)
+
+```
+frontend/src/
+├── main.tsx, App.tsx, i18n.ts
+├── chat/                    ← 客户侧
+│   ├── api.ts, CardMessage.tsx
+│   ├── VoiceChatPage.tsx, OutboundVoicePage.tsx
+│   ├── mockUsers.ts, outboundData.ts, userSync.ts
+│   └── hooks/useVoiceEngine.ts
+├── agent/                   ← 坐席工作台
+│   ├── AgentWorkstationPage.tsx
+│   └── cards/ (CardPanel, CardShell, registry, contents/*)
+├── km/                      ← 知识 + 技能管理
+│   ├── KnowledgeManagementPage.tsx + 子页面
+│   ├── EditorPage.tsx, SkillManagerPage.tsx
+│   ├── components/ (FileTree, MarkdownEditor, PipelinePanel 等)
+│   └── hooks/useSkillManager.ts
+└── shared/                  ← 共享工具
+    ├── DiagramPanel.tsx, mermaid.ts, audio.ts
+```
+
+### Tests (tests/)
+
+```
+tests/
+├── scripts/
+│   ├── start.sh      （启动测试服务）
+│   ├── stop.sh       （停止测试服务）
+│   └── seed.sh       （重置测试数据）
+├── e2e/              （Playwright E2E 测试）
+│   ├── *.spec.ts     （6 个 spec 文件）
+│   ├── playwright.config.ts, global-setup.ts
+│   └── package.json
+└── unittest/         （Bun 单元测试）
+    ├── agent/, compliance/, middleware/
+    ├── routes/{km/, ...}, skills/
+    └── session-bus.test.ts
+```
+
+### 其他目录
+
 ```
 ai-bot/
-├── backend/                        # 后端服务（Bun + Hono）
-│   ├── src/
-│   │   ├── index.ts                # 服务入口，Hono 应用，挂载所有路由
-│   │   ├── session-bus.ts          # 会话事件总线（发布/订阅），跨路由同步客户↔坐席
-│   │   ├── lang-session.ts         # 语言会话管理（per-phone 客户/坐席语言状态）
-│   │   ├── logger.ts               # 统一日志工具
-│   │   ├── i18n.ts                 # 后端双语翻译（t() 函数）
-│   │   ├── agent/
-│   │   │   ├── runner.ts               # Agent 执行器（文字客服核心逻辑）
-│   │   │   ├── llm.ts                  # LLM 配置（SiliconFlow + GLM）
-│   │   │   ├── skills.ts               # Skill 工具定义
-│   │   │   ├── system-prompt.md        # 文字客服系统提示词模板
-│   │   │   └── voice-system-prompt.md  # 语音客服系统提示词模板
-│   │   ├── db/
-│   │   │   ├── index.ts                # 数据库连接（Drizzle ORM）
-│   │   │   ├── schema.ts               # 全部表定义（含 KM 13 张表）
-│   │   │   └── seed.ts                 # 测试数据初始化（动态月份账单）
-│   │   ├── services/
-│   │   │   ├── mcp-client.ts           # MCP 工具调用客户端
-│   │   │   ├── voice-session.ts        # 语音会话状态（VoiceSessionState）
-│   │   │   └── voice-common.ts         # 语音共享工具（情感分析、转人工、流程图推送）
-│   │   ├── compliance/
-│   │   │   ├── keyword-filter.ts      # 合规关键词过滤（AC 自动机）
-│   │   │   └── version-manager.ts     # Skill 版本管理器
-│   │   ├── middleware/
-│   │   │   └── auth.ts                # 认证中间件（RBAC）
-│   │   ├── routes/
-│   │   │   ├── chat.ts                 # POST /api/chat, DELETE /api/sessions/:id
-│   │   │   ├── chat-ws.ts              # WS /ws/chat（持久 WebSocket，多轮对话）
-│   │   │   ├── agent-ws.ts             # WS /ws/agent（坐席工作台持久 WebSocket）
-│   │   │   ├── voice.ts                # WS /ws/voice（GLM-Realtime 代理）
-│   │   │   ├── outbound.ts             # WS /ws/outbound（外呼语音 WebSocket 代理）
-│   │   │   ├── files.ts                # GET/PUT /api/files/（知识库编辑）
-│   │   │   ├── skills.ts               # GET /api/skills（技能元数据列表）
-│   │   │   ├── compliance.ts           # 合规监控 API
-│   │   │   ├── sandbox.ts              # 沙箱验证 API
-│   │   │   ├── skill-versions.ts       # Skill 版本管理 API
-│   │   │   ├── skill-edit.ts           # 自然语言 Skill 编辑 API
-│   │   │   ├── skill-creator.ts        # AI 技能创建器 API（多轮对话式）
-│   │   │   ├── canary.ts               # 灰度发布 API（按手机尾号分流）
-│   │   │   ├── change-requests.ts      # 高风险变更审批 API
-│   │   │   ├── test-cases.ts           # 回归测试用例管理 API
-│   │   │   └── km/                     # 知识管理路由（9 个子模块）
-│   │   │       ├── index.ts            # 路由聚合入口
-│   │   │       ├── documents.ts        # 文档管理
-│   │   │       ├── candidates.ts       # 候选 QA 管理（三门验证）
-│   │   │       ├── evidence.ts         # 证据引用
-│   │   │       ├── conflicts.ts        # 冲突检测与仲裁
-│   │   │       ├── review-packages.ts  # 审核包工作流
-│   │   │       ├── action-drafts.ts    # 发布/回滚动作
-│   │   │       ├── assets.ts           # 已发布资产
-│   │   │       ├── tasks.ts            # 治理任务
-│   │   │       └── audit-logs.ts       # 审计日志
-│   │   ├── skills/
-│   │   │   ├── handoff-analyzer.ts     # 转人工 Handoff Context 分析器（坐席侧）
-│   │   │   ├── emotion-analyzer.ts     # 情感分析（坐席侧，每条用户消息异步触发）
-│   │   │   ├── tts.ts                  # TTS 语音合成（SiliconFlow CosyVoice）
-│   │   │   └── translate-lang.ts       # 实时翻译（文本 + Mermaid 图）
-│   │   └── utils/
-│   │       ├── mermaid.ts              # Mermaid 图解析 / 高亮 / 翻译
-│   │       └── tool-result.ts          # 工具结果解析（空数据 / 错误检测）
+├── backend/
 │   ├── mcp_servers/ts/
-│   │   └── telecom_service.ts          # Telecom MCP Server（:8003，7 个工具）
-│   └── skills/                         # Skills 知识层
-│       ├── biz-skills/                 # 业务技能（状态图驱动，v3 规范）
-│       │   ├── _shared/                    # 共享类型定义（BaseCheckStep 等）
-│       │   ├── bill-inquiry/               # 账单查询 [online, voice]
-│       │   ├── plan-inquiry/               # 套餐咨询 [online, voice]
-│       │   ├── service-cancel/             # 业务退订 [online, voice]
-│       │   ├── fault-diagnosis/            # 故障诊断 [online, voice]（含诊断脚本）
-│       │   ├── telecom-app/                # App 使用支持 [online, voice]
-│       │   ├── outbound-collection/        # 外呼催收 [outbound-collection]
-│       │   └── outbound-marketing/         # 外呼营销 [outbound-marketing]
-│       └── tech-skills/                # 技术技能
-│           ├── skill-creator-spec/         # 技能创建器 system prompt + 编写规范
-│           │   ├── SKILL.md                    # 完整的对话引导指令
-│           │   └── references/
-│           │       └── biz-skill-spec.md       # 业务 Skill 编写规范 v2
-│           ├── compliance-rules/           # 合规规则
-│           ├── emotion-detection/          # 情感分类提示词
-│           ├── handoff-analysis/           # 转人工分析提示词
-│           ├── hallucination-detection/    # 幻觉检测
-│           └── transfer-detection/         # 转接模式检测
-├── frontend/                           # 前端（React + Vite）
-│   └── src/
-│       ├── App.tsx                     # 路由入口 + 文字客服主页面
-│       ├── mockUsers.ts                # 模拟用户数据
-│       ├── outboundData.ts             # 外呼任务数据类型 + API
-│       ├── userSync.ts                 # 跨标签页用户同步（BroadcastChannel）
-│       ├── i18n.ts                     # 双语翻译字典（zh/en）
-│       ├── hooks/
-│       │   ├── useVoiceEngine.ts           # 语音引擎共享 Hook（WS + 音频管线）
-│       │   └── useSkillManager.ts          # 技能管理 Hook（CRUD + 版本 + 沙箱）
-│       ├── api/
-│       │   └── chat.ts                     # 文字客服 WebSocket API 客户端
-│       ├── pages/
-│       │   ├── VoiceChatPage.tsx            # 语音客服 UI（GLM-Realtime）
-│       │   ├── OutboundVoicePage.tsx        # 外呼机器人 UI
-│       │   ├── AgentWorkstationPage.tsx     # 坐席工作台（/agent 路由）
-│       │   ├── SkillManagerPage.tsx         # 技能管理页面
-│       │   ├── EditorPage.tsx               # 文件编辑器
-│       │   └── km/                          # 知识管理页面
-│       │       ├── DocumentListPage.tsx     # 文档列表
-│       │       ├── CandidateListPage.tsx    # 候选 QA 列表
-│       │       ├── ReviewPackageListPage.tsx# 审核包列表
-│       │       ├── AssetListPage.tsx        # 已发布资产列表
-│       │       ├── TaskListPage.tsx         # 治理任务列表
-│       │       └── AuditLogPage.tsx         # 审计日志
-│       └── components/
-│           ├── DiagramPanel.tsx            # （旧）独立流程图面板，已被卡片系统取代
-│           ├── VersionPanel.tsx            # Skill 版本管理面板（Diff + 回滚）
-│           ├── NLEditPanel.tsx             # 自然语言 Skill 编辑面板
-│           ├── SandboxPanel.tsx            # 沙箱测试面板
-│           ├── SkillEditorWidgets.tsx      # 编辑器辅助组件
-│           └── cards/                      # 坐席卡片系统
-│               ├── registry.ts             # 卡片注册表（CardDef / CardState 类型 + 注册函数）
-│               ├── CardShell.tsx           # 可拖拽卡片壳（header + collapse/close + drag）
-│               ├── CardPanel.tsx           # 2 列 Grid 卡片容器，支持拖拽排序
-│               ├── index.ts                # 注册所有内置卡片（副作用导入）
-│               └── contents/
-│                   ├── DiagramContent.tsx      # 流程图卡片内容（colSpan:2）
-│                   ├── EmotionContent.tsx      # 情感横条卡片内容（colSpan:1）
-│                   ├── HandoffContent.tsx      # 转人工摘要卡片内容（colSpan:1）
-│                   ├── ComplianceContent.tsx   # 合规监控卡片内容
-│                   ├── OutboundTaskContent.tsx # 外呼任务详情卡片
-│                   └── UserDetailContent.tsx   # 用户信息详情卡片
-├── docs/sdd/                           # 本文档目录
-├── logs/                               # 运行日志
-├── start.sh                            # 一键启动脚本
-└── stop.sh                             # 一键停止脚本
+│   │   └── telecom_service.ts      # Telecom MCP Server（:8003，7 个工具）
+│   └── skills/                     # Skills 知识层
+│       ├── biz-skills/             # 业务技能（状态图驱动，v3 规范）
+│       │   ├── _shared/                # 共享类型定义（BaseCheckStep 等）
+│       │   ├── bill-inquiry/           # 账单查询 [online, voice]
+│       │   ├── plan-inquiry/           # 套餐咨询 [online, voice]
+│       │   ├── service-cancel/         # 业务退订 [online, voice]
+│       │   ├── fault-diagnosis/        # 故障诊断 [online, voice]（含诊断脚本）
+│       │   ├── telecom-app/            # App 使用支持 [online, voice]
+│       │   ├── outbound-collection/    # 外呼催收 [outbound-collection]
+│       │   └── outbound-marketing/     # 外呼营销 [outbound-marketing]
+│       └── tech-skills/            # 技术技能
+│           ├── skill-creator-spec/     # 技能创建器 system prompt + 编写规范
+│           ├── compliance-rules/       # 合规规则
+│           ├── emotion-detection/      # 情感分类提示词
+│           ├── handoff-analysis/       # 转人工分析提示词
+│           ├── hallucination-detection/# 幻觉检测
+│           └── transfer-detection/     # 转接模式检测
+├── frontend/
+├── tests/                          # 测试目录
+├── docs/sdd/                       # 本文档目录
+├── logs/                           # 运行日志
+├── start.sh                        # 一键启动脚本
+└── stop.sh                         # 一键停止脚本
 ```

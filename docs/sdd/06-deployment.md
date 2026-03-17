@@ -191,33 +191,38 @@ ai-bot/
 │   ├── data/                         # SQLite 数据库文件（自动创建）
 │   ├── src/
 │   │   ├── index.ts                  # Hono 服务入口 → :18472
-│   │   ├── session-bus.ts            # 会话事件总线（内存 pub/sub）
-│   │   ├── logger.ts                 # 统一日志
-│   │   ├── agent/
-│   │   │   └── system-prompt.md      # 系统提示词模板
-│   │   ├── routes/
-│   │   │   ├── chat-ws.ts            # WS /ws/chat（客户侧持久连接）
-│   │   │   ├── agent-ws.ts           # WS /ws/agent（坐席侧持久连接）
-│   │   │   └── voice.ts              # WS /ws/voice（语音代理）
-│   │   └── skills/
-│   │       ├── handoff-analyzer.ts   # 转人工分析（坐席侧）
-│   │       └── emotion-analyzer.ts   # 情感分析（坐席侧）
+│   │   ├── engine/                   # LLM Agent 引擎
+│   │   │   ├── runner.ts             # Agent 编排、工具调用
+│   │   │   ├── llm.ts               # LLM 客户端配置
+│   │   │   ├── skills.ts            # 工具定义、技能注册
+│   │   │   └── *-system-prompt.md   # 系统提示词模板（5 个）
+│   │   ├── chat/                    # 客户侧路由
+│   │   │   ├── chat-ws.ts           # WS /ws/chat（客户侧持久连接）
+│   │   │   ├── voice.ts             # WS /ws/voice（语音代理）
+│   │   │   └── outbound.ts          # WS /ws/outbound（外呼语音）
+│   │   ├── agent/                   # 坐席工作台
+│   │   │   ├── chat/agent-ws.ts     # WS /ws/agent（坐席侧持久连接）
+│   │   │   ├── card/                # 情感分析、转人工分析、合规
+│   │   │   └── km/                  # 知识管理 + 技能管理
+│   │   └── services/                # 共享服务
+│   │       ├── session-bus.ts       # 会话事件总线（内存 pub/sub）
+│   │       ├── logger.ts            # 统一日志
+│   │       └── keyword-filter.ts    # 合规关键词过滤
 │   ├── mcp_servers/ts/
 │   │   └── telecom_service.ts        # Telecom MCP Server → :8003
 │   └── skills/                       # SKILLS_DIR 指向此目录
-│       ├── bill-inquiry/
-│       ├── plan-inquiry/
-│       ├── service-cancel/
-│       ├── fault-diagnosis/
-│       ├── handoff-analysis/         # 转人工分析提示词
-│       └── emotion-detection/        # 情感分类提示词
+│       ├── biz-skills/               # 业务技能
+│       └── tech-skills/              # 技术技能
 ├── frontend/
 │   └── src/
-│       ├── pages/
-│       │   ├── ChatPage.tsx                # 客户侧 /chat
-│       │   ├── AgentWorkstationPage.tsx    # 坐席侧 /agent
-│       │   └── VoiceChatPage.tsx
-│       └── components/cards/              # 坐席卡片系统
+│       ├── chat/                     # 客户侧（VoiceChatPage 等）
+│       ├── agent/                    # 坐席工作台（AgentWorkstationPage + cards/）
+│       ├── km/                       # 知识 + 技能管理
+│       └── shared/                   # 共享工具
+├── tests/                            # 测试目录
+│   ├── scripts/                      # 测试启动/停止/种子脚本
+│   ├── e2e/                          # Playwright E2E 测试
+│   └── unittest/                     # Bun 单元测试
 ├── logs/                             # 运行日志（start.sh 自动创建）
 ├── start.sh                          # 一键启动
 └── stop.sh                           # 一键停止

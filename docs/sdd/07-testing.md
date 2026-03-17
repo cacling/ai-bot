@@ -6,11 +6,10 @@
 
 | 测试类型 | 框架 | 位置 | 覆盖范围 |
 |---------|------|------|---------|
-| **单元测试** | Bun 内置测试运行器 | `backend/skills/fault-diagnosis/scripts/` | 故障诊断逻辑（纯函数） |
-| **单元测试（新功能）** | Bun 内置测试运行器 | `backend/src/compliance/`, `backend/src/routes/`, `backend/src/middleware/` | 合规拦截、版本管理、Diff 算法、语音指标、沙箱校验、权限控制 |
-| **端到端测试（E2E）** | Playwright | `testcase/e2e/` | 前端 UI、HTTP API、结构化卡片渲染、会话管理 |
+| **单元测试** | Bun 内置测试运行器 | `tests/unittest/` | 故障诊断、合规拦截、版本管理、Diff 算法、语音指标、沙箱校验、权限控制 |
+| **端到端测试（E2E）** | Playwright | `tests/e2e/` | 前端 UI、HTTP API、结构化卡片渲染、会话管理 |
 
-两套测试均需要先通过 `./win-start.sh` 启动所有服务（backend :18472、telecom-mcp :8003、frontend :5173）。
+两套测试均需要先通过 `tests/scripts/start.sh`（或项目根目录 `./start.sh`）启动所有服务（backend :18472、telecom-mcp :8003、frontend :5173）。
 
 > **注意：** 语音客服（`/ws/voice`）依赖真实 GLM-Realtime 连接（需 `ZHIPU_API_KEY`）和麦克风权限，目前没有自动化测试，需手动通过浏览器验证。
 
@@ -35,7 +34,7 @@
 | **并发** | `workers: 1`（顺序执行，避免并发写文件冲突） |
 | **重试** | `retries: 1`（LLM 响应偶发超时时自动重试） |
 | **超时** | 全局 90s；含 LLM 调用的用例单独设 120s–200s |
-| **报告** | 终端 list + HTML 报告（`testcase/playwright-report/`） |
+| **报告** | 终端 list + HTML 报告（`tests/e2e/playwright-report/`） |
 | **截图/录像** | 仅在用例失败时保留 |
 
 ---
@@ -46,7 +45,7 @@
 
 ```bash
 # 安装 E2E 测试依赖
-cd testcase
+cd tests/e2e
 npm install
 ```
 
@@ -57,13 +56,16 @@ npm install
 E2E 测试和单元测试均需要后端服务在线：
 
 ```bash
-# 项目根目录，一键启动（Windows）
-./win-start.sh
+# 使用测试专用启动脚本
+cd tests/scripts && ./start.sh
+
+# 或使用项目根目录一键启动
+./start.sh
 ```
 
-等待终端出现 `✅ 所有服务启动成功` 后再运行测试。
+等待终端出现服务就绪提示后再运行测试。
 
-> Playwright 配置了 `reuseExistingServer: true`，会复用 start.sh 已启动的实例，不会重复启动。
+> Playwright 配置了 `reuseExistingServer: true`，会复用已启动的实例，不会重复启动。
 
 ### 确认测试数据
 
@@ -86,13 +88,17 @@ E2E 测试和单元测试均需要后端服务在线：
 ### 4.1 单元测试
 
 ```bash
-cd backend
-bun test skills/fault-diagnosis/scripts/run_diagnosis.test.ts
-```
+cd tests/unittest
 
-```bash
-# 新增功能模块测试
-bun test src/compliance/keyword-filter.test.ts src/compliance/version-manager.test.ts src/routes/voice.metrics.test.ts src/routes/sandbox.test.ts src/routes/skill-versions.test.ts src/middleware/auth.test.ts
+# 运行所有单元测试
+bun test
+
+# 运行特定测试文件
+bun test agent/                      # 故障诊断等 Agent 测试
+bun test compliance/                 # 合规拦截测试
+bun test middleware/                 # 权限控制测试
+bun test skills/                     # 技能版本、沙箱等测试
+bun test session-bus.test.ts         # Session Bus 测试
 ```
 
 预期输出（约 <1s）：
@@ -109,7 +115,7 @@ bun test v1.x
 ### 4.2 E2E 测试
 
 ```bash
-cd testcase
+cd tests/e2e
 
 # 无头模式（CI / 推荐）
 npm test
@@ -127,15 +133,15 @@ npm run report
 ### 4.3 运行单个 E2E 测试文件
 
 ```bash
-cd testcase
-npx playwright test e2e/01-chat-page.spec.ts
-npx playwright test e2e/06-fault-diagnosis.spec.ts
+cd tests/e2e
+npx playwright test 01-chat-page.spec.ts
+npx playwright test 06-fault-diagnosis.spec.ts
 ```
 
 ### 4.4 运行指定用例（按 ID 过滤）
 
 ```bash
-cd testcase
+cd tests/e2e
 npx playwright test --grep "TC-CARD-01"
 npx playwright test --grep "TC-FD"
 ```
@@ -146,7 +152,7 @@ npx playwright test --grep "TC-FD"
 
 ### 5.1 单元测试 — 故障诊断逻辑
 
-**文件：** `backend/skills/fault-diagnosis/scripts/run_diagnosis.test.ts`
+**文件：** `tests/unittest/agent/run_diagnosis.test.ts`
 **运行器：** Bun
 **总数：** 19 条
 
@@ -198,7 +204,7 @@ npx playwright test --grep "TC-FD"
 
 ---
 
-### 5.2 E2E — 客服对话页（01-chat-page.spec.ts）
+### 5.2 E2E — 客服对话页（tests/e2e/01-chat-page.spec.ts）
 
 **覆盖：** 前端 UI 交互，需要浏览器
 **总数：** 15 条（TC-CHAT-01 ～ TC-CHAT-15）
@@ -223,7 +229,7 @@ npx playwright test --grep "TC-FD"
 
 ---
 
-### 5.3 E2E — REST API 端点（03-api-endpoints.spec.ts）
+### 5.3 E2E — REST API 端点（tests/e2e/03-api-endpoints.spec.ts）
 
 **覆盖：** 所有 HTTP API，使用 Playwright `request` fixture（无浏览器渲染）
 **总数：** 26 条（TC-API-01 ～ TC-API-26）
@@ -281,7 +287,7 @@ npx playwright test --grep "TC-FD"
 
 ---
 
-### 5.4 E2E — 结构化卡片渲染（04-telecom-cards.spec.ts）
+### 5.4 E2E — 结构化卡片渲染（tests/e2e/04-telecom-cards.spec.ts）
 
 **覆盖：** 4 种 MCP 结构化卡片的前端渲染正确性（含真实 LLM 调用）
 **总数：** 10 条（TC-CARD-01 ～ TC-CARD-10）
@@ -323,7 +329,7 @@ npx playwright test --grep "TC-FD"
 
 ---
 
-### 5.5 E2E — 后端集成（05-real-backend.spec.ts）
+### 5.5 E2E — 后端集成（tests/e2e/05-real-backend.spec.ts）
 
 **覆盖：** 直连后端 `http://localhost:18472`（绕过 Vite 代理），真实 LLM 调用
 **总数：** 11 条（TC-BE-01 ～ TC-BE-11）
@@ -361,7 +367,7 @@ npx playwright test --grep "TC-FD"
 
 ---
 
-### 5.6 E2E — 故障诊断 Agent 行为（06-fault-diagnosis.spec.ts）
+### 5.6 E2E — 故障诊断 Agent 行为（tests/e2e/06-fault-diagnosis.spec.ts）
 
 **覆盖：** 不同故障类型下 Agent 调用 `diagnose_network` 的行为，以及边界场景
 **总数：** 5 条（TC-FD-01 ～ TC-FD-05）
@@ -376,18 +382,18 @@ npx playwright test --grep "TC-FD"
 
 ---
 
-### 5.7 单元测试 — 新增功能模块
+### 5.7 单元测试 — 功能模块
 
 **运行器：** Bun
 **运行命令：**
 ```bash
-cd backend
-bun test src/compliance/keyword-filter.test.ts src/compliance/version-manager.test.ts src/routes/voice.metrics.test.ts src/routes/sandbox.test.ts src/routes/skill-versions.test.ts src/middleware/auth.test.ts
+cd tests/unittest
+bun test compliance/ skills/ middleware/
 ```
 
 **总数：** 60 条，分布如下：
 
-#### 合规用语拦截（keyword-filter.test.ts）— 16 条
+#### 合规用语拦截（tests/unittest/compliance/keyword-filter.test.ts）— 16 条
 
 | # | describe | 描述 |
 |---|----------|------|
@@ -397,7 +403,7 @@ bun test src/compliance/keyword-filter.test.ts src/compliance/version-manager.te
 | 12-13 | 违规词替换 | banned 替换为 ***、warning 不替换 |
 | 14-16 | 词库管理 | 添加/删除/热重载 |
 
-#### 版本管理（version-manager.test.ts）— 8 条
+#### 版本管理（tests/unittest/compliance/version-manager.test.ts）— 8 条
 
 | # | describe | 描述 |
 |---|----------|------|
@@ -406,26 +412,26 @@ bun test src/compliance/keyword-filter.test.ts src/compliance/version-manager.te
 | 5-6 | getVersionContent | 获取存在/不存在的版本 |
 | 7-8 | rollbackToVersion | 回滚并验证文件内容、不存在版本报错 |
 
-#### Diff 算法（skill-versions.test.ts）— 9 条
+#### Diff 算法（tests/unittest/skills/skill-versions.test.ts）— 9 条
 
 | # | describe | 描述 |
 |---|----------|------|
 | 1-9 | 行级 Diff | 相同内容、完全不同、单行修改、新增行、删除行、空文件、SKILL.md 场景 |
 
-#### 语音会话指标（voice.metrics.test.ts）— 12 条
+#### 语音会话指标（tests/unittest/routes/voice.metrics.test.ts）— 12 条
 
 | # | describe | 描述 |
 |---|----------|------|
 | 1-4 | 基础功能 | 初始化、轮次、工具记录、连续失败 |
 | 5-12 | 可观测指标 | 首包时延、非等待返回null、重复调用、打断计数、冷场检测、getMetrics、空数据边界 |
 
-#### 沙箱校验（sandbox.test.ts）— 6 条
+#### 沙箱校验（tests/unittest/skills/sandbox.test.ts）— 6 条
 
 | # | describe | 描述 |
 |---|----------|------|
 | 1-6 | 校验逻辑 | 合法文件、缺 frontmatter、Mermaid 缺类型、未知工具、内容过短、已知工具 |
 
-#### 权限控制（auth.test.ts）— 9 条
+#### 权限控制（tests/unittest/middleware/auth.test.ts）— 9 条
 
 | # | describe | 描述 |
 |---|----------|------|
@@ -451,7 +457,7 @@ bun test src/compliance/keyword-filter.test.ts src/compliance/version-manager.te
 E2E 测试运行后自动生成 HTML 报告：
 
 ```bash
-cd testcase
+cd tests/e2e
 npm run report
 # 自动在浏览器打开 playwright-report/index.html
 ```

@@ -381,7 +381,7 @@ metadata:
 
 ## 10. HandoffAnalysis（转人工分析结果）
 
-**来源：** `backend/src/skills/handoff-analyzer.ts`，单次 LLM 调用产出
+**来源：** `backend/src/agent/card/handoff-analyzer.ts`，单次 LLM 调用产出
 
 ```typescript
 interface HandoffAnalysis {
@@ -415,7 +415,7 @@ interface HandoffAnalysis {
 
 ## 11. EmotionResult（情绪检测结果）
 
-**来源：** `backend/src/skills/emotion-analyzer.ts`，每次用户语音转写后异步触发
+**来源：** `backend/src/agent/card/emotion-analyzer.ts`，每次用户语音转写后异步触发
 
 ```typescript
 interface EmotionResult {
@@ -471,7 +471,7 @@ interface User {
 
 ## 14. 合规检测结果（ComplianceResult）
 
-**来源：** `backend/src/compliance/keyword-filter.ts`
+**来源：** `backend/src/services/keyword-filter.ts`
 
 ```typescript
 interface ComplianceResult {
