@@ -54,7 +54,7 @@ export const CardShell = memo(function CardShell({
       <div
         draggable
         onDragStart={onDragStart}
-        className={`flex items-center px-3 py-2.5 flex-shrink-0 cursor-grab active:cursor-grabbing ${def.headerClass}`}
+        className={`flex items-center px-3 py-1.5 flex-shrink-0 cursor-grab active:cursor-grabbing ${def.headerClass}`}
       >
         {/* Drag handle */}
         <GripVertical
