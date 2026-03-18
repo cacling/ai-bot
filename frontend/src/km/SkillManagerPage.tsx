@@ -674,7 +674,7 @@ export function SkillManagerPage() {
         {/* Tab 头部 */}
         <div className="h-10 border-b border-slate-200 flex items-center shrink-0">
           <button
-            onClick={() => setRightTab('chat')}
+            onClick={() => { setRightTab('chat'); setTestDiagram(null); }}
             className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
               rightTab === 'chat' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-400 hover:text-slate-600'
             }`}
