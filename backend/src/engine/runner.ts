@@ -13,6 +13,7 @@ import { isNoDataResult } from '../services/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
 import { matchMockRule } from '../services/mock-engine';
+import { SOPGuard } from './sop-guard';
 
 // Re-export for test file
 export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };
@@ -269,6 +270,34 @@ export async function runAgent(
       },
     ]),
   );
+  // SOP Guard: wrap operation tools with precondition checks
+  const sopGuard = new SOPGuard();
+  const sopWrappedTools = Object.fromEntries(
+    Object.entries(mcpTools as Record<string, any>).map(([name, tool]) => [
+      name,
+      {
+        ...tool,
+        execute: async (...args: any[]) => {
+          // Check SOP preconditions before executing
+          const rejection = sopGuard.check(name);
+          if (rejection) {
+            if (sopGuard.shouldEscalate()) {
+              logger.error('sop-guard', 'escalate_to_human', { tool: name });
+              return { content: [{ type: 'text', text: JSON.stringify({ error: rejection + '\n连续违规，建议转接人工处理。请调用 transfer_to_human。' }) }] };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify({ error: rejection }) }] };
+          }
+          // Execute the tool
+          const result = await tool.execute(...args);
+          // Record successful call
+          sopGuard.recordToolCall(name);
+          sopGuard.resetViolations();
+          return result;
+        },
+      },
+    ]),
+  );
+
   const t_mcp_ready = Date.now();
   logger.info('agent', 'mcp_ready', { mcp_init_ms: t_mcp_ready - t_run_start });
 
@@ -293,7 +322,7 @@ export async function runAgent(
       system: systemPrompt,
       messages: [...history, { role: 'user', content: userMessage }],
       tools: {
-        ...mcpTools,
+        ...sopWrappedTools,
         ...skillsTools,
       },
       maxSteps: 10,
