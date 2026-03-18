@@ -57,8 +57,8 @@ SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
 SILICONFLOW_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
 SILICONFLOW_CHAT_MODEL=stepfun-ai/Step-3.5-Flash
 
-# MCP Server 端点（有默认值，可选）
-TELECOM_MCP_URL=http://localhost:8003/mcp
+# MCP Server 端点（有默认值，可选。5 个 MCP Server 端口 18003-18007）
+# 端口分配由 start.sh 自动管理，无需手动配置
 
 # Skills 目录（相对 backend/，有默认值）
 SKILLS_DIR=./skills
@@ -91,26 +91,34 @@ no_proxy=localhost,127.0.0.1,api.siliconflow.cn,open.bigmodel.cn
 
 ```bash
 cd /path/to/ai-bot
+
+# 正常启动（保留用户数据）
 ./start.sh
+
+# 重置启动（删除 DB + 清理旧版本快照 + 重新 seed）
+./start.sh --reset
 ```
+
+**`--reset` 模式：** 删除数据库文件 + 清理旧版本快照（仅保留最新 2 个） + 重新执行 seed。Seed 操作是幂等的：MCP 服务器使用 `onConflictDoNothing`，mock 规则自动补齐。
 
 **start.sh 执行流程：**
 
 ```
 1. 清理日志文件和残留端口进程
 2. 检查 bun / node / npm 是否可用
-3. 安装依赖
+3. [若 --reset] 删除 DB + 清理旧版本快照（保留最新 2 个）+ 重新 seed
+4. 安装依赖
    ├── backend:         bun install --frozen-lockfile
    ├── mcp_servers/ts:  npm install
    └── frontend:        npm install
-4. 初始化 SQLite 数据库 Schema（bunx drizzle-kit push）
-5. 若数据库为空，自动写入初始数据（seed）
-6. 启动三个服务（后台运行，日志写入 logs/）
-   ├── telecom-mcp: node --import tsx/esm telecom_service.ts  →  :8003
-   ├── backend:     bun run --watch src/index.ts              →  :8000
+5. 初始化 SQLite 数据库 Schema（bunx drizzle-kit push）
+6. 若数据库为空，自动写入初始数据（seed，幂等）
+7. 启动服务（后台运行，日志写入 logs/）
+   ├── 5 个 MCP Server（端口 18003-18007）
+   ├── backend:     bun run --watch src/index.ts              →  :18472
    └── frontend:    npm run dev                               →  :5173
-7. 健康检查 (curl http://localhost:8000/health)
-8. 等待 Ctrl+C 停止所有服务
+8. 健康检查 (curl http://localhost:18472/health)
+9. 等待 Ctrl+C 停止所有服务
 ```
 
 > **注意（macOS Homebrew / 非标准安装）**
@@ -130,7 +138,11 @@ cd /path/to/ai-bot
 | 服务 | 端口 | 日志文件 | 说明 |
 |------|------|---------|------|
 | 后端 API + WS | `:18472` | `logs/backend.log` | HTTP REST + WS /ws/chat + /ws/agent + /ws/voice |
-| Telecom MCP Server | `:8003` | `logs/telecom-mcp.log` | 电信业务工具 |
+| user-info-service | `:18003` | `logs/mcp-user-info.log` | query_subscriber, query_bill, query_plans |
+| business-service | `:18004` | `logs/mcp-business.log` | cancel_service, issue_invoice |
+| diagnosis-service | `:18005` | `logs/mcp-diagnosis.log` | diagnose_network, diagnose_app |
+| outbound-service | `:18006` | `logs/mcp-outbound.log` | record_call_result, send_followup_sms, create_callback_task, record_marketing_result |
+| account-service | `:18007` | `logs/mcp-account.log` | verify_identity, check_account_balance, check_contracts, apply_service_suspension |
 | 前端 Vite | `:5173` | `logs/frontend.log` | React UI（/chat 客户端 + /agent 坐席端） |
 
 启动成功后浏览器访问 `http://localhost:5173/` 开始对话。
@@ -154,13 +166,18 @@ bunx drizzle-kit push
 bun run db:seed
 ```
 
-### 步骤二：启动 Telecom MCP Server（终端 1）
+### 步骤二：启动 5 个 MCP Server（终端 1-5 或后台）
 
 ```bash
 cd backend/mcp_servers/ts
 npm install          # 首次
-node --import tsx/esm telecom_service.ts
-# 输出：[telecom-service] MCP endpoint: http://0.0.0.0:8003/mcp
+
+# 分别启动 5 个 MCP Server（可在独立终端或后台运行）
+node --import tsx/esm user-info-service.ts     # → :18003
+node --import tsx/esm business-service.ts      # → :18004
+node --import tsx/esm diagnosis-service.ts     # → :18005
+node --import tsx/esm outbound-service.ts      # → :18006
+node --import tsx/esm account-service.ts       # → :18007
 ```
 
 ### 步骤三：启动后端 API（终端 2）
@@ -258,8 +275,8 @@ Skills 文件为静态 Markdown，修改后**无需重启任何服务**，Agent 
 
 **现象：** 后端日志显示 MCP 连接异常
 
-**原因 1：** Telecom MCP Server 未启动
-**解决：** 检查 `:8003` 是否在监听：`curl http://localhost:8003/mcp`
+**原因 1：** MCP Server 未启动
+**解决：** 检查 5 个 MCP 端口是否在监听：`curl http://localhost:18003/mcp`（18003-18007）
 
 **原因 2：** 系统代理拦截 localhost 请求
 **解决：** 在 `.env` 中添加：

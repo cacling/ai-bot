@@ -294,7 +294,7 @@ bash tests/scripts/stop.sh
 
 ---
 
-### 5.3 E2E 测试（78 tests / 6 files）
+### 5.3 E2E 测试（78+ tests / 9 files）
 
 | 文件 | 测试数 | 覆盖内容 |
 |------|--------|---------|
@@ -304,6 +304,9 @@ bash tests/scripts/stop.sh
 | 05-real-backend.spec.ts | 11 | 健康检查、文件树、Chat API、多轮上下文、会话管理 |
 | 06-fault-diagnosis.spec.ts | 5 | 4 种故障诊断 + 停机/不存在号码边界 |
 | 07-skill-lifecycle.spec.ts | 13 | 技能创建→沙盒验证→发布→生效→清理 |
+| 08-mcp-management.spec.ts | — | MCP 服务器 CRUD、工具发现、mock 调用、工具启用/禁用 |
+| 09-sandbox-mock.spec.ts | — | 沙箱 mock 模式测试、mock 规则匹配验证 |
+| 10-skill-test-flow.spec.ts | — | 技能版本创建→编辑→测试（mock 模式）→发布完整流程 |
 
 ---
 

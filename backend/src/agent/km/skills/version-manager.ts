@@ -1,133 +1,274 @@
 /**
- * version-manager.ts — Skill 文件版本管理
+ * version-manager.ts — Skill 版本管理
  *
- * 提供统一的"保存并记录版本"函数，
- * 所有修改 Skill 文件的路径（手动编辑、NL 编辑、沙箱发布、回滚）都经过此函数。
+ * 概念模型：
+ * - 每个版本有编辑状态（draft/saved）和发布状态（published/unpublished）
+ * - status: 'draft' = 有未保存修改, 'saved' = 已保存, 'published' = 已发布
+ * - 所有版本中有且仅有一个 published
+ * - 草稿态不能沙盒测试，必须先保存
+ * - 发布任意版本会自动取消旧发布
  */
 
-import { readFile, writeFile } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { resolve } from 'node:path';
+import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { db } from '../../../db';
-import { skillVersions, changeRequests } from '../../../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { skillRegistry, skillVersions } from '../../../db/schema';
+import { eq, desc, and } from 'drizzle-orm';
 import { logger } from '../../../services/logger';
-import { detectHighRisk } from './change-requests';
 
-// Project root for Skill files
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
+const SKILLS_ROOT = resolve(PROJECT_ROOT, 'skills');
+const BIZ_SKILLS_DIR = resolve(SKILLS_ROOT, 'biz-skills');
+const VERSIONS_DIR = resolve(SKILLS_ROOT, '.versions');
+
+// ── Registry ─────────────────────────────────────────────────────────────────
+
+export function getSkillRegistry(skillId: string) {
+  return db.select().from(skillRegistry).where(eq(skillRegistry.id, skillId)).get();
+}
+
+export function listSkillRegistry() {
+  return db.select().from(skillRegistry).all();
+}
+
+// ── Create version from existing ─────────────────────────────────────────────
 
 /**
- * 保存文件并创建版本快照（保存旧版本内容）
+ * 基于某版本创建新版本（复制快照）
  */
-export async function saveSkillWithVersion(
-  skillPath: string,
-  newContent: string,
-  description: string,
+export async function createVersionFrom(
+  skillId: string,
+  fromVersionNo: number,
+  description: string = '',
   operator: string = 'system',
-): Promise<{ versionId: number; needsApproval?: boolean; changeRequestId?: number }> {
-  const absPath = resolve(PROJECT_ROOT, skillPath);
-  let oldContent: string;
-  try {
-    oldContent = await readFile(absPath, 'utf-8');
-  } catch {
-    oldContent = ''; // 新文件
-  }
+): Promise<{ versionNo: number; snapshotPath: string }> {
+  const reg = getSkillRegistry(skillId);
+  if (!reg) throw new Error(`Skill ${skillId} 未注册`);
 
-  // 高风险检测：非 admin 用户需要审批
-  if (operator !== 'admin') {
-    const riskReason = detectHighRisk(oldContent, newContent);
-    if (riskReason) {
-      const crResult = await db.insert(changeRequests).values({
-        skill_path: skillPath,
-        old_content: oldContent,
-        new_content: newContent,
-        description,
-        requester: operator,
-        status: 'pending',
-        risk_reason: riskReason,
-      }).returning({ id: changeRequests.id });
+  const from = db.select().from(skillVersions)
+    .where(and(eq(skillVersions.skill_id, skillId), eq(skillVersions.version_no, fromVersionNo)))
+    .get();
+  if (!from || !from.snapshot_path) throw new Error(`版本 v${fromVersionNo} 不存在`);
 
-      const changeRequestId = crResult[0]?.id ?? 0;
-      logger.warn('version', 'high_risk_blocked', {
-        path: skillPath, operator, riskReason, changeRequestId,
-      });
+  const fromAbsPath = resolve(SKILLS_ROOT, from.snapshot_path);
+  if (!existsSync(fromAbsPath)) throw new Error(`快照目录不存在: ${from.snapshot_path}`);
 
-      return { versionId: 0, needsApproval: true, changeRequestId };
-    }
-  }
+  const versionNo = (reg.latest_version ?? 0) + 1;
+  const snapshotRelPath = `.versions/${skillId}/v${versionNo}`;
+  const snapshotAbsPath = resolve(SKILLS_ROOT, snapshotRelPath);
 
-  // 保存旧版本快照
-  const result = await db.insert(skillVersions).values({
-    skill_path: skillPath,
-    content: oldContent,
-    change_description: description,
+  await mkdir(snapshotAbsPath, { recursive: true });
+  await cp(fromAbsPath, snapshotAbsPath, { recursive: true });
+
+  db.insert(skillVersions).values({
+    skill_id: skillId,
+    version_no: versionNo,
+    status: 'saved',
+    snapshot_path: snapshotRelPath,
+    change_description: description || `基于 v${fromVersionNo} 创建`,
     created_by: operator,
-  }).returning({ id: skillVersions.id });
+  }).run();
 
-  const versionId = result[0]?.id ?? 0;
+  db.update(skillRegistry).set({
+    latest_version: versionNo,
+    updated_at: new Date().toISOString(),
+  }).where(eq(skillRegistry.id, skillId)).run();
 
-  // 写入新内容
-  await writeFile(absPath, newContent, 'utf-8');
-
-  logger.info('version', 'saved', {
-    path: skillPath, versionId, operator,
-    oldLen: oldContent.length, newLen: newContent.length,
-  });
-
-  return { versionId };
+  logger.info('version', 'created_from', { skillId, fromVersionNo, versionNo, operator });
+  return { versionNo, snapshotPath: snapshotRelPath };
 }
 
-/**
- * 获取文件的版本列表
- */
-export async function getVersionList(skillPath: string) {
-  return db
-    .select({
-      id: skillVersions.id,
-      change_description: skillVersions.change_description,
-      created_by: skillVersions.created_by,
-      created_at: skillVersions.created_at,
-    })
-    .from(skillVersions)
-    .where(eq(skillVersions.skill_path, skillPath))
-    .orderBy(desc(skillVersions.created_at));
-}
+// ── Create new skill with v1 (for skill-creator) ─────────────────────────────
 
 /**
- * 获取指定版本的完整内容
+ * 创建全新技能的 v1 版本。
+ * 直接在 .versions/{skillId}/v1/ 下创建文件，不写 biz-skills/ 主目录。
  */
-export async function getVersionContent(versionId: number) {
-  const rows = await db
-    .select()
-    .from(skillVersions)
-    .where(eq(skillVersions.id, versionId))
-    .limit(1);
-  return rows[0] ?? null;
-}
-
-/**
- * 回滚到指定版本（创建新的版本记录标记为"回滚"）
- */
-export async function rollbackToVersion(
-  versionId: number,
+export async function createNewSkillVersion(
+  skillId: string,
+  skillMd: string,
+  references: Array<{ filename: string; content: string }>,
+  description: string = '',
   operator: string = 'system',
-): Promise<{ success: boolean; newVersionId?: number; error?: string }> {
-  const target = await getVersionContent(versionId);
-  if (!target) {
-    return { success: false, error: `版本 ${versionId} 不存在` };
+): Promise<{ versionNo: number; snapshotPath: string }> {
+  // Ensure registry
+  let reg = getSkillRegistry(skillId);
+  if (!reg) {
+    db.insert(skillRegistry).values({ id: skillId, latest_version: 0, description }).run();
+    reg = getSkillRegistry(skillId)!;
   }
 
-  const { versionId: newId } = await saveSkillWithVersion(
-    target.skill_path,
-    target.content,
-    `回滚至版本 #${versionId}`,
-    operator,
-  );
+  const versionNo = (reg.latest_version ?? 0) + 1;
+  const snapshotRelPath = `.versions/${skillId}/v${versionNo}`;
+  const snapshotAbsPath = resolve(SKILLS_ROOT, snapshotRelPath);
 
-  logger.info('version', 'rollback', {
-    targetVersion: versionId, newVersion: newId,
-    path: target.skill_path, operator,
+  // Create dirs + write files
+  await mkdir(resolve(snapshotAbsPath, 'references'), { recursive: true });
+  await writeFile(resolve(snapshotAbsPath, 'SKILL.md'), skillMd, 'utf-8');
+  for (const ref of references) {
+    await writeFile(resolve(snapshotAbsPath, 'references', ref.filename), ref.content, 'utf-8');
+  }
+
+  db.insert(skillVersions).values({
+    skill_id: skillId, version_no: versionNo, status: 'saved',
+    snapshot_path: snapshotRelPath, change_description: description, created_by: operator,
+  }).run();
+
+  db.update(skillRegistry).set({
+    latest_version: versionNo,
+    updated_at: new Date().toISOString(),
+  }).where(eq(skillRegistry.id, skillId)).run();
+
+  logger.info('version', 'new_skill_created', { skillId, versionNo, operator });
+  return { versionNo, snapshotPath: snapshotRelPath };
+}
+
+// ── Write file to a version snapshot ──────────────────────────────────────────
+
+/**
+ * 写入文件到指定版本的快照目录。
+ * filePath 是相对于快照根目录的路径（如 "SKILL.md" 或 "references/billing-rules.md"）
+ */
+export async function writeVersionFile(
+  skillId: string,
+  versionNo: number,
+  filePath: string,
+  content: string,
+): Promise<void> {
+  const version = getVersionDetail(skillId, versionNo);
+  if (!version?.snapshot_path) throw new Error(`版本 v${versionNo} 不存在`);
+  const absPath = resolve(SKILLS_ROOT, version.snapshot_path, filePath);
+  const dir = resolve(absPath, '..');
+  await mkdir(dir, { recursive: true });
+  await writeFile(absPath, content, 'utf-8');
+  logger.info('version', 'file_written', { skillId, versionNo, filePath });
+}
+
+// ── Save (draft → saved) ─────────────────────────────────────────────────────
+
+/**
+ * 保存版本（draft → saved）
+ */
+export function markVersionSaved(skillId: string, versionNo: number): void {
+  db.update(skillVersions).set({ status: 'saved' })
+    .where(and(eq(skillVersions.skill_id, skillId), eq(skillVersions.version_no, versionNo)))
+    .run();
+  logger.info('version', 'marked_saved', { skillId, versionNo });
+}
+
+// ── Publish ──────────────────────────────────────────────────────────────────
+
+/**
+ * 发布版本 — 该版本→published，旧 published→saved，复制快照到 skill 目录
+ */
+export async function publishVersion(
+  skillId: string,
+  versionNo: number,
+  operator: string = 'system',
+): Promise<{ success: boolean; error?: string }> {
+  const reg = getSkillRegistry(skillId);
+  if (!reg) return { success: false, error: `Skill ${skillId} 未注册` };
+
+  const version = db.select().from(skillVersions)
+    .where(and(eq(skillVersions.skill_id, skillId), eq(skillVersions.version_no, versionNo)))
+    .get();
+  if (!version) return { success: false, error: `版本 v${versionNo} 不存在` };
+  if (!version.snapshot_path) return { success: false, error: '版本快照路径缺失' };
+
+  const snapshotAbsPath = resolve(SKILLS_ROOT, version.snapshot_path);
+  if (!existsSync(snapshotAbsPath)) return { success: false, error: `快照目录不存在` };
+
+  // Check for unsaved draft files
+  const { readdirSync } = await import('node:fs');
+  function hasDraftFiles(dir: string): boolean {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.endsWith('.draft')) return true;
+      if (entry.isDirectory()) {
+        if (hasDraftFiles(resolve(dir, entry.name))) return true;
+      }
+    }
+    return false;
+  }
+  if (hasDraftFiles(snapshotAbsPath)) {
+    return { success: false, error: '该版本有未保存的文件，请先保存后再发布' };
+  }
+
+  const skillDir = resolve(BIZ_SKILLS_DIR, skillId);
+
+  // Unpublish old published version → saved
+  db.update(skillVersions).set({ status: 'saved' })
+    .where(and(eq(skillVersions.skill_id, skillId), eq(skillVersions.status, 'published')))
+    .run();
+
+  // Copy snapshot to skill dir (exclude .draft files as safety net)
+  await cp(snapshotAbsPath, skillDir, {
+    recursive: true,
+    force: true,
+    filter: (src) => !src.endsWith('.draft'),
   });
 
-  return { success: true, newVersionId: newId };
+  // Mark as published
+  db.update(skillVersions).set({ status: 'published' })
+    .where(eq(skillVersions.id, version.id))
+    .run();
+
+  db.update(skillRegistry).set({
+    published_version: versionNo,
+    updated_at: new Date().toISOString(),
+  }).where(eq(skillRegistry.id, skillId)).run();
+
+  logger.info('version', 'published', { skillId, versionNo, operator });
+  return { success: true };
 }
+
+// ── Query ────────────────────────────────────────────────────────────────────
+
+export function getVersionList(skillId: string) {
+  return db.select().from(skillVersions)
+    .where(eq(skillVersions.skill_id, skillId))
+    .orderBy(desc(skillVersions.version_no));
+}
+
+export function getVersionDetail(skillId: string, versionNo: number) {
+  return db.select().from(skillVersions)
+    .where(and(eq(skillVersions.skill_id, skillId), eq(skillVersions.version_no, versionNo)))
+    .get();
+}
+
+// ── Initialize (for seed) ────────────────────────────────────────────────────
+
+export async function initializeSkillVersion(
+  skillId: string,
+  description: string,
+): Promise<void> {
+  const skillDir = resolve(BIZ_SKILLS_DIR, skillId);
+  if (!existsSync(skillDir)) return;
+
+  // Check if already initialized
+  const existing = db.select().from(skillVersions)
+    .where(and(eq(skillVersions.skill_id, skillId), eq(skillVersions.version_no, 1)))
+    .get();
+  if (existing) {
+    db.insert(skillRegistry).values({
+      id: skillId, published_version: 1, latest_version: 1, description,
+    }).onConflictDoNothing().run();
+    return;
+  }
+
+  const snapshotRelPath = `.versions/${skillId}/v1`;
+  const snapshotAbsPath = resolve(SKILLS_ROOT, snapshotRelPath);
+
+  await mkdir(snapshotAbsPath, { recursive: true });
+  await cp(skillDir, snapshotAbsPath, { recursive: true });
+
+  db.insert(skillRegistry).values({
+    id: skillId, published_version: 1, latest_version: 1, description,
+  }).onConflictDoNothing().run();
+
+  db.insert(skillVersions).values({
+    skill_id: skillId, version_no: 1, status: 'published',
+    snapshot_path: snapshotRelPath, change_description: '初始版本', created_by: 'seed',
+  }).run();
+}
+

@@ -185,25 +185,49 @@ runDiagnosis(subscriber, issue_type)
 
 ---
 
-## 3. MCP Server 执行层（backend/mcp_servers/ts/telecom_service.ts）
+## 3. MCP Server 执行层
 
-**端口：** `http://localhost:8003/mcp`
+5 个独立 MCP Server，分别运行在端口 18003-18007：
+
+| 服务名 | 端口 | 工具 |
+|--------|------|------|
+| user-info-service | 18003 | `query_subscriber`, `query_bill`, `query_plans` |
+| business-service | 18004 | `cancel_service`, `issue_invoice` |
+| diagnosis-service | 18005 | `diagnose_network`, `diagnose_app` |
+| outbound-service | 18006 | `record_call_result`, `send_followup_sms`, `create_callback_task`, `record_marketing_result` |
+| account-service | 18007 | `verify_identity`, `check_account_balance`, `check_contracts`, `apply_service_suspension` |
+
 **传输：** StreamableHTTP（stateless，每请求独立）
-**工具数：** 7 个
 
 ### 3.1 工具列表
 
-| 工具 | 功能 | 关键参数 |
-|------|------|----------|
-| `query_subscriber` | 查询用户基本信息 | `phone: string` |
-| `query_bill` | 查询账单明细 | `phone`, `month?: string`（YYYY-MM） |
-| `query_plans` | 查询可用套餐 | `plan_id?: string` |
-| `cancel_service` | 退订增值业务 | `phone`, `service_id: string` |
-| `diagnose_network` | 网络故障诊断 | `phone`, `issue_type: enum` |
-| `diagnose_app` | App 安全诊断 | `phone`, `issue_type: enum`（app_locked/login_failed/device_incompatible/suspicious_activity） |
-| `issue_invoice` | 开具电子发票 | `phone`, `month: string`, `email: string` |
+| 工具 | 功能 | 所属服务 | 关键参数 |
+|------|------|----------|----------|
+| `query_subscriber` | 查询用户基本信息 | user-info-service | `phone: string` |
+| `query_bill` | 查询账单明细 | user-info-service | `phone`, `month?: string`（YYYY-MM） |
+| `query_plans` | 查询可用套餐 | user-info-service | `plan_id?: string` |
+| `cancel_service` | 退订增值业务 | business-service | `phone`, `service_id: string` |
+| `issue_invoice` | 开具电子发票 | business-service | `phone`, `month: string`, `email: string` |
+| `diagnose_network` | 网络故障诊断 | diagnosis-service | `phone`, `issue_type: enum` |
+| `diagnose_app` | App 安全诊断 | diagnosis-service | `phone`, `issue_type: enum` |
+| `record_call_result` | 记录通话结果 | outbound-service | `result`, `remark?`, `callback_time?` |
+| `send_followup_sms` | 发送跟进短信 | outbound-service | `sms_type` |
+| `create_callback_task` | 创建回访任务 | outbound-service | `callback_phone?`, `preferred_time` |
+| `record_marketing_result` | 记录营销结果 | outbound-service | `result`, `remark?` |
+| `verify_identity` | 身份验证 | account-service | `phone`, `id_type`, `id_number` |
+| `check_account_balance` | 查询账户余额 | account-service | `phone` |
+| `check_contracts` | 查询合约 | account-service | `phone` |
+| `apply_service_suspension` | 申请停机 | account-service | `phone`, `reason` |
 
-### 3.2 测试数据（SQLite）
+### 3.2 MCP 管理功能
+
+- **Server CRUD**：创建、更新、删除 MCP 服务器配置，支持工具自动发现（discover）、调用（invoke）、模拟调用（mock-invoke）
+- **Tool Schema 定义**：手动定义或通过 auto-discover 从服务器获取工具 schema
+- **Mock 规则**：42 条 mock 规则覆盖全部技能场景，测试时使用 `useMock: true` 模式
+- **工具启用/禁用**：按工具粒度控制可用性
+- **工具概览**：展示工具与技能引用的映射关系
+
+### 3.3 测试数据（SQLite）
 
 MCP Server 与后端共享同一个 SQLite 文件（`backend/data/telecom.db`），数据由 `db:seed` 初始化，进程重启后持久保留。
 
@@ -786,53 +810,89 @@ bunx drizzle-kit studio
 
 ---
 
-## 12. 版本管理（backend/src/agent/km/skills/version-manager.ts）
+## 12. 版本管理（Skill Version Management）
 
-### 12.1 职责
-Skill 文件的版本快照管理，支持 Diff 对比和一键回滚。
+### 12.1 概念模型
 
-### 12.2 数据存储
-SQLite `skill_versions` 表（id, skill_path, content, change_description, created_by, created_at），每次保存时记录旧版本完整内容。
+Skills 以文件目录形式存储，版本管理采用完整快照机制：
 
-### 12.3 核心函数
-| 函数 | 说明 |
+```
+backend/skills/
+├── biz-skills/{skill-name}/          # 生产目录（仅 publish 时更新）
+│   ├── SKILL.md
+│   ├── references/
+│   └── scripts/
+└── .versions/{skill-name}/           # 版本存储
+    ├── v1/                           # 完整目录快照
+    ├── v2/
+    └── v3/
+```
+
+- 每个版本是技能目录的完整快照（SKILL.md + references/ + scripts/）
+- 所有编辑操作在 `.versions/` 中进行，`biz-skills/` 主目录仅在 publish 时更新
+- Draft 文件（`.draft` 后缀）跟踪未保存的逐文件变更，对用户不可见
+
+### 12.2 版本状态
+
+| 状态 | 说明 |
 |------|------|
-| `saveSkillWithVersion()` | 保存文件并创建版本快照 |
-| `getVersionList()` | 获取文件的版本列表（时间倒序） |
-| `getVersionContent()` | 获取指定版本的完整内容 |
-| `rollbackToVersion()` | 回滚到指定版本（创建新版本记录标记为"回滚"） |
+| `saved` | 版本文件已保存，可用于测试或发布 |
+| `published` | 当前活跃版本，文件已复制到 `biz-skills/`，同一时间只有一个版本可为 published |
 
-### 12.4 集成点
-- `agent/km/skills/files.ts` PUT 接口：Skill 文件写入时自动调用 `saveSkillWithVersion()`
-- `agent/km/skills/skill-edit.ts` apply 接口：自然语言编辑确认后调用
-- `agent/km/skills/sandbox.ts` publish 接口：沙箱发布时调用
+### 12.3 文件级 Draft 跟踪
 
-### 12.5 前端
-`VersionPanel.tsx` 组件嵌入 SkillManagerPage 右侧，提供：版本列表、LCS 行级 Diff 视图、一键回滚按钮。
+- 编辑文件后标记黄色圆点（unsaved）
+- 保存文件后标记绿色圆点（saved）
+- 切换文件时自动保存 draft（`.draft` 文件）
+- 打开文件时自动加载已有 draft
+- Published 版本的文件为只读
+
+### 12.4 核心操作
+
+| 操作 | API | 说明 |
+|------|-----|------|
+| 创建版本 | `POST /api/skill-versions/create-from` | 从已有版本复制创建新版本 |
+| 保存文件 | `PUT /api/files/content` | 写入 `.versions/` 中的文件 |
+| 测试版本 | `POST /api/skill-versions/test` | 使用该版本文件运行 Agent，使用 mock 规则 |
+| 发布版本 | `POST /api/skill-versions/publish` | 将 `.versions/v{N}/` 复制到 `biz-skills/`，存在 `.draft` 文件时拒绝发布 |
+| 创建文件/文件夹 | `POST /api/files/create-file`, `POST /api/files/create-folder` | 在非 published 版本中创建 |
+
+### 12.5 数据存储
+
+- `skill_registry` 表 — id, published_version, latest_version, description
+- `skill_versions` 表 — id, skill_id, version_no, status (saved/published), snapshot_path, change_description
+
+### 12.6 前端 Skill Editor 布局
+
+三栏布局：
+
+```
+┌─────────────────┬──────────────────────────┬─────────────────────────┐
+│  Left (order 1) │   Center (order 2)       │   Right (order 99)      │
+│                 │                          │                         │
+│  ← 返回 + 技能名 │  编辑器                   │  Tab: "需求访谈"          │
+│  版本列表        │  保存按钮 + 预览切换        │  Tab: "测试"             │
+│  文件树          │  版本状态指示              │  （对话式 UI）            │
+│                 │                          │                         │
+└─────────────────┴──────────────────────────┴─────────────────────────┘
+```
+
+- 左栏：返回按钮 + 技能名称 → 版本列表 → 文件树
+- 中栏：编辑器（含保存按钮 + preview 切换 + 版本状态显示）
+- 右栏：双 Tab — "需求访谈"（requirement chat）/ "测试"（test with conversation UI）
 
 ---
 
-## 13. 沙箱验证环境（backend/src/agent/km/skills/sandbox.ts）
+## 13. 技能版本测试
 
 ### 13.1 职责
-提供 Skill 文件的隔离编辑与测试环境，修改不影响生产。
+在不影响生产环境的情况下测试技能版本的变更。
 
 ### 13.2 工作原理
-文件级影子副本：将 Skill 目录复制到 `skills/.sandbox/{uuid}/`，Agent 测试对话时使用沙箱路径。
+通过 `POST /api/skill-versions/test` 直接测试版本快照，无需独立沙箱环境。测试时使用 symlink 指向版本快照目录，默认启用 mock 模式（`useMock: true`），使用 42 条预配置的 mock 规则。
 
-### 13.3 API
-| 端点 | 说明 |
-|------|------|
-| `POST /api/sandbox/create` | 创建沙箱（复制 Skill 目录） |
-| `GET /api/sandbox/:id/content` | 读取沙箱文件 |
-| `PUT /api/sandbox/:id/content` | 编辑沙箱文件 |
-| `POST /api/sandbox/:id/test` | 在沙箱中运行 Agent 对话 |
-| `POST /api/sandbox/:id/validate` | 静态检查（Mermaid、工具引用、必填字段） |
-| `POST /api/sandbox/:id/publish` | 发布到生产（调用 saveSkillWithVersion） |
-| `DELETE /api/sandbox/:id` | 删除沙箱 |
-
-### 13.4 Runner 改造
-`runAgent()` 新增 `overrideSkillsDir` 可选参数，沙箱测试时传入沙箱路径。
+### 13.3 Runner 改造
+`runAgent()` 新增 `overrideSkillsDir` 可选参数，测试时传入版本快照路径。
 
 ---
 

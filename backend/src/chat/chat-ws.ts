@@ -31,6 +31,7 @@ import { translateText, translateMermaid } from '../services/translate-lang';
 import { t } from '../services/i18n';
 import { checkCompliance, maskPII, sanitizeText } from '../services/keyword-filter';
 import { detectHallucination } from '../services/hallucination-detector';
+import { runProgressTracking } from '../services/voice-common';
 
 const chatWs = new Hono();
 
@@ -43,6 +44,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
   let botEnabled = true;
   let cachedSubscriberName: string | undefined;
   let cachedPlanName: string | undefined;
+  let lastActiveSkill: string | null = null;
   // ── 会话级指标 ────────────────────────────────────────────────────────────
   const sessionStartTs = Date.now();
   let messageCount = 0;
@@ -326,6 +328,16 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       // Customer gets translated_text if available; agent (via bus) sees original agentLang text
       ws.send(JSON.stringify(translatedResponseText ? { ...responseEv, translated_text: translatedResponseText } : responseEv));
       sessionBus.publish(phone, responseEv);
+
+      // ── 异步流程进度追踪（与 voice/outbound 通道对齐） ──
+      const diagramSkill = result.skill_diagram?.skill_name ?? lastActiveSkill;
+      if (diagramSkill) {
+        lastActiveSkill = diagramSkill;
+        const recentTurns = rows.slice(-4).map(r => ({ role: r.role === 'user' ? 'user' : 'assistant', text: r.content }));
+        recentTurns.push({ role: 'user', text: message });
+        recentTurns.push({ role: 'assistant', text: result.text });
+        runProgressTracking(ws, phone, diagramSkill, recentTurns, langParam, sessionId, 'chat');
+      }
 
       // Signal agent side to run handoff analysis (never sent to customer WS)
       if (result.transferData) {

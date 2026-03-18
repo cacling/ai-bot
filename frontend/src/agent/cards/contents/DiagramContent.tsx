@@ -107,9 +107,12 @@ export const DiagramContent = memo(function DiagramContent({ data, lang }: { dat
         const vpRect = viewport.getBoundingClientRect();
 
         if (!hlEl) {
-          // No highlight — fit whole diagram
-          const fitZoom = Math.min(vpRect.width / size.w, vpRect.height / size.h, 1);
+          // No highlight — fit whole diagram, but never shrink below readable threshold
+          const NO_HL_ZOOM_MIN = 0.4;
+          const fitZoom = Math.max(Math.min(vpRect.width / size.w, vpRect.height / size.h, 1), NO_HL_ZOOM_MIN);
           setZoom(fitZoom);
+          // Scroll to top-left so the starting state is visible
+          requestAnimationFrame(() => viewport.scrollTo({ left: 0, top: 0 }));
           return;
         }
 

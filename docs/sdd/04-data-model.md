@@ -294,14 +294,26 @@ export const deviceContexts = sqliteTable('device_contexts', {
   otp_delivery_issue:      integer('otp_delivery_issue', { mode: 'boolean' }),
 });
 
-// 技能版本表（版本管理）
+// 技能注册表（技能元数据）
+export const skillRegistry = sqliteTable('skill_registry', {
+  id:                text('id').primaryKey(),       // 技能唯一标识，如 'bill-inquiry'
+  published_version: integer('published_version'),  // 当前发布版本号
+  latest_version:    integer('latest_version'),     // 最新版本号
+  description:       text('description'),           // 技能描述
+  created_at:        text('created_at'),
+  updated_at:        text('updated_at'),
+});
+
+// 技能版本表（版本管理，完整目录快照）
 export const skillVersions = sqliteTable('skill_versions', {
   id:                 integer('id').primaryKey({ autoIncrement: true }),
-  skill_path:         text('skill_path'),          // 文件相对路径
-  content:            text('content'),             // 旧版本完整内容快照
-  change_description: text('change_description'),  // 变更说明
-  created_by:         text('created_by'),          // 操作人
-  created_at:         text('created_at'),          // ISO 格式时间
+  skill_id:           text('skill_id').references(() => skillRegistry.id),  // 关联技能
+  version_no:         integer('version_no'),        // 版本号
+  status:             text('status'),               // 'saved' | 'published'
+  snapshot_path:      text('snapshot_path'),         // 快照目录路径，如 '.versions/bill-inquiry/v3/'
+  change_description: text('change_description'),   // 变更说明
+  created_by:         text('created_by'),           // 操作人
+  created_at:         text('created_at'),           // ISO 格式时间
 });
 
 // 用户与权限表
@@ -431,23 +443,38 @@ interface EmotionResult {
 
 ## 12. 技能版本对象（SkillVersion）
 
-**来源：** `backend/src/db/schema.ts` — `skill_versions` 表
+**来源：** `backend/src/db/schema.ts` — `skill_registry` + `skill_versions` 表
 
 ```typescript
+interface SkillRegistry {
+  id:                string;   // 技能唯一标识，如 'bill-inquiry'
+  published_version: number;   // 当前发布版本号
+  latest_version:    number;   // 最新版本号
+  description:       string;   // 技能描述
+  created_at:        string;
+  updated_at:        string;
+}
+
 interface SkillVersion {
   id:                 number;   // 自增主键
-  skill_path:         string;   // 文件相对路径
-  content:            string;   // 旧版本完整内容快照
+  skill_id:           string;   // 关联 skill_registry.id
+  version_no:         number;   // 版本号
+  status:             string;   // 'saved' | 'published'
+  snapshot_path:      string;   // 快照目录路径，如 '.versions/bill-inquiry/v3/'
   change_description: string;   // 变更说明
   created_by:         string;   // 操作人
   created_at:         string;   // 创建时间 ISO 格式
 }
 ```
 
+**版本状态：**
+- `saved` — 版本文件已保存，可用于测试或发布
+- `published` — 当前活跃版本，文件已复制到 `biz-skills/`，同一时间仅一个版本可为 published
+
 **技能生命周期：**
 
 ```
-编辑 → 保存草稿 → 发布到沙盒（验证+回归测试）→ 发布到生产 → refreshSkillsCache() → 各渠道机器人下次请求自动加载
+创建版本（create-from）→ 编辑文件（draft 跟踪）→ 保存文件 → 测试版本（mock 模式）→ 发布到生产（复制到 biz-skills/）→ 各渠道机器人下次请求自动加载
 ```
 
 ---
@@ -626,6 +653,57 @@ interface Assertion {
 | `tool_not_called` | MCP 工具名 | `!toolsCalled.includes(value)` |
 | `skill_loaded` | 技能名 | `skillsLoaded.includes(value)` |
 | `regex` | 正则表达式 | `new RegExp(value).test(responseText)` |
+
+---
+
+## 18b. MCP 服务器管理（mcpServers）
+
+**来源：** `backend/src/db/schema.ts` — `mcp_servers`, `mcp_tools`, `mcp_mock_rules` 表
+
+```typescript
+// MCP 服务器注册表
+export const mcpServers = sqliteTable('mcp_servers', {
+  id:          text('id').primaryKey(),          // 服务器 ID
+  name:        text('name'),                     // 服务器名称
+  url:         text('url'),                      // 服务器 URL（如 http://localhost:18003/mcp）
+  port:        integer('port'),                  // 端口号
+  status:      text('status'),                   // 'active' | 'inactive'
+  created_at:  text('created_at'),
+  updated_at:  text('updated_at'),
+});
+
+// MCP 工具定义表
+export const mcpTools = sqliteTable('mcp_tools', {
+  id:          text('id').primaryKey(),          // 工具 ID
+  server_id:   text('server_id'),               // 关联 mcp_servers.id
+  name:        text('name'),                     // 工具名称（如 query_subscriber）
+  schema:      text('schema'),                   // JSON Schema 定义
+  enabled:     integer('enabled', { mode: 'boolean' }),  // 是否启用
+  created_at:  text('created_at'),
+});
+
+// MCP Mock 规则表
+export const mcpMockRules = sqliteTable('mcp_mock_rules', {
+  id:          text('id').primaryKey(),          // 规则 ID
+  tool_name:   text('tool_name'),               // 关联工具名称
+  match:       text('match'),                    // 匹配条件 JSON
+  response:    text('response'),                 // 模拟响应 JSON
+  description: text('description'),              // 规则说明
+  created_at:  text('created_at'),
+});
+```
+
+**5 个 MCP 服务器（端口 18003-18007）：**
+
+| 服务器名 | 端口 | 工具数 |
+|---------|------|--------|
+| user-info-service | 18003 | 3（query_subscriber, query_bill, query_plans） |
+| business-service | 18004 | 2（cancel_service, issue_invoice） |
+| diagnosis-service | 18005 | 2（diagnose_network, diagnose_app） |
+| outbound-service | 18006 | 4（record_call_result, send_followup_sms, create_callback_task, record_marketing_result） |
+| account-service | 18007 | 4（verify_identity, check_account_balance, check_contracts, apply_service_suspension） |
+
+**Mock 规则：** 共 42 条 mock 规则覆盖全部技能场景，测试时通过 `useMock: true` 启用。
 
 ---
 

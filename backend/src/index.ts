@@ -98,15 +98,13 @@ logger.info('server', 'starting', {
 // Warmup: make a lightweight LLM call at startup to avoid cold-start latency on first request
 // Waits up to 30s for the MCP server to become available before warmup
 (async () => {
-  const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://localhost:8003/mcp';
-  // Poll until MCP server is reachable
+  // Poll until at least one MCP server is reachable
+  const MCP_CHECK_URL = process.env.TELECOM_MCP_URL ?? 'http://127.0.0.1:18003/mcp';
   for (let i = 0; i < 30; i++) {
     try {
-      const res = await fetch(TELECOM_MCP_URL, { method: 'GET', signal: AbortSignal.timeout(1000) });
-      if (res.ok || res.status === 405) break; // 405 = POST expected, server is up
-    } catch {
-      // not ready yet
-    }
+      const res = await fetch(MCP_CHECK_URL, { method: 'GET', signal: AbortSignal.timeout(1000) });
+      if (res.ok || res.status === 405) break;
+    } catch { /* not ready yet */ }
     await new Promise((r) => setTimeout(r, 1000));
   }
   logger.info('server', 'warmup_start', {});

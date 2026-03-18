@@ -9,6 +9,7 @@ import { nanoid } from '../../../db/nanoid';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { logger } from '../../../services/logger';
+import { matchMockRule } from '../../../services/mock-engine';
 
 const app = new Hono();
 
@@ -50,8 +51,7 @@ app.post('/', async (c) => {
     env_json: body.env_json ?? null,
     env_prod_json: body.env_prod_json ?? null,
     env_test_json: body.env_test_json ?? null,
-    tools_cache: body.tools_cache ?? null,
-    tools_manual: body.tools_manual ?? null,
+    tools_json: body.tools_json ?? null,
     disabled_tools: body.disabled_tools ?? null,
     mock_rules: body.mock_rules ?? null,
     created_at: now(),
@@ -82,7 +82,7 @@ app.put('/:id', async (c) => {
     env_json: body.env_json ?? existing.env_json,
     env_prod_json: body.env_prod_json ?? existing.env_prod_json,
     env_test_json: body.env_test_json ?? existing.env_test_json,
-    tools_manual: body.tools_manual ?? existing.tools_manual,
+    tools_json: body.tools_json ?? existing.tools_json,
     disabled_tools: body.disabled_tools ?? existing.disabled_tools,
     mock_rules: body.mock_rules ?? existing.mock_rules,
     updated_at: now(),
@@ -111,22 +111,40 @@ app.post('/:id/discover', async (c) => {
     await mcpClient.connect(new StreamableHTTPClientTransport(new URL(row.url!)));
 
     const { tools } = await mcpClient.listTools();
-    const toolsInfo = tools.map(t => ({
-      name: t.name,
-      description: t.description ?? '',
-      inputSchema: t.inputSchema,
-    }));
-
     await mcpClient.close();
 
+    // Merge: update existing tools' inputSchema/description, add new ones, keep local-only tools
+    const existing: Array<Record<string, unknown>> = row.tools_json ? JSON.parse(row.tools_json) : [];
+    const existingMap = new Map(existing.map(t => [t.name as string, t]));
+
+    const merged: Array<Record<string, unknown>> = [];
+    const seen = new Set<string>();
+
+    // Remote tools: update or add
+    for (const t of tools) {
+      seen.add(t.name);
+      const local = existingMap.get(t.name);
+      merged.push({
+        ...(local ?? {}),
+        name: t.name,
+        description: t.description ?? local?.description ?? '',
+        inputSchema: t.inputSchema,
+      });
+    }
+
+    // Local-only tools: keep
+    for (const t of existing) {
+      if (!seen.has(t.name as string)) merged.push(t);
+    }
+
     db.update(mcpServers).set({
-      tools_cache: JSON.stringify(toolsInfo),
+      tools_json: JSON.stringify(merged),
       last_connected_at: now(),
       updated_at: now(),
     }).where(eq(mcpServers.id, row.id)).run();
 
-    logger.info('mcp', 'tools_discovered', { id: row.id, name: row.name, count: toolsInfo.length });
-    return c.json({ tools: toolsInfo });
+    logger.info('mcp', 'tools_synced', { id: row.id, name: row.name, remote: tools.length, total: merged.length });
+    return c.json({ tools: merged });
   } catch (err) {
     logger.error('mcp', 'discover_error', { id: row.id, error: String(err) });
     return c.json({ error: `Connection failed: ${String(err)}` }, 502);
@@ -168,54 +186,16 @@ app.post('/:id/mock-invoke', async (c) => {
   const { tool_name, arguments: toolArgs } = await c.req.json();
   if (!tool_name) return c.json({ error: 'tool_name is required' }, 400);
 
-  const rules: Array<{ tool_name: string; match: string; response: string }> =
-    row.mock_rules ? JSON.parse(row.mock_rules) : [];
-  const toolRules = rules.filter(r => r.tool_name === tool_name);
-
-  if (toolRules.length === 0) {
+  const mockText = matchMockRule(tool_name, toolArgs ?? {});
+  if (mockText === null) {
     return c.json({ error: `No mock rules defined for tool "${tool_name}"` }, 404);
   }
 
-  // Find matching rule: evaluate match expression against args
-  const args = toolArgs ?? {};
-  let matched: typeof toolRules[0] | undefined;
-
-  for (const rule of toolRules) {
-    if (!rule.match || rule.match.trim() === '' || rule.match.trim() === '*') {
-      // Default/fallback rule
-      if (!matched) matched = rule;
-      continue;
-    }
-    try {
-      // Simple match: evaluate as JS expression with args in scope
-      // e.g. "phone == '13800000001'" or "issue_type == 'slow_data'"
-      const fn = new Function(...Object.keys(args), `return (${rule.match})`);
-      if (fn(...Object.values(args))) {
-        matched = rule;
-        break; // First specific match wins
-      }
-    } catch {
-      // Invalid expression, skip
-    }
-  }
-
-  if (!matched) {
-    return c.json({ error: 'No matching mock rule found', args }, 404);
-  }
-
-  let response: unknown;
-  try {
-    response = JSON.parse(matched.response);
-  } catch {
-    response = matched.response;
-  }
-
-  logger.info('mcp', 'mock_invoked', { id: row.id, tool: tool_name, match: matched.match ?? '(default)' });
   return c.json({
-    result: { content: [{ type: 'text', text: typeof response === 'string' ? response : JSON.stringify(response) }] },
+    result: { content: [{ type: 'text', text: mockText }] },
     elapsed_ms: 0,
     mock: true,
-    matched_rule: matched.match || '(default)',
+    matched_rule: '(matched)',
   });
 });
 

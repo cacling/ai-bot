@@ -125,6 +125,18 @@ async function saveFileContent(path: string, content: string): Promise<void> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
+async function saveDraft(path: string, content: string): Promise<void> {
+  await fetch('/api/files/draft', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content }),
+  });
+}
+
+async function deleteDraft(path: string): Promise<void> {
+  await fetch(`/api/files/draft?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+}
+
 // ── 自定义 Hook ───────────────────────────────────────────────────────────────
 
 export function useSkillManager() {
@@ -153,6 +165,8 @@ export function useSkillManager() {
   // 当前文件 & 编辑器
   const [selectedFile, setSelectedFile] = useState<SkillFileNode | null>(null);
   const [editorContent, setEditorContent] = useState('');
+  const selectedFileRef = useRef<SkillFileNode | null>(null);
+  const editorContentRef = useRef('');
   const [fileLoading, setFileLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [viewMode, setViewMode] = useState<ViewMode>('edit');
@@ -220,12 +234,14 @@ export function useSkillManager() {
   function doLoadFile(node: SkillFileNode) {
     if (node.type !== 'file') return;
     setSelectedFile(node);
+    selectedFileRef.current = node;
     setSaveStatus('idle');
     setDirtyState(false);
 
     if (node.path === null) {
       const content = node.content ?? '';
       setEditorContent(content);
+      editorContentRef.current = content;
       lastSavedContentRef.current = content;
       return;
     }
@@ -237,24 +253,32 @@ export function useSkillManager() {
     }
 
     setFileLoading(true);
-    fetchFileContent(node.path)
-      .then((content) => {
-        setEditorContent(content);
-        lastSavedContentRef.current = content;
-        setDirtyState(false);
+    // Fetch file content — API returns isDraft flag if .draft file exists
+    fetch(`/api/files/content?path=${encodeURIComponent(node.path)}`)
+      .then(r => r.json())
+      .then((data: { content: string; isDraft?: boolean }) => {
+        setEditorContent(data.content);
+        editorContentRef.current = data.content;
+        if (data.isDraft) {
+          // Draft exists — mark as dirty so yellow dot shows
+          lastSavedContentRef.current = ''; // force dirty
+          setDirtyState(true);
+        } else {
+          lastSavedContentRef.current = data.content;
+          setDirtyState(false);
+        }
       })
       .catch((err) => setEditorContent(`// 加载失败: ${String(err)}`))
       .finally(() => setFileLoading(false));
   }
 
-  // ── dirty guard：若有未保存修改则弹框，否则直接执行 ─────────────────────────
+  // ── dirty guard：若有未保存修改则自动保存草稿，然后执行 ─────────────────────
   function guardDirty(action: () => void) {
-    if (isDirtyRef.current) {
-      pendingActionRef.current = action;
-      setShowUnsavedDialog(true);
-    } else {
-      action();
+    if (isDirtyRef.current && selectedFileRef.current?.path) {
+      // Auto-save draft before switching (use refs for latest values)
+      saveDraft(selectedFileRef.current.path, editorContentRef.current).catch(() => {});
     }
+    action();
   }
 
   // ── 选中文件（文件树点击，带 dirty guard）──────────────────────────────────
@@ -267,6 +291,7 @@ export function useSkillManager() {
   // ── 内容变更（由 textarea onChange 调用）────────────────────────────────────
   const handleEditorChange = useCallback((content: string) => {
     setEditorContent(content);
+    editorContentRef.current = content;
     setDirtyState(true);
   }, []);
 
@@ -276,6 +301,8 @@ export function useSkillManager() {
     setSaveStatus('saving');
     try {
       await saveFileContent(selectedFile.path, editorContent);
+      // Delete draft after successful formal save
+      await deleteDraft(selectedFile.path).catch(() => {});
       lastSavedContentRef.current = editorContent;
       setDirtyState(false);
       setSaveStatus('saved');

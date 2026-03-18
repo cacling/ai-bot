@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { resolve, join, relative, extname, basename } from 'node:path';
-import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
+import { readdir, readFile, writeFile, stat, unlink } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { logger } from '../../../services/logger';
-import { saveSkillWithVersion } from './version-manager';
 import { requireRole } from '../../../services/auth';
 
 const files = new Hono();
@@ -43,6 +43,7 @@ async function scanDir(absPath: string, relPath: string): Promise<FileNode[]> {
   for (const entry of entries) {
     if (entry.name.startsWith('.') && entry.isDirectory()) continue;
     if (EXCLUDED_DIRS.has(entry.name)) continue;
+    if (entry.name.endsWith('.draft')) continue;
 
     const childRel = relPath ? `${relPath}/${entry.name}` : entry.name;
     const childAbs = join(absPath, entry.name);
@@ -100,10 +101,17 @@ files.get('/content', async (c) => {
   }
 
   const absPath = resolve(PROJECT_ROOT, filePath);
+  const draftPath = absPath + '.draft';
   try {
+    // Check for draft first
+    if (existsSync(draftPath)) {
+      const content = await readFile(draftPath, 'utf-8');
+      logger.info('files', 'read_draft', { path: filePath, bytes: Buffer.byteLength(content) });
+      return c.json({ path: filePath, content, isDraft: true });
+    }
     const content = await readFile(absPath, 'utf-8');
     logger.info('files', 'read_ok', { path: filePath, bytes: Buffer.byteLength(content) });
-    return c.json({ path: filePath, content });
+    return c.json({ path: filePath, content, isDraft: false });
   } catch (err) {
     logger.warn('files', 'read_error', { path: filePath, error: String(err) });
     return c.json({ error: `读取失败: ${String(err)}` }, 404);
@@ -130,22 +138,90 @@ files.put('/content', requireRole('config_editor'), async (c) => {
     return c.json({ error: '路径不合法' }, 403);
   }
 
-  // Skill 文件（.md）走版本管理；其他文件直接写入
-  const isSkillFile = filePath.endsWith('.md') && (filePath.includes('skills/') || filePath.includes('agent/'));
+  // 直接写入文件，不创建版本（版本由用户在版本列表手动创建）
   const absPath = resolve(PROJECT_ROOT, filePath);
   try {
-    if (isSkillFile) {
-      const { versionId } = await saveSkillWithVersion(filePath, content, '手动编辑', 'editor');
-      logger.info('files', 'write_ok_versioned', { path: filePath, versionId, bytes: Buffer.byteLength(content) });
-      return c.json({ ok: true, path: filePath, versionId });
-    } else {
-      await writeFile(absPath, content, 'utf-8');
-      logger.info('files', 'write_ok', { path: filePath, bytes: Buffer.byteLength(content) });
-      return c.json({ ok: true, path: filePath });
-    }
+    await writeFile(absPath, content, 'utf-8');
+    logger.info('files', 'write_ok', { path: filePath, bytes: Buffer.byteLength(content) });
+    return c.json({ ok: true, path: filePath });
   } catch (err) {
     logger.warn('files', 'write_error', { path: filePath, error: String(err) });
     return c.json({ error: `写入失败: ${String(err)}` }, 500);
+  }
+});
+
+// PUT /api/files/draft — 保存草稿（.draft 文件）
+files.put('/draft', async (c) => {
+  const body = await c.req.json<{ path?: string; content?: string }>();
+  const filePath = body.path;
+  const content = body.content;
+  if (!filePath || content === undefined) return c.json({ error: 'path 和 content 不能为空' }, 400);
+  if (!isPathSafe(filePath)) return c.json({ error: '路径不合法' }, 403);
+
+  const draftPath = resolve(PROJECT_ROOT, filePath) + '.draft';
+  try {
+    await writeFile(draftPath, content, 'utf-8');
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: `草稿保存失败: ${String(err)}` }, 500);
+  }
+});
+
+// DELETE /api/files/draft?path=... — 删除草稿
+files.delete('/draft', async (c) => {
+  const filePath = c.req.query('path');
+  if (!filePath) return c.json({ error: 'path 参数缺失' }, 400);
+  if (!isPathSafe(filePath)) return c.json({ error: '路径不合法' }, 403);
+
+  const draftPath = resolve(PROJECT_ROOT, filePath) + '.draft';
+  try {
+    if (existsSync(draftPath)) await unlink(draftPath);
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ error: `删除草稿失败: ${String(err)}` }, 500);
+  }
+});
+
+// POST /api/files/create-file — 创建空文件
+files.post('/create-file', async (c) => {
+  const body = await c.req.json<{ path?: string }>();
+  const filePath = body.path;
+  if (!filePath) return c.json({ error: 'path 不能为空' }, 400);
+  if (!isPathSafe(filePath)) return c.json({ error: '路径不合法' }, 403);
+  if (!/^[\w\-./]+$/.test(filePath)) return c.json({ error: '文件名包含非法字符' }, 400);
+
+  const absPath = resolve(PROJECT_ROOT, filePath);
+  if (existsSync(absPath)) return c.json({ error: '文件已存在' }, 409);
+
+  try {
+    const { mkdir: mkdirAsync } = await import('node:fs/promises');
+    await mkdirAsync(resolve(absPath, '..'), { recursive: true });
+    await writeFile(absPath, '', 'utf-8');
+    logger.info('files', 'create_file', { path: filePath });
+    return c.json({ ok: true, path: filePath });
+  } catch (err) {
+    return c.json({ error: `创建失败: ${String(err)}` }, 500);
+  }
+});
+
+// POST /api/files/create-folder — 创建空文件夹
+files.post('/create-folder', async (c) => {
+  const body = await c.req.json<{ path?: string }>();
+  const filePath = body.path;
+  if (!filePath) return c.json({ error: 'path 不能为空' }, 400);
+  if (!isPathSafe(filePath)) return c.json({ error: '路径不合法' }, 403);
+  if (!/^[\w\-./]+$/.test(filePath)) return c.json({ error: '名称包含非法字符' }, 400);
+
+  const absPath = resolve(PROJECT_ROOT, filePath);
+  if (existsSync(absPath)) return c.json({ error: '文件夹已存在' }, 409);
+
+  try {
+    const { mkdir: mkdirAsync } = await import('node:fs/promises');
+    await mkdirAsync(absPath, { recursive: true });
+    logger.info('files', 'create_folder', { path: filePath });
+    return c.json({ ok: true, path: filePath });
+  } catch (err) {
+    return c.json({ error: `创建失败: ${String(err)}` }, 500);
   }
 });
 

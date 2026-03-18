@@ -28,8 +28,7 @@ export interface McpServer {
   env_json: string | null;
   env_prod_json: string | null;
   env_test_json: string | null;
-  tools_cache: string | null;
-  tools_manual: string | null;
+  tools_json: string | null;
   disabled_tools: string | null;
   mock_rules: string | null;
   last_connected_at: string | null;
@@ -41,7 +40,8 @@ export interface McpToolInfo {
   name: string;
   description: string;
   inputSchema?: unknown;
-  source?: 'discovered' | 'manual';
+  parameters?: Array<{ name: string; type: string; required: boolean; description: string; enum?: string[] }>;
+  responseExample?: string;
 }
 
 export interface ToolParam {

@@ -150,9 +150,17 @@ GET /api/files/content?path=bill-inquiry/SKILL.md
 
 ---
 
-## 2. MCP 工具接口（telecom_service :8003）
+## 2. MCP 工具接口（5 个 MCP Server，端口 18003-18007）
 
-MCP Server 通过 `StreamableHTTP` 协议暴露工具，Agent 通过 `@modelcontextprotocol/sdk` 客户端调用。
+5 个独立 MCP Server 通过 `StreamableHTTP` 协议暴露工具，Agent 通过 `@modelcontextprotocol/sdk` 客户端调用。
+
+| 服务名 | 端口 | 工具列表 |
+|--------|------|----------|
+| user-info-service | 18003 | query_subscriber, query_bill, query_plans |
+| business-service | 18004 | cancel_service, issue_invoice |
+| diagnosis-service | 18005 | diagnose_network, diagnose_app |
+| outbound-service | 18006 | record_call_result, send_followup_sms, create_callback_task, record_marketing_result |
+| account-service | 18007 | verify_identity, check_account_balance, check_contracts, apply_service_suspension |
 
 ---
 
@@ -692,66 +700,90 @@ ws://localhost:18472/ws/agent?phone=13800000001&lang=zh
 
 ## 9. 版本管理 API
 
-### 9.1 `GET /api/skill-versions?path=<relative-path>`
-获取指定文件的版本列表。
+### 9.1 `GET /api/skill-versions?skill=<skill-name>`
+获取指定技能的版本列表。
 
 ### 9.2 `GET /api/skill-versions/:id`
-获取指定版本的完整内容。
+获取指定版本的详情。
 
-### 9.3 `GET /api/skill-versions/diff?from=x&to=y`
-生成两个版本的行级 Diff（LCS 算法）。to 省略时与当前文件对比。
-
-### 9.4 `POST /api/skill-versions/rollback`
-回滚到指定版本。
+### 9.3 `POST /api/skill-versions/create-from`
+从已有版本创建新版本（复制完整目录快照）。
 
 **请求体：**
 ```json
-{ "version_id": 3, "operator": "admin" }
+{ "skill_id": "bill-inquiry", "from_version": 2 }
 ```
+
+### 9.4 `POST /api/skill-versions/test`
+测试指定版本，使用 symlink 指向版本快照，默认启用 mock 模式（`useMock: true`）。
+
+**请求体：**
+```json
+{ "skill_id": "bill-inquiry", "version_no": 3, "message": "查话费", "phone": "13800000001" }
+```
+
+### 9.5 `POST /api/skill-versions/publish`
+发布版本到生产环境。将 `.versions/v{N}/` 复制到 `biz-skills/`，若存在 `.draft` 文件则拒绝发布。
+
+**请求体：**
+```json
+{ "skill_id": "bill-inquiry", "version_no": 3 }
+```
+
+### 9.6 `GET /api/skill-versions/diff?from=x&to=y`
+生成两个版本的行级 Diff（LCS 算法）。to 省略时与当前文件对比。
 
 ---
 
-## 10. 沙箱验证 API
+## 10. 文件管理 API（版本内文件操作）
 
-### 10.1 `POST /api/sandbox/create`
-创建沙箱环境。
+### 10.1 `POST /api/files/create-file`
+在非 published 版本中创建新文件。
 
-### 10.2 `PUT /api/sandbox/:id/content`
-编辑沙箱中的文件。
+### 10.2 `POST /api/files/create-folder`
+在非 published 版本中创建新文件夹。
 
-### 10.3 `POST /api/sandbox/:id/test`
-在沙箱中运行 Agent 对话测试。
+### 10.3 `GET /api/files/tree`
+返回技能版本目录的文件树结构。
 
-### 10.4 `POST /api/sandbox/:id/validate`
-静态校验（Mermaid 语法、工具引用、必填字段、内容长度）。
+### 10.4 `GET /api/files/content?path=<relative-path>`
+读取指定文件内容，自动加载 `.draft` 文件（如存在）。
 
-### 10.5 `POST /api/sandbox/:id/publish`
-发布到生产环境（同时创建版本记录）。
+### 10.5 `PUT /api/files/content`
+保存文件内容到 `.versions/` 目录。
 
-### 10.6 `POST /api/sandbox/:id/regression`
-在沙箱中运行回归测试，支持 6 种富断言类型（`contains`、`not_contains`、`tool_called`、`tool_not_called`、`skill_loaded`、`regex`）。
+---
 
-**响应：**
-```json
-{
-  "results": [
-    {
-      "test_case_id": "tc-001",
-      "passed": true,
-      "assertions": [
-        { "type": "contains", "value": "账单", "passed": true, "detail": "文本中找到 '账单'" },
-        { "type": "tool_called", "value": "query_bill", "passed": true, "detail": "工具 query_bill 已被调用" }
-      ],
-      "tools_called": ["query_subscriber", "query_bill"],
-      "skills_loaded": ["bill-inquiry"]
-    }
-  ],
-  "summary": { "total": 5, "passed": 5, "failed": 0 }
-}
-```
+## 10b. MCP 管理 API
 
-### 10.7 `DELETE /api/sandbox/:id`
-删除沙箱。
+### 10b.1 MCP 服务器管理
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/api/mcp/servers` | 列出所有 MCP 服务器 |
+| POST | `/api/mcp/servers` | 创建 MCP 服务器 |
+| PUT | `/api/mcp/servers/:id` | 更新服务器配置 |
+| DELETE | `/api/mcp/servers/:id` | 删除服务器 |
+| POST | `/api/mcp/servers/:id/discover` | 自动发现服务器工具 schema |
+| POST | `/api/mcp/servers/:id/invoke` | 调用服务器工具 |
+| POST | `/api/mcp/servers/:id/mock-invoke` | 使用 mock 规则调用工具 |
+
+### 10b.2 工具管理
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/api/mcp/tools` | 列出所有工具（含启用/禁用状态） |
+| PUT | `/api/mcp/tools/:id` | 更新工具 schema 或启用/禁用 |
+| GET | `/api/mcp/tools/overview` | 工具概览（含技能引用映射） |
+
+### 10b.3 Mock 规则管理
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/api/mcp/mock-rules` | 列出所有 mock 规则（42 条） |
+| POST | `/api/mcp/mock-rules` | 创建 mock 规则 |
+| PUT | `/api/mcp/mock-rules/:id` | 更新 mock 规则 |
+| DELETE | `/api/mcp/mock-rules/:id` | 删除 mock 规则 |
 
 ---
 

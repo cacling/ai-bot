@@ -19,7 +19,7 @@ import { generateText, tool } from 'ai';
 import { z } from 'zod';
 import { skillCreatorModel } from '../../../engine/llm';
 import { logger } from '../../../services/logger';
-import { saveSkillWithVersion } from './version-manager';
+import { createNewSkillVersion, createVersionFrom, getSkillRegistry } from './version-manager';
 import { refreshSkillsCache } from '../../../engine/skills';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
@@ -267,30 +267,32 @@ skillCreator.post('/save', async (c) => {
     return c.json({ error: 'skill_name 必须是 kebab-case 格式（如 my-skill）' }, 400);
   }
 
-  const skillDir = join(SKILLS_DIR, body.skill_name);
-  const isNew = !existsSync(skillDir);
+  const reg = getSkillRegistry(body.skill_name);
+  const isNew = !reg;
 
   try {
+    // 创建新版本到 .versions/ 目录（不写 biz-skills/ 主目录）
+    const refs = (body.references ?? []).map((r: { filename: string; content: string }) => ({
+      filename: r.filename, content: r.content,
+    }));
+
     if (isNew) {
-      mkdirSync(skillDir, { recursive: true });
-      mkdirSync(join(skillDir, 'references'), { recursive: true });
-      mkdirSync(join(skillDir, 'scripts'), { recursive: true });
-    }
-
-    const skillMdPath = `skills/biz-skills/${body.skill_name}/SKILL.md`;
-    const fullSkillMdPath = join(skillDir, 'SKILL.md');
-
-    if (existsSync(fullSkillMdPath)) {
-      await saveSkillWithVersion(skillMdPath, body.skill_md, isNew ? '通过技能创建器新建' : '通过技能创建器编辑', 'skill-creator');
+      // 全新技能 → 创建 v1
+      await createNewSkillVersion(
+        body.skill_name, body.skill_md, refs,
+        '通过技能创建器新建', 'skill-creator',
+      );
     } else {
-      writeFileSync(fullSkillMdPath, body.skill_md, 'utf-8');
-    }
-
-    if (body.references?.length) {
-      const refDir = join(skillDir, 'references');
-      if (!existsSync(refDir)) mkdirSync(refDir, { recursive: true });
-      for (const ref of body.references) {
-        writeFileSync(join(refDir, ref.filename), ref.content, 'utf-8');
+      // 已有技能 → 基于最新版本创建新版本，然后写入文件
+      const latestVersion = reg.latest_version ?? 1;
+      const { versionNo, snapshotPath } = await createVersionFrom(
+        body.skill_name, latestVersion, '通过技能创建器编辑', 'skill-creator',
+      );
+      // 覆盖新版本的 SKILL.md 和 references
+      const { writeVersionFile } = await import('./version-manager');
+      await writeVersionFile(body.skill_name, versionNo, 'SKILL.md', body.skill_md);
+      for (const ref of refs) {
+        await writeVersionFile(body.skill_name, versionNo, `references/${ref.filename}`, ref.content);
       }
     }
 

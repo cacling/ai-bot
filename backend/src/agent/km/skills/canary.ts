@@ -11,7 +11,7 @@ import { Hono } from 'hono';
 import { resolve, dirname, basename } from 'node:path';
 import { readFile, mkdir, cp, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { saveSkillWithVersion } from './version-manager';
+// Canary promote now writes directly to file
 import { requireRole } from '../../../services/auth';
 import { logger } from '../../../services/logger';
 
@@ -83,12 +83,8 @@ canary.post('/promote', requireRole('flow_manager'), async (c) => {
 
   try {
     const newContent = await readFile(canaryMdPath, 'utf-8');
-    const { versionId } = await saveSkillWithVersion(
-      canaryConfig.skill_path,
-      newContent,
-      '灰度转全量发布',
-      'canary',
-    );
+    const { writeFile: writeFileAsync } = await import('node:fs/promises');
+    await writeFileAsync(resolve(PROJECT_ROOT, canaryConfig.skill_path), newContent, 'utf-8');
 
     // Clean up canary directory
     await rm(CANARY_ROOT, { recursive: true, force: true });

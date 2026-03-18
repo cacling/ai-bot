@@ -3,6 +3,8 @@ import { readFileSync, readdirSync, existsSync } from 'fs';
 import { resolve, join } from 'path';
 import { z } from 'zod';
 import { logger } from '../services/logger';
+import { db } from '../db';
+import { skillRegistry } from '../db/schema';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
@@ -29,12 +31,25 @@ function parseChannels(content: string): string[] {
   return items.length ? items : DEFAULT_CHANNELS;
 }
 
+/** Get published skill IDs from registry. Empty set = no registry (load all). */
+function getPublishedSkillIds(): Set<string> | null {
+  try {
+    const rows = db.select().from(skillRegistry).all();
+    if (rows.length === 0) return null; // No registry → backward compat, load all
+    return new Set(rows.filter(r => r.published_version != null).map(r => r.id));
+  } catch { return null; }
+}
+
 function scanAvailableSkills(): SkillEntry[] {
+  const publishedIds = getPublishedSkillIds();
   const entries: SkillEntry[] = [];
   try {
     const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory() && !d.name.startsWith('_'));
+      .filter(d => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'));
     for (const dir of dirs) {
+      // If registry exists, only load published skills
+      if (publishedIds && !publishedIds.has(dir.name)) continue;
+
       const mdPath = join(SKILLS_DIR, dir.name, 'SKILL.md');
       if (existsSync(mdPath)) {
         const content = readFileSync(mdPath, 'utf-8');

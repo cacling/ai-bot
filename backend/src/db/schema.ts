@@ -95,14 +95,27 @@ export const users = sqliteTable('users', {
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
 });
 
+// ── 技能注册表 ──────────────────────────────────────────────────────────────
+
+export const skillRegistry = sqliteTable('skill_registry', {
+  id:                text('id').primaryKey(),                // skill 目录名，如 "bill-inquiry"
+  published_version: integer('published_version'),          // 当前发布的版本号
+  latest_version:    integer('latest_version').notNull().default(0),
+  description:       text('description').notNull().default(''),
+  created_at:        text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at:        text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
 // ── 技能版本控制 ────────────────────────────────────────────────────────────
 
 export const skillVersions = sqliteTable('skill_versions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  skill_path: text('skill_path').notNull(),              // "biz-skills/bill-inquiry/SKILL.md"
-  content: text('content').notNull(),                     // 完整文件快照（旧版本）
-  change_description: text('change_description'),         // 变更说明
-  created_by: text('created_by').default('system'),       // 操作人
+  skill_id: text('skill_id').notNull(),                    // FK → skill_registry.id
+  version_no: integer('version_no').notNull(),             // 每个 skill 独立编号: 1, 2, 3...
+  status: text('status').notNull().default('draft'),       // 'draft' | 'saved' | 'published'
+  snapshot_path: text('snapshot_path'),                     // 版本快照目录相对路径
+  change_description: text('change_description'),
+  created_by: text('created_by').default('system'),
   created_at: text('created_at').notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
@@ -385,8 +398,7 @@ export const mcpServers = sqliteTable('mcp_servers', {
   env_prod_json:   text('env_prod_json'),           // JSON object
   env_test_json:   text('env_test_json'),           // JSON object
   // 工具元数据
-  tools_cache:     text('tools_cache'),             // JSON: [{name, description, inputSchema, responseExample?, source?}]
-  tools_manual:    text('tools_manual'),             // JSON: 手动定义的工具 [{name, description, parameters[], responseExample}]
+  tools_json:      text('tools_json'),              // JSON: [{name, description, inputSchema?, parameters?, responseExample?}]
   disabled_tools:  text('disabled_tools'),           // JSON array of tool names
   mock_rules:      text('mock_rules'),              // JSON: [{tool_name, match, response}]
   // 时间戳

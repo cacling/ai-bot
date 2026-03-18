@@ -12,6 +12,7 @@ import { translateText } from '../services/translate-lang';
 import { isNoDataResult } from '../services/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
+import { matchMockRule } from '../services/mock-engine';
 
 // Re-export for test file
 export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };
@@ -19,7 +20,7 @@ export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch
 import { db } from '../db';
 import { mcpServers } from '../db/schema';
 
-const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://localhost:8003/mcp';
+const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://127.0.0.1:18003/mcp';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
@@ -51,59 +52,68 @@ function buildSystemPrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberNa
   return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 
-// Persistent MCP client — created once and reused across requests.
+// Persistent MCP clients — one per server, created once and reused.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let persistentMCPClient: any | null = null;
+const persistentClients = new Map<string, any>();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let allMCPTools: Record<string, any> | null = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let persistentMCPTools: Record<string, any> | null = null;
 
-/** Resolve MCP URL: prefer DB-registered server, fall back to env/default */
-function resolveMcpUrl(): string {
+/** Get all disabled tools across all servers */
+function getAllDisabledTools(): Set<string> {
+  const disabled = new Set<string>();
   try {
-    const row = db.select().from(mcpServers).all()
-      .find(s => s.enabled && s.status === 'active' && s.url);
-    if (row?.url) return row.url;
-  } catch { /* DB not ready yet */ }
-  return TELECOM_MCP_URL;
-}
-
-/** Get disabled tools from DB */
-function getDisabledTools(): string[] {
-  try {
-    const row = db.select().from(mcpServers).all()
-      .find(s => s.enabled && s.status === 'active');
-    if (row?.disabled_tools) return JSON.parse(row.disabled_tools);
+    for (const server of db.select().from(mcpServers).all()) {
+      if (server.disabled_tools) {
+        for (const name of JSON.parse(server.disabled_tools) as string[]) disabled.add(name);
+      }
+    }
   } catch { /* ignore */ }
-  return [];
+  return disabled;
 }
 
 async function getMCPTools() {
-  if (persistentMCPClient && persistentMCPTools) {
-    return { tools: persistentMCPTools };
-  }
+  // Connect to all enabled active servers (once per server)
+  if (!allMCPTools) {
+    const servers = db.select().from(mcpServers).all()
+      .filter(s => s.enabled && s.status === 'active' && s.url);
 
-  const mcpUrl = resolveMcpUrl();
-  try {
-    persistentMCPClient = await createMCPClient({
-      transport: new StreamableHTTPClientTransport(new URL(mcpUrl)),
-    });
-  } catch (err) {
-    logger.error('agent', 'mcp_connect_error', { url: mcpUrl, error: String(err) });
-    throw err;
-  }
-
-  const allTools = await persistentMCPClient.tools();
-
-  // Filter out disabled tools
-  const disabled = getDisabledTools();
-  if (disabled.length > 0) {
-    for (const name of disabled) {
-      delete (allTools as Record<string, unknown>)[name];
+    if (servers.length === 0) {
+      servers.push({ id: 'fallback', name: 'telecom-service', url: TELECOM_MCP_URL } as typeof servers[0]);
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const merged: Record<string, any> = {};
+    for (const server of servers) {
+      if (!server.url) continue;
+      try {
+        let client = persistentClients.get(server.id);
+        if (!client) {
+          client = await createMCPClient({ transport: new StreamableHTTPClientTransport(new URL(server.url)) });
+          persistentClients.set(server.id, client);
+          logger.info('agent', 'mcp_connected', { name: server.name, url: server.url });
+        }
+        const tools = await client.tools();
+        Object.assign(merged, tools);
+      } catch (err) {
+        logger.error('agent', 'mcp_connect_error', { name: server.name, url: server.url, error: String(err) });
+        persistentClients.delete(server.id);
+      }
+    }
+    allMCPTools = merged;
+    logger.info('agent', 'mcp_tools_loaded', { servers: servers.length, tools: Object.keys(merged).length });
   }
 
-  persistentMCPTools = allTools;
-  logger.info('agent', 'mcp_connected', { url: mcpUrl, tools: Object.keys(persistentMCPTools as object).length });
+  // Apply disabled_tools filter every call (reads DB, changes take effect without restart)
+  const disabled = getAllDisabledTools();
+  if (disabled.size > 0) {
+    const filtered = { ...allMCPTools } as Record<string, unknown>;
+    for (const name of disabled) delete filtered[name];
+    persistentMCPTools = filtered;
+  } else {
+    persistentMCPTools = allMCPTools;
+  }
 
   return { tools: persistentMCPTools };
 }
@@ -173,6 +183,10 @@ export interface DiagnosticCardData {
 export type DiagramUpdateCallback = (skillName: string, mermaid: string) => void;
 export type TextDeltaCallback = (delta: string) => void;
 
+export interface RunAgentOptions {
+  useMock?: boolean; // true = 使用 mock 规则替代真实 MCP 调用（沙箱默认行为）
+}
+
 export async function runAgent(
   userMessage: string,
   history: CoreMessage[],
@@ -183,13 +197,39 @@ export async function runAgent(
   subscriberName?: string,
   planName?: string,
   overrideSkillsDir?: string,
+  options?: RunAgentOptions,
 ): Promise<AgentResult> {
   const effectiveSkillsDir = overrideSkillsDir ?? SKILLS_DIR;
+  const useMock = options?.useMock ?? false;
   const t_run_start = Date.now();
   const { tools: rawMcpTools } = await getMCPTools();
+
+  // If useMock, wrap each MCP tool to try mock rules first
+  const mockWrappedTools = useMock
+    ? Object.fromEntries(
+        Object.entries(rawMcpTools as Record<string, any>).map(([name, tool]) => [
+          name,
+          {
+            ...tool,
+            execute: async (...args: any[]) => {
+              // args[0] is the tool input object from AI SDK
+              const toolInput = args[0] ?? {};
+              const mockResult = matchMockRule(name, toolInput);
+              if (mockResult !== null) {
+                logger.info('agent', 'mock_tool_used', { tool: name });
+                return { content: [{ type: 'text', text: mockResult }] };
+              }
+              // No mock rule → fall through to real MCP
+              return tool.execute(...args);
+            },
+          },
+        ]),
+      )
+    : rawMcpTools;
   // Wrap MCP tools to translate results when lang !== 'zh'
-  const mcpTools = lang === 'zh' ? rawMcpTools : Object.fromEntries(
-    Object.entries(rawMcpTools as Record<string, any>).map(([name, tool]) => [
+  const effectiveMcpTools = mockWrappedTools;
+  const mcpTools = lang === 'zh' ? effectiveMcpTools : Object.fromEntries(
+    Object.entries(effectiveMcpTools as Record<string, any>).map(([name, tool]) => [
       name,
       {
         ...tool,
@@ -280,6 +320,7 @@ export async function runAgent(
             // progressHL will be applied later by the async progress tracker.
             const skillName = SKILL_TOOL_MAP[tc.toolName] ?? lastActiveSkill;
             if (skillName) {
+              lastActiveSkill = skillName;
               try {
                 const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
                 if (existsSync(skillPath)) {
@@ -340,6 +381,20 @@ export async function runAgent(
             const mermaid = extractMermaidFromContent(content);
             if (skillName && mermaid) skillDiagram = { skill_name: skillName, mermaid: stripMermaidMarkers(mermaid) };
             continue;
+          }
+
+          // Set skillDiagram for MCP skill tools (e.g. diagnose_network → fault-diagnosis)
+          if (!skillDiagram) {
+            const mappedSkill = SKILL_TOOL_MAP[toolResult.toolName as string];
+            if (mappedSkill) {
+              try {
+                const sp = resolve(SKILLS_DIR, mappedSkill, 'SKILL.md');
+                if (existsSync(sp)) {
+                  const mm = extractMermaidFromContent(readFileSync(sp, 'utf-8'));
+                  if (mm) skillDiagram = { skill_name: mappedSkill, mermaid: stripMermaidMarkers(mm) };
+                }
+              } catch { /* ignore */ }
+            }
           }
 
           // Collect tool records for handoff analysis
@@ -464,7 +519,7 @@ export async function runAgent(
           logger.info('agent', 'progress_tracked', { skill: progressSkill, state: stateName });
           const highlighted = highlightMermaidProgress(rawMermaid, stateName);
           progressCallback(progressSkill, stripMermaidMarkers(highlighted));
-        } catch { /* ignore */ }
+        } catch (err) { logger.warn('agent', 'inline_progress_tracking_error', { skill: progressSkill, error: String(err) }); }
       })();
     }
 

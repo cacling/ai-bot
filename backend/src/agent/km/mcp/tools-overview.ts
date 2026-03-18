@@ -61,39 +61,19 @@ app.get('/', async (c) => {
   // 1. MCP Server tools
   const servers = db.select().from(mcpServers).all();
   for (const server of servers) {
-    if (server.status === 'planned') {
-      // Planned servers: show tools from cache or empty
-      const cached = server.tools_cache ? JSON.parse(server.tools_cache) as Array<{ name: string; description: string }> : [];
-      for (const tool of cached) {
-        items.push({
-          name: tool.name,
-          description: tool.description,
-          source: server.name,
-          source_type: 'mcp',
-          status: 'planned',
-          skills: skillRefs.get(tool.name) ?? [],
-        });
-      }
-      continue;
-    }
-    // Merge discovered tools + manual tools (manual takes precedence for description)
-    const cached = server.tools_cache ? JSON.parse(server.tools_cache) as Array<{ name: string; description: string }> : [];
-    const manual = server.tools_manual ? JSON.parse(server.tools_manual) as Array<{ name: string; description: string }> : [];
-    const manualMap = new Map(manual.map(t => [t.name, t]));
-    const allToolNames = new Set([...cached.map(t => t.name), ...manual.map(t => t.name)]);
+    const tools = server.tools_json ? JSON.parse(server.tools_json) as Array<{ name: string; description: string }> : [];
     const disabledTools: string[] = server.disabled_tools ? JSON.parse(server.disabled_tools) : [];
 
-    for (const toolName of allToolNames) {
-      const manualDef = manualMap.get(toolName);
-      const cachedDef = cached.find(t => t.name === toolName);
-      const desc = manualDef?.description || cachedDef?.description || '';
+    for (const tool of tools) {
+      const toolStatus = server.status === 'planned' ? 'planned'
+        : (!server.enabled || disabledTools.includes(tool.name)) ? 'disabled' : 'available';
       items.push({
-        name: toolName,
-        description: desc,
+        name: tool.name,
+        description: tool.description || '',
         source: server.name,
         source_type: 'mcp',
-        status: !server.enabled || disabledTools.includes(toolName) ? 'disabled' : 'available',
-        skills: skillRefs.get(toolName) ?? [],
+        status: toolStatus,
+        skills: skillRefs.get(tool.name) ?? [],
       });
     }
   }
@@ -115,7 +95,23 @@ app.get('/', async (c) => {
     });
   }
 
-  return c.json({ items });
+  // 3. Missing tools: referenced by skills but not registered anywhere
+  const registeredNames = new Set(items.map(i => i.name));
+  const missing: ToolOverviewItem[] = [];
+  for (const [toolName, skills] of skillRefs) {
+    if (!registeredNames.has(toolName)) {
+      missing.push({
+        name: toolName,
+        description: '',
+        source: '(未注册)',
+        source_type: 'mcp',
+        status: 'planned',
+        skills,
+      });
+    }
+  }
+
+  return c.json({ items: [...items, ...missing] });
 });
 
 export default app;

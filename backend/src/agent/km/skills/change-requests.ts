@@ -11,7 +11,7 @@ import { Hono } from 'hono';
 import { eq, desc } from 'drizzle-orm';
 import { db } from '../../../db';
 import { changeRequests } from '../../../db/schema';
-import { saveSkillWithVersion } from './version-manager';
+// Change requests now write directly to file
 import { requireRole } from '../../../services/auth';
 import { logger } from '../../../services/logger';
 
@@ -60,13 +60,11 @@ changeRequestRoutes.post('/:id/approve', requireRole('reviewer'), async (c) => {
 
   const reviewer = c.req.header('X-User-Id') ?? 'reviewer';
 
-  // Apply the change
-  const { versionId } = await saveSkillWithVersion(
-    cr.skill_path,
-    cr.new_content,
-    `审批通过: ${cr.description ?? '高风险变更'}`,
-    reviewer as string,
-  );
+  // Apply the change — write directly to file
+  const { writeFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
+  await writeFile(resolve(PROJECT_ROOT, cr.skill_path), cr.new_content, 'utf-8');
 
   await db
     .update(changeRequests)

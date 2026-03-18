@@ -17,9 +17,10 @@ import { existsSync } from 'node:fs';
 import { type CoreMessage } from 'ai';
 import { eq } from 'drizzle-orm';
 import { runAgent } from '../../../engine/runner';
-import { saveSkillWithVersion } from './version-manager';
+// Sandbox publish now handled by frontend via /api/skill-versions/publish
 import { logger } from '../../../services/logger';
 import { requireRole } from '../../../services/auth';
+import { getRegisteredToolNames } from '../../../services/mock-engine';
 import { db } from '../../../db';
 import { testCases } from '../../../db/schema';
 
@@ -114,8 +115,11 @@ sandbox.post('/:id/test', async (c) => {
   const info = sandboxes.get(id);
   if (!info) return c.json({ error: '沙箱不存在' }, 404);
 
-  const body = await c.req.json<{ message: string; phone?: string; lang?: 'zh' | 'en'; history?: CoreMessage[] }>();
+  const body = await c.req.json<{ message: string; phone?: string; lang?: 'zh' | 'en'; history?: CoreMessage[]; useMock?: boolean }>();
   if (!body.message) return c.json({ error: 'message 不能为空' }, 400);
+
+  // 沙箱默认使用 mock 规则，可通过 useMock: false 关闭
+  const useMock = body.useMock !== false;
 
   const skillsDir = resolve(info.sandboxDir, 'biz-skills');
 
@@ -130,8 +134,9 @@ sandbox.post('/:id/test', async (c) => {
       undefined, // subscriberName
       undefined, // planName
       skillsDir, // 沙箱 Skills 目录
+      { useMock },
     );
-    return c.json({ text: result.text, card: result.card ?? null });
+    return c.json({ text: result.text, card: result.card ?? null, mock: useMock });
   } catch (err) {
     return c.json({ error: `Agent 执行失败: ${String(err)}` }, 500);
   }
@@ -159,22 +164,18 @@ sandbox.post('/:id/validate', async (c) => {
     const mermaidMatch = content.match(/```mermaid\n([\s\S]*?)```/);
     if (mermaidMatch) {
       const mermaid = mermaidMatch[1];
-      if (!mermaid.includes('graph') && !mermaid.includes('flowchart') && !mermaid.includes('sequenceDiagram')) {
+      if (!mermaid.includes('graph') && !mermaid.includes('flowchart') && !mermaid.includes('sequenceDiagram') && !mermaid.includes('stateDiagram')) {
         issues.push('Mermaid 流程图缺少图类型声明（graph/flowchart/sequenceDiagram）');
       }
     }
 
-    // 3. 检查工具引用
+    // 3. 检查工具引用（从 MCP 管理读取已注册工具）
     const toolRefs = content.match(/%% tool:(\w+)/g) ?? [];
-    const knownTools = new Set([
-      'query_subscriber', 'query_bill', 'query_plans', 'cancel_service',
-      'diagnose_network', 'diagnose_app', 'transfer_to_human',
-      'record_call_result', 'send_followup_sms', 'create_callback_task',
-    ]);
+    const knownTools = getRegisteredToolNames();
     for (const ref of toolRefs) {
       const toolName = ref.replace('%% tool:', '');
       if (!knownTools.has(toolName)) {
-        issues.push(`引用了未知工具: ${toolName}`);
+        issues.push(`引用了未注册的工具: ${toolName}（请在 MCP 管理中注册）`);
       }
     }
 
@@ -204,20 +205,12 @@ sandbox.post('/:id/publish', requireRole('flow_manager'), async (c) => {
   const sandboxMdPath = resolve(info.sandboxDir, 'biz-skills', skillDirName, 'SKILL.md');
 
   try {
-    const newContent = await readFile(sandboxMdPath, 'utf-8');
-    const { versionId } = await saveSkillWithVersion(
-      info.skillPath,
-      newContent,
-      `从沙箱 ${id} 发布`,
-      'sandbox',
-    );
-
-    // 清理沙箱
+    // 清理沙箱（发布由前端通过 /api/skill-versions/publish 完成）
     await rm(info.sandboxDir, { recursive: true, force: true });
     sandboxes.delete(id);
 
-    logger.info('sandbox', 'published', { id, skillPath: info.skillPath, versionId });
-    return c.json({ ok: true, versionId });
+    logger.info('sandbox', 'published', { id, skillPath: info.skillPath });
+    return c.json({ ok: true });
   } catch (err) {
     return c.json({ error: `发布失败: ${String(err)}` }, 500);
   }
@@ -343,6 +336,7 @@ sandbox.post('/:id/regression', async (c) => {
         undefined, // subscriberName
         undefined, // planName
         skillsDir, // 沙箱 Skills 目录
+        { useMock: true }, // 沙箱回归测试默认使用 mock
       );
 
       // 从 agent result 的 steps 中提取工具调用信息

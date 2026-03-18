@@ -4,7 +4,6 @@
 GRN='\033[0;32m'; RED='\033[0;31m'; BLU='\033[0;34m'; NC='\033[0m'
 log()  { echo -e "${BLU}[$(date '+%H:%M:%S')]${NC} $*"; }
 ok()   { echo -e "  ${GRN}✓${NC} $*"; }
-fail() { echo -e "  ${RED}✗${NC} $*"; }
 
 kill_port() {
   local port=$1
@@ -20,8 +19,12 @@ kill_port() {
 
 log "停止所有服务..."
 kill_port 18472  # backend
-kill_port 8003   # telecom-mcp
-kill_port 5173   # frontend (vite 默认)
+kill_port 18003  # 用户信息 MCP
+kill_port 18004  # 业务办理 MCP
+kill_port 18005  # 故障诊断 MCP
+kill_port 18006  # 外呼服务 MCP
+kill_port 18007  # 账户操作 MCP
+kill_port 5173   # frontend
 
 # 杀掉可能漂移的 Vite 端口
 for port in 5174 5175 5176 5177 5178; do
@@ -29,7 +32,7 @@ for port in 5174 5175 5176 5177 5178; do
   [[ -n "$pids" ]] && echo "$pids" | xargs kill -9 2>/dev/null && ok "端口 $port 已释放" || true
 done
 
-# 杀掉所有 start.sh 的 wrapper 循环（通过匹配进程名）
+# 杀掉 start.sh 的 wrapper 循环
 wrapper_pids=$(pgrep -f "bash.*start.sh" 2>/dev/null) || true
 if [[ -n "$wrapper_pids" ]]; then
   echo "$wrapper_pids" | xargs kill 2>/dev/null || true

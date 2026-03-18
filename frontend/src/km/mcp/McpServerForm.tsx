@@ -1,11 +1,12 @@
 /**
  * McpServerForm.tsx — MCP Server 新建/编辑表单
  *
- * 包含：基本信息、连接配置、环境变量、工具定义（手动）、Mock 规则
+ * 包含：基本信息、连接配置、环境变量、工具管理（统一的工具卡片视图）
  */
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
-import { mcpApi, type McpServer, type ManualTool, type ToolParam, type MockRule } from './api';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronRight, ToggleLeft, ToggleRight, Plug, RefreshCw } from 'lucide-react';
+import { mcpApi, type McpServer, type ToolParam, type MockRule, type McpToolInfo } from './api';
+import { McpToolTestPanel } from './McpToolTestPanel';
 
 interface Props {
   serverId?: string;
@@ -90,6 +91,23 @@ function Section({ title, badge, children, defaultOpen = false }: { title: strin
   );
 }
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface ToolItem {
+  name: string;
+  description: string;
+  inputSchema?: unknown;
+  parameters?: Array<{ name: string; type: string; required: boolean; description: string; enum?: string[] }>;
+  responseExample?: string;
+}
+
+interface ToolWithMeta extends ToolItem {
+  index: number;          // index into tools array
+  disabled: boolean;
+  mockRules: MockRule[];
+  mockIndices: number[];
+}
+
 // ── Main Form ────────────────────────────────────────────────────────────────
 export function McpServerForm({ serverId, onBack, onSaved }: Props) {
   const isEdit = !!serverId;
@@ -109,8 +127,10 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
   const [envEntries, setEnvEntries] = useState<EnvEntry[]>([]);
   const [envProdEntries, setEnvProdEntries] = useState<EnvEntry[]>([]);
   const [envTestEntries, setEnvTestEntries] = useState<EnvEntry[]>([]);
-  // Tools (manual definition)
-  const [manualTools, setManualTools] = useState<ManualTool[]>([]);
+  // Tools (unified)
+  const [tools, setTools] = useState<ToolItem[]>([]);
+  // Disabled tools
+  const [disabledTools, setDisabledTools] = useState<string[]>([]);
   // Mock rules
   const [mockRules, setMockRules] = useState<MockRule[]>([]);
 
@@ -131,7 +151,8 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
       setEnvEntries(parseEnvJson(s.env_json));
       setEnvProdEntries(parseEnvJson(s.env_prod_json));
       setEnvTestEntries(parseEnvJson(s.env_test_json));
-      try { setManualTools(s.tools_manual ? JSON.parse(s.tools_manual) : []); } catch { setManualTools([]); }
+      try { setTools(s.tools_json ? JSON.parse(s.tools_json) : []); } catch { setTools([]); }
+      try { setDisabledTools(s.disabled_tools ? JSON.parse(s.disabled_tools) : []); } catch { setDisabledTools([]); }
       try { setMockRules(s.mock_rules ? JSON.parse(s.mock_rules) : []); } catch { setMockRules([]); }
     }).catch(console.error);
   }, [serverId]);
@@ -153,7 +174,8 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
         env_json: envToJson(envEntries),
         env_prod_json: envToJson(envProdEntries),
         env_test_json: envToJson(envTestEntries),
-        tools_manual: manualTools.length > 0 ? JSON.stringify(manualTools) : null,
+        tools_json: tools.length > 0 ? JSON.stringify(tools) : null,
+        disabled_tools: disabledTools.length > 0 ? JSON.stringify(disabledTools) : null,
         mock_rules: mockRules.length > 0 ? JSON.stringify(mockRules) : null,
       };
       if (isEdit) {
@@ -169,11 +191,88 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
     }
   };
 
-  // Tool names for mock rule dropdown
-  const allToolNames = manualTools.map(t => t.name).filter(Boolean);
+  // Build tool list with metadata
+  const toolsWithMeta = useMemo((): ToolWithMeta[] => {
+    return tools.map((t, i) => {
+      const indices: number[] = [];
+      const rules: MockRule[] = [];
+      mockRules.forEach((r, ri) => { if (r.tool_name === t.name) { indices.push(ri); rules.push(r); } });
+      return {
+        ...t,
+        index: i,
+        disabled: disabledTools.includes(t.name),
+        mockRules: rules,
+        mockIndices: indices,
+      };
+    });
+  }, [tools, disabledTools, mockRules]);
+
+  // Skill references per tool
+  const [toolSkillMap, setToolSkillMap] = useState<Map<string, string[]>>(new Map());
+  useEffect(() => {
+    mcpApi.getToolsOverview().then(r => {
+      const map = new Map<string, string[]>();
+      for (const item of r.items) {
+        if (item.skills.length > 0) map.set(item.name, item.skills);
+      }
+      setToolSkillMap(map);
+    }).catch(() => {});
+  }, []);
+
+  // Tool detail panel state
+  const [testTool, setTestTool] = useState<McpToolInfo | null>(null);
+
+  // Discover tools
+  const [discovering, setDiscovering] = useState(false);
+  const handleDiscover = async () => {
+    if (!serverId) return;
+    setDiscovering(true);
+    try {
+      const res = await mcpApi.discoverTools(serverId);
+      setTools(res.tools as ToolItem[]);
+    } catch (e) {
+      alert(`连接失败: ${e}`);
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
+  // Build a McpServer-like object from current form state (for McpToolTestPanel)
+  const currentServerSnapshot = useMemo((): McpServer => ({
+    id: serverId ?? '',
+    name,
+    description,
+    transport,
+    status,
+    enabled: true,
+    url: url || null,
+    headers_json: headersJson || null,
+    command: command || null,
+    args_json: argsJson || null,
+    cwd: cwd || null,
+    env_json: envToJson(envEntries),
+    env_prod_json: envToJson(envProdEntries),
+    env_test_json: envToJson(envTestEntries),
+    tools_json: tools.length > 0 ? JSON.stringify(tools) : null,
+    disabled_tools: disabledTools.length > 0 ? JSON.stringify(disabledTools) : null,
+    mock_rules: mockRules.length > 0 ? JSON.stringify(mockRules) : null,
+    last_connected_at: null,
+    created_at: '',
+    updated_at: '',
+  }), [serverId, name, description, transport, status, url, headersJson, command, argsJson, cwd, envEntries, envProdEntries, envTestEntries, tools, disabledTools, mockRules]);
+
+  // Helper: get param count from inputSchema
+  const getParamCount = (schema?: unknown): { total: number; required: number } | null => {
+    if (!schema || typeof schema !== 'object') return null;
+    const s = schema as { properties?: Record<string, unknown>; required?: string[] };
+    if (!s.properties) return null;
+    return { total: Object.keys(s.properties).length, required: s.required?.length ?? 0 };
+  };
+
+  const envCount = envEntries.length + envProdEntries.length + envTestEntries.length;
 
   return (
-    <div className="p-4 max-w-3xl">
+    <div className="p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <button onClick={onBack} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
@@ -186,177 +285,229 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
 
       <h2 className="text-sm font-semibold text-gray-700 mb-4">{isEdit ? '编辑 MCP Server' : '新建 MCP Server'}</h2>
 
-      <div className="space-y-3">
-        {/* Basic info */}
-        <Section title="基本信息" defaultOpen>
-          <div className="space-y-3 pt-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">名称</label>
-                <input value={name} onChange={e => setName(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg" placeholder="telecom-service" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">状态</label>
-                <select value={status} onChange={e => setStatus(e.target.value as 'active' | 'planned')} className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white">
-                  <option value="active">Active（可连接）</option>
-                  <option value="planned">Planned（规划中）</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">描述</label>
-              <input value={description} onChange={e => setDescription(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg" placeholder="电信业务系统 MCP 服务" />
+      {/* ── Server Properties (two-column grid, full width) ────────────── */}
+      <div className="border rounded-lg p-4 mb-6 bg-white">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+          {/* Row 1 */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">名称</label>
+            <input value={name} onChange={e => setName(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg" placeholder="telecom-service" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">状态</label>
+            <select value={status} onChange={e => setStatus(e.target.value as 'active' | 'planned')} className="w-full px-2.5 py-1.5 text-xs border rounded-lg bg-white">
+              <option value="active">Active（可连接）</option>
+              <option value="planned">Planned（规划中）</option>
+            </select>
+          </div>
+
+          {/* Row 2 */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">描述</label>
+            <input value={description} onChange={e => setDescription(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded-lg" placeholder="电信业务系统 MCP 服务" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">传输方式</label>
+            <div className="flex gap-3 py-1.5">
+              {(['http', 'stdio', 'sse'] as const).map(t => (
+                <label key={t} className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <input type="radio" name="transport" value={t} checked={transport === t} onChange={() => setTransport(t)} className="w-3 h-3" />
+                  {t === 'http' ? 'Streamable HTTP' : t === 'stdio' ? 'stdio' : 'SSE'}
+                </label>
+              ))}
             </div>
           </div>
-        </Section>
 
-        {/* Transport + Connection */}
-        <Section title="连接配置" defaultOpen>
-          <div className="space-y-3 pt-2">
-            <div>
-              <label className="text-xs font-medium text-gray-600 mb-1 block">传输方式</label>
-              <div className="flex gap-3">
-                {(['http', 'stdio', 'sse'] as const).map(t => (
-                  <label key={t} className="flex items-center gap-1.5 text-xs text-gray-600">
-                    <input type="radio" name="transport" value={t} checked={transport === t} onChange={() => setTransport(t)} className="w-3 h-3" />
-                    {t === 'http' ? 'Streamable HTTP' : t === 'stdio' ? 'stdio' : 'SSE'}
-                  </label>
-                ))}
+          {/* Row 3: connection fields (conditional) */}
+          {transport === 'stdio' ? (
+            <>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Command</label>
+                <input value={command} onChange={e => setCommand(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white" placeholder="python" />
               </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Args (JSON array)</label>
+                <input value={argsJson} onChange={e => setArgsJson(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white font-mono" placeholder='["-m", "my_server"]' />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">工作目录 (可选)</label>
+                <input value={cwd} onChange={e => setCwd(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white" />
+              </div>
+              <div /> {/* empty cell for grid alignment */}
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">URL</label>
+                <input value={url} onChange={e => setUrl(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white font-mono" placeholder="http://localhost:8003/mcp" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Headers (JSON, 可选)</label>
+                <input value={headersJson} onChange={e => setHeadersJson(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white font-mono" placeholder='{"Authorization": "Bearer xxx"}' />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Env vars — collapsible inline */}
+        <div className="mt-4 pt-3 border-t">
+          <Section title="环境变量" badge={envCount > 0 ? `${envCount}` : undefined}>
+            <div className="space-y-3 pt-2">
+              <EnvEditor label="公共" entries={envEntries} onChange={setEnvEntries} />
+              <EnvEditor label="Prod 覆盖" entries={envProdEntries} onChange={setEnvProdEntries} />
+              <EnvEditor label="Test 覆盖" entries={envTestEntries} onChange={setEnvTestEntries} />
             </div>
-            {transport === 'stdio' ? (
-              <>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Command</label>
-                  <input value={command} onChange={e => setCommand(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white" placeholder="python" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Args (JSON array)</label>
-                  <input value={argsJson} onChange={e => setArgsJson(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white font-mono" placeholder='["-m", "my_server"]' />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">工作目录 (可选)</label>
-                  <input value={cwd} onChange={e => setCwd(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white" />
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">URL</label>
-                  <input value={url} onChange={e => setUrl(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white font-mono" placeholder="http://localhost:8003/mcp" />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Headers (JSON, 可选)</label>
-                  <input value={headersJson} onChange={e => setHeadersJson(e.target.value)} className="w-full px-2.5 py-1.5 text-xs border rounded bg-white font-mono" placeholder='{"Authorization": "Bearer xxx"}' />
-                </div>
-              </>
+          </Section>
+        </div>
+      </div>
+
+      {/* ── Tool Management (table-style list, full width) ─────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-700">工具管理</h3>
+            <span className="text-[11px] text-gray-400">
+              {tools.length > 0 && <span>{tools.length} 个工具</span>}
+              {mockRules.length > 0 && <span> · {mockRules.length} Mock</span>}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {isEdit && status !== 'planned' && (
+              <button
+                onClick={handleDiscover}
+                disabled={discovering}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                {discovering ? <RefreshCw size={12} className="animate-spin" /> : <Plug size={12} />}
+                {discovering ? '同步中...' : '同步工具'}
+              </button>
             )}
-          </div>
-        </Section>
-
-        {/* Env vars */}
-        <Section title="环境变量" badge={`${envEntries.length + envProdEntries.length + envTestEntries.length}`}>
-          <div className="space-y-3 pt-2">
-            <EnvEditor label="公共" entries={envEntries} onChange={setEnvEntries} />
-            <EnvEditor label="Prod 覆盖" entries={envProdEntries} onChange={setEnvProdEntries} />
-            <EnvEditor label="Test 覆盖" entries={envTestEntries} onChange={setEnvTestEntries} />
-          </div>
-        </Section>
-
-        {/* Tool Definitions (manual) */}
-        <Section title="工具定义" badge={`${manualTools.length}`} defaultOpen={manualTools.length > 0}>
-          <div className="space-y-3 pt-2">
-            <p className="text-[11px] text-gray-400">手动定义工具的参数 Schema 和返回格式。Server 运行后可通过"发现工具"自动获取。</p>
-            {manualTools.map((tool, ti) => (
-              <div key={ti} className="border rounded-lg p-3 bg-white space-y-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    value={tool.name}
-                    onChange={e => { const n = [...manualTools]; n[ti] = { ...n[ti], name: e.target.value }; setManualTools(n); }}
-                    placeholder="工具名 (如 diagnose_network)"
-                    className="flex-1 px-2 py-1 text-xs font-mono border rounded"
-                  />
-                  <button onClick={() => setManualTools(manualTools.filter((_, j) => j !== ti))} className="text-red-400 hover:text-red-600"><Trash2 size={13} /></button>
-                </div>
-                <input
-                  value={tool.description}
-                  onChange={e => { const n = [...manualTools]; n[ti] = { ...n[ti], description: e.target.value }; setManualTools(n); }}
-                  placeholder="工具描述"
-                  className="w-full px-2 py-1 text-xs border rounded"
-                />
-                <div>
-                  <div className="text-[11px] font-medium text-gray-500 mb-1">参数</div>
-                  <ParamEditor
-                    params={tool.parameters}
-                    onChange={params => { const n = [...manualTools]; n[ti] = { ...n[ti], parameters: params }; setManualTools(n); }}
-                  />
-                </div>
-                <div>
-                  <div className="text-[11px] font-medium text-gray-500 mb-1">返回示例 (JSON)</div>
-                  <textarea
-                    value={tool.responseExample}
-                    onChange={e => { const n = [...manualTools]; n[ti] = { ...n[ti], responseExample: e.target.value }; setManualTools(n); }}
-                    placeholder='{"success": true, "data": {...}}'
-                    className="w-full h-16 px-2 py-1 text-[11px] font-mono border rounded resize-none"
-                  />
-                </div>
-              </div>
-            ))}
             <button
-              onClick={() => setManualTools([...manualTools, { name: '', description: '', parameters: [], responseExample: '' }])}
-              className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700"
+              onClick={() => setTools([...tools, { name: '', description: '' }])}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition"
             >
               <Plus size={12} /> 添加工具
             </button>
           </div>
-        </Section>
+        </div>
 
-        {/* Mock Rules */}
-        <Section title="Mock 规则" badge={`${mockRules.length}`} defaultOpen={mockRules.length > 0}>
-          <div className="space-y-3 pt-2">
-            <p className="text-[11px] text-gray-400">定义 test 模式下的 mock 返回数据。匹配条件为 JS 表达式（如 <code className="bg-gray-100 px-1 rounded">phone == "138..."</code>），留空为默认兜底。</p>
-            {mockRules.map((rule, ri) => (
-              <div key={ri} className="border rounded-lg p-3 bg-white space-y-2">
-                <div className="flex items-center gap-2">
-                  <select
-                    value={rule.tool_name}
-                    onChange={e => { const n = [...mockRules]; n[ri] = { ...n[ri], tool_name: e.target.value }; setMockRules(n); }}
-                    className="w-40 px-2 py-1 text-xs border rounded bg-white"
-                  >
-                    <option value="">选择工具...</option>
-                    {allToolNames.map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                  <button onClick={() => setMockRules(mockRules.filter((_, j) => j !== ri))} className="ml-auto text-red-400 hover:text-red-600"><Trash2 size={13} /></button>
-                </div>
-                <div>
-                  <div className="text-[11px] font-medium text-gray-500 mb-1">匹配条件 (留空=默认)</div>
-                  <input
-                    value={rule.match}
-                    onChange={e => { const n = [...mockRules]; n[ri] = { ...n[ri], match: e.target.value }; setMockRules(n); }}
-                    placeholder='phone == "13800000001" && issue_type == "slow_data"'
-                    className="w-full px-2 py-1 text-xs font-mono border rounded"
-                  />
-                </div>
-                <div>
-                  <div className="text-[11px] font-medium text-gray-500 mb-1">返回数据 (JSON)</div>
-                  <textarea
-                    value={rule.response}
-                    onChange={e => { const n = [...mockRules]; n[ri] = { ...n[ri], response: e.target.value }; setMockRules(n); }}
-                    placeholder='{"success": true, "message": "..."}'
-                    className="w-full h-20 px-2 py-1 text-[11px] font-mono border rounded resize-none"
-                  />
-                </div>
-              </div>
-            ))}
-            <button
-              onClick={() => setMockRules([...mockRules, { tool_name: '', match: '', response: '{}' }])}
-              className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-700"
-            >
-              <Plus size={12} /> 添加规则
-            </button>
+        {toolsWithMeta.length === 0 ? (
+          <div className="text-xs text-gray-400 text-center py-8 border rounded-lg bg-white">
+            暂无工具。运行后在列表页点"发现工具"自动获取，或点击上方按钮手动添加。
           </div>
-        </Section>
+        ) : (
+          <div className="border rounded-lg bg-white overflow-hidden">
+            {/* Table header */}
+            <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 border-b text-[11px] font-medium text-gray-500">
+              <span className="w-40 flex-shrink-0">工具名</span>
+              <span className="w-36 flex-shrink-0">关联 Skill</span>
+              <span className="flex-1">描述</span>
+              <span className="w-14 flex-shrink-0 text-center">参数</span>
+              <span className="w-14 flex-shrink-0 text-center">Mock</span>
+              <span className="w-36 flex-shrink-0 text-center">操作</span>
+            </div>
+
+            {/* Tool rows */}
+            {toolsWithMeta.map(tool => {
+              const toolKey = `tool-${tool.index}-${tool.name || 'new'}`;
+              const params = getParamCount(tool.inputSchema);
+              const paramCount = tool.parameters?.length ?? 0;
+
+              const openDetail = () => {
+                if (!tool.name) return;
+                const toolInfo: McpToolInfo = {
+                  name: tool.name,
+                  description: tool.description,
+                  inputSchema: tool.inputSchema,
+                  parameters: tool.parameters,
+                  responseExample: tool.responseExample,
+                };
+                setTestTool(toolInfo);
+              };
+
+              const handleDeleteTool = (e: React.MouseEvent) => {
+                e.stopPropagation();
+                if (!confirm(`确定删除工具 ${tool.name}？`)) return;
+                setTools(tools.filter((_, j) => j !== tool.index));
+                setMockRules(mockRules.filter(r => r.tool_name !== tool.name));
+                setDisabledTools(disabledTools.filter(n => n !== tool.name));
+              };
+
+              return (
+                <div
+                  key={toolKey}
+                  onClick={openDetail}
+                  className={`flex items-center gap-3 px-4 py-2 border-b border-gray-50 hover:bg-gray-50 transition cursor-pointer ${tool.disabled ? 'opacity-50' : ''}`}
+                >
+                  {/* Name */}
+                  <span className={`w-40 flex-shrink-0 font-mono text-xs ${tool.disabled ? 'text-gray-400 line-through' : 'text-gray-800 font-semibold'}`}>
+                    {tool.name || <span className="text-gray-300 italic font-sans font-normal">未命名</span>}
+                  </span>
+                  {/* Skills */}
+                  <span className="w-36 flex-shrink-0 truncate">
+                    {(toolSkillMap.get(tool.name) ?? []).length > 0
+                      ? (toolSkillMap.get(tool.name) ?? []).map(s => (
+                          <span key={s} className="inline-block px-1.5 py-0.5 mr-1 rounded bg-blue-50 text-blue-500 text-[10px]">{s}</span>
+                        ))
+                      : <span className="text-[11px] text-gray-300">-</span>}
+                  </span>
+                  {/* Description */}
+                  <span className="flex-1 text-[11px] text-gray-500 truncate" title={tool.description}>
+                    {tool.description || '-'}
+                  </span>
+                  {/* Params */}
+                  <span className="w-14 flex-shrink-0 text-center text-[11px] text-gray-400">
+                    {params
+                      ? <span>{params.required}<span className="text-gray-300">/{params.total}</span></span>
+                      : paramCount > 0 ? paramCount : <span className="text-gray-300">-</span>}
+                  </span>
+                  {/* Mock count */}
+                  <span className="w-14 flex-shrink-0 text-center">
+                    {tool.mockRules.length > 0
+                      ? <span className="inline-block px-1.5 py-0.5 rounded bg-purple-50 text-purple-500 text-[10px] font-medium">{tool.mockRules.length}</span>
+                      : <span className="text-[11px] text-gray-300">-</span>}
+                  </span>
+                  {/* Actions: toggle + edit + delete */}
+                  <span className="w-36 flex-shrink-0 flex items-center justify-center gap-3 text-xs">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (tool.disabled) setDisabledTools(disabledTools.filter(n => n !== tool.name));
+                        else setDisabledTools([...disabledTools, tool.name]);
+                      }}
+                      className="text-gray-400 hover:text-blue-600 transition"
+                      title={tool.disabled ? '启用' : '禁用'}
+                    >
+                      {tool.disabled ? <ToggleLeft size={16} /> : <ToggleRight size={16} className="text-green-500" />}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openDetail(); }}
+                      className="text-blue-500 hover:text-blue-700"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      onClick={handleDeleteTool}
+                      className="text-red-400 hover:text-red-600"
+                    >
+                      删除
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {/* Tool detail/test modal — reuses McpToolTestPanel from list page */}
+      {testTool && serverId && (
+        <McpToolTestPanel
+          server={currentServerSnapshot}
+          tool={testTool}
+          onClose={() => setTestTool(null)}
+        />
+      )}
     </div>
   );
 }

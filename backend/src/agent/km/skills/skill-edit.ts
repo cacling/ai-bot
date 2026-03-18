@@ -12,7 +12,7 @@ import { resolve, join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 import { generateText } from 'ai';
 import { chatModel } from '../../../engine/llm';
-import { saveSkillWithVersion } from './version-manager';
+// Edits now write directly to .versions/ files via PUT /api/files/content
 import { logger } from '../../../services/logger';
 import { requireRole } from '../../../services/auth';
 
@@ -232,15 +232,13 @@ skillEdit.post('/apply', requireRole('config_editor'), async (c) => {
   }
 
   const newContent = content.replace(body.old_fragment, body.new_fragment);
-  const { versionId } = await saveSkillWithVersion(
-    body.skill_path,
-    newContent,
-    body.description ?? '自然语言编辑',
-    'nl-editor',
-  );
 
-  logger.info('skill-edit', 'applied', { path: body.skill_path, versionId });
-  return c.json({ ok: true, versionId });
+  // Write directly to the file (which is in .versions/)
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(fullPath, newContent, 'utf-8');
+
+  logger.info('skill-edit', 'applied', { path: body.skill_path });
+  return c.json({ ok: true });
 });
 
 export default skillEdit;
