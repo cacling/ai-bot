@@ -200,6 +200,7 @@ export type TextDeltaCallback = (delta: string) => void;
 export interface RunAgentOptions {
   useMock?: boolean; // true = 使用 mock 规则替代真实 MCP 调用（沙箱默认行为）
   skillContent?: string; // 预注入的 SKILL.md 内容（测试时使用，避免依赖 LLM 调用 get_skill_instructions）
+  skillName?: string; // 预设的技能名（配合 skillContent，用于进度追踪）
 }
 
 export async function runAgent(
@@ -319,7 +320,7 @@ export async function runAgent(
   const t0 = t_mcp_ready; // LLM 阶段计时起点（MCP 初始化结束后）
   let stepCount = 0;
   let prevStepEnd = t_mcp_ready; // 用于计算每步增量耗时
-  let lastActiveSkill: string | undefined; // 追踪当前活跃 skill，用于通用工具的流程图高亮
+  let lastActiveSkill: string | undefined = options?.skillName; // 追踪当前活跃 skill，用于通用工具的流程图高亮
 
   try {
     const result = await generateText({

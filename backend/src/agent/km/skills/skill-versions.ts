@@ -162,7 +162,7 @@ app.post('/test', async (c) => {
         body.lang ?? 'zh',
         undefined, undefined, undefined, undefined,
         tempParent,
-        { useMock: body.useMock !== false, skillContent },
+        { useMock: body.useMock !== false, skillContent, skillName: body.skill },
       );
       return c.json({ text: result.text, card: result.card ?? null, skill_diagram: result.skill_diagram ?? null, mock: body.useMock !== false });
     } finally {
