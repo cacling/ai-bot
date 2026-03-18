@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react';
-import { GitBranch, Loader2, AlertTriangle, GitFork } from 'lucide-react';
-import { renderMermaid } from './mermaid';
+/**
+ * DiagramPanel.tsx — Right-side floating diagram panel for chat page
+ *
+ * Thin wrapper around MermaidRenderer with a styled panel frame.
+ */
+
+import { GitBranch, GitFork } from 'lucide-react';
+import { MermaidRenderer } from './MermaidRenderer';
 import { T, type Lang } from '../i18n';
 
 export interface ActiveDiagram {
@@ -16,40 +21,6 @@ interface Props {
 
 export function DiagramPanel({ diagram, onClose, lang = 'zh' }: Props) {
   const t = T[lang];
-  const [svg, setSvg]         = useState('');
-  const [error, setError]     = useState('');
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!diagram) {
-      setSvg('');
-      setError('');
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setSvg('');
-    setError('');
-    setLoading(true);
-
-    // Debug: log mermaid update
-    const hlLines = diagram.mermaid.split('\n').filter((l: string) => l.includes(':::'));
-    console.log('[DiagramPanel] mermaid update', { skill: diagram.skill_name, len: diagram.mermaid.length, hlLines });
-
-    renderMermaid(diagram.mermaid)
-      .then((result) => {
-        if (!cancelled) {
-          const hasHL = result.includes('progressHL') || result.includes('toolHL') || result.includes('branchHL');
-          console.log('[DiagramPanel] render done', { hasHL, svgLen: result.length });
-          setSvg(result);
-        }
-      })
-      .catch((err)   => { if (!cancelled) { console.error('[DiagramPanel] render error', err); setError(err instanceof Error ? err.message : t.diagram_error); } })
-      .finally(()    => { if (!cancelled) setLoading(false); });
-
-    return () => { cancelled = true; };
-  }, [diagram?.mermaid]);
 
   const title = diagram
     ? (t.diagram_skill_labels[diagram.skill_name] ?? diagram.skill_name)
@@ -57,7 +28,6 @@ export function DiagramPanel({ diagram, onClose, lang = 'zh' }: Props) {
 
   return (
     <div className="flex flex-col w-[520px] flex-shrink-0 bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden h-[800px] max-h-[90vh]">
-
       {/* Header */}
       <div className={`px-4 py-3 flex items-center justify-between flex-shrink-0 ${
         diagram
@@ -80,9 +50,8 @@ export function DiagramPanel({ diagram, onClose, lang = 'zh' }: Props) {
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-auto p-4 bg-gray-50">
-
-        {!diagram && (
+      <div className="flex-1 overflow-hidden p-4 bg-gray-50">
+        {!diagram ? (
           <div className="flex flex-col items-center justify-center h-full space-y-4 text-center select-none">
             <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
               <GitFork size={28} className="text-gray-300" />
@@ -92,27 +61,13 @@ export function DiagramPanel({ diagram, onClose, lang = 'zh' }: Props) {
               <p className="text-xs text-gray-300 whitespace-pre-line">{t.diagram_empty_subtitle}</p>
             </div>
           </div>
-        )}
-
-        {diagram && loading && (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-3">
-            <Loader2 size={28} className="animate-spin text-indigo-400" />
-            <p className="text-sm">{t.diagram_loading}</p>
-          </div>
-        )}
-
-        {diagram && !loading && error && (
-          <div className="flex flex-col items-center justify-center h-full space-y-3 text-center">
-            <AlertTriangle size={28} className="text-amber-400" />
-            <p className="text-sm text-gray-500">{t.diagram_error}</p>
-            <pre className="text-xs text-red-400 bg-red-50 px-3 py-2 rounded-lg max-w-xs whitespace-pre-wrap">{error}</pre>
-          </div>
-        )}
-
-        {diagram && !loading && !error && svg && (
-          <div
-            className="w-full h-full flex items-start justify-center [&_svg]:max-w-full [&_svg]:h-auto"
-            dangerouslySetInnerHTML={{ __html: svg }}
+        ) : (
+          <MermaidRenderer
+            mermaid={diagram.mermaid}
+            height="100%"
+            emptyText={t.diagram_empty_title}
+            loadingText={t.diagram_loading}
+            errorText={t.diagram_error}
           />
         )}
       </div>

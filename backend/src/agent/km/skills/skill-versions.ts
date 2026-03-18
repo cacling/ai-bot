@@ -150,7 +150,7 @@ app.post('/test', async (c) => {
         tempParent,
         { useMock: body.useMock !== false },
       );
-      return c.json({ text: result.text, card: result.card ?? null, mock: body.useMock !== false });
+      return c.json({ text: result.text, card: result.card ?? null, skill_diagram: result.skill_diagram ?? null, mock: body.useMock !== false });
     } finally {
       rmSync(tempParent, { recursive: true, force: true });
     }

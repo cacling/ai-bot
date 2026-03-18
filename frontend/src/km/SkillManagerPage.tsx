@@ -19,10 +19,11 @@ import { json } from '@codemirror/lang-json';
 import { oneDark } from '@codemirror/theme-one-dark';
 import {
   Send, Bot, User, FileText, Folder, FileCode,
-  ChevronRight, Sparkles, CheckCircle2, Plus,
-  ArrowLeft, AlertCircle,
+  ChevronRight, ChevronDown, Sparkles, CheckCircle2, Plus,
+  ArrowLeft, AlertCircle, GitBranch,
   Mic, MicOff, Loader2, FlaskConical,
 } from 'lucide-react';
+import { MermaidRenderer } from '../shared/MermaidRenderer';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
 import {
@@ -428,6 +429,8 @@ export function SkillManagerPage() {
   const [testInput, setTestInput] = useState('');
   const [testRunning, setTestRunning] = useState(false);
   const [testMode, setTestMode] = useState<'mock' | 'real'>('mock');
+  const [testDiagram, setTestDiagram] = useState<{ skill_name: string; mermaid: string } | null>(null);
+  const [diagramCollapsed, setDiagramCollapsed] = useState(false);
   const testMsgIdRef = useRef(0);
   const testEndRef = useRef<HTMLDivElement>(null);
 
@@ -435,6 +438,7 @@ export function SkillManagerPage() {
     setTestingVersion(versionNo);
     setTestMessages([]);
     setTestInput('');
+    setTestDiagram(null);
     setRightTab('test');
   }, []);
 
@@ -452,6 +456,7 @@ export function SkillManagerPage() {
       });
       const data = await res.json();
       setTestMessages(prev => [...prev, { id: ++testMsgIdRef.current, role: 'assistant', text: data.text ?? data.error ?? '无返回' }]);
+      if (data.skill_diagram) { setTestDiagram(data.skill_diagram); setDiagramCollapsed(false); }
     } catch (e) {
       setTestMessages(prev => [...prev, { id: ++testMsgIdRef.current, role: 'assistant', text: `测试失败: ${e}` }]);
     }
@@ -988,6 +993,31 @@ export function SkillManagerPage() {
             </div>
           )}
         </div>
+
+        {/* ── 测试流程图（测试时展开，非测试时隐藏）── */}
+        {testingVersion !== null && testDiagram && (
+          <div className="border-t border-slate-200 shrink-0">
+            <button
+              onClick={() => setDiagramCollapsed(prev => !prev)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            >
+              {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+              <GitBranch size={12} />
+              流程图 — {testDiagram.skill_name}
+            </button>
+            {!diagramCollapsed && (
+              <div className="px-3 pb-3">
+                <MermaidRenderer
+                  mermaid={testDiagram.mermaid}
+                  height="35vh"
+                  zoom={true}
+                  autoFocus={true}
+                  emptyText="暂无流程图"
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
