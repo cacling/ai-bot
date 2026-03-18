@@ -54,36 +54,24 @@ export const CardShell = memo(function CardShell({
       <div
         draggable
         onDragStart={onDragStart}
-        className={`flex items-center px-3 py-1.5 flex-shrink-0 cursor-grab active:cursor-grabbing ${def.headerClass}`}
+        className="flex items-center px-3 py-1.5 flex-shrink-0 cursor-grab active:cursor-grabbing bg-gray-50 border-b border-gray-200"
       >
-        {/* Drag handle */}
-        <GripVertical
-          size={14}
-          className="text-white/50 hover:text-white/80 mr-1.5 flex-shrink-0"
-        />
+        <GripVertical size={12} className="text-gray-300 hover:text-gray-500 mr-1.5 flex-shrink-0" />
+        <span className="text-[11px] font-medium text-gray-600 flex-1 truncate">{title}</span>
 
-        {/* Icon + title */}
-        <def.Icon size={14} className="text-white mr-1.5 flex-shrink-0" />
-        <span className="text-xs font-semibold text-white flex-1 truncate">{title}</span>
-
-        {/* Collapse toggle */}
         <button
           onClick={onToggleCollapse}
-          className="text-white/60 hover:text-white/90 transition ml-1 flex-shrink-0"
+          className="text-gray-400 hover:text-gray-600 transition ml-1 flex-shrink-0"
           title={state.isCollapsed ? '展开' : '收起'}
         >
-          {state.isCollapsed
-            ? <ChevronDown size={14} />
-            : <ChevronUp   size={14} />}
+          {state.isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
         </button>
-
-        {/* Close */}
         <button
           onClick={onClose}
-          className="text-white/60 hover:text-white/90 transition ml-1 flex-shrink-0"
+          className="text-gray-400 hover:text-gray-600 transition ml-1 flex-shrink-0"
           title="关闭"
         >
-          <X size={14} />
+          <X size={13} />
         </button>
       </div>
 
