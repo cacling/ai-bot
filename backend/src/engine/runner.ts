@@ -538,31 +538,48 @@ export async function runAgent(
       [...(result.steps ?? [])].reverse().find((s) => s.text)?.text ||
       (transferRequested ? transferDefault : '');
 
-    // ── 异步流程进度追踪（text chat 通道） ──
-    // 如果有活跃 skill 且有 onDiagramUpdate 回调，异步判断当前进度并推送高亮
-    if (lastActiveSkill && onDiagramUpdate && text) {
+    // ── 流程进度追踪 ──
+    if (lastActiveSkill && text) {
       const progressSkill = lastActiveSkill;
-      const progressCallback = onDiagramUpdate;
       const recentTurns = [
         ...history.slice(-4).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', text: typeof m.content === 'string' ? m.content : '' })),
         { role: 'user', text: userMessage },
         { role: 'assistant', text },
       ];
-      // Fire-and-forget: don't block response
-      (async () => {
+
+      const runProgressTracking = async () => {
+        const skillPath = resolve(effectiveSkillsDir, progressSkill, 'SKILL.md');
+        if (!existsSync(skillPath)) return null;
+        const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
+        if (!rawMermaid) return null;
+        const stateNames = extractStateNames(rawMermaid);
+        const stateName = await analyzeProgress(recentTurns, stateNames);
+        if (!stateName) return null;
+        logger.info('agent', 'progress_tracked', { skill: progressSkill, state: stateName });
+        return { rawMermaid, stateName };
+      };
+
+      if (onDiagramUpdate) {
+        // WebSocket: fire-and-forget, push via callback
+        const progressCallback = onDiagramUpdate;
+        (async () => {
+          try {
+            const result = await runProgressTracking();
+            if (!result) return;
+            const highlighted = highlightMermaidProgress(result.rawMermaid, result.stateName);
+            progressCallback(progressSkill, stripMermaidMarkers(highlighted));
+          } catch (err) { logger.warn('agent', 'progress_tracking_error', { skill: progressSkill, error: String(err) }); }
+        })();
+      } else {
+        // HTTP (test endpoint): run synchronously, embed progress in returned skill_diagram
         try {
-          const skillPath = resolve(SKILLS_DIR, progressSkill, 'SKILL.md');
-          if (!existsSync(skillPath)) return;
-          const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
-          if (!rawMermaid) return;
-          const stateNames = extractStateNames(rawMermaid);
-          const stateName = await analyzeProgress(recentTurns, stateNames);
-          if (!stateName) return;
-          logger.info('agent', 'progress_tracked', { skill: progressSkill, state: stateName });
-          const highlighted = highlightMermaidProgress(rawMermaid, stateName);
-          progressCallback(progressSkill, stripMermaidMarkers(highlighted));
-        } catch (err) { logger.warn('agent', 'inline_progress_tracking_error', { skill: progressSkill, error: String(err) }); }
-      })();
+          const result = await runProgressTracking();
+          if (result && skillDiagram) {
+            const highlighted = highlightMermaidProgress(result.rawMermaid, result.stateName);
+            skillDiagram = { skill_name: progressSkill, mermaid: stripMermaidMarkers(highlighted) };
+          }
+        } catch (err) { logger.warn('agent', 'progress_tracking_error', { skill: progressSkill, error: String(err) }); }
+      }
     }
 
     return { text, card, skill_diagram: skillDiagram, transferData };
