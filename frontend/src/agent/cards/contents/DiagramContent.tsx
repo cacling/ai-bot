@@ -51,19 +51,26 @@ function applyProgressHighlightDOM(container: HTMLElement, stateName: string): b
   for (const { el, text } of allTexts) {
     if (text !== stateName) continue;
     console.log('[ProgressHL] found match:', el.tagName, el.className);
-    // Walk up to find the statediagram node group (has a <rect> sibling)
+    // Walk up to find the outer state node group (skip inner "label" groups)
+    // Mermaid SVG: <g class="node statediagram-state" id="state-xxx"> → <rect/> (background)
+    //                → <g class="label"> → <foreignObject> → <div> → <span class="nodeLabel">
     let node: Element | null = el;
-    for (let depth = 0; depth < 6; depth++) {
+    for (let depth = 0; depth < 8; depth++) {
       node = node?.parentElement ?? null;
       if (!node) break;
-      const rect = node.querySelector(':scope > rect, :scope > path, :scope > polygon');
-      if (rect) {
-        console.log('[ProgressHL] applying style to rect in:', node.tagName, node.id, node.className);
-        (rect as SVGElement).style.fill = '#fef08a';
-        (rect as SVGElement).style.stroke = '#f59e0b';
-        (rect as SVGElement).style.strokeWidth = '3px';
-        node.classList.add('progressHL');
-        return true;
+      const cls = node.getAttribute('class') ?? '';
+      const id = node.id ?? '';
+      // Must be the outer node group, not inner label group
+      if (cls.includes('node') || cls.includes('statediagram') || id.includes('state-')) {
+        const rect = node.querySelector(':scope > rect, :scope > path, :scope > polygon');
+        if (rect) {
+          console.log('[ProgressHL] applying style to:', node.tagName, id, cls);
+          (rect as SVGElement).style.fill = '#fef08a';
+          (rect as SVGElement).style.stroke = '#f59e0b';
+          (rect as SVGElement).style.strokeWidth = '3px';
+          node.classList.add('progressHL');
+          return true;
+        }
       }
     }
   }
