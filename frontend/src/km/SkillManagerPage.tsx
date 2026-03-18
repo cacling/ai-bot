@@ -897,9 +897,9 @@ export function SkillManagerPage() {
                     {/* 操作按钮：默认隐藏，hover 显示 */}
                     {v.status !== 'published' && (
                       <div className="ml-auto flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); handleStartTest(v.version_no); }}
+                        <button onClick={(e) => { e.stopPropagation(); setViewingVersion(v.version_no); handleStartTest(v.version_no); }}
                           className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500 text-white hover:bg-indigo-600">测试</button>
-                        <button onClick={(e) => { e.stopPropagation(); handlePublishVersion(v.version_no); }}
+                        <button onClick={(e) => { e.stopPropagation(); setViewingVersion(v.version_no); handlePublishVersion(v.version_no); }}
                           className="text-[9px] px-1.5 py-0.5 rounded bg-green-500 text-white hover:bg-green-600">发布</button>
                       </div>
                     )}
