@@ -448,16 +448,19 @@ export function SkillManagerPage() {
         const skillMdPath = versionDetail?.snapshot_path
           ? `skills/${versionDetail.snapshot_path}/SKILL.md`
           : `skills/biz-skills/${activeSkill.id}/SKILL.md`;
-        const res = await fetch(`/api/files/read?path=${encodeURIComponent(skillMdPath)}`);
+        console.log('[TestDiagram] loading from:', skillMdPath);
+        const res = await fetch(`/api/files/content?path=${encodeURIComponent(skillMdPath)}`);
+        console.log('[TestDiagram] fetch status:', res.status);
         if (res.ok) {
           const data = await res.json();
           const content = data.content ?? '';
           const mermaidMatch = content.match(/```mermaid\r?\n([\s\S]*?)```/);
+          console.log('[TestDiagram] mermaid found:', !!mermaidMatch, 'content length:', content.length);
           if (mermaidMatch) {
             setTestDiagram({ skill_name: activeSkill.id, mermaid: mermaidMatch[1].trim() });
           }
         }
-      } catch { /* ignore */ }
+      } catch (e) { console.error('[TestDiagram] error:', e); }
     }
   }, [activeSkill, versions]);
 
@@ -674,7 +677,7 @@ export function SkillManagerPage() {
         {/* Tab 头部 */}
         <div className="h-10 border-b border-slate-200 flex items-center shrink-0">
           <button
-            onClick={() => { setRightTab('chat'); setTestDiagram(null); }}
+            onClick={() => setRightTab('chat')}
             className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
               rightTab === 'chat' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-400 hover:text-slate-600'
             }`}
@@ -1020,7 +1023,7 @@ export function SkillManagerPage() {
         </div>
 
         {/* ── 测试流程图（测试时展开，非测试时隐藏）── */}
-        {testingVersion !== null && testDiagram && (
+        {rightTab === 'test' && testDiagram && (
           <div className="border-t border-slate-200 shrink-0">
             <button
               onClick={() => setDiagramCollapsed(prev => !prev)}
