@@ -8,7 +8,7 @@ import { skillRegistry } from '../db/schema';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
-const SOP_ENFORCEMENT_SUFFIX = `
+export const SOP_ENFORCEMENT_SUFFIX = `
 
 ---
 ## ⚠️ SOP 执行要求（强制）

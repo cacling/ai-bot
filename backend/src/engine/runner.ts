@@ -199,6 +199,7 @@ export type TextDeltaCallback = (delta: string) => void;
 
 export interface RunAgentOptions {
   useMock?: boolean; // true = 使用 mock 规则替代真实 MCP 调用（沙箱默认行为）
+  skillContent?: string; // 预注入的 SKILL.md 内容（测试时使用，避免依赖 LLM 调用 get_skill_instructions）
 }
 
 export async function runAgent(
@@ -301,7 +302,11 @@ export async function runAgent(
   const t_mcp_ready = Date.now();
   logger.info('agent', 'mcp_ready', { mcp_init_ms: t_mcp_ready - t_run_start });
 
-  const systemPrompt = buildSystemPrompt(userPhone, lang, subscriberName, planName);
+  let systemPrompt = buildSystemPrompt(userPhone, lang, subscriberName, planName);
+  // Inject pre-loaded skill content (for test endpoint — ensures SOP is visible without get_skill_instructions)
+  if (options?.skillContent) {
+    systemPrompt += '\n\n---\n### 当前测试技能操作指南\n\n' + options.skillContent;
+  }
 
   // Per-request abort controller with 120s timeout
   const AGENT_TIMEOUT_MS = 180_000;

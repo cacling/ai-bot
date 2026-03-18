@@ -133,6 +133,7 @@ app.post('/test', async (c) => {
 
   // Simplest approach: use runAgent's existing useMock + the snapshot path
   const { runAgent } = await import('../../../engine/runner');
+  const { SOP_ENFORCEMENT_SUFFIX } = await import('../../../engine/skills');
 
   try {
     // Create a virtual skills dir structure: tempParent/{skillId}/ -> snapshot
@@ -145,6 +146,15 @@ app.post('/test', async (c) => {
         role: m.role as 'user' | 'assistant',
         content: m.content,
       }));
+      // Read SKILL.md and inject into prompt (so LLM sees SOP without needing to call get_skill_instructions)
+      const { readFileSync } = await import('node:fs');
+      const skillMdPath = join(snapshotAbsPath, 'SKILL.md');
+      let skillContent: string | undefined;
+      try {
+        const raw = readFileSync(skillMdPath, 'utf-8');
+        skillContent = raw + SOP_ENFORCEMENT_SUFFIX;
+      } catch { /* SKILL.md not found, proceed without injection */ }
+
       const result = await runAgent(
         body.message,
         history,
@@ -152,7 +162,7 @@ app.post('/test', async (c) => {
         body.lang ?? 'zh',
         undefined, undefined, undefined, undefined,
         tempParent,
-        { useMock: body.useMock !== false },
+        { useMock: body.useMock !== false, skillContent },
       );
       return c.json({ text: result.text, card: result.card ?? null, skill_diagram: result.skill_diagram ?? null, mock: body.useMock !== false });
     } finally {
