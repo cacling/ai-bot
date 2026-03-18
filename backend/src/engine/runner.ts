@@ -585,7 +585,7 @@ export async function runAgent(
         // HTTP (test endpoint): run synchronously, embed progress in returned skill_diagram
         try {
           const result = await runProgressTracking();
-          if (result && skillDiagram) {
+          if (result) {
             const highlighted = highlightMermaidProgress(result.rawMermaid, result.stateName);
             skillDiagram = { skill_name: progressSkill, mermaid: stripMermaidMarkers(highlighted) };
           }
