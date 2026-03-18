@@ -24,10 +24,23 @@ const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://127.0.0.1:18003/m
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
-/** Tool → skill name mapping for diagram highlighting */
+/** Tool → skill name mapping for diagram highlighting (fallback when no active skill) */
 const SKILL_TOOL_MAP: Record<string, string> = {
+  query_subscriber: 'service-cancel',
+  query_bill: 'bill-inquiry',
+  query_plans: 'plan-inquiry',
+  cancel_service: 'service-cancel',
   diagnose_network: 'fault-diagnosis',
   diagnose_app: 'telecom-app',
+  issue_invoice: 'bill-inquiry',
+  verify_identity: 'service-suspension',
+  check_account_balance: 'service-suspension',
+  check_contracts: 'service-suspension',
+  apply_service_suspension: 'service-suspension',
+  record_call_result: 'outbound-collection',
+  send_followup_sms: 'outbound-collection',
+  create_callback_task: 'outbound-collection',
+  record_marketing_result: 'outbound-marketing',
 };
 
 

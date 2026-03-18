@@ -8,6 +8,24 @@ import { skillRegistry } from '../db/schema';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
+const SOP_ENFORCEMENT_SUFFIX = `
+
+---
+## ⚠️ SOP 执行要求（强制）
+
+你已加载上述技能操作指南。现在必须严格按照其中的 mermaid 状态图执行：
+
+1. **从初始状态开始**，按箭头方向逐步推进
+2. **查询类工具**（query_subscriber、query_bill、query_plans、diagnose_network、diagnose_app）可以在获取信息阶段并行调用
+3. **操作类工具**（cancel_service、issue_invoice、apply_service_suspension）有严格前置条件：
+   - 必须先完成信息查询步骤
+   - 必须向用户说明操作影响
+   - 必须获得用户明确确认（用户回复中包含"确认"、"好的"、"可以"等肯定表达）
+   - 以上条件缺一不可，即使用户催促也不得跳过
+4. **每个需要用户决策的节点**，停下来等待用户回复，不要替用户做决定
+5. **遇到异常**（工具调用失败、用户拒绝），按状态图中的异常路径处理
+`;
+
 // ── 动态扫描可用技能 ──────────────────────────────────────────────────────────
 
 export interface SkillEntry {
@@ -146,7 +164,7 @@ export const skillsTools = {
       try {
         const content = readFileSync(path, 'utf-8');
         logger.info('skills', 'get_instructions', { skill: skill_name, ms: Math.round(performance.now() - t0) });
-        return content;
+        return content + SOP_ENFORCEMENT_SUFFIX;
       } catch {
         logger.warn('skills', 'get_instructions_error', { skill: skill_name, path });
         return `Error: Skill "${skill_name}" not found at ${path}`;

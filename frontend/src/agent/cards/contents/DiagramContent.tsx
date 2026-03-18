@@ -24,6 +24,48 @@ const MAX_ZOOM = 5;
 const FOCUS_ZOOM_MIN = 0.8;
 const FOCUS_ZOOM_MAX = 1.5;
 
+/** Extract `%% progress:stateName` marker from mermaid source */
+function extractProgressMarker(mermaid: string): string | null {
+  const m = mermaid.match(/%% progress:(.+)$/m);
+  return m ? m[1].trim() : null;
+}
+
+/** Strip `%% progress:xxx` marker from mermaid source before rendering */
+function stripProgressMarker(mermaid: string): string {
+  return mermaid.replace(/\n%% progress:.+$/m, '');
+}
+
+/**
+ * Apply DOM-based highlighting to a state node by matching its text content.
+ * Mermaid stateDiagram SVG structure: each state is a <g> containing <rect> + <text> (or <span>).
+ * We find all <text> elements, match by textContent, then style the sibling <rect>.
+ */
+function applyProgressHighlightDOM(container: HTMLElement, stateName: string): boolean {
+  const allTexts = container.querySelectorAll<SVGTextElement | HTMLSpanElement>('text, foreignObject span');
+  for (const textEl of allTexts) {
+    const content = textEl.textContent?.trim();
+    if (content !== stateName) continue;
+    // Walk up to find the parent group node
+    let g: Element | null = textEl.closest('g');
+    if (!g) continue;
+    // Find the background shape (rect, path, or polygon) in this group or its parent
+    let shape = g.querySelector('rect, path, polygon');
+    if (!shape) {
+      g = g.parentElement?.closest('g') ?? null;
+      if (g) shape = g.querySelector('rect, path, polygon');
+    }
+    if (shape) {
+      (shape as SVGElement).style.fill = '#fef08a';
+      (shape as SVGElement).style.stroke = '#f59e0b';
+      (shape as SVGElement).style.strokeWidth = '3px';
+    }
+    // Mark the group with class for auto-focus to find
+    (g ?? textEl.parentElement)?.classList.add('progressHL');
+    return true;
+  }
+  return false;
+}
+
 /** Find the first highlighted node element inside a container */
 function findHighlightedEl(container: HTMLElement): SVGGraphicsElement | null {
   for (const sel of ['.progressHL', '.toolHL', '.branchHL']) {
@@ -60,6 +102,7 @@ export const DiagramContent = memo(function DiagramContent({ data, lang }: { dat
   const viewportRef = useRef<HTMLDivElement>(null);
   const wrapRef     = useRef<HTMLDivElement>(null);
   const svgSizeRef  = useRef({ w: 0, h: 0 });
+  const progressRef = useRef<string | null>(null);
 
   /* ── mermaid render ── */
   useEffect(() => {
@@ -71,11 +114,15 @@ export const DiagramContent = memo(function DiagramContent({ data, lang }: { dat
     let cancelled = false;
     setSvgHtml(''); setError(''); setLoading(true);
 
-    renderMermaid(diagram.mermaid)
+    const progressState = extractProgressMarker(diagram.mermaid);
+    progressRef.current = progressState;
+    const mermaidClean = progressState ? stripProgressMarker(diagram.mermaid) : diagram.mermaid;
+
+    renderMermaid(mermaidClean)
       .then(result => {
         if (!cancelled) {
           const hasHL = result.includes('progressHL') || result.includes('toolHL') || result.includes('branchHL');
-          console.log('[DiagramContent] render done', { hasHL, svgLen: result.length });
+          console.log('[DiagramContent] render done', { hasHL, svgLen: result.length, progressState });
           setSvgHtml(result);
         }
       })
@@ -103,6 +150,10 @@ export const DiagramContent = memo(function DiagramContent({ data, lang }: { dat
 
       // Wait another frame for zoom=1 to apply
       requestAnimationFrame(() => {
+        // Apply DOM-based progress highlighting if marker was present
+        if (progressRef.current) {
+          applyProgressHighlightDOM(wrap, progressRef.current);
+        }
         const hlEl = findHighlightedEl(wrap);
         const vpRect = viewport.getBoundingClientRect();
 
