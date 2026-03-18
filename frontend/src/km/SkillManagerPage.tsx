@@ -341,13 +341,19 @@ export function SkillManagerPage() {
       .catch(() => {});
   }, [activeSkill]);
 
-  // Load version list when skill changes
+  // Load version list + reset all state when skill changes
   useEffect(() => {
     if (!activeSkill) return;
     reloadVersions();
     setViewingVersion(null);
     setSandboxId(null);
     setPipelineStage('draft');
+    // Reset test state
+    setTestingVersion(null);
+    setTestMessages([]);
+    setTestInput('');
+    setTestDiagram(null);
+    setRightTab('chat');
   }, [activeSkill, reloadVersions]);
 
   // Derive pipeline stage from selected version's status
