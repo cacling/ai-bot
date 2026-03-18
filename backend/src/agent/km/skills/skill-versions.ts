@@ -110,7 +110,7 @@ app.post('/create-from', async (c) => {
 
 // POST /api/skill-versions/test — 直接用版本快照测试（不创建沙箱）
 app.post('/test', async (c) => {
-  const body = await c.req.json<{ skill: string; version_no: number; message: string; phone?: string; lang?: 'zh' | 'en'; useMock?: boolean }>();
+  const body = await c.req.json<{ skill: string; version_no: number; message: string; history?: Array<{ role: string; content: string }>; phone?: string; lang?: 'zh' | 'en'; useMock?: boolean }>();
   if (!body.skill || !body.version_no || !body.message) {
     return c.json({ error: 'skill, version_no, message 必填' }, 400);
   }
@@ -141,9 +141,13 @@ app.post('/test', async (c) => {
     const tempParent = mkdtempSync(join(tmpdir(), 'skill-test-'));
     try {
       symlinkSync(snapshotAbsPath, join(tempParent, body.skill));
+      const history = (body.history ?? []).map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
       const result = await runAgent(
         body.message,
-        [],
+        history,
         body.phone ?? '13800000001',
         body.lang ?? 'zh',
         undefined, undefined, undefined, undefined,

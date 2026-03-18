@@ -452,7 +452,13 @@ export function SkillManagerPage() {
       const res = await fetch('/api/skill-versions/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skill: activeSkill.id, version_no: testingVersion, message: userMsg.text, useMock: testMode === 'mock' }),
+        body: JSON.stringify({
+          skill: activeSkill.id,
+          version_no: testingVersion,
+          message: userMsg.text,
+          history: testMessages.map(m => ({ role: m.role, content: m.text })),
+          useMock: testMode === 'mock',
+        }),
       });
       const data = await res.json();
       setTestMessages(prev => [...prev, { id: ++testMsgIdRef.current, role: 'assistant', text: data.text ?? data.error ?? '无返回' }]);
