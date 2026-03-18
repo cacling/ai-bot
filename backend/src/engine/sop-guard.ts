@@ -48,48 +48,61 @@ function extractToolDependencies(mermaid: string): ToolDependency[] {
   const deps: ToolDependency[] = [];
   const lines = mermaid.split('\n');
 
-  // Extract all transitions with tool markers: A --> B: label %% tool:xxx
-  const transitions: Array<{ from: string; to: string; tool: string }> = [];
+  // Step 1: Extract ALL transitions (not just tool-marked ones)
+  const allTransitions: Array<{ from: string; to: string }> = [];
+  // Step 2: Extract tool → state mapping (which state has which tool marker)
+  const toolAtState = new Map<string, string>(); // stateFrom → toolName
+
   for (const line of lines) {
-    const toolMatch = line.match(/%% tool:(\w+)/);
-    if (!toolMatch) continue;
     const transMatch = line.match(/^\s*(\S+)\s*-->\s*([^:\s]+)/);
     if (!transMatch) continue;
-    transitions.push({
-      from: transMatch[1],
-      to: transMatch[2],
-      tool: toolMatch[1],
-    });
+    const from = transMatch[1];
+    const to = transMatch[2];
+    if (from === '[*]' || to === '[*]') {
+      allTransitions.push({ from, to });
+      // Still check for tool marker on [*] transitions
+      const toolMatch = line.match(/%% tool:(\w+)/);
+      if (toolMatch) toolAtState.set(from, toolMatch[1]);
+      continue;
+    }
+    allTransitions.push({ from, to });
+
+    const toolMatch = line.match(/%% tool:(\w+)/);
+    if (toolMatch) {
+      toolAtState.set(from, toolMatch[1]);
+    }
   }
 
-  // For each operation tool, trace back to find all query tools that must precede it
-  for (const t of transitions) {
-    if (!OPERATION_TOOLS.has(t.tool)) continue;
+  // Step 3: For each operation tool, BFS backwards along ALL transitions
+  // to find predecessor query tools
+  for (const [state, toolName] of toolAtState) {
+    if (!OPERATION_TOOLS.has(toolName)) continue;
 
-    // BFS backwards from this state to find all predecessor query tools
     const required = new Set<string>();
     const visited = new Set<string>();
-    const queue = [t.from];
-    visited.add(t.from);
+    const queue = [state];
+    visited.add(state);
 
     while (queue.length > 0) {
       const current = queue.shift()!;
-      // Find all transitions that lead TO this state
-      for (const prev of transitions) {
-        if (prev.to === current && !visited.has(prev.from)) {
-          visited.add(prev.from);
-          if (QUERY_TOOLS.has(prev.tool)) {
-            required.add(prev.tool);
+      // Find ALL transitions that lead TO this state (not just tool-marked)
+      for (const t of allTransitions) {
+        if (t.to === current && !visited.has(t.from)) {
+          visited.add(t.from);
+          // If this predecessor state has a query tool marker, record it
+          const predTool = toolAtState.get(t.from);
+          if (predTool && QUERY_TOOLS.has(predTool)) {
+            required.add(predTool);
           }
-          queue.push(prev.from);
+          queue.push(t.from);
         }
       }
     }
 
     deps.push({
-      tool: t.tool,
+      tool: toolName,
       requiredTools: [...required],
-      description: `${t.tool} 需要先完成: ${[...required].join(', ') || '(无前置工具)'}`,
+      description: `${toolName} 需要先完成: ${[...required].join(', ') || '(无前置工具)'}`,
     });
   }
 
@@ -115,15 +128,38 @@ function buildGlobalDependencies(): Map<string, ToolDependency> {
       if (!mermaidMatch) continue;
 
       const deps = extractToolDependencies(mermaidMatch[1]);
+
+      // Within a skill: same tool may appear in multiple branches.
+      // Take INTERSECTION — only require tools common to ALL branches.
+      const skillToolDeps = new Map<string, Set<string>[]>();
       for (const dep of deps) {
-        // If tool already has deps from another skill, merge (take the most restrictive)
-        const existing = map.get(dep.tool);
+        const list = skillToolDeps.get(dep.tool) ?? [];
+        list.push(new Set(dep.requiredTools));
+        skillToolDeps.set(dep.tool, list);
+      }
+
+      for (const [toolName, branchDeps] of skillToolDeps) {
+        // Intersect all branches
+        let common = branchDeps[0] ? new Set(branchDeps[0]) : new Set<string>();
+        for (let i = 1; i < branchDeps.length; i++) {
+          for (const t of common) {
+            if (!branchDeps[i].has(t)) common.delete(t);
+          }
+        }
+        const required = [...common];
+
+        // Across skills: merge (union) with existing
+        const existing = map.get(toolName);
         if (existing) {
-          const merged = new Set([...existing.requiredTools, ...dep.requiredTools]);
+          const merged = new Set([...existing.requiredTools, ...required]);
           existing.requiredTools = [...merged];
-          existing.description = `${dep.tool} 需要先完成: ${existing.requiredTools.join(', ')}`;
+          existing.description = `${toolName} 需要先完成: ${existing.requiredTools.join(', ')}`;
         } else {
-          map.set(dep.tool, dep);
+          map.set(toolName, {
+            tool: toolName,
+            requiredTools: required,
+            description: `${toolName} 需要先完成: ${required.join(', ') || '(无前置工具)'}`,
+          });
         }
       }
     }
@@ -137,6 +173,11 @@ function buildGlobalDependencies(): Map<string, ToolDependency> {
 // Build once at startup, refresh every 60s
 let _deps = buildGlobalDependencies();
 let _depsBuiltAt = Date.now();
+
+// Log at startup
+for (const [tool, dep] of _deps) {
+  logger.info('sop-guard', 'dependency', { tool, requires: dep.requiredTools });
+}
 
 function getDeps(): Map<string, ToolDependency> {
   if (Date.now() - _depsBuiltAt > 60_000) {
