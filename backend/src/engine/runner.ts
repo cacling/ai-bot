@@ -340,15 +340,23 @@ export async function runAgent(
         });
         prevStepEnd = now;
 
+        // Track active skill from tool calls (needed for progress tracking)
+        for (const tc of toolCalls ?? []) {
+          if (tc.toolName === 'get_skill_instructions') {
+            const args = tc.args as { skill_name?: string };
+            if (args.skill_name) lastActiveSkill = args.skill_name;
+          }
+          const mappedSkill = SKILL_TOOL_MAP[tc.toolName] ?? lastActiveSkill;
+          if (mappedSkill) lastActiveSkill = mappedSkill;
+        }
+
         // Push diagram updates via callback (for WebSocket chat channel)
         if (onDiagramUpdate) {
           for (const tc of toolCalls ?? []) {
-            // get_skill_instructions: push un-highlighted diagram so the panel appears early
             if (tc.toolName === 'get_skill_instructions') {
               const args = tc.args as { skill_name?: string };
               const skillName = args.skill_name;
               if (skillName) {
-                lastActiveSkill = skillName;
                 try {
                   const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
                   if (existsSync(skillPath)) {
@@ -358,11 +366,8 @@ export async function runAgent(
                 } catch { /* ignore */ }
               }
             }
-            // MCP skill tools: send un-highlighted diagram immediately;
-            // progressHL will be applied later by the async progress tracker.
             const skillName = SKILL_TOOL_MAP[tc.toolName] ?? lastActiveSkill;
             if (skillName) {
-              lastActiveSkill = skillName;
               try {
                 const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
                 if (existsSync(skillPath)) {
