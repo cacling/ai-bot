@@ -41,28 +41,33 @@ function stripProgressMarker(mermaid: string): string {
  * We find all <text> elements, match by textContent, then style the sibling <rect>.
  */
 function applyProgressHighlightDOM(container: HTMLElement, stateName: string): boolean {
-  const allTexts = container.querySelectorAll<SVGTextElement | HTMLSpanElement>('text, foreignObject span');
-  for (const textEl of allTexts) {
-    const content = textEl.textContent?.trim();
-    if (content !== stateName) continue;
-    // Walk up to find the parent group node
-    let g: Element | null = textEl.closest('g');
-    if (!g) continue;
-    // Find the background shape (rect, path, or polygon) in this group or its parent
-    let shape = g.querySelector('rect, path, polygon');
-    if (!shape) {
-      g = g.parentElement?.closest('g') ?? null;
-      if (g) shape = g.querySelector('rect, path, polygon');
+  // Mermaid stateDiagram SVG uses: <g class="node ..."> → <rect> + <g class="label"> → <foreignObject> → <div> → <span class="nodeLabel">
+  // Also possible: <g> → <rect> + <text> → <tspan>
+  // Strategy: find ALL text-bearing elements and match by content
+  const candidates = container.querySelectorAll<Element>('.nodeLabel, text, tspan, foreignObject span, foreignObject div');
+  const allTexts = Array.from(candidates).map(el => ({ el, text: el.textContent?.trim() ?? '' }));
+  console.log('[ProgressHL] searching for:', stateName, 'candidates:', allTexts.map(t => t.text).slice(0, 20));
+
+  for (const { el, text } of allTexts) {
+    if (text !== stateName) continue;
+    console.log('[ProgressHL] found match:', el.tagName, el.className);
+    // Walk up to find the statediagram node group (has a <rect> sibling)
+    let node: Element | null = el;
+    for (let depth = 0; depth < 6; depth++) {
+      node = node?.parentElement ?? null;
+      if (!node) break;
+      const rect = node.querySelector(':scope > rect, :scope > path, :scope > polygon');
+      if (rect) {
+        console.log('[ProgressHL] applying style to rect in:', node.tagName, node.id, node.className);
+        (rect as SVGElement).style.fill = '#fef08a';
+        (rect as SVGElement).style.stroke = '#f59e0b';
+        (rect as SVGElement).style.strokeWidth = '3px';
+        node.classList.add('progressHL');
+        return true;
+      }
     }
-    if (shape) {
-      (shape as SVGElement).style.fill = '#fef08a';
-      (shape as SVGElement).style.stroke = '#f59e0b';
-      (shape as SVGElement).style.strokeWidth = '3px';
-    }
-    // Mark the group with class for auto-focus to find
-    (g ?? textEl.parentElement)?.classList.add('progressHL');
-    return true;
   }
+  console.warn('[ProgressHL] no match found for:', stateName);
   return false;
 }
 
