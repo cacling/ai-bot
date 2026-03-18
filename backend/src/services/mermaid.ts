@@ -83,31 +83,12 @@ export function extractTransitions(mermaid: string): string[] {
  */
 export function highlightMermaidProgress(rawMermaid: string, stateName: string): string {
   if (!isStateDiagram(rawMermaid) || !stateName) return rawMermaid;
-  const lines = rawMermaid.split('\n');
-  // Verify the state actually exists in the diagram
   const allStates = extractStateNames(rawMermaid);
   if (!allStates.includes(stateName)) return rawMermaid;
 
-  const className = 'progressHL';
-  const classStyle = 'fill:#fef08a,stroke:#f59e0b,stroke-width:3px,color:#000';
-  const classDef = `    classDef ${className} ${classStyle}`;
-
-  let applied = false;
-  const modifiedLines = lines.slice(1).map(line => {
-    if (applied) return line;
-    // Match transition targeting this state: --> stateName or --> stateName:
-    const re = new RegExp(`-->\\s*${stateName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s*:|\\s*$)`);
-    if (re.test(line)) {
-      applied = true;
-      return line.replace(/-->\s*([^:\s]+)(\s*:)?/, (_, name, colon) =>
-        colon ? `--> ${name}:::${className} :` : `--> ${name}:::${className}`
-      );
-    }
-    return line;
-  });
-
-  if (!applied) return rawMermaid;
-  return `${lines[0]}\n${classDef}\n${modifiedLines.join('\n')}`;
+  // CJK state names are incompatible with Mermaid's ::: / class syntax in stateDiagram-v2.
+  // Append a comment marker instead — the frontend applies highlighting via DOM after SVG render.
+  return `${rawMermaid}\n%% progress:${stateName}`;
 }
 
 /**

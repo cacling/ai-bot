@@ -13,6 +13,7 @@ import { isNoDataResult } from '../services/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
 import { matchMockRule } from '../services/mock-engine';
+import { SOPGuard } from './sop-guard';
 
 // Re-export for test file
 export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };
@@ -24,10 +25,23 @@ const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://127.0.0.1:18003/m
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
-/** Tool → skill name mapping for diagram highlighting */
+/** Tool → skill name mapping for diagram highlighting (fallback when no active skill) */
 const SKILL_TOOL_MAP: Record<string, string> = {
+  query_subscriber: 'service-cancel',
+  query_bill: 'bill-inquiry',
+  query_plans: 'plan-inquiry',
+  cancel_service: 'service-cancel',
   diagnose_network: 'fault-diagnosis',
   diagnose_app: 'telecom-app',
+  issue_invoice: 'bill-inquiry',
+  verify_identity: 'service-suspension',
+  check_account_balance: 'service-suspension',
+  check_contracts: 'service-suspension',
+  apply_service_suspension: 'service-suspension',
+  record_call_result: 'outbound-collection',
+  send_followup_sms: 'outbound-collection',
+  create_callback_task: 'outbound-collection',
+  record_marketing_result: 'outbound-marketing',
 };
 
 
@@ -256,6 +270,34 @@ export async function runAgent(
       },
     ]),
   );
+  // SOP Guard: wrap operation tools with precondition checks
+  const sopGuard = new SOPGuard();
+  const sopWrappedTools = Object.fromEntries(
+    Object.entries(mcpTools as Record<string, any>).map(([name, tool]) => [
+      name,
+      {
+        ...tool,
+        execute: async (...args: any[]) => {
+          // Check SOP preconditions before executing
+          const rejection = sopGuard.check(name);
+          if (rejection) {
+            if (sopGuard.shouldEscalate()) {
+              logger.error('sop-guard', 'escalate_to_human', { tool: name });
+              return { content: [{ type: 'text', text: JSON.stringify({ error: rejection + '\n连续违规，建议转接人工处理。请调用 transfer_to_human。' }) }] };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify({ error: rejection }) }] };
+          }
+          // Execute the tool
+          const result = await tool.execute(...args);
+          // Record successful call
+          sopGuard.recordToolCall(name);
+          sopGuard.resetViolations();
+          return result;
+        },
+      },
+    ]),
+  );
+
   const t_mcp_ready = Date.now();
   logger.info('agent', 'mcp_ready', { mcp_init_ms: t_mcp_ready - t_run_start });
 
@@ -280,7 +322,7 @@ export async function runAgent(
       system: systemPrompt,
       messages: [...history, { role: 'user', content: userMessage }],
       tools: {
-        ...mcpTools,
+        ...sopWrappedTools,
         ...skillsTools,
       },
       maxSteps: 10,
