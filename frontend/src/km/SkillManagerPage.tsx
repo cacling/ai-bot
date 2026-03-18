@@ -431,6 +431,15 @@ export function SkillManagerPage() {
   const [testMode, setTestMode] = useState<'mock' | 'real'>('mock');
   const [testDiagram, setTestDiagram] = useState<{ skill_name: string; mermaid: string } | null>(null);
   const [diagramCollapsed, setDiagramCollapsed] = useState(false);
+  const [testPersona, setTestPersona] = useState('normal');
+
+  // Test personas
+  const TEST_PERSONAS: Record<string, { label: string; data: Record<string, unknown> }> = {
+    normal:     { label: '正常客户 — 张三（畅享50G）', data: { phone: '13800000001', name: '张三', plan: '畅享50G套餐' } },
+    arrears:    { label: '欠费客户 — 王五（已停机）', data: { phone: '13800000003', name: '王五', plan: '基础10G套餐' } },
+    collection: { label: '催收 — 张明（宽带欠费30天）', data: { phone: '13900000001', name: '张明', task_type: 'collection', product_name: '宽带包年套餐', arrears_amount: 388, overdue_days: 30 } },
+    marketing:  { label: '营销 — 用户（套餐升级）', data: { phone: '13900000002', name: '用户', task_type: 'marketing', product_name: '语音增强套餐', campaign_name: '春季套餐升级活动' } },
+  };
   const testMsgIdRef = useRef(0);
   const testEndRef = useRef<HTMLDivElement>(null);
 
@@ -480,6 +489,7 @@ export function SkillManagerPage() {
           message: userMsg.text,
           history: testMessages.map(m => ({ role: m.role, content: m.text })),
           useMock: testMode === 'mock',
+          persona: TEST_PERSONAS[testPersona]?.data,
         }),
       });
       const data = await res.json();
@@ -787,8 +797,17 @@ export function SkillManagerPage() {
             </div>
             {testingVersion !== null && (
               <div className="p-3 bg-white border-t border-slate-200 space-y-2">
-                {/* Mock / Real 模式切换 */}
-                <div className="flex items-center gap-3">
+                {/* 测试场景 + Mock/Real */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <select
+                    value={testPersona}
+                    onChange={e => setTestPersona(e.target.value)}
+                    className="px-2 py-1 text-[11px] border border-slate-200 rounded-md bg-white text-slate-600"
+                  >
+                    {Object.entries(TEST_PERSONAS).map(([key, p]) => (
+                      <option key={key} value={key}>{p.label}</option>
+                    ))}
+                  </select>
                   <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
                     <input type="radio" name="testMode" checked={testMode === 'mock'} onChange={() => setTestMode('mock')} className="w-3 h-3" />
                     Mock
@@ -797,7 +816,6 @@ export function SkillManagerPage() {
                     <input type="radio" name="testMode" checked={testMode === 'real'} onChange={() => setTestMode('real')} className="w-3 h-3" />
                     Real
                   </label>
-                  <span className="text-[10px] text-slate-400">{testMode === 'mock' ? '工具调用走 Mock 规则' : '工具调用走真实 MCP'}</span>
                 </div>
                 <div className="rounded-xl border border-slate-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 bg-slate-50 transition-all overflow-hidden">
                   <textarea

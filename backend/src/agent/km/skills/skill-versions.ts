@@ -110,7 +110,7 @@ app.post('/create-from', async (c) => {
 
 // POST /api/skill-versions/test — 直接用版本快照测试（不创建沙箱）
 app.post('/test', async (c) => {
-  const body = await c.req.json<{ skill: string; version_no: number; message: string; history?: Array<{ role: string; content: string }>; phone?: string; lang?: 'zh' | 'en'; useMock?: boolean }>();
+  const body = await c.req.json<{ skill: string; version_no: number; message: string; history?: Array<{ role: string; content: string }>; phone?: string; lang?: 'zh' | 'en'; useMock?: boolean; persona?: Record<string, unknown> }>();
   if (!body.skill || !body.version_no || !body.message) {
     return c.json({ error: 'skill, version_no, message 必填' }, 400);
   }
@@ -155,12 +155,33 @@ app.post('/test', async (c) => {
         skillContent = raw + SOP_ENFORCEMENT_SUFFIX;
       } catch { /* SKILL.md not found, proceed without injection */ }
 
+      // Build persona context to inject into prompt
+      const persona = body.persona ?? {};
+      const phone = (persona.phone as string) ?? body.phone ?? '13800000001';
+      const subscriberName = (persona.name as string) ?? undefined;
+      const planName = (persona.plan as string) ?? undefined;
+
+      // For outbound personas, inject task context
+      let personaContext = '';
+      if (persona.task_type) {
+        personaContext = `\n\n---\n### 测试任务上下文\n\n任务类型：${persona.task_type === 'collection' ? '催收' : '营销'}\n` +
+          `客户姓名：${persona.name ?? '用户'}\n` +
+          `客户手机号：${phone}\n` +
+          (persona.product_name ? `产品名称：${persona.product_name}\n` : '') +
+          (persona.arrears_amount ? `欠款金额：¥${persona.arrears_amount}\n` : '') +
+          (persona.overdue_days ? `逾期天数：${persona.overdue_days}天\n` : '') +
+          (persona.campaign_name ? `活动名称：${persona.campaign_name}\n` : '') +
+          '\n请根据以上任务信息，按照技能操作指南执行。';
+        if (skillContent) skillContent += personaContext;
+        else skillContent = personaContext;
+      }
+
       const result = await runAgent(
         body.message,
         history,
-        body.phone ?? '13800000001',
+        phone,
         body.lang ?? 'zh',
-        undefined, undefined, undefined, undefined,
+        undefined, undefined, subscriberName, planName,
         tempParent,
         { useMock: body.useMock !== false, skillContent, skillName: body.skill },
       );
