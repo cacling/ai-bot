@@ -14,7 +14,7 @@
 | [04-data-model.md](04-data-model.md) | 数据模型：用户、账单、套餐、外呼任务、知识管理（13 张表）、数据库 Schema |
 | [05-nfr.md](05-nfr.md) | 非功能需求：性能、安全、可靠性 |
 | [06-deployment.md](06-deployment.md) | 部署指南：一键启动、手动启动、环境配置 |
-| [07-testing.md](07-testing.md) | 测试指南：技术栈、运行命令、单元测试与 E2E 用例清单 |
+| [07-testing.md](07-testing.md) | 测试指南：1040 个测试用例（962 单元 + 78 E2E）、93% 覆盖率、运行命令 |
 
 ---
 
@@ -126,22 +126,32 @@ frontend/src/
     ├── DiagramPanel.tsx, mermaid.ts, audio.ts
 ```
 
-### Tests (tests/)
+### Tests (tests/) — 962 单元 + 78 E2E = 1040 测试用例，93% 文件覆盖率
 
 ```
 tests/
 ├── scripts/
-│   ├── start.sh      （启动测试服务）
-│   ├── stop.sh       （停止测试服务）
-│   └── seed.sh       （重置测试数据）
-├── e2e/              （Playwright E2E 测试）
-│   ├── *.spec.ts     （6 个 spec 文件）
+│   ├── start.sh              （启动测试服务）
+│   ├── stop.sh               （停止测试服务）
+│   └── seed.sh               （重置测试数据）
+├── e2e/                      （Playwright E2E，78 tests / 6 files）
+│   ├── *.spec.ts
 │   ├── playwright.config.ts, global-setup.ts
 │   └── package.json
-└── unittest/         （Bun 单元测试）
-    ├── agent/, compliance/, middleware/
-    ├── routes/{km/, ...}, skills/
-    └── session-bus.test.ts
+└── unittest/
+    ├── backend/              （Bun 单元测试，580 tests / 52 files）
+    │   ├── services/         （16 个测试文件）
+    │   ├── engine/           （2 个测试文件）
+    │   ├── chat/             （4 个测试文件）
+    │   ├── agent/{card/,chat/,km/kms/,km/skills/}
+    │   └── db/
+    └── frontend/             （Vitest 单元测试，382 tests / 53 files）
+        ├── chat/             （7 个测试文件）
+        ├── agent/cards/      （12 个测试文件）
+        ├── km/               （22 个测试文件）
+        ├── shared/           （3 个测试文件）
+        ├── vitest.config.ts, setup.ts
+        └── package.json
 ```
 
 ### 其他目录
