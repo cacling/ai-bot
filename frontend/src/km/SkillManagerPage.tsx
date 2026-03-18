@@ -434,13 +434,32 @@ export function SkillManagerPage() {
   const testMsgIdRef = useRef(0);
   const testEndRef = useRef<HTMLDivElement>(null);
 
-  const handleStartTest = useCallback((versionNo: number) => {
+  const handleStartTest = useCallback(async (versionNo: number) => {
     setTestingVersion(versionNo);
     setTestMessages([]);
     setTestInput('');
-    setTestDiagram(null);
+    setDiagramCollapsed(false);
     setRightTab('test');
-  }, []);
+
+    // Load mermaid diagram from SKILL.md immediately
+    if (activeSkill) {
+      try {
+        const versionDetail = versions.find(v => v.version_no === versionNo);
+        const skillMdPath = versionDetail?.snapshot_path
+          ? `skills/${versionDetail.snapshot_path}/SKILL.md`
+          : `skills/biz-skills/${activeSkill.id}/SKILL.md`;
+        const res = await fetch(`/api/files/read?path=${encodeURIComponent(skillMdPath)}`);
+        if (res.ok) {
+          const data = await res.json();
+          const content = data.content ?? '';
+          const mermaidMatch = content.match(/```mermaid\r?\n([\s\S]*?)```/);
+          if (mermaidMatch) {
+            setTestDiagram({ skill_name: activeSkill.id, mermaid: mermaidMatch[1].trim() });
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  }, [activeSkill, versions]);
 
   const handleSendTest = useCallback(async () => {
     if (!activeSkill || testingVersion === null || !testInput.trim()) return;
