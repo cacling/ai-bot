@@ -807,17 +807,20 @@ export function SkillManagerPage() {
             </div>
             {testingVersion !== null && (
               <div className="p-3 bg-white border-t border-slate-200 space-y-2">
-                {/* 测试场景 + Mock/Real */}
-                <div className="flex items-center gap-3 flex-wrap">
+                {/* 测试角色 */}
+                <div>
                   <select
                     value={testPersonaId}
                     onChange={e => setTestPersonaId(e.target.value)}
-                    className="px-2 py-1 text-[11px] border border-slate-200 rounded-md bg-white text-slate-600"
+                    className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-md bg-white text-slate-600"
                   >
                     {testPersonaList.map(p => (
                       <option key={p.id} value={p.id}>{p.label}</option>
                     ))}
                   </select>
+                </div>
+                {/* Mock/Real */}
+                <div className="flex items-center gap-3">
                   <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
                     <input type="radio" name="testMode" checked={testMode === 'mock'} onChange={() => setTestMode('mock')} className="w-3 h-3" />
                     Mock
