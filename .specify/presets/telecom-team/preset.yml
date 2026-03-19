@@ -1,0 +1,5 @@
+id: telecom-team
+name: Telecom Customer Service Team Preset
+description: Team-level workflow standards, performance targets, testing conventions, and development processes for the smart telecom customer service system.
+version: 1.0.0
+priority: 10
