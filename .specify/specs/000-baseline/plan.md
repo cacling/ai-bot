@@ -38,7 +38,7 @@ flowchart TD
     end
 
     subgraph "前端 :5173"
-        FE["React + Vite<br/>Tailwind CSS"]
+        FE["React + Vite<br/>shadcn/ui + Tailwind CSS"]
     end
 
     subgraph "后端 :18472（Hono + Bun 单体）"
@@ -201,7 +201,7 @@ flowchart TD
 
 | 层次 | 技术 |
 |------|------|
-| 前端 | React 18 + TypeScript + Vite + Tailwind CSS |
+| 前端 | React 18 + TypeScript + Vite + shadcn/ui + Tailwind CSS |
 | 后端 | Hono + Bun |
 | AI SDK | Vercel AI SDK（generateText + tool） |
 | 文字客服 LLM | SiliconFlow 托管模型（stepfun-ai/Step-3.5-Flash） |

@@ -346,7 +346,8 @@ interface EmotionResult {
 |------|------|
 | React 18 + TypeScript | UI 框架 |
 | Vite | 构建工具，开发代理 `/api` → `:18472` |
-| Tailwind CSS | 样式 |
+| shadcn/ui + Tailwind CSS | UI 组件库 + 样式（Button, Input, Select, Table, Badge, Card, Dialog 等） |
+| @base-ui/react | shadcn/ui 底层原语（Select, Checkbox, RadioGroup 等） |
 | react-markdown + remark-gfm | Markdown 渲染 |
 | lucide-react | 图标库 |
 
@@ -699,7 +700,7 @@ interface CardDef {
   id: string;
   title: Record<Lang, string>;
   Icon: LucideIcon;
-  headerClass: string;          // Tailwind 渐变 header 样式
+  headerClass: string;          // Tailwind header 样式（使用 shadcn 语义色如 bg-muted）
   colSpan: 1 | 2;               // 2 列 Grid 中占几列
   defaultOpen: boolean;
   defaultCollapsed: boolean;
@@ -759,7 +760,7 @@ interface CardState {
            焦虑
 ```
 
-- 渐变轨道：`from-green-400 via-yellow-400 via-orange-400 to-red-500`
+- 渐变轨道：`from-green-400 via-yellow-400 via-orange-400 to-red-500`（数据可视化，保留具体色值）
 - 指示器位置由 `color` 字段映射：`green→12%` / `amber→42%` / `orange→68%` / `red→88%`
 - 位置变化：CSS `transition: left 0.5s ease` 平滑滑动
 - 空状态：无指示器，显示"等待客户发言…"

@@ -251,16 +251,19 @@ backend/skills/
 
 ```
 frontend/
-├── package.json                 # 前端依赖（React 18 + Vite + Tailwind）
-├── tsconfig.json                # TypeScript 配置
-├── vite.config.ts               # Vite 配置（代理 /api → :18472）
-├── tailwind.config.js           # Tailwind CSS 配置
+├── package.json                 # 前端依赖（React 18 + Vite + shadcn/ui + Tailwind）
+├── tsconfig.json                # TypeScript 配置（@/ 路径别名指向 src/）
+├── vite.config.ts               # Vite 配置（代理 /api → :18472，@/ 路径别名）
+├── tailwind.config.js           # Tailwind CSS 配置（shadcn/ui 主题变量）
+├── components.json              # shadcn/ui 组件配置
 ├── index.html                   # HTML 入口
 └── src/
     ├── main.tsx                 # React 入口（ReactDOM.createRoot）
     ├── App.tsx                  # 路由定义（/、/agent、/voice、/outbound、/km/*）
     ├── i18n.ts                  # 前端国际化配置
-    └── index.css                # 全局样式（Tailwind @apply）
+    ├── index.css                # 全局样式（Tailwind + shadcn/ui CSS 变量主题）
+    ├── lib/utils.ts             # shadcn/ui 工具函数（cn 类名合并）
+    └── components/ui/           # shadcn/ui 组件（Button, Input, Select, Table 等 15 个）
 ```
 
 ### 客户侧（chat/）
@@ -547,6 +550,8 @@ tests/unittest/frontend/
 | **Drizzle 配置** | `backend/drizzle.config.ts` |
 | **Vite 配置** | `frontend/vite.config.ts` |
 | **Tailwind 配置** | `frontend/tailwind.config.js` |
+| **shadcn/ui 配置** | `frontend/components.json` |
+| **shadcn/ui 组件** | `frontend/src/components/ui/` |
 | **路由注册** | `backend/src/index.ts`（全部路由挂载） |
 | **前端路由** | `frontend/src/App.tsx` |
 | **日志文件** | `logs/backend.log`、`logs/mcp-*.log`、`logs/frontend.log` |
