@@ -123,12 +123,12 @@ ok "数据库 Schema 就绪"
 
 PLAN_COUNT=$(cd "$BASE_DIR/backend" && "$BUN" -e \
   "import {db} from './src/db/index.ts'; \
-   import {plans} from './src/db/schema.ts'; \
+   import {plans} from './src/db/schema/index.ts'; \
    console.log(db.select().from(plans).all().length)" 2>/dev/null || echo "0")
 
 MOCK_USER_COUNT=$(cd "$BASE_DIR/backend" && "$BUN" -e \
   "import {db} from './src/db/index.ts'; \
-   import {mockUsers} from './src/db/schema.ts'; \
+   import {mockUsers} from './src/db/schema/index.ts'; \
    console.log(db.select().from(mockUsers).all().length)" 2>/dev/null || echo "0")
 
 if [[ "$PLAN_COUNT" == "0" || "$MOCK_USER_COUNT" == "0" ]]; then
