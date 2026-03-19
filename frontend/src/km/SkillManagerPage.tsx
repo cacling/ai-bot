@@ -21,7 +21,7 @@ import {
   Send, Bot, User, FileText, Folder, FileCode,
   ChevronRight, ChevronDown, Sparkles, CheckCircle2, Plus,
   ArrowLeft, AlertCircle, GitBranch,
-  Mic, MicOff, Loader2, FlaskConical, ImagePlus, X,
+  Mic, MicOff, Loader2, FlaskConical, ImagePlus, X, ScanEye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -296,6 +296,7 @@ export function SkillManagerPage() {
     openSkill,
     requestCloseEditor,
     createNewSkill,
+    deleteSkill,
     // skill-creator
     phase,
     canPublish,
@@ -534,7 +535,6 @@ export function SkillManagerPage() {
           version_no: testingVersion,
           message: userMsg.text,
           history: testMessages.map(m => ({ role: m.role, content: m.text })),
-          useMock: testMode === 'mock',
           persona: testPersonaList.find(p => p.id === testPersonaId)?.context,
         }),
       });
@@ -603,9 +603,9 @@ export function SkillManagerPage() {
   }, [reloadVersions]);
 
   const handleDiscardSandbox = useCallback(async () => {
-    if (sandboxId) {
-      try { await fetch(`/api/sandbox/${sandboxId}`, { method: 'DELETE' }); } catch {}
-    }
+    if (!sandboxId) return;
+    if (!confirm('确定丢弃沙箱？所有测试数据将被清除，此操作不可恢复。')) return;
+    try { await fetch(`/api/sandbox/${sandboxId}`, { method: 'DELETE' }); } catch {}
     setSandboxId(null);
     setPipelineStage('draft');
   }, [sandboxId]);
@@ -677,9 +677,12 @@ export function SkillManagerPage() {
                           <div className="flex items-center gap-2">
                             <Button variant="ghost" size="xs" onClick={() => openSkill(skill)}>编辑</Button>
                             <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive"
-                              onClick={() => {
-                                if (confirm(`确定删除技能 ${skill.id}？`)) {
-                                  alert('删除功能开发中');
+                              onClick={async () => {
+                                if (!confirm(`确定删除技能「${skill.id}」？此操作不可恢复。`)) return;
+                                try {
+                                  await deleteSkill(skill.id);
+                                } catch (err: any) {
+                                  alert(`删除失败: ${err.message ?? '未知错误'}`);
                                 }
                               }}
                             >删除</Button>
@@ -983,28 +986,42 @@ export function SkillManagerPage() {
           <>
             <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
               {messages.map((msg) => (
-                <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
-                    {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                msg.role === 'system' ? (
+                  /* 系统消息（图片解析结果等） */
+                  <div key={msg.id} className="flex gap-2">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+                      <ScanEye className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="max-w-[90%] rounded-2xl rounded-tl-none px-3 py-2 text-xs leading-relaxed shadow-sm bg-amber-50 border border-amber-200 text-foreground dark:bg-amber-950/20 dark:border-amber-800">
+                      <div className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-1">流程图解析结果</div>
+                      <InlineMarkdown text={msg.text} />
+                    </div>
                   </div>
-                  <div className="max-w-[85%] flex flex-col gap-1">
-                    {msg.role === 'assistant' && msg.thinking && (
-                      <div className="text-[10px] italic text-muted-foreground bg-muted border border-border/50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
-                        {msg.thinking}
-                      </div>
-                    )}
-                    {msg.image && (
-                      <div className={`rounded-2xl overflow-hidden shadow-sm ${msg.role === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'}`}>
-                        <img src={msg.image} alt="上传的流程图" className="max-w-full max-h-48 object-contain rounded-2xl border border-border" />
-                      </div>
-                    )}
-                    {msg.text && (
-                      <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
-                        <InlineMarkdown text={msg.text} />
-                      </div>
-                    )}
+                ) : (
+                  /* 用户 / AI 消息 */
+                  <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
+                      {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                    </div>
+                    <div className="max-w-[85%] flex flex-col gap-1">
+                      {msg.role === 'assistant' && msg.thinking && (
+                        <div className="text-[10px] italic text-muted-foreground bg-muted border border-border/50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
+                          {msg.thinking}
+                        </div>
+                      )}
+                      {msg.image && (
+                        <div className={`rounded-2xl overflow-hidden shadow-sm ${msg.role === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'}`}>
+                          <img src={msg.image} alt="上传的流程图" className="max-w-full max-h-48 object-contain rounded-2xl border border-border" />
+                        </div>
+                      )}
+                      {msg.text && (
+                        <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
+                          <InlineMarkdown text={msg.text} />
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )
               ))}
               {isTyping && (
                 <div className="flex gap-2">
@@ -1126,22 +1143,15 @@ export function SkillManagerPage() {
                     <SelectContent>
                       {testPersonaList.map(p => {
                         const ctx = p.context as Record<string, string>;
-                        const shortLabel = `${ctx.name ?? p.id} · ${ctx.status === 'suspended' ? '欠费停机' : ctx.plan ?? ''}`;
+                        const shortLabel = `${ctx.name ?? p.id} · ${ctx.phone ?? ''} · ${ctx.status === 'suspended' ? '欠费停机' : ctx.plan ?? ''}`;
                         return <SelectItem key={p.id} value={p.id}>{shortLabel}</SelectItem>;
                       })}
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Mock/Real */}
-                <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => setTestMode('mock')} className={`flex items-center gap-1.5 text-xs cursor-pointer font-normal ${testMode === 'mock' ? 'text-primary font-medium' : 'text-foreground/70'}`}>
-                    <span className={`inline-block size-3 rounded-full border-2 ${testMode === 'mock' ? 'border-primary bg-primary' : 'border-input'}`} />
-                    Mock
-                  </button>
-                  <button type="button" onClick={() => setTestMode('real')} className={`flex items-center gap-1.5 text-xs cursor-pointer font-normal ${testMode === 'real' ? 'text-primary font-medium' : 'text-foreground/70'}`}>
-                    <span className={`inline-block size-3 rounded-full border-2 ${testMode === 'real' ? 'border-primary bg-primary' : 'border-input'}`} />
-                    Real
-                  </button>
+                {/* Mock/Real 已改为工具级控制（在 MCP 管理中设置） */}
+                <div className="text-[10px] text-muted-foreground px-1">
+                  Mock/Real 模式在 MCP 管理中按工具设置
                 </div>
                 <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
                   <Textarea

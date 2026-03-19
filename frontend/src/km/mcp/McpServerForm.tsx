@@ -118,8 +118,84 @@ interface ToolItem {
 interface ToolWithMeta extends ToolItem {
   index: number;
   disabled: boolean;
+  mocked: boolean;
   mockRules: MockRule[];
   mockIndices: number[];
+}
+
+// ── Tool Edit Dialog ─────────────────────────────────────────────────────────
+function ToolEditDialog({ tool, onSave, onCancel }: {
+  tool: ToolItem;
+  onSave: (t: ToolItem) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(tool.name);
+  const [description, setDescription] = useState(tool.description);
+  const [params, setParams] = useState<ToolParam[]>(
+    (tool.parameters ?? []).map(p => ({ ...p, type: (['string', 'number', 'boolean'].includes(p.type) ? p.type : 'string') as ToolParam['type'] }))
+  );
+  const [responseExample, setResponseExample] = useState(tool.responseExample ?? '');
+
+  const handleSave = () => {
+    if (!name.trim()) { alert('工具名不能为空'); return; }
+    if (!/^\w+$/.test(name.trim())) { alert('工具名只能包含字母、数字和下划线（snake_case）'); return; }
+    // Build inputSchema from params
+    const inputSchema: Record<string, unknown> = {
+      type: 'object',
+      properties: Object.fromEntries(params.map(p => [p.name, {
+        type: p.type,
+        description: p.description,
+        ...(p.enum ? { enum: p.enum } : {}),
+      }])),
+      required: params.filter(p => p.required).map(p => p.name),
+    };
+    onSave({
+      name: name.trim(),
+      description,
+      parameters: params,
+      inputSchema,
+      responseExample: responseExample || undefined,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background/80 flex items-center justify-center" onClick={onCancel}>
+      <div className="bg-background border rounded-lg shadow-lg w-[560px] max-h-[80vh] overflow-auto p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <h3 className="text-sm font-semibold">{tool.name ? `编辑工具: ${tool.name}` : '添加工具'}</h3>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">工具名 (snake_case)</label>
+            <Input value={name} onChange={e => setName(e.target.value)} className="text-xs font-mono" placeholder="apply_service_suspension" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">描述</label>
+            <Input value={description} onChange={e => setDescription(e.target.value)} className="text-xs" placeholder="执行停机保号操作" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">参数</label>
+          <ParamEditor params={params} onChange={setParams} />
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">返回示例 (JSON, 可选)</label>
+          <Input
+            value={responseExample}
+            onChange={e => setResponseExample(e.target.value)}
+            className="text-xs font-mono"
+            placeholder='{"success": true, "message": "操作成功"}'
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t">
+          <Button variant="outline" size="sm" onClick={onCancel}>取消</Button>
+          <Button size="sm" onClick={handleSave}><Save size={12} /> 确定</Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Main Form ────────────────────────────────────────────────────────────────
@@ -145,6 +221,8 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
   const [tools, setTools] = useState<ToolItem[]>([]);
   // Disabled tools
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
+  // Mocked tools (per-tool mock/real control)
+  const [mockedTools, setMockedTools] = useState<string[]>([]);
   // Mock rules
   const [mockRules, setMockRules] = useState<MockRule[]>([]);
 
@@ -167,6 +245,7 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
       setEnvTestEntries(parseEnvJson(s.env_test_json));
       try { setTools(s.tools_json ? JSON.parse(s.tools_json) : []); } catch { setTools([]); }
       try { setDisabledTools(s.disabled_tools ? JSON.parse(s.disabled_tools) : []); } catch { setDisabledTools([]); }
+      try { setMockedTools(s.mocked_tools ? JSON.parse(s.mocked_tools) : []); } catch { setMockedTools([]); }
       try { setMockRules(s.mock_rules ? JSON.parse(s.mock_rules) : []); } catch { setMockRules([]); }
     }).catch(console.error);
   }, [serverId]);
@@ -190,6 +269,7 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
         env_test_json: envToJson(envTestEntries),
         tools_json: tools.length > 0 ? JSON.stringify(tools) : null,
         disabled_tools: disabledTools.length > 0 ? JSON.stringify(disabledTools) : null,
+        mocked_tools: mockedTools.length > 0 ? JSON.stringify(mockedTools) : null,
         mock_rules: mockRules.length > 0 ? JSON.stringify(mockRules) : null,
       };
       if (isEdit) {
@@ -215,11 +295,12 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
         ...t,
         index: i,
         disabled: disabledTools.includes(t.name),
+        mocked: mockedTools.includes(t.name),
         mockRules: rules,
         mockIndices: indices,
       };
     });
-  }, [tools, disabledTools, mockRules]);
+  }, [tools, disabledTools, mockedTools, mockRules]);
 
   // Skill references per tool
   const [toolSkillMap, setToolSkillMap] = useState<Map<string, string[]>>(new Map());
@@ -235,6 +316,12 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
 
   // Tool detail panel state
   const [testTool, setTestTool] = useState<McpToolInfo | null>(null);
+
+  // Tool edit dialog state
+  const [editingToolIndex, setEditingToolIndex] = useState<number | null>(null); // null=closed, -1=new
+  const editingTool: ToolItem | null = editingToolIndex === -1
+    ? { name: '', description: '' }
+    : editingToolIndex !== null ? tools[editingToolIndex] ?? null : null;
 
   // Discover tools
   const [discovering, setDiscovering] = useState(false);
@@ -269,6 +356,7 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
     env_test_json: envToJson(envTestEntries),
     tools_json: tools.length > 0 ? JSON.stringify(tools) : null,
     disabled_tools: disabledTools.length > 0 ? JSON.stringify(disabledTools) : null,
+    mocked_tools: mockedTools.length > 0 ? JSON.stringify(mockedTools) : null,
     mock_rules: mockRules.length > 0 ? JSON.stringify(mockRules) : null,
     last_connected_at: null,
     created_at: '',
@@ -392,7 +480,7 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
                 {discovering ? '同步中...' : '同步工具'}
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={() => setTools([...tools, { name: '', description: '' }])}>
+            <Button variant="outline" size="sm" onClick={() => setEditingToolIndex(-1)}>
               <Plus size={12} /> 添加工具
             </Button>
           </div>
@@ -410,8 +498,7 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
                   <TableHead className="w-40">工具名</TableHead>
                   <TableHead className="w-36">关联 Skill</TableHead>
                   <TableHead>描述</TableHead>
-                  <TableHead className="w-14 text-center">参数</TableHead>
-                  <TableHead className="w-14 text-center">Mock</TableHead>
+                  <TableHead className="w-40 text-center">模式</TableHead>
                   <TableHead className="w-36 text-center">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -458,15 +545,29 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
                           : <span className="text-muted-foreground">-</span>}
                       </TableCell>
                       <TableCell className="text-muted-foreground truncate" title={tool.description}>{tool.description || '-'}</TableCell>
-                      <TableCell className="text-center text-muted-foreground">
-                        {params
-                          ? <span>{params.required}<span className="text-muted-foreground/50">/{params.total}</span></span>
-                          : paramCount > 0 ? paramCount : '-'}
-                      </TableCell>
                       <TableCell className="text-center">
-                        {tool.mockRules.length > 0
-                          ? <Badge variant="outline" className="text-[10px]">{tool.mockRules.length}</Badge>
-                          : <span className="text-muted-foreground">-</span>}
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className={`text-[11px] ${!tool.mocked ? 'font-medium text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>Real</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (tool.mocked) {
+                                setMockedTools(mockedTools.filter(n => n !== tool.name));
+                              } else {
+                                if (tool.mockRules.length === 0) {
+                                  alert('请先为该工具配置 Mock 规则（点击编辑 → Mock 规则 Tab）');
+                                  return;
+                                }
+                                setMockedTools([...mockedTools, tool.name]);
+                              }
+                            }}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${tool.mocked ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                            title={tool.mocked ? '当前 Mock 模式（点击切换为 Real）' : '当前 Real 模式（点击切换为 Mock）'}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${tool.mocked ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                          </button>
+                          <span className={`text-[11px] ${tool.mocked ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>Mock</span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
@@ -500,6 +601,41 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
           server={currentServerSnapshot}
           tool={testTool}
           onClose={() => setTestTool(null)}
+          onServerUpdated={() => {
+            // Mock rules 在 TestPanel 中保存后，同步回 Form 的 state
+            mcpApi.getServer(serverId).then(s => {
+              try { setMockRules(s.mock_rules ? JSON.parse(s.mock_rules) : []); } catch { /* ignore */ }
+            }).catch(() => {});
+          }}
+        />
+      )}
+
+      {/* Tool edit dialog */}
+      {editingTool && (
+        <ToolEditDialog
+          tool={editingTool}
+          onCancel={() => setEditingToolIndex(null)}
+          onSave={(updated) => {
+            if (editingToolIndex === -1) {
+              // 新增：默认设为 Mock 模式（工具还没在 MCP Server 中实现）
+              setTools([...tools, updated]);
+              if (updated.name && !mockedTools.includes(updated.name)) {
+                setMockedTools([...mockedTools, updated.name]);
+              }
+            } else if (editingToolIndex !== null) {
+              // 编辑已有
+              const newTools = [...tools];
+              const oldName = newTools[editingToolIndex].name;
+              newTools[editingToolIndex] = updated;
+              // 如果工具名改了，同步更新 mockRules 和 disabledTools
+              if (oldName && oldName !== updated.name) {
+                setMockRules(mockRules.map(r => r.tool_name === oldName ? { ...r, tool_name: updated.name } : r));
+                setDisabledTools(disabledTools.map(n => n === oldName ? updated.name : n));
+              }
+              setTools(newTools);
+            }
+            setEditingToolIndex(null);
+          }}
         />
       )}
     </div>

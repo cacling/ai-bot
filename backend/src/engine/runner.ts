@@ -1,10 +1,10 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { type CoreMessage, generateText } from 'ai';
+import { type CoreMessage, generateText, jsonSchema } from 'ai';
 import { experimental_createMCPClient as createMCPClient } from 'ai';
 import { chatModel } from './llm';
-import { skillsTools, getSkillsDescriptionByChannel } from './skills';
+import { skillsTools, getSkillsDescriptionByChannel, getToolSkillMap } from './skills';
 import { logger } from '../services/logger';
 import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../agent/card/handoff-analyzer';
 import { t } from '../services/i18n';
@@ -12,7 +12,7 @@ import { translateText } from '../services/translate-lang';
 import { isNoDataResult } from '../services/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
-import { matchMockRule } from '../services/mock-engine';
+import { matchMockRule, getMockedToolNames, getMockedToolDefinitions } from '../services/mock-engine';
 import { SOPGuard } from './sop-guard';
 
 // Re-export for test file
@@ -25,24 +25,10 @@ const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://127.0.0.1:18003/m
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
-/** Tool → skill name mapping for diagram highlighting (fallback when no active skill) */
-const SKILL_TOOL_MAP: Record<string, string> = {
-  query_subscriber: 'service-cancel',
-  query_bill: 'bill-inquiry',
-  query_plans: 'plan-inquiry',
-  cancel_service: 'service-cancel',
-  diagnose_network: 'fault-diagnosis',
-  diagnose_app: 'telecom-app',
-  issue_invoice: 'bill-inquiry',
-  verify_identity: 'service-suspension',
-  check_account_balance: 'service-suspension',
-  check_contracts: 'service-suspension',
-  apply_service_suspension: 'service-suspension',
-  record_call_result: 'outbound-collection',
-  send_followup_sms: 'outbound-collection',
-  create_callback_task: 'outbound-collection',
-  record_marketing_result: 'outbound-marketing',
-};
+/** Tool → skill name mapping for diagram highlighting (auto-generated from SKILL.md %% tool:xxx annotations) */
+function getSkillToolMap(): Record<string, string> {
+  return getToolSkillMap();
+}
 
 
 const SYSTEM_PROMPT_TEMPLATE =
@@ -198,7 +184,8 @@ export type DiagramUpdateCallback = (skillName: string, mermaid: string) => void
 export type TextDeltaCallback = (delta: string) => void;
 
 export interface RunAgentOptions {
-  useMock?: boolean; // true = 使用 mock 规则替代真实 MCP 调用（沙箱默认行为）
+  /** @deprecated 使用工具级 mock 控制（MCP 管理中每个工具的 Mock 开关）。传 true 时回退为：对所有配了 mock_rules 的工具走 mock */
+  useMock?: boolean;
   skillContent?: string; // 预注入的 SKILL.md 内容（测试时使用，避免依赖 LLM 调用 get_skill_instructions）
   skillName?: string; // 预设的技能名（配合 skillContent，用于进度追踪）
 }
@@ -216,32 +203,54 @@ export async function runAgent(
   options?: RunAgentOptions,
 ): Promise<AgentResult> {
   const effectiveSkillsDir = overrideSkillsDir ?? SKILLS_DIR;
-  const useMock = options?.useMock ?? false;
   const t_run_start = Date.now();
   const { tools: rawMcpTools } = await getMCPTools();
 
-  // If useMock, wrap each MCP tool to try mock rules first
-  const mockWrappedTools = useMock
-    ? Object.fromEntries(
-        Object.entries(rawMcpTools as Record<string, any>).map(([name, tool]) => [
-          name,
-          {
-            ...tool,
-            execute: async (...args: any[]) => {
-              // args[0] is the tool input object from AI SDK
-              const toolInput = args[0] ?? {};
-              const mockResult = matchMockRule(name, toolInput);
-              if (mockResult !== null) {
-                logger.info('agent', 'mock_tool_used', { tool: name });
-                return { content: [{ type: 'text', text: mockResult }] };
-              }
-              // No mock rule → fall through to real MCP
-              return tool.execute(...args);
-            },
-          },
-        ]),
-      )
-    : rawMcpTools;
+  // 工具级 mock 控制：从 MCP 管理读取哪些工具标记为 mock 模式
+  const mockedToolNames = getMockedToolNames();
+  // 向后兼容：如果旧代码传了 useMock: true，对所有配了 mock_rules 的工具走 mock
+  const legacyUseMock = options?.useMock ?? false;
+
+  const mockWrappedTools = Object.fromEntries(
+    Object.entries(rawMcpTools as Record<string, any>).map(([name, tool]) => {
+      const shouldMock = mockedToolNames.has(name) || legacyUseMock;
+      if (!shouldMock) return [name, tool];
+      return [name, {
+        ...tool,
+        execute: async (...args: any[]) => {
+          const toolInput = args[0] ?? {};
+          const mockResult = matchMockRule(name, toolInput);
+          if (mockResult !== null) {
+            logger.info('agent', 'mock_tool_used', { tool: name, source: mockedToolNames.has(name) ? 'per_tool' : 'legacy_global' });
+            return { content: [{ type: 'text', text: mockResult }] };
+          }
+          // 没匹配到 mock 规则 → 回退到真实 MCP 调用
+          return tool.execute(...args);
+        },
+      }];
+    }),
+  );
+  // 注入 DB-only 的 mock 工具：这些工具在真实 MCP Server 中不存在，
+  // 但用户已在 MCP 管理中手动创建并设为 Mock 模式
+  const mockedDefs = getMockedToolDefinitions();
+  for (const def of mockedDefs) {
+    if (def.name in mockWrappedTools) continue; // 已经从真实 MCP 拿到了，跳过
+    // 构造与 MCP 工具相同格式的 mock 工具对象
+    mockWrappedTools[def.name] = {
+      description: def.description,
+      parameters: jsonSchema(def.inputSchema ?? { type: 'object', properties: {} } as any),
+      execute: async (args: Record<string, unknown>) => {
+        const mockResult = matchMockRule(def.name, args);
+        if (mockResult !== null) {
+          logger.info('agent', 'mock_tool_used', { tool: def.name, source: 'db_only_mock' });
+          return { content: [{ type: 'text', text: mockResult }] };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ success: false, message: `工具 ${def.name} 处于 Mock 模式但未匹配到 Mock 规则` }) }] };
+      },
+    };
+    logger.info('agent', 'mock_tool_injected', { tool: def.name });
+  }
+
   // Wrap MCP tools to translate results when lang !== 'zh'
   const effectiveMcpTools = mockWrappedTools;
   const mcpTools = lang === 'zh' ? effectiveMcpTools : Object.fromEntries(
@@ -352,7 +361,7 @@ export async function runAgent(
             const args = tc.args as { skill_name?: string };
             if (args.skill_name) lastActiveSkill = args.skill_name;
           }
-          const mappedSkill = SKILL_TOOL_MAP[tc.toolName] ?? lastActiveSkill;
+          const mappedSkill = getSkillToolMap()[tc.toolName] ?? lastActiveSkill;
           if (mappedSkill) lastActiveSkill = mappedSkill;
         }
 
@@ -372,7 +381,7 @@ export async function runAgent(
                 } catch { /* ignore */ }
               }
             }
-            const skillName = SKILL_TOOL_MAP[tc.toolName] ?? lastActiveSkill;
+            const skillName = getSkillToolMap()[tc.toolName] ?? lastActiveSkill;
             if (skillName) {
               try {
                 const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
@@ -438,7 +447,7 @@ export async function runAgent(
 
           // Set skillDiagram for MCP skill tools (e.g. diagnose_network → fault-diagnosis)
           if (!skillDiagram) {
-            const mappedSkill = SKILL_TOOL_MAP[toolResult.toolName as string];
+            const mappedSkill = getSkillToolMap()[toolResult.toolName as string];
             if (mappedSkill) {
               try {
                 const sp = resolve(SKILLS_DIR, mappedSkill, 'SKILL.md');

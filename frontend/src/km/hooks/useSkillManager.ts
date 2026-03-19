@@ -26,7 +26,7 @@ export interface SkillFileNode {
 
 export interface ChatMessage {
   id: number;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   text: string;
   thinking?: string | null;
   image?: string; // base64 图片预览（仅用户消息）
@@ -125,6 +125,14 @@ async function saveFileContent(path: string, content: string): Promise<void> {
     body: JSON.stringify({ path, content }),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
+async function deleteSkillApi(id: string): Promise<void> {
+  const res = await fetch(`/api/skills/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? `HTTP ${res.status}`);
+  }
 }
 
 async function saveDraft(path: string, content: string): Promise<void> {
@@ -381,6 +389,18 @@ export function useSkillManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSkillId, messages]);
 
+  // ── 删除技能 ─────────────────────────────────────────────────────────────────
+  const deleteSkill = useCallback(async (id: string) => {
+    try {
+      await deleteSkillApi(id);
+      // 刷新列表
+      const metas = await fetchSkillList();
+      setSkills(metas.map((m) => ({ ...m, messages: [makeExistingSkillMsg(m)] })));
+    } catch (err: any) {
+      throw err; // 让调用方处理错误提示
+    }
+  }, []);
+
   // ── 新建技能 ─────────────────────────────────────────────────────────────────
   const createNewSkill = useCallback(() => {
     const newSkill: Skill = {
@@ -432,16 +452,19 @@ export function useSkillManager() {
       const hasImage = !!pendingImage;
       if ((!hasText && !hasImage) || isTyping) return;
 
-      const userMsg: ChatMessage = {
-        id: Date.now(),
-        role: 'user',
-        text: inputValue || (hasImage ? '（上传了一张流程图）' : ''),
-        image: pendingImage ?? undefined,
-      };
-      setMessages((prev) => [...prev, userMsg]);
+      // 先捕获当前值再清空，避免闭包竞争
+      const submittedText = inputValue;
       const submittedImage = pendingImage;
       setInputValue('');
       setPendingImage(null);
+
+      const userMsg: ChatMessage = {
+        id: Date.now(),
+        role: 'user',
+        text: submittedText || (hasImage ? '（上传了一张流程图）' : ''),
+        image: submittedImage ?? undefined,
+      };
+      setMessages((prev) => [...prev, userMsg]);
       setIsTyping(true);
 
       try {
@@ -450,7 +473,7 @@ export function useSkillManager() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            message: inputValue,
+            message: submittedText,
             session_id: sessionId,
             skill_id: isNew ? null : activeSkillId,
             enable_thinking: showThinking,
@@ -487,7 +510,19 @@ export function useSkillManager() {
               if (!line.startsWith('data: ')) continue;
               try {
                 const data = JSON.parse(line.slice(6));
-                if (data.type === 'thinking') {
+                if (data.type === 'vision_result') {
+                  // 图片解析结果：插入一条系统消息，在 AI 回复之前展示
+                  setMessages((prev) => {
+                    const aiMsgIndex = prev.findIndex(m => m.id === msgId);
+                    const visionMsg: ChatMessage = { id: Date.now() - 1, role: 'system', text: data.text };
+                    if (aiMsgIndex >= 0) {
+                      const updated = [...prev];
+                      updated.splice(aiMsgIndex, 0, visionMsg);
+                      return updated;
+                    }
+                    return [...prev, visionMsg];
+                  });
+                } else if (data.type === 'thinking') {
                   setMessages((prev) => prev.map((m) =>
                     m.id === msgId ? { ...m, thinking: (m.thinking ?? '') + data.text } : m
                   ));
@@ -517,15 +552,18 @@ export function useSkillManager() {
             phase: Phase;
             draft: Draft | null;
             thinking?: string | null;
+            vision_result?: string | null;
           };
 
           setSessionId(data.session_id);
           setPhase(data.phase);
 
-          setMessages((prev) => [
-            ...prev,
-            { id: Date.now(), role: 'assistant', text: data.reply, thinking: data.thinking },
-          ]);
+          const newMessages: ChatMessage[] = [];
+          if (data.vision_result) {
+            newMessages.push({ id: Date.now() - 1, role: 'system', text: data.vision_result });
+          }
+          newMessages.push({ id: Date.now(), role: 'assistant', text: data.reply, thinking: data.thinking });
+          setMessages((prev) => [...prev, ...newMessages]);
 
           if (data.draft) {
             setDraft(data.draft);
@@ -571,18 +609,28 @@ export function useSkillManager() {
         throw new Error(errData.error ?? `HTTP ${res.status}`);
       }
 
-      const data = await res.json() as { ok: boolean; skill_id: string; is_new: boolean };
+      const data = await res.json() as {
+        ok: boolean; skill_id: string; is_new: boolean;
+        tools_ready?: boolean;
+        tool_warnings?: Array<{ tool: string; status: string; message: string }>;
+      };
 
-      // 添加确认消息
+      // 构建确认消息（含工具状态警告）
+      let confirmText = data.is_new
+        ? `技能「**${draft.skill_name}**」已成功创建并保存！你可以在右侧编辑器中继续微调，或通过沙箱测试验证效果。`
+        : `技能「**${draft.skill_name}**」已成功更新！`;
+
+      if (data.tool_warnings && data.tool_warnings.length > 0) {
+        confirmText += '\n\n⚠️ **工具就绪检查**：以下工具尚未就绪，技能运行时对应步骤将无法执行：\n';
+        confirmText += data.tool_warnings.map(w =>
+          `- **${w.tool}**（${w.status}）：${w.message}`
+        ).join('\n');
+        confirmText += '\n\n请前往「MCP 管理」创建或启用这些工具后再进行沙箱测试。';
+      }
+
       setMessages((prev) => [
         ...prev,
-        {
-          id: Date.now(),
-          role: 'assistant',
-          text: data.is_new
-            ? `技能「**${draft.skill_name}**」已成功创建并保存！你可以在右侧编辑器中继续微调，或通过沙箱测试验证效果。`
-            : `技能「**${draft.skill_name}**」已成功更新！`,
-        },
+        { id: Date.now(), role: 'assistant', text: confirmText },
       ]);
 
       // 刷新技能列表
@@ -647,6 +695,6 @@ export function useSkillManager() {
     // thinking 模式
     showThinking, setShowThinking,
     // 导航
-    openSkill, requestCloseEditor, createNewSkill,
+    openSkill, requestCloseEditor, createNewSkill, deleteSkill,
   };
 }

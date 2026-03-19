@@ -68,6 +68,44 @@ export function matchMockRule(
   return typeof response === 'string' ? response : JSON.stringify(response);
 }
 
+/** Get set of tool names that should use mock instead of real MCP call */
+export function getMockedToolNames(): Set<string> {
+  const names = new Set<string>();
+  const servers = db.select().from(mcpServers).all();
+  for (const server of servers) {
+    if (server.mocked_tools) {
+      try {
+        for (const name of JSON.parse(server.mocked_tools) as string[]) {
+          names.add(name);
+        }
+      } catch { /* ignore */ }
+    }
+  }
+  return names;
+}
+
+/**
+ * 获取所有标记为 Mock 模式的工具定义（含 inputSchema）。
+ * 用于 runner 注入 DB-only 的 mock 工具——这些工具在真实 MCP Server 中不存在，
+ * 但用户已在 MCP 管理中手动创建并设为 Mock 模式。
+ */
+export function getMockedToolDefinitions(): Array<{ name: string; description: string; inputSchema?: Record<string, unknown> }> {
+  const result: Array<{ name: string; description: string; inputSchema?: Record<string, unknown> }> = [];
+  const servers = db.select().from(mcpServers).all();
+  for (const server of servers) {
+    const mockedNames: string[] = server.mocked_tools ? JSON.parse(server.mocked_tools) : [];
+    if (mockedNames.length === 0) continue;
+    const tools: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }> = server.tools_json ? JSON.parse(server.tools_json) : [];
+    const mockedSet = new Set(mockedNames);
+    for (const t of tools) {
+      if (mockedSet.has(t.name)) {
+        result.push({ name: t.name, description: t.description ?? '', inputSchema: t.inputSchema });
+      }
+    }
+  }
+  return result;
+}
+
 /** Get all known tool names from MCP servers (discovered + manually defined) */
 export function getRegisteredToolNames(): Set<string> {
   const names = new Set<string>();

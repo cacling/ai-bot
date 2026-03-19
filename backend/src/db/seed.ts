@@ -482,9 +482,6 @@ async function seed() {
     { tool_name: 'check_contracts', match: 'phone == "13800000001"', response: '{"success":true,"phone":"13800000001","contracts":[{"contract_id":"CT001","name":"24个月合约套餐","end_date":"2027-06-30","penalty":200,"risk_level":"high"}],"has_active_contracts":true,"has_high_risk":true,"message":"存在高风险合约，停机需支付违约金 ¥200"}' },
     { tool_name: 'check_contracts', match: 'phone == "13800000002"', response: '{"success":true,"phone":"13800000002","contracts":[],"has_active_contracts":false,"has_high_risk":false,"message":"无有效合约，可直接办理停机"}' },
     { tool_name: 'check_contracts', match: '', response: '{"success":true,"contracts":[],"has_active_contracts":false,"has_high_risk":false,"message":"无有效合约"}' },
-    // apply_service_suspension
-    { tool_name: 'apply_service_suspension', match: 'phone == "13800000003"', response: '{"success":false,"message":"该号码已处于停机状态"}' },
-    { tool_name: 'apply_service_suspension', match: '', response: '{"success":true,"phone":"13800000001","suspension_type":"temporary","effective_date":"2026-03-18","resume_deadline":"2026-06-16","message":"临时停机已生效，请在 2026-06-16 前办理复机"}' },
   ]);
 
   db.insert(mcpServers).values([
@@ -548,7 +545,6 @@ async function seed() {
         { name: 'verify_identity', description: '验证用户身份（通过短信验证码）', inputSchema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, otp: { type: 'string', description: '短信验证码' } }, required: ['phone', 'otp'] } },
         { name: 'check_account_balance', description: '查询用户账户余额和欠费状态', inputSchema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] } },
         { name: 'check_contracts', description: '查询用户当前有效合约列表', inputSchema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] } },
-        { name: 'apply_service_suspension', description: '执行停机操作', inputSchema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, suspension_type: { type: 'string', enum: ['temporary', 'permanent'], description: '停机类型，默认临时停机' } }, required: ['phone'] } },
       ]),
       mock_rules: accountMockRules,
       created_at: now, updated_at: now,
@@ -611,7 +607,6 @@ async function seed() {
       { name: 'verify_identity', description: '验证用户身份（通过短信验证码）', inputSchema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, otp: { type: 'string', description: '短信验证码' } }, required: ['phone', 'otp'] } },
       { name: 'check_account_balance', description: '查询用户账户余额和欠费状态', inputSchema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] } },
       { name: 'check_contracts', description: '查询用户当前有效合约列表', inputSchema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] } },
-      { name: 'apply_service_suspension', description: '执行停机操作', inputSchema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, suspension_type: { type: 'string', enum: ['temporary', 'permanent'], description: '停机类型，默认临时停机' } }, required: ['phone'] } },
     ],
   };
   for (const [id, seedTools] of Object.entries(seedToolDefs)) {

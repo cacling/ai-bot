@@ -30,6 +30,7 @@ export interface McpServer {
   env_test_json: string | null;
   tools_json: string | null;
   disabled_tools: string | null;
+  mocked_tools: string | null;
   mock_rules: string | null;
   last_connected_at: string | null;
   created_at: string;

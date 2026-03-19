@@ -53,6 +53,7 @@ app.post('/', async (c) => {
     env_test_json: body.env_test_json ?? null,
     tools_json: body.tools_json ?? null,
     disabled_tools: body.disabled_tools ?? null,
+    mocked_tools: body.mocked_tools ?? null,
     mock_rules: body.mock_rules ?? null,
     created_at: now(),
     updated_at: now(),
@@ -84,6 +85,7 @@ app.put('/:id', async (c) => {
     env_test_json: body.env_test_json ?? existing.env_test_json,
     tools_json: body.tools_json ?? existing.tools_json,
     disabled_tools: body.disabled_tools ?? existing.disabled_tools,
+    mocked_tools: body.mocked_tools ?? existing.mocked_tools,
     mock_rules: body.mock_rules ?? existing.mock_rules,
     updated_at: now(),
   }).where(eq(mcpServers.id, id)).run();
@@ -99,55 +101,86 @@ app.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-// ── Discover tools ───────────────────────────────────────────────────────────
+// ── Discover tools (shared logic) ────────────────────────────────────────────
+
+/**
+ * 连接 MCP Server，发现工具并合并写入 DB。
+ * - 远端有的：更新 description 和 inputSchema
+ * - 远端没有但本地手动添加的：保留（用户可能还没在代码中实现）
+ * - 关联数据（disabled_tools、mocked_tools、mock_rules）中引用已不在 merged 列表中的工具会被清理
+ * 返回合并后的工具列表，失败时抛异常。
+ */
+export async function discoverServerTools(serverId: string): Promise<Array<Record<string, unknown>>> {
+  const row = db.select().from(mcpServers).where(eq(mcpServers.id, serverId)).get();
+  if (!row) throw new Error('Server not found');
+  if (row.status === 'planned') throw new Error('Server is in planned status');
+  if (!row.url && row.transport !== 'stdio') throw new Error('No URL configured');
+
+  const mcpClient = new Client({ name: 'mcp-sync', version: '1.0' });
+  await mcpClient.connect(new StreamableHTTPClientTransport(new URL(row.url!)));
+  const { tools } = await mcpClient.listTools();
+  await mcpClient.close();
+
+  // Merge: update existing tools' inputSchema/description, add new ones
+  const existing: Array<Record<string, unknown>> = row.tools_json ? JSON.parse(row.tools_json) : [];
+  const existingMap = new Map(existing.map(t => [t.name as string, t]));
+
+  const merged: Array<Record<string, unknown>> = [];
+  const remoteNames = new Set<string>();
+
+  // Remote tools: update or add
+  for (const t of tools) {
+    remoteNames.add(t.name);
+    const local = existingMap.get(t.name);
+    merged.push({
+      ...(local ?? {}),
+      name: t.name,
+      description: t.description ?? local?.description ?? '',
+      inputSchema: t.inputSchema,
+    });
+  }
+
+  // Local-only tools: 保留手动添加但远端还没实现的工具
+  for (const t of existing) {
+    if (!remoteNames.has(t.name as string)) merged.push(t);
+  }
+
+  // 合并后的所有工具名（远端 + 本地手动添加）
+  const allToolNames = new Set(merged.map(t => t.name as string));
+
+  // 清理关联数据：只清理 merged 中已经不存在的工具
+  const disabledTools: string[] = row.disabled_tools ? JSON.parse(row.disabled_tools) : [];
+  const mockedTools: string[] = row.mocked_tools ? JSON.parse(row.mocked_tools) : [];
+  const mockRules: Array<{ tool_name: string; match: string; response: string }> = row.mock_rules ? JSON.parse(row.mock_rules) : [];
+
+  const cleanedDisabled = disabledTools.filter(n => allToolNames.has(n));
+  const cleanedMocked = mockedTools.filter(n => allToolNames.has(n));
+  const cleanedMockRules = mockRules.filter(r => allToolNames.has(r.tool_name));
+
+  db.update(mcpServers).set({
+    tools_json: JSON.stringify(merged),
+    disabled_tools: cleanedDisabled.length > 0 ? JSON.stringify(cleanedDisabled) : null,
+    mocked_tools: cleanedMocked.length > 0 ? JSON.stringify(cleanedMocked) : null,
+    mock_rules: cleanedMockRules.length > 0 ? JSON.stringify(cleanedMockRules) : null,
+    last_connected_at: now(),
+    updated_at: now(),
+  }).where(eq(mcpServers.id, row.id)).run();
+
+  logger.info('mcp', 'tools_synced', { id: row.id, name: row.name, remote: tools.length, total: merged.length });
+  return merged;
+}
+
+// ── Discover tools (HTTP endpoint) ──────────────────────────────────────────
 app.post('/:id/discover', async (c) => {
-  const row = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
-  if (!row) return c.json({ error: 'Not found' }, 404);
-  if (row.status === 'planned') return c.json({ error: 'Server is in planned status, cannot connect' }, 400);
-  if (!row.url && row.transport !== 'stdio') return c.json({ error: 'No URL configured' }, 400);
-
   try {
-    const mcpClient = new Client({ name: 'mcp-manager', version: '1.0' });
-    await mcpClient.connect(new StreamableHTTPClientTransport(new URL(row.url!)));
-
-    const { tools } = await mcpClient.listTools();
-    await mcpClient.close();
-
-    // Merge: update existing tools' inputSchema/description, add new ones, keep local-only tools
-    const existing: Array<Record<string, unknown>> = row.tools_json ? JSON.parse(row.tools_json) : [];
-    const existingMap = new Map(existing.map(t => [t.name as string, t]));
-
-    const merged: Array<Record<string, unknown>> = [];
-    const seen = new Set<string>();
-
-    // Remote tools: update or add
-    for (const t of tools) {
-      seen.add(t.name);
-      const local = existingMap.get(t.name);
-      merged.push({
-        ...(local ?? {}),
-        name: t.name,
-        description: t.description ?? local?.description ?? '',
-        inputSchema: t.inputSchema,
-      });
-    }
-
-    // Local-only tools: keep
-    for (const t of existing) {
-      if (!seen.has(t.name as string)) merged.push(t);
-    }
-
-    db.update(mcpServers).set({
-      tools_json: JSON.stringify(merged),
-      last_connected_at: now(),
-      updated_at: now(),
-    }).where(eq(mcpServers.id, row.id)).run();
-
-    logger.info('mcp', 'tools_synced', { id: row.id, name: row.name, remote: tools.length, total: merged.length });
+    const merged = await discoverServerTools(c.req.param('id'));
     return c.json({ tools: merged });
   } catch (err) {
-    logger.error('mcp', 'discover_error', { id: row.id, error: String(err) });
-    return c.json({ error: `Connection failed: ${String(err)}` }, 502);
+    const msg = String(err);
+    if (msg.includes('not found')) return c.json({ error: 'Not found' }, 404);
+    if (msg.includes('planned')) return c.json({ error: 'Server is in planned status, cannot connect' }, 400);
+    logger.error('mcp', 'discover_error', { id: c.req.param('id'), error: msg });
+    return c.json({ error: `Connection failed: ${msg}` }, 502);
   }
 });
 

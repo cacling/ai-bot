@@ -27,6 +27,7 @@ import { join } from 'path';
 import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR } from '../../../services/paths';
 import { db } from '../../../db';
 import { testCases } from '../../../db/schema';
+import { getToolsOverview, getToolDetail } from '../mcp/tools-overview';
 
 // ── 类型定义 ──────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,38 @@ interface Draft {
     persona_id?: string;
   }>;
 }
+
+const PHASE_VALUES = ['interview', 'draft', 'confirm', 'done'] as const;
+const ASSERTION_TYPE_VALUES = ['contains', 'not_contains', 'tool_called', 'tool_not_called', 'skill_loaded', 'regex'] as const;
+const SKILL_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const REFERENCE_FILE_RE = /^[a-z0-9]+(-[a-z0-9]+)*\.md$/;
+
+const phaseSchema = z.enum(PHASE_VALUES);
+const assertionSchema = z.object({
+  type: z.enum(ASSERTION_TYPE_VALUES),
+  value: z.string().min(1),
+});
+const testCaseSchema = z.object({
+  input: z.string().min(1),
+  assertions: z.array(assertionSchema).min(1),
+  persona_id: z.string().optional().nullable(),
+});
+const referenceSchema = z.object({
+  filename: z.string().regex(REFERENCE_FILE_RE),
+  content: z.string().min(1),
+});
+const llmDraftSchema = z.object({
+  skill_name: z.string().regex(SKILL_NAME_RE),
+  skill_md: z.string().min(1),
+  references: z.array(referenceSchema).default([]),
+  description: z.string().min(1),
+  test_cases: z.array(testCaseSchema).max(5).optional(),
+});
+const llmResponseSchema = z.object({
+  reply: z.string().min(1),
+  phase: phaseSchema,
+  draft: llmDraftSchema.nullable().optional().default(null),
+});
 
 // ── 会话存储 ──────────────────────────────────────────────────────────────────
 
@@ -158,6 +191,119 @@ function buildSystemPrompt(session: Session, skillIndex: Array<{ name: string; d
     .replace('{{SKILL_INDEX}}', skillIndexText);
 }
 
+function stripJsonFences(text: string): string {
+  return text
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+}
+
+function extractJsonCandidates(text: string): string[] {
+  const cleaned = stripJsonFences(text);
+  const candidates = [cleaned];
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const objectSlice = cleaned.slice(firstBrace, lastBrace + 1).trim();
+    if (objectSlice && !candidates.includes(objectSlice)) candidates.push(objectSlice);
+  }
+  return candidates;
+}
+
+function dedupeReferences(references: Array<{ filename: string; content: string }>): Array<{ filename: string; content: string }> {
+  const seen = new Set<string>();
+  const deduped: Array<{ filename: string; content: string }> = [];
+  for (const ref of references) {
+    if (seen.has(ref.filename)) continue;
+    seen.add(ref.filename);
+    deduped.push(ref);
+  }
+  return deduped;
+}
+
+function normalizeDraft(draft: z.infer<typeof llmDraftSchema>): Draft {
+  return {
+    skill_name: draft.skill_name,
+    description: draft.description,
+    skill_md: draft.skill_md,
+    references: dedupeReferences(draft.references.map(ref => ({
+      filename: ref.filename,
+      content: ref.content,
+    }))),
+    test_cases: draft.test_cases?.map(tc => ({
+      input: tc.input,
+      assertions: tc.assertions.map(a => ({ type: a.type, value: a.value })),
+      persona_id: tc.persona_id ?? undefined,
+    })),
+  };
+}
+
+function parseSkillCreatorResponse(rawText: string, session: Session): { reply: string; phase: Phase; draft: Draft | null } {
+  let parsedValue: unknown = null;
+  let lastError = '';
+
+  for (const candidate of extractJsonCandidates(rawText)) {
+    try {
+      parsedValue = JSON.parse(candidate);
+      break;
+    } catch (err) {
+      lastError = String(err);
+    }
+  }
+
+  if (parsedValue === null) {
+    logger.warn('skill-creator', 'response_parse_fallback', {
+      session_id: session.id,
+      error: lastError,
+      text_preview: rawText.slice(0, 200),
+    });
+    return { reply: stripJsonFences(rawText), phase: session.phase, draft: null };
+  }
+
+  const validated = llmResponseSchema.safeParse(parsedValue);
+  if (!validated.success) {
+    logger.warn('skill-creator', 'response_schema_invalid', {
+      session_id: session.id,
+      issues: validated.error.issues.map(issue => `${issue.path.join('.') || '(root)'}: ${issue.message}`),
+      text_preview: rawText.slice(0, 200),
+    });
+    const reply = typeof parsedValue === 'object' && parsedValue && 'reply' in parsedValue && typeof (parsedValue as { reply?: unknown }).reply === 'string'
+      ? (parsedValue as { reply: string }).reply
+      : stripJsonFences(rawText);
+    return { reply, phase: session.phase, draft: null };
+  }
+
+  let phase = validated.data.phase;
+  let draft = validated.data.draft ? normalizeDraft(validated.data.draft) : null;
+
+  if (phase === 'interview') {
+    draft = null;
+  }
+
+  if ((phase === 'draft' || phase === 'confirm') && !draft) {
+    logger.warn('skill-creator', 'response_missing_draft', {
+      session_id: session.id,
+      phase,
+    });
+    phase = session.phase;
+  }
+
+  if (phase === 'confirm' && draft && (!draft.test_cases || draft.test_cases.length < 3)) {
+    logger.warn('skill-creator', 'response_confirm_without_tests', {
+      session_id: session.id,
+      test_case_count: draft.test_cases?.length ?? 0,
+    });
+    phase = 'draft';
+  }
+
+  return {
+    reply: validated.data.reply,
+    phase,
+    draft,
+  };
+}
+
 // ── 图片解析（调用视觉模型）─────────────────────────────────────────────────
 
 async function parseFlowchartImage(imageBase64: string): Promise<string> {
@@ -219,20 +365,28 @@ skillCreator.post('/chat', async (c) => {
     return c.json({ error: 'message 或 image 不能为空' }, 400);
   }
 
-  // ── 图片解析：先用视觉模型提取流程描述，再注入到文字消息中 ──
-  let finalMessage = body.message?.trim() ?? '';
-  if (body.image) {
+  // ── 图片解析（延迟到流式/非流式分支中处理，以便先返回解析结果）──
+  const hasImage = !!body.image;
+  let imageDescription: string | null = null;
+
+  // 如果有图片，先解析视觉模型
+  if (hasImage) {
     try {
-      const imageDescription = await parseFlowchartImage(body.image);
-      const imageContext = `\n\n---\n**[用户上传了一张流程图，以下是 AI 视觉模型的解析结果]**\n\n${imageDescription}\n---\n`;
-      finalMessage = finalMessage
-        ? `${finalMessage}\n${imageContext}`
-        : `我上传了一张手绘流程图，请根据以下解析结果帮我完善需求：${imageContext}`;
-      logger.info('skill-creator', 'image_injected', { message_length: finalMessage.length });
+      imageDescription = await parseFlowchartImage(body.image!);
+      logger.info('skill-creator', 'image_parsed', { result_length: imageDescription.length });
     } catch (err) {
       logger.error('skill-creator', 'image_parse_error', { error: String(err) });
       return c.json({ error: `图片解析失败: ${String(err)}` }, 500);
     }
+  }
+
+  // 构造最终消息（注入图片解析结果）
+  let finalMessage = body.message?.trim() ?? '';
+  if (imageDescription) {
+    const imageContext = `\n\n---\n**[用户上传了一张流程图，以下是 AI 视觉模型的解析结果]**\n\n${imageDescription}\n---\n`;
+    finalMessage = finalMessage
+      ? `${finalMessage}\n${imageContext}`
+      : `我上传了一张手绘流程图，请根据以下解析结果帮我完善需求：${imageContext}`;
   }
 
   let session: Session;
@@ -275,6 +429,41 @@ skillCreator.post('/chat', async (c) => {
       parameters: z.object({}),
       execute: async () => JSON.stringify(skillIndex.map(s => ({ ...s, references: listSkillReferences(s.name) }))),
     }),
+    list_mcp_tools: tool({
+      description: '列出系统中所有已注册的 MCP 工具（含名称、描述、来源服务、状态、关联技能）。用于工具可行性检查，判断流程中需要的工具是否已存在。',
+      parameters: z.object({}),
+      execute: async () => {
+        const items = getToolsOverview();
+        // 只返回 LLM 需要的字段，减少 token 消耗
+        return JSON.stringify(items.map(t => ({
+          name: t.name,
+          description: t.description,
+          source: t.source,
+          status: t.status, // available | disabled | planned
+          skills: t.skills,
+        })));
+      },
+    }),
+    get_mcp_tool_detail: tool({
+      description: '查看指定 MCP 工具的详细信息，包括参数 schema 和返回示例。用于确认工具的语义是否匹配流程步骤的需求。',
+      parameters: z.object({
+        tool_name: z.string().describe('工具名称（snake_case）'),
+      }),
+      execute: async ({ tool_name }) => {
+        const detail = getToolDetail(tool_name);
+        if (!detail) return JSON.stringify({ found: false, message: `工具 "${tool_name}" 未注册。可能需要新建。` });
+        return JSON.stringify({
+          found: true,
+          name: detail.name,
+          description: detail.description,
+          source: detail.source,
+          status: detail.status,
+          inputSchema: detail.inputSchema,
+          responseExample: detail.responseExample,
+          skills: detail.skills,
+        });
+      },
+    }),
   };
 
   const model = body.enable_thinking ? skillCreatorThinkingModel : skillCreatorModel;
@@ -296,6 +485,11 @@ skillCreator.post('/chat', async (c) => {
       const sseStream = new ReadableStream({
         async start(controller) {
           try {
+            // 如果有图片解析结果，先推送给前端
+            if (imageDescription) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'vision_result', text: imageDescription })}\n\n`));
+            }
+
             for await (const part of result.fullStream) {
               if (part.type === 'reasoning') {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'thinking', text: part.textDelta })}\n\n`));
@@ -307,13 +501,7 @@ skillCreator.post('/chat', async (c) => {
             // 流结束后，获取完整文本并解析
             const text = await result.text;
             const reasoning = await result.reasoning;
-            const cleaned = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-            let parsed: { reply: string; phase: Phase; draft: Draft | null };
-            try {
-              parsed = JSON.parse(cleaned);
-            } catch {
-              parsed = { reply: cleaned, phase: session.phase, draft: null };
-            }
+            const parsed = parseSkillCreatorResponse(text, session);
 
             logger.info('skill-creator', 'chat_stream_parsed', {
               session_id: session.id,
@@ -373,13 +561,7 @@ skillCreator.post('/chat', async (c) => {
       temperature: 0.3,
     });
 
-    const cleaned = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    let parsed: { reply: string; phase: Phase; draft: Draft | null };
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch {
-      parsed = { reply: cleaned, phase: session.phase, draft: null };
-    }
+    const parsed = parseSkillCreatorResponse(text, session);
 
     session.phase = parsed.phase ?? session.phase;
     if (parsed.draft) session.draft = parsed.draft;
@@ -387,7 +569,7 @@ skillCreator.post('/chat', async (c) => {
 
     logger.info('skill-creator', 'chat', { session_id: session.id, phase: session.phase, has_draft: !!session.draft });
 
-    return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft, thinking: null });
+    return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft, thinking: null, vision_result: imageDescription ?? null });
   } catch (err) {
     logger.error('skill-creator', 'chat_error', { error: String(err) });
     return c.json({ error: `对话失败: ${String(err)}` }, 500);
@@ -413,8 +595,52 @@ skillCreator.post('/save', async (c) => {
     return c.json({ error: 'skill_name 和 skill_md 不能为空' }, 400);
   }
 
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(body.skill_name)) {
+  if (!SKILL_NAME_RE.test(body.skill_name)) {
     return c.json({ error: 'skill_name 必须是 kebab-case 格式（如 my-skill）' }, 400);
+  }
+
+  const referencesValidation = z.array(referenceSchema).safeParse(body.references ?? []);
+  if (!referencesValidation.success) {
+    return c.json({ error: `references 非法: ${referencesValidation.error.issues[0]?.message ?? '未知错误'}` }, 400);
+  }
+
+  const duplicateRef = (() => {
+    const seen = new Set<string>();
+    for (const ref of referencesValidation.data) {
+      if (seen.has(ref.filename)) return ref.filename;
+      seen.add(ref.filename);
+    }
+    return null;
+  })();
+  if (duplicateRef) {
+    return c.json({ error: `references 中存在重复文件名: ${duplicateRef}` }, 400);
+  }
+
+  const testCasesValidation = z.array(testCaseSchema).max(5).safeParse(body.test_cases ?? []);
+  if (!testCasesValidation.success) {
+    return c.json({ error: `test_cases 非法: ${testCasesValidation.error.issues[0]?.message ?? '未知错误'}` }, 400);
+  }
+
+  // ── 工具状态门禁：检查 SKILL.md 中引用的 MCP 工具 ──
+  const toolAnnotations = body.skill_md.match(/%% tool:(\w+)/g) ?? [];
+  const referencedTools = [...new Set(toolAnnotations.map(a => a.replace('%% tool:', '')))];
+
+  const toolWarnings: Array<{ tool: string; status: string; message: string }> = [];
+  if (referencedTools.length > 0) {
+    const allTools = getToolsOverview();
+    const toolMap = new Map(allTools.map(t => [t.name, t]));
+
+    for (const toolName of referencedTools) {
+      const info = toolMap.get(toolName);
+      if (!info) {
+        toolWarnings.push({ tool: toolName, status: 'missing', message: `工具 "${toolName}" 未注册，请在 MCP 管理中创建后再发布` });
+      } else if (info.status === 'planned') {
+        toolWarnings.push({ tool: toolName, status: 'planned', message: `工具 "${toolName}" 处于 planned 状态（来源: ${info.source}），运行时不可用` });
+      } else if (info.status === 'disabled') {
+        toolWarnings.push({ tool: toolName, status: 'disabled', message: `工具 "${toolName}" 已被禁用（来源: ${info.source}），运行时不可用` });
+      }
+      // available → 无 warning
+    }
   }
 
   const reg = getSkillRegistry(body.skill_name);
@@ -422,7 +648,7 @@ skillCreator.post('/save', async (c) => {
 
   try {
     // 创建新版本到 .versions/ 目录（不写 biz-skills/ 主目录）
-    const refs = (body.references ?? []).map((r: { filename: string; content: string }) => ({
+    const refs = referencesValidation.data.map((r: { filename: string; content: string }) => ({
       filename: r.filename, content: r.content,
     }));
 
@@ -460,8 +686,8 @@ skillCreator.post('/save', async (c) => {
     }
 
     // 写入测试用例（如果 LLM 生成了）
-    if (body.test_cases?.length) {
-      for (const tc of body.test_cases) {
+    if (testCasesValidation.data.length) {
+      for (const tc of testCasesValidation.data) {
         const keywords = tc.assertions.filter(a => a.type === 'contains').map(a => a.value);
         await db.insert(testCases).values({
           skill_name: body.skill_name,
@@ -471,14 +697,27 @@ skillCreator.post('/save', async (c) => {
           persona_id: tc.persona_id ?? null,
         });
       }
-      logger.info('skill-creator', 'test_cases_saved', { skill: body.skill_name, count: body.test_cases.length });
+      logger.info('skill-creator', 'test_cases_saved', { skill: body.skill_name, count: testCasesValidation.data.length });
     }
 
     refreshSkillsCache();
 
-    logger.info('skill-creator', 'saved', { skill_name: body.skill_name, is_new: isNew, ref_count: body.references?.length ?? 0, test_cases: body.test_cases?.length ?? 0 });
+    const allToolsReady = toolWarnings.length === 0;
+    logger.info('skill-creator', 'saved', {
+      skill_name: body.skill_name, is_new: isNew,
+      ref_count: refs.length, test_cases: testCasesValidation.data.length,
+      tools_ready: allToolsReady, tool_warnings: toolWarnings.length,
+    });
 
-    return c.json({ ok: true, skill_id: body.skill_name, is_new: isNew, test_cases_count: body.test_cases?.length ?? 0 });
+    return c.json({
+      ok: true,
+      skill_id: body.skill_name,
+      is_new: isNew,
+      test_cases_count: testCasesValidation.data.length,
+      // 工具就绪状态
+      tools_ready: allToolsReady,
+      tool_warnings: toolWarnings,
+    });
   } catch (err) {
     logger.error('skill-creator', 'save_error', { error: String(err) });
     return c.json({ error: `保存失败: ${String(err)}` }, 500);
@@ -486,3 +725,11 @@ skillCreator.post('/save', async (c) => {
 });
 
 export default skillCreator;
+
+// ── 导出纯函数供单元测试使用 ────────────────────────────────────────────────
+export const _testOnly = {
+  stripJsonFences,
+  extractJsonCandidates,
+  dedupeReferences,
+  parseSkillCreatorResponse,
+};

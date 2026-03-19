@@ -1,5 +1,5 @@
 /**
- * 账户操作服务 — verify_identity, check_account_balance, check_contracts, apply_service_suspension
+ * 账户操作服务 — verify_identity, check_account_balance, check_contracts
  * Port: 18007
  */
 import { db, subscribers, mcpLog, startMcpHttpServer, eq, z, McpServer } from "./shared.js";
@@ -40,19 +40,6 @@ function createServer(): McpServer {
     const contracts = MOCK_CONTRACTS[phone] ?? [];
     const hasHighRisk = contracts.some(c => c.risk_level === "high");
     return { content: [{ type: "text", text: JSON.stringify({ success: true, phone, contracts, has_active_contracts: contracts.length > 0, has_high_risk: hasHighRisk, message: hasHighRisk ? `存在高风险合约，停机需支付违约金` : contracts.length > 0 ? `存在 ${contracts.length} 个合约，不影响停机` : "无有效合约，可直接办理停机" }) }] };
-  });
-
-  server.tool("apply_service_suspension", "执行停机操作", {
-    phone: z.string().describe("用户手机号"),
-    suspension_type: z.enum(["temporary", "permanent"]).optional().describe("停机类型"),
-  }, async ({ phone, suspension_type = "temporary" }) => {
-    mcpLog("account", "apply_service_suspension", { phone, suspension_type });
-    const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
-    if (!sub) return { content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到手机号 ${phone}` }) }] };
-    if (sub.status === "suspended") return { content: [{ type: "text", text: JSON.stringify({ success: false, message: "该号码已处于停机状态" }) }] };
-    const suspendDate = new Date().toISOString().slice(0, 10);
-    const resumeDeadline = suspension_type === "temporary" ? new Date(Date.now() + 90 * 86400_000).toISOString().slice(0, 10) : null;
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, phone, suspension_type, effective_date: suspendDate, resume_deadline: resumeDeadline, message: suspension_type === "temporary" ? `临时停机已生效，请在 ${resumeDeadline} 前办理复机` : "永久停机已生效" }) }] };
   });
 
   return server;

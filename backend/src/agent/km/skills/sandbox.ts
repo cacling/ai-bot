@@ -21,6 +21,7 @@ import { runAgent } from '../../../engine/runner';
 import { logger } from '../../../services/logger';
 import { requireRole } from '../../../services/auth';
 import { getRegisteredToolNames } from '../../../services/mock-engine';
+import { getToolsOverview } from '../mcp/tools-overview';
 import { db } from '../../../db';
 import { testCases, testPersonas } from '../../../db/schema';
 
@@ -169,14 +170,21 @@ sandbox.post('/:id/validate', async (c) => {
       }
     }
 
-    // 3. 检查工具引用（从 MCP 管理读取已注册工具）
+    // 3. 检查工具引用（区分 available / planned / disabled / missing）
     const toolRefs = content.match(/%% tool:(\w+)/g) ?? [];
-    const knownTools = getRegisteredToolNames();
+    const allToolItems = getToolsOverview();
+    const toolStatusMap = new Map(allToolItems.map(t => [t.name, t]));
     for (const ref of toolRefs) {
       const toolName = ref.replace('%% tool:', '');
-      if (!knownTools.has(toolName)) {
-        issues.push(`引用了未注册的工具: ${toolName}（请在 MCP 管理中注册）`);
+      const info = toolStatusMap.get(toolName);
+      if (!info) {
+        issues.push(`引用了未注册的工具: ${toolName}（请在 MCP 管理中创建）`);
+      } else if (info.status === 'planned') {
+        issues.push(`工具 ${toolName} 处于 planned 状态（来源: ${info.source}），运行时不可用`);
+      } else if (info.status === 'disabled') {
+        issues.push(`工具 ${toolName} 已被禁用（来源: ${info.source}），请先启用`);
       }
+      // available → 无 issue
     }
 
     // 4. 检查是否为空内容

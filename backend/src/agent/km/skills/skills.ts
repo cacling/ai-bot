@@ -7,7 +7,10 @@
 
 import { Hono } from 'hono';
 import { resolve, join, relative } from 'node:path';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat, rm } from 'node:fs/promises';
+import { db } from '../../../db';
+import { skillRegistry, skillVersions } from '../../../db/schema';
+import { eq } from 'drizzle-orm';
 import { logger } from '../../../services/logger';
 
 // PROJECT_ROOT 与 files.ts 保持一致（backend/ 目录）
@@ -151,6 +154,34 @@ skills.get('/:id/files', async (c) => {
   const tree = await scanSkillDir(skillDir);
   logger.info('skills', 'files', { id, count: tree.length });
   return c.json({ tree });
+});
+
+// DELETE /api/skills/:id
+skills.delete('/:id', async (c) => {
+  const id = c.req.param('id');
+  // 只允许合法目录名，防止路径穿越
+  if (!/^[\w-]+$/.test(id)) {
+    return c.json({ error: 'invalid skill id' }, 400);
+  }
+
+  const skillDir = join(BIZ_SKILLS_DIR, id);
+
+  try {
+    // 1. 删除 skill_versions 表中该 skill 的所有版本记录
+    await db.delete(skillVersions).where(eq(skillVersions.skill_id, id));
+
+    // 2. 删除 skill_registry 表中该 skill 记录
+    await db.delete(skillRegistry).where(eq(skillRegistry.id, id));
+
+    // 3. 删除磁盘上该 skill 的目录
+    await rm(skillDir, { recursive: true, force: true });
+
+    logger.info('skills', 'deleted', { id });
+    return c.json({ ok: true });
+  } catch (err) {
+    logger.error('skills', 'delete_error', { id, error: String(err) });
+    return c.json({ error: String(err) }, 500);
+  }
 });
 
 export default skills;

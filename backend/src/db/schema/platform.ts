@@ -290,6 +290,7 @@ export const mcpServers = sqliteTable('mcp_servers', {
   // 工具元数据
   tools_json:      text('tools_json'),              // JSON: [{name, description, inputSchema?, parameters?, responseExample?}]
   disabled_tools:  text('disabled_tools'),           // JSON array of tool names
+  mocked_tools:    text('mocked_tools'),             // JSON array of tool names (these use mock_rules instead of real MCP call)
   mock_rules:      text('mock_rules'),              // JSON: [{tool_name, match, response}]
   // 时间戳
   last_connected_at: text('last_connected_at'),

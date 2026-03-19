@@ -35,11 +35,11 @@ export function McpServerList() {
   if (view === 'create') return <McpServerForm onBack={() => setView('list')} onSaved={handleSaved} />;
   if (view === 'edit' && editId) return <McpServerForm serverId={editId} onBack={() => { setView('list'); setEditId(null); }} onSaved={handleSaved} />;
 
-  const getToolCount = (server: McpServer): number => {
+  const getToolNames = (server: McpServer): string[] => {
     try {
-      const tools = server.tools_json ? JSON.parse(server.tools_json) as unknown[] : [];
-      return tools.length;
-    } catch { return 0; }
+      const tools = server.tools_json ? JSON.parse(server.tools_json) as Array<{ name: string }> : [];
+      return tools.map(t => t.name).filter(Boolean);
+    } catch { return []; }
   };
 
   const getStatus = (server: McpServer): { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' } => {
@@ -67,17 +67,18 @@ export function McpServerList() {
           <Table className="text-xs">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-44">名称</TableHead>
-                <TableHead>描述</TableHead>
+                <TableHead className="w-40">名称</TableHead>
+                <TableHead className="w-52">描述</TableHead>
+                <TableHead>工具</TableHead>
                 <TableHead className="w-20 text-center">状态</TableHead>
-                <TableHead className="w-16 text-center">工具</TableHead>
                 <TableHead className="w-24 text-center">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {servers.map(server => {
                 const status = getStatus(server);
-                const toolCount = getToolCount(server);
+                const toolNames = getToolNames(server);
+                const toolDisplay = toolNames.length > 0 ? toolNames.join(', ') : '-';
                 return (
                   <TableRow
                     key={server.id}
@@ -85,11 +86,18 @@ export function McpServerList() {
                     onClick={() => { setEditId(server.id); setView('edit'); }}
                   >
                     <TableCell className="font-mono font-semibold">{server.name}</TableCell>
-                    <TableCell className="text-muted-foreground truncate" title={server.description}>{server.description || '-'}</TableCell>
-                    <TableCell className="text-center"><Badge variant={status.variant}>{status.label}</Badge></TableCell>
-                    <TableCell className="text-center text-muted-foreground">
-                      {toolCount > 0 ? toolCount : '-'}
+                    <TableCell className="text-muted-foreground truncate max-w-[200px]" title={server.description}>{server.description || '-'}</TableCell>
+                    <TableCell className="max-w-[260px]">
+                      <div className="truncate text-muted-foreground font-mono text-[11px] relative group" title={toolDisplay}>
+                        {toolDisplay}
+                        {toolNames.length > 0 && (
+                          <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover:block bg-popover text-popover-foreground border rounded-lg shadow-lg p-2 text-[11px] font-mono whitespace-nowrap">
+                            {toolNames.map(name => <div key={name}>{name}</div>)}
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
+                    <TableCell className="text-center"><Badge variant={status.variant}>{status.label}</Badge></TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-3">
                         <Button variant="ghost" size="xs" onClick={(e) => { e.stopPropagation(); setEditId(server.id); setView('edit'); }}>

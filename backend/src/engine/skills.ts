@@ -98,7 +98,58 @@ function getAvailableSkills(): SkillEntry[] {
 /** 强制刷新技能缓存（新建/删除技能后调用） */
 export function refreshSkillsCache(): void {
   _cachedSkills = scanAvailableSkills();
+  _cachedToolSkillMap = buildToolSkillMap();
   _lastScan = Date.now();
+}
+
+// ── Tool → Skill 自动映射（从 SKILL.md 的 %% tool:xxx 标注生成）─────────────
+
+function buildToolSkillMap(): Record<string, string> {
+  const toolToSkills = new Map<string, string[]>();
+  const publishedIds = getPublishedSkillIds();
+
+  try {
+    const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
+      .filter(d => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'));
+    for (const dir of dirs) {
+      if (publishedIds && !publishedIds.has(dir.name)) continue;
+      const mdPath = join(SKILLS_DIR, dir.name, 'SKILL.md');
+      if (!existsSync(mdPath)) continue;
+      const content = readFileSync(mdPath, 'utf-8');
+      const annotations = content.matchAll(/%% tool:(\w+)/g);
+      for (const m of annotations) {
+        const toolName = m[1];
+        const skills = toolToSkills.get(toolName) ?? [];
+        if (!skills.includes(dir.name)) skills.push(dir.name);
+        toolToSkills.set(toolName, skills);
+      }
+    }
+  } catch { /* ignore */ }
+
+  // 只保留唯一归属的映射（一个工具被多个技能引用时不映射）
+  const map: Record<string, string> = {};
+  for (const [toolName, skills] of toolToSkills) {
+    if (skills.length === 1) {
+      map[toolName] = skills[0];
+    }
+  }
+  return map;
+}
+
+let _cachedToolSkillMap: Record<string, string> = buildToolSkillMap();
+
+/**
+ * 获取 tool → skill 映射（自动从 SKILL.md 的 %% tool:xxx 标注生成）。
+ * 只包含唯一归属的映射——一个工具被多个技能引用时不出现在映射中。
+ * 与技能缓存同步刷新（30s + refreshSkillsCache）。
+ */
+export function getToolSkillMap(): Record<string, string> {
+  if (Date.now() - _lastScan > 30_000) {
+    _cachedSkills = scanAvailableSkills();
+    _cachedToolSkillMap = buildToolSkillMap();
+    _lastScan = Date.now();
+  }
+  return _cachedToolSkillMap;
 }
 
 // ── 按 channel 过滤 ─────────────────────────────────────────────────────────
@@ -110,7 +161,7 @@ export function getSkillsByChannel(channel: string): SkillEntry[] {
 
 /** 获取指定 channel 的技能描述（用于 system prompt 注入） */
 export function getSkillsDescriptionByChannel(channel: string): string {
-  return getSkillsByChannel(channel).map(s => `${s.description}→${s.name}`).join('；');
+  return getSkillsByChannel(channel).map(s => `- ${s.name}：${s.description}`).join('\n');
 }
 
 /** 获取指定 channel 的技能 SKILL.md 完整内容（用于语音/外呼 prompt 注入） */

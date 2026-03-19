@@ -27,11 +27,7 @@ import { getSkillsDescriptionByChannel } from '../engine/skills';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
-/** Tool → skill name mapping: used to send skill_diagram_update to the frontend */
-const SKILL_TOOL_MAP: Record<string, string> = {
-  diagnose_network: 'fault-diagnosis',
-  diagnose_app: 'telecom-app',
-};
+import { getToolSkillMap } from '../engine/skills';
 
 const ZHIPU_API_KEY      = process.env.ZHIPU_API_KEY ?? '';
 const GLM_REALTIME_URL   = process.env.GLM_REALTIME_URL ?? 'wss://open.bigmodel.cn/api/paas/v4/realtime';
@@ -476,8 +472,9 @@ voice.get(
               logger.info('voice', 'lang_chain_mcp_result', { session: sessionId, tool: toolName, lang, resultPreview: result.slice(0, 150) });
 
               // 若该工具对应某个 skill，推送无高亮版流程图（progressHL 由后续 progress tracker 异步添加）
-              if (SKILL_TOOL_MAP[toolName]) {
-                activeSkillName = SKILL_TOOL_MAP[toolName];
+              const toolSkillMap = getToolSkillMap();
+              if (toolSkillMap[toolName]) {
+                activeSkillName = toolSkillMap[toolName];
                 await sendSkillDiagram(ws, userPhone, activeSkillName, null, lang, sessionId, 'voice');
               }
 
