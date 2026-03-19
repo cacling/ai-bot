@@ -28,6 +28,7 @@ export interface ChatMessage {
   id: number;
   role: 'user' | 'assistant';
   text: string;
+  thinking?: string | null;
 }
 
 export interface Skill extends SkillMeta {
@@ -39,7 +40,7 @@ export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 export type ViewMode = 'edit' | 'preview';
 export type SkillManagerView = 'list' | 'editor';
 
-type Phase = 'interview' | 'draft' | 'confirm' | 'done';
+type Phase = 'capture' | 'interview' | 'draft' | 'confirm' | 'done';
 
 interface Draft {
   skill_name: string;
@@ -157,6 +158,7 @@ export function useSkillManager() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('capture');
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [showThinking, setShowThinking] = useState(true);
 
   // 文件树
   const [fileTree, setFileTree] = useState<SkillFileNode[]>([]);
@@ -440,6 +442,7 @@ export function useSkillManager() {
             message: inputValue,
             session_id: sessionId,
             skill_id: isNew ? null : activeSkillId,
+            enable_thinking: showThinking,
           }),
         });
 
@@ -453,6 +456,7 @@ export function useSkillManager() {
           reply: string;
           phase: Phase;
           draft: Draft | null;
+          thinking?: string | null;
         };
 
         setSessionId(data.session_id);
@@ -461,7 +465,7 @@ export function useSkillManager() {
         // 显示 AI 回复
         setMessages((prev) => [
           ...prev,
-          { id: Date.now(), role: 'assistant', text: data.reply },
+          { id: Date.now(), role: 'assistant', text: data.reply, thinking: data.thinking },
         ]);
 
         // 如果有 draft，实时更新右侧编辑器
@@ -483,7 +487,7 @@ export function useSkillManager() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [inputValue, isTyping, activeSkillId, sessionId]
+    [inputValue, isTyping, activeSkillId, sessionId, showThinking]
   );
 
   // ── 发布新技能（将 draft 写入磁盘）─────────────────────────────────────────
@@ -580,6 +584,8 @@ export function useSkillManager() {
     messages, inputValue, setInputValue, isTyping, messagesEndRef, handleSubmit,
     // skill-creator 状态
     phase, draft, canPublish, publishSkill,
+    // thinking 模式
+    showThinking, setShowThinking,
     // 导航
     openSkill, requestCloseEditor, createNewSkill,
   };

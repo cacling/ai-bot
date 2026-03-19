@@ -25,13 +25,13 @@ function FileTreeNode({ node, selectedPath, onSelect, depth }: FileTreeNodeProps
       <div>
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="flex items-center w-full text-left px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded transition-colors"
+          className="flex items-center w-full text-left px-2 py-1 text-sm text-muted-foreground hover:bg-accent rounded transition-colors"
           style={{ paddingLeft: `${8 + indent}px` }}
         >
-          <span className="mr-1 text-gray-400">
+          <span className="mr-1 text-muted-foreground">
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </span>
-          <span className="mr-1.5 text-amber-500">
+          <span className="mr-1.5 text-muted-foreground">
             {expanded ? <FolderOpen size={14} /> : <Folder size={14} />}
           </span>
           <span className="font-medium truncate">{node.name}</span>
@@ -58,12 +58,12 @@ function FileTreeNode({ node, selectedPath, onSelect, depth }: FileTreeNodeProps
       onClick={() => onSelect(node.path)}
       className={`flex items-center w-full text-left px-2 py-1 text-sm rounded transition-colors ${
         isSelected
-          ? 'bg-blue-50 text-blue-700 font-medium'
-          : 'text-gray-700 hover:bg-gray-100'
+          ? 'bg-accent text-accent-foreground font-medium'
+          : 'text-foreground hover:bg-accent'
       }`}
       style={{ paddingLeft: `${8 + indent}px` }}
     >
-      <span className={`mr-1.5 ${isSelected ? 'text-blue-500' : 'text-gray-400'}`}>
+      <span className={`mr-1.5 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
         <FileText size={14} />
       </span>
       <span className="truncate">{node.name}</span>
@@ -81,7 +81,7 @@ interface FileTreeProps {
 export function FileTree({ nodes, selectedPath, onSelect, loading }: FileTreeProps) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
         加载中…
       </div>
     );
@@ -89,7 +89,7 @@ export function FileTree({ nodes, selectedPath, onSelect, loading }: FileTreePro
 
   if (nodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+      <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
         未找到 .md 文件
       </div>
     );

@@ -38,7 +38,7 @@ export function PipelinePanel({
     <div className="flex flex-col bg-white overflow-y-auto">
       {/* Sandbox test area */}
       {stage === 'sandbox' && sandboxId && (
-        <div className="flex-1 border-t border-slate-200 overflow-hidden">
+        <div className="flex-1 border-t border-border overflow-hidden">
           <SandboxPanel
             filePath={filePath}
             onPublishDone={onPublishDone}

@@ -1,12 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, RefreshCw } from 'lucide-react';
 import { kmApi, type KMReviewPackage } from './api';
 import type { KMPage } from './KnowledgeManagementPage';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿', submitted: '已提交', reviewing: '评审中',
   approved: '已通过', rejected: '已驳回', published: '已发布',
 };
+
+const statusVariant = (s: string): 'secondary' | 'destructive' | 'outline' =>
+  s === 'published' ? 'secondary' : s === 'rejected' ? 'destructive' : 'outline';
 
 export function ReviewPackageListPage({ navigate }: { navigate: (p: KMPage) => void }) {
   const [items, setItems] = useState<KMReviewPackage[]>([]);
@@ -32,59 +40,53 @@ export function ReviewPackageListPage({ navigate }: { navigate: (p: KMPage) => v
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-800">评审包</h2>
+        <h2 className="text-sm font-semibold">评审包</h2>
         <div className="flex gap-2">
-          <button onClick={load} className="p-1.5 text-gray-400 hover:text-gray-600"><RefreshCw size={14} /></button>
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
-            <Plus size={12} /> 新建评审包
-          </button>
+          <Button variant="ghost" size="icon-sm" onClick={load}><RefreshCw size={14} /></Button>
+          <Button size="sm" onClick={() => setShowCreate(true)}><Plus size={12} /> 新建评审包</Button>
         </div>
       </div>
 
       {showCreate && (
-        <div className="mb-3 p-3 bg-white rounded-lg border border-gray-200 space-y-2">
-          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            placeholder="评审包标题" className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded" />
-          <input value={form.candidate_ids} onChange={e => setForm(f => ({ ...f, candidate_ids: e.target.value }))}
-            placeholder="候选 ID（逗号分隔）" className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded" />
+        <Card className="mb-3"><CardContent className="p-3 space-y-2">
+          <Input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+            placeholder="评审包标题" className="text-xs" />
+          <Input value={form.candidate_ids} onChange={e => setForm(f => ({ ...f, candidate_ids: e.target.value }))}
+            placeholder="候选 ID（逗号分隔）" className="text-xs" />
           <div className="flex gap-2">
-            <button onClick={handleCreate} className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700">创建</button>
-            <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded hover:bg-gray-50">取消</button>
+            <Button size="sm" onClick={handleCreate}>创建</Button>
+            <Button variant="outline" size="sm" onClick={() => setShowCreate(false)}>取消</Button>
           </div>
-        </div>
+        </CardContent></Card>
       )}
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50 text-gray-500">
-            <tr>
-              <th className="text-left px-3 py-2 font-medium">标题</th>
-              <th className="text-left px-3 py-2 font-medium">状态</th>
-              <th className="text-left px-3 py-2 font-medium">风险</th>
-              <th className="text-left px-3 py-2 font-medium">提交人</th>
-              <th className="text-left px-3 py-2 font-medium">更新时间</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
+      <div className="rounded-lg border overflow-hidden">
+        <Table className="text-xs">
+          <TableHeader>
+            <TableRow>
+              <TableHead>标题</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>风险</TableHead>
+              <TableHead>提交人</TableHead>
+              <TableHead>更新时间</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-8 text-gray-400">加载中...</td></tr>
+              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">加载中...</TableCell></TableRow>
             ) : items.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-8 text-gray-400">暂无评审包</td></tr>
+              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">暂无评审包</TableCell></TableRow>
             ) : items.map(pkg => (
-              <tr key={pkg.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate({ view: 'review-detail', id: pkg.id })}>
-                <td className="px-3 py-2 text-blue-600 font-medium">{pkg.title}</td>
-                <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                  pkg.status === 'published' ? 'bg-green-50 text-green-600' :
-                  pkg.status === 'approved' ? 'bg-blue-50 text-blue-600' :
-                  pkg.status === 'rejected' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'
-                }`}>{STATUS_LABELS[pkg.status] ?? pkg.status}</span></td>
-                <td className="px-3 py-2 text-gray-500">{pkg.risk_level}</td>
-                <td className="px-3 py-2 text-gray-500">{pkg.submitted_by ?? '-'}</td>
-                <td className="px-3 py-2 text-gray-400">{pkg.updated_at?.slice(0, 16).replace('T', ' ')}</td>
-              </tr>
+              <TableRow key={pkg.id} className="cursor-pointer" onClick={() => navigate({ view: 'review-detail', id: pkg.id })}>
+                <TableCell className="text-primary font-medium">{pkg.title}</TableCell>
+                <TableCell><Badge variant={statusVariant(pkg.status)}>{STATUS_LABELS[pkg.status] ?? pkg.status}</Badge></TableCell>
+                <TableCell className="text-muted-foreground">{pkg.risk_level}</TableCell>
+                <TableCell className="text-muted-foreground">{pkg.submitted_by ?? '-'}</TableCell>
+                <TableCell className="text-muted-foreground">{pkg.updated_at?.slice(0, 16).replace('T', ' ')}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

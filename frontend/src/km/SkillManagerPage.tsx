@@ -23,6 +23,14 @@ import {
   ArrowLeft, AlertCircle, GitBranch,
   Mic, MicOff, Loader2, FlaskConical,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { MermaidRenderer } from '../shared/MermaidRenderer';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
@@ -36,10 +44,10 @@ import {
 
 // Phase 标签配色映射
 const PHASE_LABELS: Record<string, { label: string; color: string }> = {
-  interview: { label: '需求访谈',  color: 'bg-purple-100 text-purple-700' },
-  draft:     { label: '生成草稿',  color: 'bg-amber-100 text-amber-700' },
-  confirm:   { label: '待确认',   color: 'bg-orange-100 text-orange-700' },
-  done:      { label: '已完成',   color: 'bg-green-100 text-green-700' },
+  interview: { label: '需求访谈',  color: 'bg-secondary text-secondary-foreground' },
+  draft:     { label: '生成草稿',  color: 'bg-secondary text-secondary-foreground' },
+  confirm:   { label: '待确认',   color: 'bg-secondary text-secondary-foreground' },
+  done:      { label: '已完成',   color: 'bg-secondary text-secondary-foreground' },
 };
 
 // ── CodeMirror 语言选择 ───────────────────────────────────────────────────────
@@ -54,11 +62,11 @@ function getCodeMirrorLang(name: string) {
 // ── 文件图标 ──────────────────────────────────────────────────────────────────
 
 function FileIcon({ name, type }: { name: string; type: 'file' | 'dir' }) {
-  if (type === 'dir') return <Folder className="w-4 h-4 text-blue-400 flex-shrink-0" />;
-  if (isMdFile(name)) return <FileText className="w-4 h-4 text-emerald-500 flex-shrink-0" />;
+  if (type === 'dir') return <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />;
+  if (isMdFile(name)) return <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />;
   if (/\.(py|js|ts|sh|bash)$/i.test(name))
-    return <FileCode className="w-4 h-4 text-amber-500 flex-shrink-0" />;
-  return <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />;
+    return <FileCode className="w-4 h-4 text-muted-foreground flex-shrink-0" />;
+  return <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />;
 }
 
 // ── 文件树（递归）────────────────────────────────────────────────────────────
@@ -89,7 +97,7 @@ function InlineCreateInput({ onConfirm, onCancel, placeholder }: { onConfirm: (n
       }}
       onBlur={() => { if (!value.trim()) onCancel(); }}
       placeholder={placeholder}
-      className="w-full px-2 py-0.5 text-xs border border-indigo-300 rounded bg-white outline-none"
+      className="w-full px-2 py-0.5 text-xs border border-ring rounded bg-background outline-none"
     />
   );
 }
@@ -113,29 +121,31 @@ function FileTreeNode({
         onClick={() => { if (isDir) setOpen(o => !o); else onSelect(node); }}
         style={{ paddingLeft: `${(depth + 1) * 12}px` }}
         className={`group flex items-center gap-1.5 pr-2 py-1 rounded text-sm cursor-pointer select-none
-          ${isActive ? 'bg-indigo-100 text-indigo-700 font-medium' : isClickable ? 'text-slate-600 hover:bg-slate-100' : 'text-slate-500 hover:bg-slate-50'}`}
+          ${isActive ? 'bg-accent text-primary font-medium' : isClickable ? 'text-foreground/70 hover:bg-muted' : 'text-muted-foreground hover:bg-muted'}`}
       >
-        {isDir && <ChevronRight className={`w-3 h-3 text-slate-400 flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />}
+        {isDir && <ChevronRight className={`w-3 h-3 text-muted-foreground flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />}
         {!isDir && <div className="w-3 flex-shrink-0" />}
         <FileIcon name={node.name} type={node.type} />
         <span className="truncate">{node.name}</span>
         {!isDir && node.path && dirtyMap?.has(node.path) && (
-          <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ml-auto ${dirtyMap.get(node.path) ? 'bg-amber-400' : 'bg-green-400'}`} />
+          <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ml-auto ${dirtyMap.get(node.path) ? 'bg-primary' : 'bg-muted-foreground'}`} />
         )}
         {/* Create button on directories */}
         {isDir && !readOnly && node.path && (
-          <button
+          <Button
+            variant="ghost"
+            size="icon-xs"
             onClick={e => { e.stopPropagation(); setCreating(creating ? null : 'file'); setOpen(true); }}
-            className="ml-auto opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
+            className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity"
             title="新建文件/文件夹"
           >
             <Plus size={12} />
-          </button>
+          </Button>
         )}
       </div>
 
       {isDir && open && (
-        <div className="border-l border-slate-200 ml-5">
+        <div className="border-l border-border ml-5">
           {node.children?.map(child => (
             <FileTreeNode key={child.path ?? child.name} node={child} selectedPath={selectedPath} onSelect={onSelect} dirtyMap={dirtyMap} onCreateFile={onCreateFile} onCreateFolder={onCreateFolder} readOnly={readOnly} depth={depth + 1} />
           ))}
@@ -143,8 +153,8 @@ function FileTreeNode({
           {creating && node.path && (
             <div className="px-2 py-1 flex items-center gap-1" style={{ paddingLeft: `${(depth + 2) * 12}px` }}>
               <div className="flex gap-1 mb-1">
-                <button onClick={() => setCreating('file')} className={`text-[9px] px-1 rounded ${creating === 'file' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400'}`}>文件</button>
-                <button onClick={() => setCreating('folder')} className={`text-[9px] px-1 rounded ${creating === 'folder' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400'}`}>文件夹</button>
+                <Button variant={creating === 'file' ? 'secondary' : 'ghost'} size="xs" className="text-[9px] h-4 px-1" onClick={() => setCreating('file')}>文件</Button>
+                <Button variant={creating === 'folder' ? 'secondary' : 'ghost'} size="xs" className="text-[9px] h-4 px-1" onClick={() => setCreating('folder')}>文件夹</Button>
               </div>
               <InlineCreateInput
                 placeholder={creating === 'file' ? '文件名.md' : '文件夹名'}
@@ -176,8 +186,8 @@ function FileTree({ nodes, selectedPath, onSelect, dirtyMap, onCreateFile, onCre
           {rootCreating ? (
             <div className="flex items-center gap-1">
               <div className="flex gap-1 mb-1">
-                <button onClick={() => setRootCreating('file')} className={`text-[9px] px-1 rounded ${rootCreating === 'file' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400'}`}>文件</button>
-                <button onClick={() => setRootCreating('folder')} className={`text-[9px] px-1 rounded ${rootCreating === 'folder' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400'}`}>文件夹</button>
+                <Button variant={rootCreating === 'file' ? 'secondary' : 'ghost'} size="xs" className="text-[9px] h-4 px-1" onClick={() => setRootCreating('file')}>文件</Button>
+                <Button variant={rootCreating === 'folder' ? 'secondary' : 'ghost'} size="xs" className="text-[9px] h-4 px-1" onClick={() => setRootCreating('folder')}>文件夹</Button>
               </div>
               <InlineCreateInput
                 placeholder={rootCreating === 'file' ? '文件名.md' : '文件夹名'}
@@ -190,9 +200,9 @@ function FileTree({ nodes, selectedPath, onSelect, dirtyMap, onCreateFile, onCre
               />
             </div>
           ) : (
-            <button onClick={() => setRootCreating('file')} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-indigo-600">
+            <Button variant="ghost" size="xs" onClick={() => setRootCreating('file')}>
               <Plus size={10} /> 新建
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -205,7 +215,7 @@ function FileTree({ nodes, selectedPath, onSelect, dirtyMap, onCreateFile, onCre
 // ── 语音输入 Hook ─────────────────────────────────────────────────────────────
 
 function useVoiceInput(onTranscript: (text: string) => void) {
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<any>(null);
   const [isRecording, setIsRecording] = useState(false);
 
   const toggle = () => {
@@ -222,14 +232,14 @@ function useVoiceInput(onTranscript: (text: string) => void) {
       return;
     }
 
-    const rec: SpeechRecognition = new SR();
+    const rec = new SR();
     rec.lang = 'zh-CN';
     rec.continuous = true;
     rec.interimResults = true;
 
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const transcript = Array.from(e.results)
-        .map((r) => r[0].transcript)
+    rec.onresult = (e: any) => {
+      const transcript = Array.from(e.results as Iterable<any>)
+        .map((r: any) => r[0].transcript)
         .join('');
       onTranscript(transcript);
     };
@@ -288,6 +298,9 @@ export function SkillManagerPage() {
     phase,
     canPublish,
     publishSkill,
+    // thinking 模式
+    showThinking,
+    setShowThinking,
   } = useSkillManager();
 
   const { isRecording, toggle: toggleVoice } = useVoiceInput((text) => setInputValue(text));
@@ -589,85 +602,78 @@ export function SkillManagerPage() {
 
   if (view === 'list') {
     return (
-      <div className="h-full bg-white overflow-y-auto">
-        <div className="px-6 py-4">
+      <div className="h-full bg-background overflow-y-auto">
+        <div className="p-4">
           {/* 头部 */}
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-slate-700">技能列表 ({skills.length})</h2>
-            <button
-              onClick={createNewSkill}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
-            >
-              <Plus size={13} /> 新建
-            </button>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold">技能列表 ({skills.length})</h2>
+            <Button size="sm" onClick={createNewSkill}><Plus size={12} /> 新建</Button>
           </div>
 
           {loading && (
-            <div className="flex items-center justify-center py-16 text-slate-400 gap-2">
+            <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
               <Loader2 className="w-5 h-5 animate-spin" />
               <span className="text-sm">加载中…</span>
             </div>
           )}
           {!loading && loadError && (
-            <div className="flex items-center gap-2 text-red-500 text-sm py-8">
+            <div className="flex items-center gap-2 text-destructive text-sm py-8">
               <AlertCircle className="w-4 h-4" /> {loadError}
             </div>
           )}
           {!loading && !loadError && (
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 text-left text-slate-500 text-xs">
-                    <th className="px-4 py-2.5 font-medium">名称</th>
-                    <th className="px-4 py-2.5 font-medium">描述</th>
-                    <th className="px-4 py-2.5 font-medium w-20">发布版本</th>
-                    <th className="px-4 py-2.5 font-medium w-24">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="rounded-lg border overflow-hidden">
+              <Table className="text-xs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>名称</TableHead>
+                    <TableHead>描述</TableHead>
+                    <TableHead className="w-20">发布版本</TableHead>
+                    <TableHead className="w-24">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {skills.map(skill => {
                     const reg = registry.find(r => r.id === skill.id);
                     return (
-                      <tr
+                      <TableRow
                         key={skill.id}
-                        className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer transition"
+                        className="cursor-pointer"
                         onClick={() => openSkill(skill)}
                       >
-                        <td className="px-4 py-2.5 font-mono text-slate-800 font-medium">{skill.id}</td>
-                        <td className="px-4 py-2.5 text-slate-500 text-xs truncate max-w-[300px]">{skill.description}</td>
-                        <td className="px-4 py-2.5">
+                        <TableCell className="font-mono font-medium">{skill.id}</TableCell>
+                        <TableCell className="text-muted-foreground truncate max-w-[300px]">{skill.description}</TableCell>
+                        <TableCell>
                           {reg?.published_version ? (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-600">v{reg.published_version}</span>
+                            <Badge variant="secondary">v{reg.published_version}</Badge>
                           ) : (
-                            <span className="text-xs text-slate-400">—</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
-                        </td>
-                        <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                        </TableCell>
+                        <TableCell onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => openSkill(skill)} className="text-xs text-indigo-600 hover:text-indigo-800">编辑</button>
-                            <button
+                            <Button variant="ghost" size="xs" onClick={() => openSkill(skill)}>编辑</Button>
+                            <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive"
                               onClick={() => {
                                 if (confirm(`确定删除技能 ${skill.id}？`)) {
-                                  // TODO: implement delete API
                                   alert('删除功能开发中');
                                 }
                               }}
-                              className="text-xs text-red-500 hover:text-red-700"
-                            >删除</button>
+                            >删除</Button>
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
                   {skills.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-12 text-center text-slate-400 text-sm">
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                         暂无技能，点击「新建」开始创建
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
         </div>
@@ -680,7 +686,7 @@ export function SkillManagerPage() {
   const selectedIsMd = selectedFile ? isMdFile(selectedFile.name) : false;
 
   return (
-    <div className="h-full w-full flex bg-slate-50 overflow-hidden relative">
+    <div className="h-full w-full flex bg-background overflow-hidden relative">
 
       {/* ── 未保存对话框 ── */}
       {showUnsavedDialog && (
@@ -692,74 +698,91 @@ export function SkillManagerPage() {
       )}
 
       {/* ── 右侧栏：需求访谈 / 测试（双 Tab） ── */}
-      <div className="w-[360px] flex-shrink-0 flex flex-col border-l border-slate-200 bg-white shadow-sm" style={{ order: 99 }}>
+      <div className="w-[360px] flex-shrink-0 flex flex-col border-l border-border bg-background shadow-sm" style={{ order: 99 }}>
 
         {/* Tab 头部 */}
-        <div className="h-10 border-b border-slate-200 flex items-center shrink-0">
-          <button
+        <div className="h-10 border-b border-border flex items-center shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setRightTab('chat')}
-            className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
-              rightTab === 'chat' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-400 hover:text-slate-600'
+            className={`rounded-none h-full border-b-2 transition-colors ${
+              rightTab === 'chat' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" /> 需求访谈
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setRightTab('test')}
-            className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
-              rightTab === 'test' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-400 hover:text-slate-600'
+            className={`rounded-none h-full border-b-2 transition-colors ${
+              rightTab === 'test' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
             }`}
           >
             <FlaskConical className="w-3.5 h-3.5" /> 测试{testingVersion !== null ? ` v${testingVersion}` : ''}
-          </button>
+          </Button>
+          {rightTab === 'chat' && (
+            <Label className="ml-auto flex items-center gap-1.5 pr-3 text-[10px] text-muted-foreground cursor-pointer select-none font-normal">
+              <Checkbox checked={showThinking} onCheckedChange={(v: boolean) => setShowThinking(v)} className="size-3" />
+              思考过程
+            </Label>
+          )}
         </div>
 
         {/* ── 需求访谈 Tab ── */}
         {rightTab === 'chat' && (
           <>
-            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
                     {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                   </div>
-                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'}`}>
-                    <InlineMarkdown text={msg.text} />
+                  <div className="max-w-[85%] flex flex-col gap-1">
+                    {msg.role === 'assistant' && msg.thinking && (
+                      <div className="text-[10px] italic text-muted-foreground bg-muted border border-border/50 rounded-lg px-2.5 py-1.5 max-h-[80px] overflow-y-auto whitespace-pre-wrap">
+                        {msg.thinking}
+                      </div>
+                    )}
+                    <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
+                      <InlineMarkdown text={msg.text} />
+                    </div>
                   </div>
                 </div>
               ))}
               {isTyping && (
                 <div className="flex gap-2">
-                  <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
-                  <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-bounce" />
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-bounce" style={{ animationDelay: '0.2s' }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-bounce" style={{ animationDelay: '0.4s' }} />
+                  <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
+                  <div className="bg-background border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
                   </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
-            <div className="p-3 bg-white border-t border-slate-200">
+            <div className="p-3 bg-background border-t border-border">
               <form onSubmit={handleSubmit}>
-                <div className="rounded-xl border border-slate-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 bg-slate-50 transition-all overflow-hidden">
-                  <textarea
+                <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
+                  <Textarea
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (inputValue.trim() && !isTyping) handleSubmit(e as any); } }}
                     placeholder="描述需求或补充修改…（Enter 发送，Shift+Enter 换行）"
                     rows={3}
-                    className="w-full resize-none bg-transparent px-3 pt-2.5 pb-1 outline-none text-xs text-slate-800 placeholder:text-slate-400 leading-relaxed"
+                    className="w-full min-h-0 resize-none bg-transparent px-3 pt-2.5 pb-1 border-none shadow-none focus-visible:ring-0 focus-visible:border-transparent text-xs text-foreground placeholder:text-muted-foreground leading-relaxed rounded-none"
                     spellCheck={false}
                   />
                   <div className="flex items-center justify-between px-2 pb-2">
-                    <button type="button" onClick={toggleVoice} className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${isRecording ? 'bg-red-50 text-red-500 animate-pulse' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}>
+                    <Button type="button" variant="ghost" size="xs" onClick={toggleVoice} className={isRecording ? 'text-destructive animate-pulse' : ''}>
                       {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
                       {isRecording ? '停止' : '语音'}
-                    </button>
-                    <button type="submit" disabled={!inputValue.trim() || isTyping} className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                    </Button>
+                    <Button type="submit" size="icon-sm" disabled={!inputValue.trim() || isTyping}>
                       <Send className="w-3.5 h-3.5" />
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </form>
@@ -770,34 +793,34 @@ export function SkillManagerPage() {
         {/* ── 测试 Tab ── */}
         {rightTab === 'test' && (
           <>
-            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
               {testingVersion === null ? (
-                <div className="flex items-center justify-center h-full text-sm text-slate-400">
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                   在版本列表中点击 [测试] 开始
                 </div>
               ) : testMessages.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-sm text-slate-400">
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                   输入消息开始测试 v{testingVersion}
                 </div>
               ) : (
                 <>
                   {testMessages.map((msg) => (
                     <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
                         {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                       </div>
-                      <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'}`}>
+                      <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
                         <InlineMarkdown text={msg.text} />
                       </div>
                     </div>
                   ))}
                   {testRunning && (
                     <div className="flex gap-2">
-                      <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
-                      <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
-                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-bounce" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-bounce" style={{ animationDelay: '0.2s' }} />
-                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300 animate-bounce" style={{ animationDelay: '0.4s' }} />
+                      <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
+                      <div className="bg-background border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
+                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
+                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
                       </div>
                     </div>
                   )}
@@ -806,48 +829,49 @@ export function SkillManagerPage() {
               <div ref={testEndRef} />
             </div>
             {testingVersion !== null && (
-              <div className="p-3 bg-white border-t border-slate-200 space-y-2">
+              <div className="p-3 bg-background border-t border-border space-y-2">
                 {/* 测试角色 */}
                 <div>
-                  <select
-                    value={testPersonaId}
-                    onChange={e => setTestPersonaId(e.target.value)}
-                    className="w-full px-2 py-1 text-[11px] border border-slate-200 rounded-md bg-white text-slate-600"
-                  >
-                    {testPersonaList.map(p => (
-                      <option key={p.id} value={p.id}>{p.label}</option>
-                    ))}
-                  </select>
+                  <Select value={testPersonaId} onValueChange={(v) => v && setTestPersonaId(v)}>
+                    <SelectTrigger className="w-full text-[11px] h-7">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {testPersonaList.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 {/* Mock/Real */}
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                    <input type="radio" name="testMode" checked={testMode === 'mock'} onChange={() => setTestMode('mock')} className="w-3 h-3" />
+                <RadioGroup value={testMode} onValueChange={(v) => v && setTestMode(v as 'mock' | 'real')} className="flex items-center gap-3">
+                  <Label className="flex items-center gap-1.5 text-xs text-foreground/70 cursor-pointer font-normal">
+                    <RadioGroupItem value="mock" className="size-3" />
                     Mock
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                    <input type="radio" name="testMode" checked={testMode === 'real'} onChange={() => setTestMode('real')} className="w-3 h-3" />
+                  </Label>
+                  <Label className="flex items-center gap-1.5 text-xs text-foreground/70 cursor-pointer font-normal">
+                    <RadioGroupItem value="real" className="size-3" />
                     Real
-                  </label>
-                </div>
-                <div className="rounded-xl border border-slate-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 bg-slate-50 transition-all overflow-hidden">
-                  <textarea
+                  </Label>
+                </RadioGroup>
+                <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
+                  <Textarea
                     value={testInput}
                     onChange={(e) => setTestInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendTest(); } }}
                     placeholder="输入测试消息…（Enter 发送）"
                     rows={3}
-                    className="w-full resize-none bg-transparent px-3 pt-2.5 pb-1 outline-none text-xs text-slate-800 placeholder:text-slate-400 leading-relaxed"
+                    className="w-full min-h-0 resize-none bg-transparent px-3 pt-2.5 pb-1 border-none shadow-none focus-visible:ring-0 focus-visible:border-transparent text-xs text-foreground placeholder:text-muted-foreground leading-relaxed rounded-none"
                     spellCheck={false}
                   />
                   <div className="flex items-center justify-between px-2 pb-2">
-                    <button type="button" onClick={toggleVoice} className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${isRecording ? 'bg-red-50 text-red-500 animate-pulse' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}>
+                    <Button type="button" variant="ghost" size="xs" onClick={toggleVoice} className={isRecording ? 'text-destructive animate-pulse' : ''}>
                       {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
                       {isRecording ? '停止' : '语音'}
-                    </button>
-                    <button type="button" onClick={handleSendTest} disabled={!testInput.trim() || testRunning} className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                    </Button>
+                    <Button type="button" size="icon-sm" onClick={handleSendTest} disabled={!testInput.trim() || testRunning}>
                       <Send className="w-3.5 h-3.5" />
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -857,30 +881,31 @@ export function SkillManagerPage() {
       </div>
 
       {/* ── 左列：返回 → 版本 → 文件树 → 测试区 ── */}
-      <div className="w-56 flex-shrink-0 bg-slate-50 border-r border-slate-200 flex flex-col overflow-hidden" style={{ order: 1 }}>
+      <div className="w-56 flex-shrink-0 bg-background border-r border-border flex flex-col overflow-hidden" style={{ order: 1 }}>
 
         {/* 返回按钮 + 技能名 */}
-        <div className="px-3 py-2 border-b border-slate-200 flex items-center gap-2">
-          <button onClick={requestCloseEditor} className="text-slate-400 hover:text-slate-600">
+        <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+          <Button variant="ghost" size="icon-xs" onClick={requestCloseEditor}>
             <ArrowLeft size={14} />
-          </button>
-          <span className="text-xs font-semibold text-slate-700 truncate">{activeSkill?.name ?? ''}</span>
+          </Button>
+          <span className="text-xs font-semibold text-foreground truncate">{activeSkill?.name ?? ''}</span>
         </div>
 
         {/* 版本列表 */}
         {versions.length > 0 && (
-          <div className="border-b border-slate-200">
+          <div className="border-b border-border">
             <div className="px-3 py-1.5 flex items-center justify-between">
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">版本</span>
-              <button
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">版本</span>
+              <Button
+                variant="ghost"
+                size="xs"
                 onClick={() => {
                   const base = viewingVersion ?? versions.find(v => v.status === 'published')?.version_no ?? versions[0]?.version_no;
                   if (base) handleCreateFrom(base);
                 }}
-                className="text-[10px] text-indigo-600 hover:text-indigo-800 font-medium"
               >
                 + 新版本
-              </button>
+              </Button>
             </div>
             <div className="pb-1">
               {versions.map(v => {
@@ -892,22 +917,20 @@ export function SkillManagerPage() {
                     key={v.id}
                     onClick={() => setViewingVersion(v.version_no)}
                     className={`group flex items-center gap-1 px-3 py-1.5 text-xs cursor-pointer transition ${
-                      isActive ? 'bg-amber-50 border-l-2 border-amber-400' : 'hover:bg-slate-100'
+                      isActive ? 'bg-accent border-l-2 border-primary' : 'hover:bg-muted'
                     }`}
                   >
-                    <span className={`font-mono flex-shrink-0 ${isActive ? 'text-amber-700 font-semibold' : 'text-slate-600'}`}>
+                    <span className={`font-mono flex-shrink-0 ${isActive ? 'text-primary font-semibold' : 'text-foreground/70'}`}>
                       v{v.version_no}
                     </span>
-                    {v.status === 'published' && <span className="px-1 py-0.5 rounded text-[9px] bg-green-100 text-green-600 flex-shrink-0">已发布</span>}
-                    {v.status !== 'published' && <span className="px-1 py-0.5 rounded text-[9px] bg-blue-100 text-blue-600 flex-shrink-0">已保存</span>}
+                    {v.status === 'published' && <Badge variant="secondary" className="px-1 py-0.5 text-[9px] flex-shrink-0">已发布</Badge>}
+                    {v.status !== 'published' && <Badge variant="outline" className="px-1 py-0.5 text-[9px] flex-shrink-0">已保存</Badge>}
 
                     {/* 操作按钮：默认隐藏，hover 显示 */}
                     {v.status !== 'published' && (
                       <div className="ml-auto flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); setViewingVersion(v.version_no); handleStartTest(v.version_no); }}
-                          className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500 text-white hover:bg-indigo-600">测试</button>
-                        <button onClick={(e) => { e.stopPropagation(); setViewingVersion(v.version_no); handlePublishVersion(v.version_no); }}
-                          className="text-[9px] px-1.5 py-0.5 rounded bg-green-500 text-white hover:bg-green-600">发布</button>
+                        <Button size="xs" variant="default" className="text-[9px] h-5 px-1.5" onClick={(e) => { e.stopPropagation(); setViewingVersion(v.version_no); handleStartTest(v.version_no); }}>测试</Button>
+                        <Button size="xs" className="text-[9px] h-5 px-1.5" onClick={(e) => { e.stopPropagation(); setViewingVersion(v.version_no); handlePublishVersion(v.version_no); }}>发布</Button>
                       </div>
                     )}
                   </div>
@@ -921,14 +944,14 @@ export function SkillManagerPage() {
         <div className="min-h-[20%]">
           <div className="overflow-y-auto">
             {fileTreeLoading ? (
-              <div className="flex items-center justify-center py-8 text-slate-400 gap-1.5">
+              <div className="flex items-center justify-center py-8 text-muted-foreground gap-1.5">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span className="text-xs">加载中…</span>
               </div>
             ) : viewingVersion !== null ? (
               /* 版本快照的文件树 */
               versionFileTree.length === 0 ? (
-                <div className="flex items-center justify-center py-8 text-slate-400 gap-1.5">
+                <div className="flex items-center justify-center py-8 text-muted-foreground gap-1.5">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span className="text-xs">加载中…</span>
                 </div>
@@ -959,36 +982,26 @@ export function SkillManagerPage() {
       </div>
 
       {/* ── 中间：编辑区（全宽）── */}
-      <div className="flex-1 flex flex-col bg-white overflow-hidden" style={{ order: 2 }}>
+      <div className="flex-1 flex flex-col bg-background overflow-hidden" style={{ order: 2 }}>
 
         {/* 工具栏 */}
-        <div className="h-10 border-b border-slate-200 flex items-center justify-between px-3 shrink-0">
-          <span className="text-xs text-slate-500 truncate">
+        <div className="h-10 border-b border-border flex items-center justify-between px-3 shrink-0">
+          <span className="text-xs text-muted-foreground truncate">
             {selectedFile ? selectedFile.name : ''}
           </span>
           <div className="flex items-center gap-2">
             {/* 保存按钮（发布版本不显示） */}
             {!isPublishedVersion && (
-              <button
-                onClick={handleManualSave}
-                disabled={!currentFileDirty || !canSave}
-                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition ${
-                  currentFileDirty && canSave
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                }`}
-              >
+              <Button size="sm" onClick={handleManualSave} disabled={!currentFileDirty || !canSave}>
                 保存
-              </button>
+              </Button>
             )}
             {selectedIsMd && (
               <ViewToggle viewMode={viewMode} onChange={setViewMode} />
             )}
             {/* 版本状态标签 */}
             {selectedVersion && (
-              <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${
-                selectedVersion.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-              }`}>
+              <span className={`text-[10px] px-2 py-1 rounded-full font-medium bg-secondary text-secondary-foreground`}>
                 v{selectedVersion.version_no} {selectedVersion.status === 'published' ? '已发布' : '已保存'}
               </span>
             )}
@@ -997,7 +1010,7 @@ export function SkillManagerPage() {
 
         {/* 发布版本只读提示 */}
         {isPublishedVersion && (
-          <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-700">
+          <div className="px-4 py-2 bg-accent border-b border-border text-xs text-accent-foreground">
             当前为发布版本，不可编辑。如需修改请基于此版本创建新版本，或将其他版本设为发布后再编辑。
           </div>
         )}
@@ -1006,15 +1019,15 @@ export function SkillManagerPage() {
         <div className="flex-1 overflow-hidden">
 
           {fileLoading && (
-            <div className="flex items-center justify-center h-full text-slate-400 gap-2">
+            <div className="flex items-center justify-center h-full text-muted-foreground gap-2">
               <Loader2 className="w-5 h-5 animate-spin" />
               <span className="text-sm">加载中…</span>
             </div>
           )}
 
           {!fileLoading && selectedFile && selectedIsMd && viewMode === 'edit' && (
-            <textarea
-              className={`w-full h-full resize-none font-mono text-sm leading-relaxed p-4 outline-none ${isPublishedVersion ? 'bg-slate-50 text-slate-500' : 'bg-white text-slate-800'}`}
+            <Textarea
+              className={`w-full h-full min-h-0 resize-none font-mono text-sm leading-relaxed p-4 border-none shadow-none focus-visible:ring-0 rounded-none ${isPublishedVersion ? 'bg-muted text-muted-foreground' : 'bg-background text-foreground'}`}
               readOnly={isPublishedVersion}
               value={editorContent}
               onChange={(e) => !isPublishedVersion && handleEditorChangeTracked(e.target.value)}
@@ -1046,7 +1059,7 @@ export function SkillManagerPage() {
           )}
 
           {!fileLoading && selectedFile && !selectedIsMd && !isTextFile(selectedFile.name) && (
-            <div className="flex items-center justify-center h-full text-slate-400 text-sm gap-2">
+            <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
               <AlertCircle size={16} />
               不支持预览此文件类型
             </div>
@@ -1055,15 +1068,17 @@ export function SkillManagerPage() {
 
         {/* ── 测试流程图（测试时展开，非测试时隐藏）── */}
         {rightTab === 'test' && testDiagram && (
-          <div className="border-t border-slate-200 shrink-0">
-            <button
+          <div className="border-t border-border shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setDiagramCollapsed(prev => !prev)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              className="w-full justify-start rounded-none"
             >
               {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
               <GitBranch size={12} />
               流程图 — {testDiagram.skill_name}
-            </button>
+            </Button>
             {!diagramCollapsed && (
               <div className="px-3 pb-3">
                 <MermaidRenderer

@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { RefreshCw, CheckCircle } from 'lucide-react';
 import { kmApi, type KMTask } from './api';
 import type { KMPage } from './KnowledgeManagementPage';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 
 const TYPE_LABELS: Record<string, string> = {
   review_expiry: '到期复核', content_gap: '内容补齐', conflict_arb: '冲突仲裁',
@@ -10,6 +13,9 @@ const TYPE_LABELS: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = {
   open: '待处理', in_progress: '处理中', done: '已完成', closed: '已关闭',
 };
+
+const priorityVariant = (p: string): 'destructive' | 'outline' | 'secondary' =>
+  p === 'urgent' ? 'destructive' : p === 'high' ? 'outline' : 'secondary';
 
 export function TaskListPage({ navigate }: { navigate: (p: KMPage) => void }) {
   const [items, setItems] = useState<KMTask[]>([]);
@@ -31,48 +37,47 @@ export function TaskListPage({ navigate }: { navigate: (p: KMPage) => void }) {
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-800">治理任务</h2>
-        <button onClick={load} className="p-1.5 text-gray-400 hover:text-gray-600"><RefreshCw size={14} /></button>
+        <h2 className="text-sm font-semibold">治理任务</h2>
+        <Button variant="ghost" size="icon-sm" onClick={load}><RefreshCw size={14} /></Button>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50 text-gray-500">
-            <tr>
-              <th className="text-left px-3 py-2 font-medium">类型</th>
-              <th className="text-left px-3 py-2 font-medium">来源</th>
-              <th className="text-left px-3 py-2 font-medium">优先级</th>
-              <th className="text-left px-3 py-2 font-medium">负责人</th>
-              <th className="text-left px-3 py-2 font-medium">状态</th>
-              <th className="text-left px-3 py-2 font-medium">时限</th>
-              <th className="text-left px-3 py-2 font-medium">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
+      <div className="rounded-lg border overflow-hidden">
+        <Table className="text-xs">
+          <TableHeader>
+            <TableRow>
+              <TableHead>类型</TableHead>
+              <TableHead>来源</TableHead>
+              <TableHead>优先级</TableHead>
+              <TableHead>负责人</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>时限</TableHead>
+              <TableHead>操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {loading ? (
-              <tr><td colSpan={7} className="text-center py-8 text-gray-400">加载中...</td></tr>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">加载中...</TableCell></TableRow>
             ) : items.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-8 text-gray-400">暂无任务</td></tr>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">暂无任务</TableCell></TableRow>
             ) : items.map(t => (
-              <tr key={t.id} className="hover:bg-gray-50">
-                <td className="px-3 py-2">{TYPE_LABELS[t.task_type] ?? t.task_type}</td>
-                <td className="px-3 py-2 text-gray-400 font-mono text-[10px]">{t.source_ref_id?.slice(0, 8) ?? '-'}</td>
-                <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                  t.priority === 'urgent' ? 'bg-red-50 text-red-600' :
-                  t.priority === 'high' ? 'bg-orange-50 text-orange-600' : 'bg-gray-100 text-gray-600'
-                }`}>{t.priority}</span></td>
-                <td className="px-3 py-2 text-gray-500">{t.assignee ?? '-'}</td>
-                <td className="px-3 py-2 text-gray-500">{STATUS_LABELS[t.status] ?? t.status}</td>
-                <td className="px-3 py-2 text-gray-400">{t.due_date ?? '-'}</td>
-                <td className="px-3 py-2">
+              <TableRow key={t.id}>
+                <TableCell>{TYPE_LABELS[t.task_type] ?? t.task_type}</TableCell>
+                <TableCell className="text-muted-foreground font-mono text-[10px]">{t.source_ref_id?.slice(0, 8) ?? '-'}</TableCell>
+                <TableCell><Badge variant={priorityVariant(t.priority)}>{t.priority}</Badge></TableCell>
+                <TableCell className="text-muted-foreground">{t.assignee ?? '-'}</TableCell>
+                <TableCell className="text-muted-foreground">{STATUS_LABELS[t.status] ?? t.status}</TableCell>
+                <TableCell className="text-muted-foreground">{t.due_date ?? '-'}</TableCell>
+                <TableCell>
                   {(t.status === 'open' || t.status === 'in_progress') && (
-                    <button onClick={() => handleClose(t.id)} className="text-blue-600 hover:text-blue-800">完成</button>
+                    <Button variant="ghost" size="xs" onClick={() => handleClose(t.id)}>
+                      <CheckCircle size={11} /> 完成
+                    </Button>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

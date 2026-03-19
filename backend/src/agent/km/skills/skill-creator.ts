@@ -17,7 +17,7 @@
 import { Hono } from 'hono';
 import { generateText, tool } from 'ai';
 import { z } from 'zod';
-import { skillCreatorModel } from '../../../engine/llm';
+import { skillCreatorModel, skillCreatorThinkingModel } from '../../../engine/llm';
 import { logger } from '../../../services/logger';
 import { createNewSkillVersion, createVersionFrom, getSkillRegistry } from './version-manager';
 import { refreshSkillsCache } from '../../../engine/skills';
@@ -167,6 +167,7 @@ skillCreator.post('/chat', async (c) => {
     message: string;
     session_id?: string;
     skill_id?: string | null;
+    enable_thinking?: boolean;
   }>();
 
   if (!body.message?.trim()) {
@@ -195,8 +196,13 @@ skillCreator.post('/chat', async (c) => {
   const systemPrompt = buildSystemPrompt(session, skillIndex);
 
   try {
-    const { text } = await generateText({
-      model: skillCreatorModel,
+    const model = body.enable_thinking ? skillCreatorThinkingModel : skillCreatorModel;
+    logger.info('skill-creator', 'chat_model_selected', {
+      enable_thinking: body.enable_thinking,
+      model_type: body.enable_thinking ? 'thinking' : 'normal',
+    });
+    const { text, reasoning } = await generateText({
+      model,
       system: systemPrompt,
       messages: session.history,
       tools: {
@@ -235,9 +241,25 @@ skillCreator.post('/chat', async (c) => {
     if (parsed.draft) session.draft = parsed.draft;
     session.history.push({ role: 'assistant', content: parsed.reply });
 
+    // reasoning 在 AI SDK v4.x 中是 string | undefined
+    const thinkingText = reasoning || null;
+
+    logger.info('skill-creator', 'chat_reasoning_debug', {
+      session_id: session.id,
+      reasoning_type: typeof reasoning,
+      reasoning_is_undefined: reasoning === undefined,
+      reasoning_is_null: reasoning === null,
+      reasoning_is_empty_string: reasoning === '',
+      reasoning_length: typeof reasoning === 'string' ? reasoning.length : -1,
+      reasoning_preview: typeof reasoning === 'string' ? reasoning.substring(0, 200) : String(reasoning),
+      thinkingText_value: thinkingText === null ? 'null' : `length=${thinkingText?.length}`,
+      raw_text_has_think_tag: text.includes('<think>') || text.includes('</think>'),
+      raw_text_preview: text.substring(0, 300),
+    });
+
     logger.info('skill-creator', 'chat', { session_id: session.id, phase: session.phase, has_draft: !!session.draft });
 
-    return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft });
+    return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft, thinking: thinkingText });
   } catch (err) {
     logger.error('skill-creator', 'chat_error', { error: String(err) });
     return c.json({ error: `对话失败: ${String(err)}` }, 500);

@@ -3,6 +3,7 @@
  */
 import React, { useState, useCallback } from 'react';
 import { FileText, Inbox, PackageCheck, Archive, ClipboardList, Shield, ChevronRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { DocumentListPage } from './DocumentListPage';
 import { DocumentDetailPage } from './DocumentDetailPage';
 import { CandidateListPage } from './CandidateListPage';
@@ -71,12 +72,12 @@ export function KnowledgeManagementPage() {
   const activeView = page.view.replace(/-detail$/, 's').replace('review-detail', 'review-packages');
 
   return (
-    <div className="flex h-full bg-gray-50">
+    <div className="flex h-full bg-background">
       {/* 左侧导航 */}
-      <nav className="w-48 flex-shrink-0 bg-white border-r border-gray-200 overflow-y-auto py-2">
+      <nav className="w-48 flex-shrink-0 bg-background border-r overflow-y-auto py-2">
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="mb-1">
-            <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+            <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
               {group.label}
             </div>
             {group.items.map((item) => {
@@ -84,19 +85,21 @@ export function KnowledgeManagementPage() {
               const isActive = activeView === item.key ||
                 (item.key === 'review-packages' && page.view === 'review-detail');
               return (
-                <button
+                <Button
                   key={item.key}
+                  variant="ghost"
+                  size="sm"
                   onClick={() => navigate({ view: item.view } as KMPage)}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${
+                  className={`w-full justify-start gap-2 rounded-none text-xs ${
                     isActive
-                      ? 'bg-blue-50 text-blue-700 font-medium'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                      ? 'bg-accent text-accent-foreground font-medium'
+                      : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   <Icon size={13} />
                   {item.label}
                   {isActive && <ChevronRight size={11} className="ml-auto" />}
-                </button>
+                </Button>
               );
             })}
           </div>

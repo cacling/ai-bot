@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { RefreshCw, Play } from 'lucide-react';
 import { kmApi, type KMActionDraft } from './api';
 import type { KMPage } from './KnowledgeManagementPage';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿', submitted: '已提交', reviewed: '已复核',
@@ -11,6 +14,9 @@ const TYPE_LABELS: Record<string, string> = {
   publish: '发布', rollback: '回滚', rescope: '改范围',
   unpublish: '下架', downgrade: '降权', renew: '续期',
 };
+
+const statusVariant = (s: string): 'secondary' | 'destructive' | 'outline' =>
+  s === 'done' ? 'secondary' : s === 'failed' ? 'destructive' : 'outline';
 
 export function ActionDraftListPage({ navigate }: { navigate: (p: KMPage) => void }) {
   const [items, setItems] = useState<KMActionDraft[]>([]);
@@ -35,48 +41,45 @@ export function ActionDraftListPage({ navigate }: { navigate: (p: KMPage) => voi
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-800">动作草案</h2>
-        <button onClick={load} className="p-1.5 text-gray-400 hover:text-gray-600"><RefreshCw size={14} /></button>
+        <h2 className="text-sm font-semibold">动作草案</h2>
+        <Button variant="ghost" size="icon-sm" onClick={load}><RefreshCw size={14} /></Button>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-xs">
-          <thead className="bg-gray-50 text-gray-500">
-            <tr>
-              <th className="text-left px-3 py-2 font-medium">类型</th>
-              <th className="text-left px-3 py-2 font-medium">变更摘要</th>
-              <th className="text-left px-3 py-2 font-medium">状态</th>
-              <th className="text-left px-3 py-2 font-medium">回归</th>
-              <th className="text-left px-3 py-2 font-medium">更新时间</th>
-              <th className="text-left px-3 py-2 font-medium">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
+      <div className="rounded-lg border overflow-hidden">
+        <Table className="text-xs">
+          <TableHeader>
+            <TableRow>
+              <TableHead>类型</TableHead>
+              <TableHead>变更摘要</TableHead>
+              <TableHead>状态</TableHead>
+              <TableHead>回归</TableHead>
+              <TableHead>更新时间</TableHead>
+              <TableHead>操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {loading ? (
-              <tr><td colSpan={6} className="text-center py-8 text-gray-400">加载中...</td></tr>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">加载中...</TableCell></TableRow>
             ) : items.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-8 text-gray-400">暂无草案</td></tr>
+              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">暂无草案</TableCell></TableRow>
             ) : items.map(d => (
-              <tr key={d.id} className="hover:bg-gray-50">
-                <td className="px-3 py-2">{TYPE_LABELS[d.action_type] ?? d.action_type}</td>
-                <td className="px-3 py-2 text-gray-600 truncate max-w-[200px]">{d.change_summary ?? '-'}</td>
-                <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                  d.status === 'done' ? 'bg-green-50 text-green-600' :
-                  d.status === 'failed' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'
-                }`}>{STATUS_LABELS[d.status] ?? d.status}</span></td>
-                <td className="px-3 py-2 text-gray-400 font-mono text-[10px]">{d.regression_window_id ? '已绑定' : '-'}</td>
-                <td className="px-3 py-2 text-gray-400">{d.updated_at?.slice(0, 16).replace('T', ' ')}</td>
-                <td className="px-3 py-2">
+              <TableRow key={d.id}>
+                <TableCell>{TYPE_LABELS[d.action_type] ?? d.action_type}</TableCell>
+                <TableCell className="text-muted-foreground truncate max-w-[200px]">{d.change_summary ?? '-'}</TableCell>
+                <TableCell><Badge variant={statusVariant(d.status)}>{STATUS_LABELS[d.status] ?? d.status}</Badge></TableCell>
+                <TableCell className="text-muted-foreground font-mono text-[10px]">{d.regression_window_id ? '已绑定' : '-'}</TableCell>
+                <TableCell className="text-muted-foreground">{d.updated_at?.slice(0, 16).replace('T', ' ')}</TableCell>
+                <TableCell>
                   {(d.status === 'draft' || d.status === 'reviewed') && (
-                    <button onClick={() => handleExecute(d.id)} className="flex items-center gap-1 text-blue-600 hover:text-blue-800">
+                    <Button variant="ghost" size="xs" onClick={() => handleExecute(d.id)}>
                       <Play size={11} /> 执行
-                    </button>
+                    </Button>
                   )}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   );
