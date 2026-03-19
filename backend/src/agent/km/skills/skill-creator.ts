@@ -20,7 +20,7 @@ import { z } from 'zod';
 import { skillCreatorModel, skillCreatorThinkingModel, skillCreatorVisionModel } from '../../../engine/llm';
 import { logger } from '../../../services/logger';
 import { createNewSkillVersion, createVersionFrom, getSkillRegistry } from './version-manager';
-import { refreshSkillsCache } from '../../../engine/skills';
+import { refreshSkillsCache, syncSkillMetadata } from '../../../engine/skills';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -700,6 +700,8 @@ skillCreator.post('/save', async (c) => {
       logger.info('skill-creator', 'test_cases_saved', { skill: body.skill_name, count: testCasesValidation.data.length });
     }
 
+    // 同步元数据到 DB
+    syncSkillMetadata(body.skill_name, body.skill_md);
     refreshSkillsCache();
 
     const allToolsReady = toolWarnings.length === 0;

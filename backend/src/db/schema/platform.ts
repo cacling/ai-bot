@@ -35,6 +35,14 @@ export const skillRegistry = sqliteTable('skill_registry', {
   published_version: integer('published_version'),          // 当前发布的版本号
   latest_version:    integer('latest_version').notNull().default(0),
   description:       text('description').notNull().default(''),
+  // ── 技能元数据（从 SKILL.md frontmatter + 正文提取）────────────────────────
+  channels:          text('channels'),                       // JSON: ["online","voice"]
+  mode:              text('mode'),                           // "inbound" | "outbound"
+  trigger_keywords:  text('trigger_keywords'),               // JSON: ["停机保号","暂停服务"]
+  tool_names:        text('tool_names'),                     // JSON: ["verify_identity","check_account_balance"]
+  mermaid:           text('mermaid'),                        // Mermaid 状态图原文（不含 ```mermaid 围栏）
+  tags:              text('tags'),                           // JSON: ["停机","保号"]
+  reference_files:   text('reference_files'),                // JSON: ["suspend-rules.md"]
   created_at:        text('created_at').$defaultFn(() => new Date().toISOString()),
   updated_at:        text('updated_at').$defaultFn(() => new Date().toISOString()),
 });

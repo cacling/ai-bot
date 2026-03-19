@@ -16,6 +16,7 @@ import { db } from '../../../db';
 import { skillRegistry, skillVersions } from '../../../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import { logger } from '../../../services/logger';
+import { syncSkillMetadata, refreshSkillsCache } from '../../../engine/skills';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 const SKILLS_ROOT = resolve(PROJECT_ROOT, 'skills');
@@ -217,6 +218,18 @@ export async function publishVersion(
     published_version: versionNo,
     updated_at: new Date().toISOString(),
   }).where(eq(skillRegistry.id, skillId)).run();
+
+  // 发布后同步元数据到 skill_registry（从刚复制的 SKILL.md 提取）
+  const publishedMdPath = resolve(BIZ_SKILLS_DIR, skillId, 'SKILL.md');
+  if (existsSync(publishedMdPath)) {
+    try {
+      const { readFileSync } = await import('node:fs');
+      syncSkillMetadata(skillId, readFileSync(publishedMdPath, 'utf-8'));
+    } catch (e) {
+      logger.warn('version', 'metadata_sync_error', { skillId, error: String(e) });
+    }
+  }
+  refreshSkillsCache();
 
   logger.info('version', 'published', { skillId, versionNo, operator });
   return { success: true };

@@ -1,8 +1,9 @@
 import { tool } from 'ai';
-import { readFileSync, readdirSync, existsSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { resolve, join } from 'path';
 import { z } from 'zod';
 import { logger } from '../services/logger';
+import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { skillRegistry } from '../db/schema';
 
@@ -58,65 +59,60 @@ function getPublishedSkillIds(): Set<string> | null {
   } catch { return null; }
 }
 
-// ── 内部缓存：技能内容（避免重复读文件）───────────────────────────────────────
+// ── 内部缓存（数据源：skill_registry 表）──────────────────────────────────────
 
 interface SkillCache {
   entries: SkillEntry[];
-  /** skill_name → SKILL.md 完整内容 */
-  contents: Map<string, string>;
   /** tool → skill 唯一映射 */
   toolSkillMap: Record<string, string>;
   /** skill_name → tool_name[] */
   skillToolNames: Map<string, string[]>;
-  /** skill_name → mermaid 原文（不含 ```mermaid 围栏）*/
+  /** skill_name → mermaid 原文 */
   skillMermaid: Map<string, string>;
-  /** tool → skill_name[]（一个工具被多个技能引用的完整映射）*/
+  /** tool → skill_name[]（完整映射）*/
   toolToSkills: Map<string, string[]>;
+  /** skill_name → reference filenames */
+  skillReferenceFiles: Map<string, string[]>;
 }
 
 function buildCache(): SkillCache {
-  const publishedIds = getPublishedSkillIds();
   const entries: SkillEntry[] = [];
-  const contents = new Map<string, string>();
   const skillToolNames = new Map<string, string[]>();
   const skillMermaid = new Map<string, string>();
   const toolToSkills = new Map<string, string[]>();
+  const skillReferenceFiles = new Map<string, string[]>();
 
   try {
-    const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'));
-    for (const dir of dirs) {
-      if (publishedIds && !publishedIds.has(dir.name)) continue;
-      const mdPath = join(SKILLS_DIR, dir.name, 'SKILL.md');
-      if (!existsSync(mdPath)) continue;
+    const rows = db.select().from(skillRegistry).all()
+      .filter(r => r.published_version != null);
 
-      const content = readFileSync(mdPath, 'utf-8');
-      contents.set(dir.name, content);
-
-      // description + channels
-      const descMatch = content.match(/^description:\s*(.+)$/m);
+    for (const row of rows) {
+      const channels: string[] = row.channels ? JSON.parse(row.channels) : DEFAULT_CHANNELS;
       entries.push({
-        name: dir.name,
-        description: descMatch?.[1]?.trim() ?? dir.name,
-        channels: parseChannels(content),
+        name: row.id,
+        description: row.description || row.id,
+        channels,
       });
 
-      // %% tool:xxx annotations
-      const tools: string[] = [];
-      for (const m of content.matchAll(/%% tool:(\w+)/g)) {
-        const toolName = m[1];
-        if (!tools.includes(toolName)) tools.push(toolName);
+      // tool_names
+      const tools: string[] = row.tool_names ? JSON.parse(row.tool_names) : [];
+      skillToolNames.set(row.id, tools);
+      for (const toolName of tools) {
         const skills = toolToSkills.get(toolName) ?? [];
-        if (!skills.includes(dir.name)) skills.push(dir.name);
+        if (!skills.includes(row.id)) skills.push(row.id);
         toolToSkills.set(toolName, skills);
       }
-      skillToolNames.set(dir.name, tools);
 
       // mermaid
-      const mermaidMatch = content.match(/```mermaid\r?\n([\s\S]*?)```/);
-      if (mermaidMatch) skillMermaid.set(dir.name, mermaidMatch[1]);
+      if (row.mermaid) skillMermaid.set(row.id, row.mermaid);
+
+      // reference_files
+      const refs: string[] = row.reference_files ? JSON.parse(row.reference_files) : [];
+      skillReferenceFiles.set(row.id, refs);
     }
-  } catch { /* ignore */ }
+  } catch (e) {
+    logger.warn('skills', 'build_cache_error', { error: String(e) });
+  }
 
   // tool → skill 唯一映射
   const toolSkillMap: Record<string, string> = {};
@@ -124,15 +120,168 @@ function buildCache(): SkillCache {
     if (skills.length === 1) toolSkillMap[toolName] = skills[0];
   }
 
-  return { entries, contents, toolSkillMap, skillToolNames, skillMermaid, toolToSkills };
+  return { entries, toolSkillMap, skillToolNames, skillMermaid, toolToSkills, skillReferenceFiles };
 }
 
-// 缓存 + 定时刷新（每 30 秒）
+// ── 从 SKILL.md 提取元数据并写入 DB ─────────────────────────────────────────
+
+/** 从 SKILL.md 内容中提取元数据 */
+export function extractSkillMetadata(content: string): {
+  description: string;
+  channels: string[];
+  mode: string;
+  triggerKeywords: string[];
+  toolNames: string[];
+  mermaid: string | null;
+  tags: string[];
+} {
+  const descMatch = content.match(/^description:\s*(.+)$/m);
+  const modeMatch = content.match(/^\s*mode:\s*(.+)$/m);
+  const tagsMatch = content.match(/^\s*tags:\s*\[([^\]]*)\]/m);
+  const mermaidMatch = content.match(/```mermaid\r?\n([\s\S]*?)```/);
+
+  // 触发条件：提取 ## 触发条件 后面的列表项
+  const triggerSection = content.match(/## 触发条件\s*\n([\s\S]*?)(?=\n##|\n---|\Z)/);
+  const triggerKeywords: string[] = [];
+  if (triggerSection) {
+    for (const m of triggerSection[1].matchAll(/[-–]\s*(?:[""]([^""]+)[""]|"([^"]+)")/g)) {
+      triggerKeywords.push(m[1] ?? m[2]);
+    }
+  }
+
+  // %% tool:xxx
+  const toolNames: string[] = [];
+  for (const m of content.matchAll(/%% tool:(\w+)/g)) {
+    if (!toolNames.includes(m[1])) toolNames.push(m[1]);
+  }
+
+  // tags
+  const tags: string[] = [];
+  if (tagsMatch) {
+    for (const t of tagsMatch[1].split(',')) {
+      const trimmed = t.trim().replace(/^["']|["']$/g, '');
+      if (trimmed) tags.push(trimmed);
+    }
+  }
+
+  return {
+    description: descMatch?.[1]?.trim() ?? '',
+    channels: parseChannels(content),
+    mode: modeMatch?.[1]?.trim() ?? 'inbound',
+    triggerKeywords,
+    toolNames,
+    mermaid: mermaidMatch?.[1] ?? null,
+    tags,
+  };
+}
+
+/** 从 SKILL.md 提取元数据并更新 skill_registry 表 */
+export function syncSkillMetadata(skillName: string, content: string): void {
+  const meta = extractSkillMetadata(content);
+
+  // 扫描 references 目录
+  const refsDir = join(SKILLS_DIR, skillName, 'references');
+  let refFiles: string[] = [];
+  try {
+    if (existsSync(refsDir)) {
+      refFiles = readdirSync(refsDir).filter(f => f.endsWith('.md'));
+    }
+  } catch { /* ignore */ }
+
+  const now = new Date().toISOString();
+  db.update(skillRegistry).set({
+    description: meta.description,
+    channels: JSON.stringify(meta.channels),
+    mode: meta.mode,
+    trigger_keywords: meta.triggerKeywords.length > 0 ? JSON.stringify(meta.triggerKeywords) : null,
+    tool_names: meta.toolNames.length > 0 ? JSON.stringify(meta.toolNames) : null,
+    mermaid: meta.mermaid,
+    tags: meta.tags.length > 0 ? JSON.stringify(meta.tags) : null,
+    reference_files: refFiles.length > 0 ? JSON.stringify(refFiles) : null,
+    updated_at: now,
+  }).where(eq(skillRegistry.id, skillName)).run();
+
+  logger.info('skills', 'metadata_synced', { skill: skillName, tools: meta.toolNames.length, refs: refFiles.length });
+}
+
+/** 批量同步所有已发布技能的元数据（seed / startup 时使用） */
+export function syncAllSkillMetadata(): void {
+  try {
+    const rows = db.select().from(skillRegistry).all()
+      .filter(r => r.published_version != null);
+    for (const row of rows) {
+      const mdPath = join(SKILLS_DIR, row.id, 'SKILL.md');
+      if (!existsSync(mdPath)) continue;
+      const content = readFileSync(mdPath, 'utf-8');
+      syncSkillMetadata(row.id, content);
+    }
+    logger.info('skills', 'all_metadata_synced', { count: rows.length });
+  } catch (e) {
+    logger.warn('skills', 'sync_all_error', { error: String(e) });
+  }
+}
+
+// 缓存 + 定时校验（每 30 秒）
 let _cache: SkillCache = buildCache();
 let _lastScan = Date.now();
+/** skill_name → mtime (ms) 上次同步时的文件修改时间 */
+const _mtimeMap = new Map<string, number>();
+
+/** 轻量校验：检查磁盘文件和 DB 是否一致，不一致时自动同步 */
+function reconcileWithDisk(): void {
+  try {
+    const rows = db.select().from(skillRegistry).all()
+      .filter(r => r.published_version != null);
+    const publishedIds = new Set(rows.map(r => r.id));
+
+    // 1. 检查 DB 中的技能是否在磁盘上
+    for (const row of rows) {
+      const mdPath = join(SKILLS_DIR, row.id, 'SKILL.md');
+      if (!existsSync(mdPath)) {
+        // 文件被删除 → 清除元数据
+        db.update(skillRegistry).set({
+          channels: null, mode: null, trigger_keywords: null,
+          tool_names: null, mermaid: null, tags: null, reference_files: null,
+          updated_at: new Date().toISOString(),
+        }).where(eq(skillRegistry.id, row.id)).run();
+        _mtimeMap.delete(row.id);
+        logger.info('skills', 'reconcile_file_deleted', { skill: row.id });
+        continue;
+      }
+
+      // 比较 mtime
+      try {
+        const stat = statSync(mdPath);
+        const mtime = stat.mtimeMs;
+        const lastMtime = _mtimeMap.get(row.id);
+        if (lastMtime === undefined || mtime > lastMtime) {
+          // 文件有变更（或首次检查）→ 重新同步
+          const content = readFileSync(mdPath, 'utf-8');
+          syncSkillMetadata(row.id, content);
+          _mtimeMap.set(row.id, mtime);
+        }
+      } catch { /* ignore stat errors */ }
+    }
+
+    // 2. 检查磁盘上是否有新技能目录不在 DB 中
+    try {
+      const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
+        .filter(d => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'));
+      for (const dir of dirs) {
+        if (publishedIds.has(dir.name)) continue;
+        const mdPath = join(SKILLS_DIR, dir.name, 'SKILL.md');
+        if (!existsSync(mdPath)) continue;
+        // 磁盘上有但 DB 中没发布 → 不主动补录（只有通过 API 发布的才算）
+      }
+    } catch { /* ignore */ }
+  } catch (e) {
+    logger.warn('skills', 'reconcile_error', { error: String(e) });
+  }
+}
 
 function ensureFresh(): SkillCache {
   if (Date.now() - _lastScan > 30_000) {
+    reconcileWithDisk();
     _cache = buildCache();
     _lastScan = Date.now();
   }
@@ -141,6 +290,7 @@ function ensureFresh(): SkillCache {
 
 /** 强制刷新技能缓存（新建/删除技能后调用） */
 export function refreshSkillsCache(): void {
+  reconcileWithDisk();
   _cache = buildCache();
   _lastScan = Date.now();
 }
@@ -162,19 +312,19 @@ export function getSkillsDescriptionByChannel(channel: string): string {
   return getSkillsByChannel(channel).map(s => `- ${s.name}：${s.description}`).join('\n');
 }
 
-/** 获取指定 channel 的技能完整内容（用于语音/外呼 prompt 注入） */
+/** 获取指定 channel 的技能完整内容（用于语音/外呼 prompt 注入，读文件） */
 export function getSkillContentByChannel(channel: string): string {
-  const cache = ensureFresh();
   return getSkillsByChannel(channel).map(s => {
-    const content = cache.contents.get(s.name);
+    const content = getSkillContent(s.name);
     if (!content) return '';
     return `\n---\n### 技能：${s.name}\n${content.replace(/^---[\s\S]*?---\s*/, '')}`;
   }).filter(Boolean).join('\n');
 }
 
-/** 获取单个技能的 SKILL.md 完整内容 */
+/** 获取单个技能的 SKILL.md 完整内容（执行时读文件，不读 DB） */
 export function getSkillContent(skillName: string): string | null {
-  return ensureFresh().contents.get(skillName) ?? null;
+  const mdPath = join(SKILLS_DIR, skillName, 'SKILL.md');
+  try { return readFileSync(mdPath, 'utf-8'); } catch { return null; }
 }
 
 /** 获取单个技能的 Mermaid 状态图（不含 ```mermaid 围栏） */
@@ -195,6 +345,11 @@ export function getToolSkillMap(): Record<string, string> {
 /** 获取 tool→skill[] 完整映射（含多技能引用） */
 export function getToolToSkillsMap(): Map<string, string[]> {
   return ensureFresh().toolToSkills;
+}
+
+/** 获取单个技能的参考文档文件名列表 */
+export function getSkillReferenceFiles(skillName: string): string[] {
+  return ensureFresh().skillReferenceFiles.get(skillName) ?? [];
 }
 
 /** 获取所有技能名 */
