@@ -22,6 +22,11 @@ export const skillCreatorModel = skillCreatorProvider(
   process.env.SKILL_CREATOR_MODEL ?? 'qwen3-max'
 );
 
+// ── 视觉模型（图片解析专用）─────────────────────────────────────────────────
+export const skillCreatorVisionModel = skillCreatorProvider(
+  process.env.SKILL_CREATOR_VISION_MODEL!
+);
+
 // ── Thinking 模式 ───────────────────────────────────────────────────────────
 // DashScope 的 reasoning_content 是独立字段（非流式在 message.reasoning_content，
 // 流式在 delta.reasoning_content），需要转换为 <think> 标签包裹到 content 中，

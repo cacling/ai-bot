@@ -12,6 +12,7 @@ import { fetchOutboundTasks, findOutboundTaskByPhone, type OutboundTask } from '
 import './cards/index';  // register all card defs (side-effect)
 import { buildInitialCardStates, findCardByEvent, type CardState } from './cards/registry';
 import { CardPanel } from './cards/CardPanel';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { EditorPage } from '../km/EditorPage';
 import { SkillManagerPage } from '../km/SkillManagerPage';
 import { KnowledgeManagementPage } from '../km/KnowledgeManagementPage';
@@ -412,10 +413,12 @@ export function AgentWorkstationPage() {
       )}
 
       {/* Main content: Chat left + CardPanel right */}
-      <div className={`flex flex-1 overflow-hidden p-4 gap-4 ${agentTab !== 'chat' ? 'hidden' : ''}`}>
+      <div className={`flex-1 overflow-hidden p-4 ${agentTab !== 'chat' ? 'hidden' : ''}`}>
+      <ResizablePanelGroup orientation="horizontal" className="h-full gap-4" id="agent-workstation">
 
         {/* Left: Chat dialog */}
-        <div className="w-[400px] flex-shrink-0 bg-background rounded-2xl shadow-md border border-border flex flex-col overflow-hidden">
+        <ResizablePanel id="agent-chat" defaultSize="30%" minSize="20%" maxSize="50%">
+        <div className="h-full bg-background rounded-2xl shadow-md border border-border flex flex-col overflow-hidden">
 
           {/* Dialog header */}
           <div className="flex items-center px-4 py-2.5 border-b border-border bg-muted flex-shrink-0">
@@ -576,11 +579,17 @@ export function AgentWorkstationPage() {
             </div>
           </div>
         </div>
+        </ResizablePanel>
+
+        <ResizableHandle />
 
         {/* Right: Card panel */}
-        <div className="flex-1 overflow-y-auto h-full pb-4 min-w-0">
+        <ResizablePanel id="agent-cards" defaultSize="70%" minSize="40%">
+        <div className="h-full overflow-y-auto pb-4">
           <CardPanel cards={cardStates} lang={lang} onUpdate={setCardStates} />
         </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
       </div>
     </div>
   );

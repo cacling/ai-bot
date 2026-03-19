@@ -21,7 +21,7 @@ import {
   Send, Bot, User, FileText, Folder, FileCode,
   ChevronRight, ChevronDown, Sparkles, CheckCircle2, Plus,
   ArrowLeft, AlertCircle, GitBranch,
-  Mic, MicOff, Loader2, FlaskConical,
+  Mic, MicOff, Loader2, FlaskConical, ImagePlus, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,8 +29,8 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { MermaidRenderer } from '../shared/MermaidRenderer';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
@@ -290,6 +290,8 @@ export function SkillManagerPage() {
     isTyping,
     messagesEndRef,
     handleSubmit,
+    pendingImage,
+    setPendingImage,
 
     openSkill,
     requestCloseEditor,
@@ -304,6 +306,25 @@ export function SkillManagerPage() {
   } = useSkillManager();
 
   const { isRecording, toggle: toggleVoice } = useVoiceInput((text) => setInputValue(text));
+
+  // ── 图片上传 ────────────────────────────────────────────────────────────────
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert('图片大小不能超过 10MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPendingImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    // 重置 input 以便可以重复选同一张图
+    e.target.value = '';
+  }, [setPendingImage]);
 
   // ── 文件保存状态跟踪（per-file dirty map）──────────────────────────────────
   // true = 有未保存修改（黄点），false = 已保存（绿点），无 entry = 初始状态（无点）
@@ -453,13 +474,15 @@ export function SkillManagerPage() {
   const [testPersonaId, setTestPersonaId] = useState('');
   const [testPersonaList, setTestPersonaList] = useState<Array<{ id: string; label: string; context: Record<string, unknown> }>>([]);
 
-  // Load test personas from API
+  // Load test personas from API（按 inbound 过滤，技能管理中测试的都是入呼技能）
   useEffect(() => {
-    fetch('/api/test-personas?lang=zh')
+    fetch('/api/test-personas?lang=zh&category=inbound')
       .then(r => r.json())
       .then((data: Array<{ id: string; label: string; context: Record<string, unknown> }>) => {
         setTestPersonaList(data);
-        if (data.length > 0 && !testPersonaId) setTestPersonaId(data[0].id);
+        if (data.length > 0 && !testPersonaId) {
+          setTestPersonaId(data[0].id);
+        }
       })
       .catch(console.error);
   }, []);
@@ -686,7 +709,7 @@ export function SkillManagerPage() {
   const selectedIsMd = selectedFile ? isMdFile(selectedFile.name) : false;
 
   return (
-    <div className="h-full w-full flex bg-background overflow-hidden relative">
+    <div className="h-full w-full bg-background overflow-hidden relative">
 
       {/* ── 未保存对话框 ── */}
       {showUnsavedDialog && (
@@ -697,201 +720,11 @@ export function SkillManagerPage() {
         />
       )}
 
-      {/* ── 右侧栏：需求访谈 / 测试（双 Tab） ── */}
-      <div className="w-[360px] flex-shrink-0 flex flex-col border-l border-border bg-background shadow-sm" style={{ order: 99 }}>
-
-        {/* Tab 头部 */}
-        <div className="h-10 border-b border-border flex items-center shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setRightTab('chat')}
-            className={`rounded-none h-full border-b-2 transition-colors ${
-              rightTab === 'chat' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" /> 需求访谈
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setRightTab('test')}
-            className={`rounded-none h-full border-b-2 transition-colors ${
-              rightTab === 'test' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
-            }`}
-          >
-            <FlaskConical className="w-3.5 h-3.5" /> 测试{testingVersion !== null ? ` v${testingVersion}` : ''}
-          </Button>
-          {rightTab === 'chat' && (
-            <Label className="ml-auto flex items-center gap-1.5 pr-3 text-[10px] text-muted-foreground cursor-pointer select-none font-normal">
-              <Checkbox checked={showThinking} onCheckedChange={(v: boolean) => setShowThinking(v)} className="size-3" />
-              思考过程
-            </Label>
-          )}
-        </div>
-
-        {/* ── 需求访谈 Tab ── */}
-        {rightTab === 'chat' && (
-          <>
-            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
-                    {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-                  </div>
-                  <div className="max-w-[85%] flex flex-col gap-1">
-                    {msg.role === 'assistant' && msg.thinking && (
-                      <div className="text-[10px] italic text-muted-foreground bg-muted border border-border/50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
-                        {msg.thinking}
-                      </div>
-                    )}
-                    {msg.text && (
-                      <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
-                        <InlineMarkdown text={msg.text} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {isTyping && (
-                <div className="flex gap-2">
-                  <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
-                  <div className="bg-background border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
-                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
-                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
-                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-            {canPublish && (
-              <div className="px-3 pt-2 pb-1 bg-accent/50 border-t border-border flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">技能草稿已就绪</span>
-                <Button size="sm" onClick={publishSkill} className="text-xs h-7">
-                  保存技能
-                </Button>
-              </div>
-            )}
-            <div className="p-3 bg-background border-t border-border">
-              <form onSubmit={handleSubmit}>
-                <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
-                  <Textarea
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (inputValue.trim() && !isTyping) handleSubmit(e as any); } }}
-                    placeholder="描述需求或补充修改…（Enter 发送，Shift+Enter 换行）"
-                    rows={3}
-                    className="w-full min-h-0 resize-none bg-transparent px-3 pt-2.5 pb-1 border-none shadow-none focus-visible:ring-0 focus-visible:border-transparent text-xs text-foreground placeholder:text-muted-foreground leading-relaxed rounded-none"
-                    spellCheck={false}
-                  />
-                  <div className="flex items-center justify-between px-2 pb-2">
-                    <Button type="button" variant="ghost" size="xs" onClick={toggleVoice} className={isRecording ? 'text-destructive animate-pulse' : ''}>
-                      {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-                      {isRecording ? '停止' : '语音'}
-                    </Button>
-                    <Button type="submit" size="icon-sm" disabled={!inputValue.trim() || isTyping}>
-                      <Send className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </div>
-          </>
-        )}
-
-        {/* ── 测试 Tab ── */}
-        {rightTab === 'test' && (
-          <>
-            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
-              {testingVersion === null ? (
-                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                  在版本列表中点击 [测试] 开始
-                </div>
-              ) : testMessages.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                  输入消息开始测试 v{testingVersion}
-                </div>
-              ) : (
-                <>
-                  {testMessages.map((msg) => (
-                    <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
-                        {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-                      </div>
-                      <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
-                        <InlineMarkdown text={msg.text} />
-                      </div>
-                    </div>
-                  ))}
-                  {testRunning && (
-                    <div className="flex gap-2">
-                      <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
-                      <div className="bg-background border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
-                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
-                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              <div ref={testEndRef} />
-            </div>
-            {testingVersion !== null && (
-              <div className="p-3 bg-background border-t border-border space-y-2">
-                {/* 测试角色 */}
-                <div>
-                  <Select value={testPersonaId} onValueChange={(v) => v && setTestPersonaId(v)}>
-                    <SelectTrigger className="w-full text-[11px] h-7">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {testPersonaList.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* Mock/Real */}
-                <RadioGroup value={testMode} onValueChange={(v) => v && setTestMode(v as 'mock' | 'real')} className="flex items-center gap-3">
-                  <Label className="flex items-center gap-1.5 text-xs text-foreground/70 cursor-pointer font-normal">
-                    <RadioGroupItem value="mock" className="size-3" />
-                    Mock
-                  </Label>
-                  <Label className="flex items-center gap-1.5 text-xs text-foreground/70 cursor-pointer font-normal">
-                    <RadioGroupItem value="real" className="size-3" />
-                    Real
-                  </Label>
-                </RadioGroup>
-                <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
-                  <Textarea
-                    value={testInput}
-                    onChange={(e) => setTestInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendTest(); } }}
-                    placeholder="输入测试消息…（Enter 发送）"
-                    rows={3}
-                    className="w-full min-h-0 resize-none bg-transparent px-3 pt-2.5 pb-1 border-none shadow-none focus-visible:ring-0 focus-visible:border-transparent text-xs text-foreground placeholder:text-muted-foreground leading-relaxed rounded-none"
-                    spellCheck={false}
-                  />
-                  <div className="flex items-center justify-between px-2 pb-2">
-                    <Button type="button" variant="ghost" size="xs" onClick={toggleVoice} className={isRecording ? 'text-destructive animate-pulse' : ''}>
-                      {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-                      {isRecording ? '停止' : '语音'}
-                    </Button>
-                    <Button type="button" size="icon-sm" onClick={handleSendTest} disabled={!testInput.trim() || testRunning}>
-                      <Send className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+      <ResizablePanelGroup orientation="horizontal" className="h-full" id="skill-editor">
 
       {/* ── 左列：返回 → 版本 → 文件树 → 测试区 ── */}
-      <div className="w-56 flex-shrink-0 bg-background border-r border-border flex flex-col overflow-hidden" style={{ order: 1 }}>
+      <ResizablePanel id="left" defaultSize="15%" minSize="10%" maxSize="25%">
+      <div className="h-full bg-background border-r border-border flex flex-col overflow-hidden">
 
         {/* 返回按钮 + 技能名 */}
         <div className="px-3 py-2 border-b border-border flex items-center gap-2">
@@ -990,9 +823,13 @@ export function SkillManagerPage() {
         </div>
 
       </div>
+      </ResizablePanel>
+
+      <ResizableHandle />
 
       {/* ── 中间：编辑区（全宽）── */}
-      <div className="flex-1 flex flex-col bg-background overflow-hidden" style={{ order: 2 }}>
+      <ResizablePanel id="center" defaultSize="60%" minSize="30%">
+      <div className="h-full flex flex-col bg-background overflow-hidden">
 
         {/* 工具栏 */}
         <div className="h-10 border-b border-border flex items-center justify-between px-3 shrink-0">
@@ -1103,6 +940,237 @@ export function SkillManagerPage() {
           </div>
         )}
       </div>
+      </ResizablePanel>
+
+      <ResizableHandle />
+
+      {/* ── 右侧栏：需求访谈 / 测试（双 Tab） ── */}
+      <ResizablePanel id="right" defaultSize="25%" minSize="15%" maxSize="40%">
+      <div className="h-full flex flex-col border-l border-border bg-background shadow-sm">
+
+        {/* Tab 头部 */}
+        <div className="h-10 border-b border-border flex items-center shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRightTab('chat')}
+            className={`rounded-none h-full border-b-2 transition-colors ${
+              rightTab === 'chat' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" /> 需求访谈
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRightTab('test')}
+            className={`rounded-none h-full border-b-2 transition-colors ${
+              rightTab === 'test' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'
+            }`}
+          >
+            <FlaskConical className="w-3.5 h-3.5" /> 测试{testingVersion !== null ? ` v${testingVersion}` : ''}
+          </Button>
+          {rightTab === 'chat' && (
+            <Label className="ml-auto flex items-center gap-1.5 pr-3 text-[10px] text-muted-foreground cursor-pointer select-none font-normal">
+              <Checkbox checked={showThinking} onCheckedChange={(v: boolean) => setShowThinking(v)} className="size-3" />
+              思考过程
+            </Label>
+          )}
+        </div>
+
+        {/* ── 需求访谈 Tab ── */}
+        {rightTab === 'chat' && (
+          <>
+            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
+              {messages.map((msg) => (
+                <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
+                    {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                  </div>
+                  <div className="max-w-[85%] flex flex-col gap-1">
+                    {msg.role === 'assistant' && msg.thinking && (
+                      <div className="text-[10px] italic text-muted-foreground bg-muted border border-border/50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
+                        {msg.thinking}
+                      </div>
+                    )}
+                    {msg.image && (
+                      <div className={`rounded-2xl overflow-hidden shadow-sm ${msg.role === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'}`}>
+                        <img src={msg.image} alt="上传的流程图" className="max-w-full max-h-48 object-contain rounded-2xl border border-border" />
+                      </div>
+                    )}
+                    {msg.text && (
+                      <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
+                        <InlineMarkdown text={msg.text} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {isTyping && (
+                <div className="flex gap-2">
+                  <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
+                  <div className="bg-background border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+            {canPublish && (
+              <div className="px-3 pt-2 pb-1 bg-accent/50 border-t border-border flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">技能草稿已就绪</span>
+                <Button size="sm" onClick={publishSkill} className="text-xs h-7">
+                  保存技能
+                </Button>
+              </div>
+            )}
+            <div className="p-3 bg-background border-t border-border">
+              <form onSubmit={handleSubmit}>
+                <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
+                  {pendingImage && (
+                    <div className="px-3 pt-2 flex items-start gap-2">
+                      <div className="relative group">
+                        <img src={pendingImage} alt="待发送的流程图" className="max-h-24 rounded-lg border border-border object-contain" />
+                        <button
+                          type="button"
+                          onClick={() => setPendingImage(null)}
+                          className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground mt-1">流程图已添加，可附加文字说明后发送</span>
+                    </div>
+                  )}
+                  <Textarea
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if ((inputValue.trim() || pendingImage) && !isTyping) handleSubmit(e as any); } }}
+                    placeholder={pendingImage ? '可选：补充文字说明…（Enter 发送）' : '描述需求或补充修改…（Enter 发送，Shift+Enter 换行）'}
+                    rows={3}
+                    className="w-full min-h-0 resize-none bg-transparent px-3 pt-2.5 pb-1 border-none shadow-none focus-visible:ring-0 focus-visible:border-transparent text-xs text-foreground placeholder:text-muted-foreground leading-relaxed rounded-none"
+                    spellCheck={false}
+                  />
+                  <div className="flex items-center justify-between px-2 pb-2">
+                    <div className="flex items-center gap-1">
+                      <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+                      <Button type="button" variant="ghost" size="xs" onClick={() => imageInputRef.current?.click()} title="上传流程图">
+                        <ImagePlus className="w-3.5 h-3.5" />
+                        图片
+                      </Button>
+                      <Button type="button" variant="ghost" size="xs" onClick={toggleVoice} className={isRecording ? 'text-destructive animate-pulse' : ''}>
+                        {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                        {isRecording ? '停止' : '语音'}
+                      </Button>
+                    </div>
+                    <Button type="submit" size="icon-sm" disabled={(!inputValue.trim() && !pendingImage) || isTyping}>
+                      <Send className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </>
+        )}
+
+        {/* ── 测试 Tab ── */}
+        {rightTab === 'test' && (
+          <>
+            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
+              {testingVersion === null ? (
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                  在版本列表中点击 [测试] 开始
+                </div>
+              ) : testMessages.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                  输入消息开始测试 v{testingVersion}
+                </div>
+              ) : (
+                <>
+                  {testMessages.map((msg) => (
+                    <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
+                        {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                      </div>
+                      <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
+                        <InlineMarkdown text={msg.text} />
+                      </div>
+                    </div>
+                  ))}
+                  {testRunning && (
+                    <div className="flex gap-2">
+                      <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
+                      <div className="bg-background border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
+                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
+                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+              <div ref={testEndRef} />
+            </div>
+            {testingVersion !== null && (
+              <div className="p-3 bg-background border-t border-border space-y-2">
+                {/* 测试角色 */}
+                <div>
+                  <Select value={testPersonaId} onValueChange={(v) => { if (v) setTestPersonaId(v); }}>
+                    <SelectTrigger className="w-full text-[11px] h-7">
+                      <SelectValue placeholder="选择测试用户">
+                        {testPersonaList.find(p => p.id === testPersonaId)?.label ?? testPersonaId}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {testPersonaList.map(p => {
+                        const ctx = p.context as Record<string, string>;
+                        const shortLabel = `${ctx.name ?? p.id} · ${ctx.status === 'suspended' ? '欠费停机' : ctx.plan ?? ''}`;
+                        return <SelectItem key={p.id} value={p.id}>{shortLabel}</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Mock/Real */}
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => setTestMode('mock')} className={`flex items-center gap-1.5 text-xs cursor-pointer font-normal ${testMode === 'mock' ? 'text-primary font-medium' : 'text-foreground/70'}`}>
+                    <span className={`inline-block size-3 rounded-full border-2 ${testMode === 'mock' ? 'border-primary bg-primary' : 'border-input'}`} />
+                    Mock
+                  </button>
+                  <button type="button" onClick={() => setTestMode('real')} className={`flex items-center gap-1.5 text-xs cursor-pointer font-normal ${testMode === 'real' ? 'text-primary font-medium' : 'text-foreground/70'}`}>
+                    <span className={`inline-block size-3 rounded-full border-2 ${testMode === 'real' ? 'border-primary bg-primary' : 'border-input'}`} />
+                    Real
+                  </button>
+                </div>
+                <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
+                  <Textarea
+                    value={testInput}
+                    onChange={(e) => setTestInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendTest(); } }}
+                    placeholder="输入测试消息…（Enter 发送）"
+                    rows={3}
+                    className="w-full min-h-0 resize-none bg-transparent px-3 pt-2.5 pb-1 border-none shadow-none focus-visible:ring-0 focus-visible:border-transparent text-xs text-foreground placeholder:text-muted-foreground leading-relaxed rounded-none"
+                    spellCheck={false}
+                  />
+                  <div className="flex items-center justify-between px-2 pb-2">
+                    <Button type="button" variant="ghost" size="xs" onClick={toggleVoice} className={isRecording ? 'text-destructive animate-pulse' : ''}>
+                      {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                      {isRecording ? '停止' : '语音'}
+                    </Button>
+                    <Button type="button" size="icon-sm" onClick={handleSendTest} disabled={!testInput.trim() || testRunning}>
+                      <Send className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      </ResizablePanel>
+
+      </ResizablePanelGroup>
     </div>
   );
 }

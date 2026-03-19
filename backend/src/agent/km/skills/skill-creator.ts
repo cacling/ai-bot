@@ -17,7 +17,7 @@
 import { Hono } from 'hono';
 import { generateText, streamText, tool } from 'ai';
 import { z } from 'zod';
-import { skillCreatorModel, skillCreatorThinkingModel } from '../../../engine/llm';
+import { skillCreatorModel, skillCreatorThinkingModel, skillCreatorVisionModel } from '../../../engine/llm';
 import { logger } from '../../../services/logger';
 import { createNewSkillVersion, createVersionFrom, getSkillRegistry } from './version-manager';
 import { refreshSkillsCache } from '../../../engine/skills';
@@ -158,6 +158,50 @@ function buildSystemPrompt(session: Session, skillIndex: Array<{ name: string; d
     .replace('{{SKILL_INDEX}}', skillIndexText);
 }
 
+// ── 图片解析（调用视觉模型）─────────────────────────────────────────────────
+
+async function parseFlowchartImage(imageBase64: string): Promise<string> {
+  const { text } = await generateText({
+    model: skillCreatorVisionModel,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            image: imageBase64,
+          },
+          {
+            type: 'text',
+            text: `请仔细分析这张流程图/草图，完成以下任务：
+
+1. **文字描述**：用自然语言描述图中的完整流程，包括每个步骤、判断条件、分支走向。
+2. **Mermaid 状态图**：将流程转换为 Mermaid stateDiagram-v2 格式，要求：
+   - 使用中文标签
+   - 包含所有分支和判断条件
+   - 用 [*] 标记起始和结束状态
+
+请按以下格式输出：
+
+## 流程描述
+（自然语言描述）
+
+## Mermaid 状态图
+\`\`\`mermaid
+stateDiagram-v2
+  ...
+\`\`\``,
+          },
+        ],
+      },
+    ],
+    temperature: 0.2,
+  });
+
+  logger.info('skill-creator', 'image_parsed', { result_length: text.length });
+  return text;
+}
+
 // ── POST /api/skill-creator/chat ──────────────────────────────────────────────
 
 const skillCreator = new Hono();
@@ -168,10 +212,27 @@ skillCreator.post('/chat', async (c) => {
     session_id?: string;
     skill_id?: string | null;
     enable_thinking?: boolean;
+    image?: string; // base64 编码的图片数据（data:image/xxx;base64,...）
   }>();
 
-  if (!body.message?.trim()) {
-    return c.json({ error: 'message 不能为空' }, 400);
+  if (!body.message?.trim() && !body.image) {
+    return c.json({ error: 'message 或 image 不能为空' }, 400);
+  }
+
+  // ── 图片解析：先用视觉模型提取流程描述，再注入到文字消息中 ──
+  let finalMessage = body.message?.trim() ?? '';
+  if (body.image) {
+    try {
+      const imageDescription = await parseFlowchartImage(body.image);
+      const imageContext = `\n\n---\n**[用户上传了一张流程图，以下是 AI 视觉模型的解析结果]**\n\n${imageDescription}\n---\n`;
+      finalMessage = finalMessage
+        ? `${finalMessage}\n${imageContext}`
+        : `我上传了一张手绘流程图，请根据以下解析结果帮我完善需求：${imageContext}`;
+      logger.info('skill-creator', 'image_injected', { message_length: finalMessage.length });
+    } catch (err) {
+      logger.error('skill-creator', 'image_parse_error', { error: String(err) });
+      return c.json({ error: `图片解析失败: ${String(err)}` }, 500);
+    }
   }
 
   let session: Session;
@@ -190,7 +251,7 @@ skillCreator.post('/chat', async (c) => {
     sessions.set(id, session);
   }
 
-  session.history.push({ role: 'user', content: body.message });
+  session.history.push({ role: 'user', content: finalMessage });
 
   const skillIndex = loadSkillIndex();
   const systemPrompt = buildSystemPrompt(session, skillIndex);
@@ -227,6 +288,7 @@ skillCreator.post('/chat', async (c) => {
         messages: session.history,
         tools: skillTools,
         maxSteps: 5,
+        maxTokens: 16384,
         temperature: 0.3,
       });
 
@@ -252,6 +314,15 @@ skillCreator.post('/chat', async (c) => {
             } catch {
               parsed = { reply: cleaned, phase: session.phase, draft: null };
             }
+
+            logger.info('skill-creator', 'chat_stream_parsed', {
+              session_id: session.id,
+              text_length: text.length,
+              parsed_phase: parsed.phase,
+              has_draft: !!parsed.draft,
+              draft_keys: parsed.draft ? Object.keys(parsed.draft) : [],
+              reply_preview: parsed.reply?.substring(0, 100),
+            });
 
             session.phase = parsed.phase ?? session.phase;
             if (parsed.draft) session.draft = parsed.draft;
@@ -298,6 +369,7 @@ skillCreator.post('/chat', async (c) => {
       messages: session.history,
       tools: skillTools,
       maxSteps: 5,
+      maxTokens: 16384,
       temperature: 0.3,
     });
 
@@ -355,11 +427,20 @@ skillCreator.post('/save', async (c) => {
     }));
 
     if (isNew) {
-      // 全新技能 → 创建 v1
+      // 全新技能 → 创建 v1（写入 .versions/ 目录）
       await createNewSkillVersion(
         body.skill_name, body.skill_md, refs,
         '通过技能创建器新建', 'skill-creator',
       );
+      // 同时写入 biz-skills/ 主目录，确保技能列表能读到
+      const skillDir = join(SKILLS_DIR, body.skill_name);
+      if (!existsSync(skillDir)) mkdirSync(skillDir, { recursive: true });
+      writeFileSync(join(skillDir, 'SKILL.md'), body.skill_md, 'utf-8');
+      const refsDir = join(skillDir, 'references');
+      if (refs.length > 0 && !existsSync(refsDir)) mkdirSync(refsDir, { recursive: true });
+      for (const ref of refs) {
+        writeFileSync(join(refsDir, ref.filename), ref.content, 'utf-8');
+      }
     } else {
       // 已有技能 → 基于最新版本创建新版本，然后写入文件
       const latestVersion = reg.latest_version ?? 1;

@@ -29,6 +29,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
   thinking?: string | null;
+  image?: string; // base64 图片预览（仅用户消息）
 }
 
 export interface Skill extends SkillMeta {
@@ -153,6 +154,7 @@ export function useSkillManager() {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [pendingImage, setPendingImage] = useState<string | null>(null); // base64
 
   // skill-creator 会话状态
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -426,11 +428,20 @@ export function useSkillManager() {
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!inputValue.trim() || isTyping) return;
+      const hasText = inputValue.trim().length > 0;
+      const hasImage = !!pendingImage;
+      if ((!hasText && !hasImage) || isTyping) return;
 
-      const userMsg: ChatMessage = { id: Date.now(), role: 'user', text: inputValue };
+      const userMsg: ChatMessage = {
+        id: Date.now(),
+        role: 'user',
+        text: inputValue || (hasImage ? '（上传了一张流程图）' : ''),
+        image: pendingImage ?? undefined,
+      };
       setMessages((prev) => [...prev, userMsg]);
+      const submittedImage = pendingImage;
       setInputValue('');
+      setPendingImage(null);
       setIsTyping(true);
 
       try {
@@ -443,6 +454,7 @@ export function useSkillManager() {
             session_id: sessionId,
             skill_id: isNew ? null : activeSkillId,
             enable_thinking: showThinking,
+            image: submittedImage ?? undefined,
           }),
         });
 
@@ -534,7 +546,7 @@ export function useSkillManager() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [inputValue, isTyping, activeSkillId, sessionId, showThinking]
+    [inputValue, isTyping, activeSkillId, sessionId, showThinking, pendingImage]
   );
 
   // ── 发布新技能（将 draft 写入磁盘）─────────────────────────────────────────
@@ -629,6 +641,7 @@ export function useSkillManager() {
     showUnsavedDialog, saveAndProceed, confirmDiscard, cancelUnsaved,
     // 对话
     messages, inputValue, setInputValue, isTyping, messagesEndRef, handleSubmit,
+    pendingImage, setPendingImage,
     // skill-creator 状态
     phase, draft, canPublish, publishSkill,
     // thinking 模式
