@@ -7,29 +7,14 @@
  * 只拦截操作类工具（有副作用），查询类工具不限制。
  */
 
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join } from 'path';
 import { logger } from '../services/logger';
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
+import { getToolsOverview } from '../agent/km/mcp/tools-overview';
+import { getAvailableSkills, getSkillMermaid } from './skills';
 
-// 操作类工具 — 需要 SOP 前置条件验证
-const OPERATION_TOOLS = new Set([
-  'cancel_service',
-  'issue_invoice',
-  'apply_service_suspension',
-]);
-
-// 查询类工具 — 不需要拦截
-const QUERY_TOOLS = new Set([
-  'query_subscriber',
-  'query_bill',
-  'query_plans',
-  'diagnose_network',
-  'diagnose_app',
-  'verify_identity',
-  'check_account_balance',
-  'check_contracts',
-]);
+// 操作类工具集合：从 SKILL.md 的 %% tool:xxx 依赖关系中动态生成
+// 任何有前置依赖的工具就是操作类工具，其余为查询类
+// 在 buildGlobalDependencies() 中构建
+let _operationTools = new Set<string>();
 
 /**
  * 从 mermaid 状态图中提取工具依赖关系。
@@ -73,10 +58,9 @@ function extractToolDependencies(mermaid: string): ToolDependency[] {
     }
   }
 
-  // Step 3: For each operation tool, BFS backwards along ALL transitions
-  // to find predecessor query tools
+  // Step 3: For each tool, BFS backwards along ALL transitions
+  // to find predecessor tools. Tools with predecessors are "operation" tools.
   for (const [state, toolName] of toolAtState) {
-    if (!OPERATION_TOOLS.has(toolName)) continue;
 
     const required = new Set<string>();
     const visited = new Set<string>();
@@ -89,9 +73,9 @@ function extractToolDependencies(mermaid: string): ToolDependency[] {
       for (const t of allTransitions) {
         if (t.to === current && !visited.has(t.from)) {
           visited.add(t.from);
-          // If this predecessor state has a query tool marker, record it
+          // If this predecessor state has a tool marker, record it as required
           const predTool = toolAtState.get(t.from);
-          if (predTool && QUERY_TOOLS.has(predTool)) {
+          if (predTool) {
             required.add(predTool);
           }
           queue.push(t.from);
@@ -116,18 +100,13 @@ function buildGlobalDependencies(): Map<string, ToolDependency> {
   const map = new Map<string, ToolDependency>();
 
   try {
-    const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'));
+    const skills = getAvailableSkills();
 
-    for (const dir of dirs) {
-      const mdPath = join(SKILLS_DIR, dir.name, 'SKILL.md');
-      if (!existsSync(mdPath)) continue;
+    for (const skill of skills) {
+      const mermaid = getSkillMermaid(skill.name);
+      if (!mermaid) continue;
 
-      const content = readFileSync(mdPath, 'utf-8');
-      const mermaidMatch = content.match(/```mermaid\r?\n([\s\S]*?)```/);
-      if (!mermaidMatch) continue;
-
-      const deps = extractToolDependencies(mermaidMatch[1]);
+      const deps = extractToolDependencies(mermaid);
 
       // Within a skill: same tool may appear in multiple branches.
       // Take INTERSECTION — only require tools common to ALL branches.
@@ -167,6 +146,9 @@ function buildGlobalDependencies(): Map<string, ToolDependency> {
     logger.warn('sop-guard', 'build_deps_error', { error: String(e) });
   }
 
+  // 操作类工具 = 有前置依赖的工具（自动从状态图推断）
+  _operationTools = new Set(map.keys());
+
   return map;
 }
 
@@ -178,6 +160,7 @@ let _depsBuiltAt = Date.now();
 for (const [tool, dep] of _deps) {
   logger.info('sop-guard', 'dependency', { tool, requires: dep.requiredTools });
 }
+logger.info('sop-guard', 'operation_tools', { tools: [..._operationTools] });
 
 function getDeps(): Map<string, ToolDependency> {
   if (Date.now() - _depsBuiltAt > 60_000) {
@@ -207,8 +190,8 @@ export class SOPGuard {
    * 返回 null 表示允许，返回 string 表示拒绝原因。
    */
   check(toolName: string): string | null {
-    // 查询类工具不拦截
-    if (!OPERATION_TOOLS.has(toolName)) return null;
+    // 查询类工具不拦截（不在操作工具集中的就是查询类）
+    if (!_operationTools.has(toolName)) return null;
 
     const deps = getDeps();
     const dep = deps.get(toolName);
@@ -219,13 +202,12 @@ export class SOPGuard {
     if (missing.length === 0) return null;
 
     this.violations++;
+    // 从 DB 动态获取工具描述
+    const allTools = getToolsOverview();
+    const toolDescMap = new Map(allTools.map(t => [t.name, t.description]));
     const missingDesc = missing.map(t => {
-      if (t === 'query_subscriber') return 'query_subscriber（查询用户信息）';
-      if (t === 'query_bill') return 'query_bill（查询账单）';
-      if (t === 'verify_identity') return 'verify_identity（身份验证）';
-      if (t === 'check_account_balance') return 'check_account_balance（查询余额）';
-      if (t === 'check_contracts') return 'check_contracts（查询合约）';
-      return t;
+      const desc = toolDescMap.get(t);
+      return desc ? `${t}（${desc}）` : t;
     }).join('、');
 
     logger.warn('sop-guard', 'tool_blocked', {

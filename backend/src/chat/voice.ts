@@ -20,6 +20,7 @@ import { getLangs, setCustomerLang } from '../services/lang-session';
 import { checkCompliance } from '../services/keyword-filter';
 import { VoiceSessionState, TRANSFER_PHRASE_RE, type HandoffContext } from '../services/voice-session';
 import { callMcpTool } from '../services/mcp-client';
+import { getMockedToolNames, matchMockRule } from '../services/mock-engine';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { getSkillsDescriptionByChannel } from '../engine/skills';
 
@@ -81,121 +82,62 @@ function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberNam
 // Re-export for outbound.ts and test files
 export { VoiceSessionState, TRANSFER_PHRASE_RE } from '../services/voice-session';
 
-// ── GLM 工具定义 ──────────────────────────────────────────────────────────────
-const VOICE_TOOLS = [
-  {
-    type: 'function',
-    name: 'query_subscriber',
-    description: '查询用户的账户信息，包括套餐、余额、流量使用情况、已订增值业务',
-    parameters: {
-      type: 'object',
-      properties: { phone: { type: 'string', description: '用户手机号' } },
-      required: ['phone'],
-    },
-  },
-  {
-    type: 'function',
-    name: 'query_bill',
-    description: '查询用户的账单和费用明细',
-    parameters: {
-      type: 'object',
-      properties: {
-        phone: { type: 'string', description: '用户手机号' },
-        month: { type: 'string', description: '账单月份，格式 YYYY-MM，不填则返回最近3个月' },
+// ── GLM 工具定义（从 DB 动态生成）─────────────────────────────────────────────
+
+import { getToolsOverview } from '../agent/km/mcp/tools-overview';
+
+const TRANSFER_TO_HUMAN_TOOL = {
+  type: 'function',
+  name: 'transfer_to_human',
+  description: '将用户转接给人工客服。触发条件：用户明确要求人工、连续两轮无法识别意图、用户情绪激烈或投诉、高风险操作需人工确认、工具连续失败、身份校验未通过、置信度不足、用户问题超出已有技能范围。',
+  parameters: {
+    type: 'object',
+    properties: {
+      reason: {
+        type: 'string',
+        enum: ['user_request', 'unrecognized_intent', 'emotional_complaint', 'high_risk_operation', 'tool_failure', 'identity_verify_failed', 'low_confidence'],
+        description: '转人工原因',
       },
-      required: ['phone'],
+      current_intent:     { type: 'string', description: '用户当前意图，如"退订业务"、"停机保号" 等' },
+      risk_tags:          { type: 'array', items: { type: 'string' }, description: '风险标签，如 ["complaint","high_value"]' },
+      recommended_action: { type: 'string', description: '推荐坐席的下一步动作' },
     },
+    required: ['reason', 'current_intent'],
   },
-  {
-    type: 'function',
-    name: 'query_plans',
-    description: '查询可用套餐列表，或查询指定套餐详情',
-    parameters: {
-      type: 'object',
-      properties: { plan_id: { type: 'string', description: '套餐 ID，不填则返回全部套餐' } },
-    },
-  },
-  {
-    type: 'function',
-    name: 'cancel_service',
-    description: '退订用户已开通的增值业务',
-    parameters: {
-      type: 'object',
-      properties: {
-        phone:      { type: 'string', description: '用户手机号' },
-        service_id: { type: 'string', description: '要退订的业务ID，如 video_pkg、sms_100' },
-      },
-      required: ['phone', 'service_id'],
-    },
-  },
-  {
-    type: 'function',
-    name: 'diagnose_network',
-    description: '诊断用户的网络故障问题',
-    parameters: {
-      type: 'object',
-      properties: {
-        phone: { type: 'string', description: '用户手机号' },
-        issue_type: {
-          type: 'string',
-          enum: ['no_signal', 'slow_data', 'call_drop', 'no_network'],
-          description: '故障类型：no_signal=无信号，slow_data=网速慢，call_drop=通话中断，no_network=无法上网',
-        },
-      },
-      required: ['phone', 'issue_type'],
-    },
-  },
-  {
-    type: 'function',
-    name: 'diagnose_app',
-    description: '诊断营业厅 App 问题，涵盖账号被锁、登录失败、设备不兼容、可疑活动等安全类场景',
-    parameters: {
-      type: 'object',
-      properties: {
-        phone: { type: 'string', description: '用户手机号' },
-        issue_type: {
-          type: 'string',
-          enum: ['app_locked', 'login_failed', 'device_incompatible', 'suspicious_activity'],
-          description: '故障类型：app_locked=App被锁定，login_failed=登录失败，device_incompatible=设备不兼容，suspicious_activity=可疑活动',
-        },
-      },
-      required: ['phone', 'issue_type'],
-    },
-  },
-  {
-    type: 'function',
-    name: 'issue_invoice',
-    description: '为用户指定月份的账单开具电子发票并发送到邮箱',
-    parameters: {
-      type: 'object',
-      properties: {
-        phone: { type: 'string', description: '用户手机号' },
-        month: { type: 'string', description: '账单月份，格式 YYYY-MM' },
-        email: { type: 'string', description: '发票接收邮箱地址' },
-      },
-      required: ['phone', 'month', 'email'],
-    },
-  },
-  {
-    type: 'function',
-    name: 'transfer_to_human',
-    description: '将用户转接给人工客服。触发条件：用户明确要求人工、连续两轮无法识别意图、用户情绪激烈或投诉、高风险操作需人工确认、工具连续失败、身份校验未通过、置信度不足。',
-    parameters: {
-      type: 'object',
-      properties: {
-        reason: {
-          type: 'string',
-          enum: ['user_request', 'unrecognized_intent', 'emotional_complaint', 'high_risk_operation', 'tool_failure', 'identity_verify_failed', 'low_confidence'],
-          description: '转人工原因',
-        },
-        current_intent:     { type: 'string', description: '用户当前意图，如"退订业务"、"投诉网络" 等' },
-        risk_tags:          { type: 'array', items: { type: 'string' }, description: '风险标签，如 ["complaint","high_value"]' },
-        recommended_action: { type: 'string', description: '推荐坐席的下一步动作' },
-      },
-      required: ['reason', 'current_intent'],
-    },
-  },
-];
+};
+
+/** 从 DB 读取所有 available 的 MCP 工具，转换为 GLM function calling 格式 */
+function buildVoiceTools(): Array<Record<string, unknown>> {
+  const tools: Array<Record<string, unknown>> = [];
+  const allTools = getToolsOverview();
+
+  for (const t of allTools) {
+    if (t.source_type === 'builtin') continue; // 内建工具（get_skill_instructions 等）不暴露给语音
+    if (t.status !== 'available') continue; // 只用 available 的工具
+
+    const schema = (() => {
+      // 尝试从 DB 读取 inputSchema
+      try {
+        const { getToolDetail } = require('../agent/km/mcp/tools-overview');
+        const detail = getToolDetail(t.name);
+        if (detail?.inputSchema) return detail.inputSchema;
+      } catch { /* ignore */ }
+      return { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] };
+    })();
+
+    tools.push({
+      type: 'function',
+      name: t.name,
+      description: t.description,
+      parameters: schema,
+    });
+  }
+
+  // transfer_to_human 始终可用
+  tools.push(TRANSFER_TO_HUMAN_TOOL);
+
+  return tools;
+}
 
 
 // ── Bun WebSocket 适配器 ──────────────────────────────────────────────────────
@@ -290,7 +232,7 @@ voice.get(
                 interrupt_response: false,
               },
               temperature: 0.2,
-              tools: VOICE_TOOLS,
+              tools: buildVoiceTools(),
             },
           }));
         });
@@ -465,9 +407,26 @@ voice.get(
                 return;
               }
 
-              // ── MCP 工具调用 ──────────────────────────────────────────────
+              // ── MCP 工具调用（支持工具级 mock）─────────────────────────────
               logger.info('voice', 'tool_call_start', { session: sessionId, tool: toolName, args: toolArgs });
-              const { text: result, success } = await callMcpTool(sessionId, toolName, toolArgs);
+              let result: string;
+              let success: boolean;
+              const mockedNames = getMockedToolNames();
+              if (mockedNames.has(toolName)) {
+                const mockResult = matchMockRule(toolName, toolArgs);
+                if (mockResult !== null) {
+                  result = mockResult;
+                  success = true;
+                  logger.info('voice', 'mock_tool_used', { session: sessionId, tool: toolName });
+                } else {
+                  result = JSON.stringify({ success: false, message: `工具 ${toolName} 处于 Mock 模式但未匹配到规则` });
+                  success = false;
+                }
+              } else {
+                const mcpResult = await callMcpTool(sessionId, toolName, toolArgs);
+                result = mcpResult.text;
+                success = mcpResult.success;
+              }
               state.recordTool(toolName, toolArgs, result, success);
               logger.info('voice', 'lang_chain_mcp_result', { session: sessionId, tool: toolName, lang, resultPreview: result.slice(0, 150) });
 

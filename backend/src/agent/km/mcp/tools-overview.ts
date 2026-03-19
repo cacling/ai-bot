@@ -8,11 +8,9 @@
  * 避免通过 HTTP 自调用。
  */
 import { Hono } from 'hono';
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join } from 'path';
 import { db } from '../../../db';
 import { mcpServers } from '../../../db/schema';
-import { BIZ_SKILLS_DIR } from '../../../services/paths';
+import { getToolToSkillsMap } from '../../../engine/skills';
 
 const app = new Hono();
 
@@ -32,36 +30,9 @@ export interface ToolDetailItem extends ToolOverviewItem {
   // mocked is inherited from ToolOverviewItem
 }
 
-/** Scan all SKILL.md files for %% tool:xxx annotations and tool_name(...) references */
-function scanSkillToolRefs(): Map<string, string[]> {
-  const map = new Map<string, string[]>();
-  try {
-    const dirs = readdirSync(BIZ_SKILLS_DIR, { withFileTypes: true })
-      .filter(d => d.isDirectory() && !d.name.startsWith('_'));
-    for (const dir of dirs) {
-      const mdPath = join(BIZ_SKILLS_DIR, dir.name, 'SKILL.md');
-      if (!existsSync(mdPath)) continue;
-      const content = readFileSync(mdPath, 'utf-8');
-      // Match %% tool:tool_name annotations
-      const toolAnnotations = content.matchAll(/%% tool:(\w+)/g);
-      for (const m of toolAnnotations) {
-        const toolName = m[1];
-        const skills = map.get(toolName) ?? [];
-        if (!skills.includes(dir.name)) skills.push(dir.name);
-        map.set(toolName, skills);
-      }
-      // Also match tool_name(...) in prose (e.g., "调用 diagnose_network(phone, issue_type)")
-      const toolCalls = content.matchAll(/调用\s*`?(\w+)\s*\(/g);
-      for (const m of toolCalls) {
-        const toolName = m[1];
-        if (toolName === 'get_skill_instructions' || toolName === 'get_skill_reference') continue;
-        const skills = map.get(toolName) ?? [];
-        if (!skills.includes(dir.name)) skills.push(dir.name);
-        map.set(toolName, skills);
-      }
-    }
-  } catch { /* ignore */ }
-  return map;
+/** 获取 tool → skill[] 映射（从 skills.ts 统一入口获取，不直接读文件） */
+function getSkillToolRefs(): Map<string, string[]> {
+  return getToolToSkillsMap();
 }
 
 // ── 从 DB 加载完整的工具元数据（含 inputSchema / responseExample）────────────
@@ -98,7 +69,7 @@ function loadRawToolMap(): Map<string, { raw: RawToolRecord; serverName: string;
 // ── 共享函数：获取工具概览列表 ────────────────────────────────────────────────
 
 export function getToolsOverview(): ToolOverviewItem[] {
-  const skillRefs = scanSkillToolRefs();
+  const skillRefs = getSkillToolRefs();
   const items: ToolOverviewItem[] = [];
 
   // 1. MCP Server tools
@@ -157,7 +128,7 @@ export function getToolsOverview(): ToolOverviewItem[] {
 // ── 共享函数：获取单个工具的详细信息（含 inputSchema / responseExample）──────
 
 export function getToolDetail(toolName: string): ToolDetailItem | null {
-  const skillRefs = scanSkillToolRefs();
+  const skillRefs = getSkillToolRefs();
   const rawMap = loadRawToolMap();
   const info = rawMap.get(toolName);
 

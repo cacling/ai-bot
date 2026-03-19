@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { type CoreMessage, generateText, jsonSchema } from 'ai';
 import { experimental_createMCPClient as createMCPClient } from 'ai';
 import { chatModel } from './llm';
-import { skillsTools, getSkillsDescriptionByChannel, getToolSkillMap } from './skills';
+import { skillsTools, getSkillsDescriptionByChannel, getToolSkillMap, getSkillContent, getSkillMermaid } from './skills';
 import { logger } from '../services/logger';
 import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../agent/card/handoff-analyzer';
 import { t } from '../services/i18n';
@@ -372,26 +372,14 @@ export async function runAgent(
               const args = tc.args as { skill_name?: string };
               const skillName = args.skill_name;
               if (skillName) {
-                try {
-                  const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
-                  if (existsSync(skillPath)) {
-                    const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
-                    if (rawMermaid) onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid));
-                  }
-                } catch { /* ignore */ }
+                const rawMermaid = getSkillMermaid(skillName);
+                if (rawMermaid) onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid));
               }
             }
             const skillName = getSkillToolMap()[tc.toolName] ?? lastActiveSkill;
             if (skillName) {
-              try {
-                const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
-                if (existsSync(skillPath)) {
-                  const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
-                  if (rawMermaid) {
-                    onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid));
-                  }
-                }
-              } catch { /* ignore */ }
+              const rawMermaid = getSkillMermaid(skillName);
+              if (rawMermaid) onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid));
             }
           }
         }
@@ -449,13 +437,8 @@ export async function runAgent(
           if (!skillDiagram) {
             const mappedSkill = getSkillToolMap()[toolResult.toolName as string];
             if (mappedSkill) {
-              try {
-                const sp = resolve(SKILLS_DIR, mappedSkill, 'SKILL.md');
-                if (existsSync(sp)) {
-                  const mm = extractMermaidFromContent(readFileSync(sp, 'utf-8'));
-                  if (mm) skillDiagram = { skill_name: mappedSkill, mermaid: stripMermaidMarkers(mm) };
-                }
-              } catch { /* ignore */ }
+              const mm = getSkillMermaid(mappedSkill);
+              if (mm) skillDiagram = { skill_name: mappedSkill, mermaid: stripMermaidMarkers(mm) };
             }
           }
 
@@ -568,9 +551,13 @@ export async function runAgent(
       ];
 
       const runProgressTracking = async () => {
-        const skillPath = resolve(effectiveSkillsDir, progressSkill, 'SKILL.md');
-        if (!existsSync(skillPath)) return null;
-        const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
+        // 优先从技能缓存读（标准目录），sandbox 场景回退到文件读取
+        let rawMermaid = overrideSkillsDir ? null : getSkillMermaid(progressSkill);
+        if (!rawMermaid) {
+          const skillPath = resolve(effectiveSkillsDir, progressSkill, 'SKILL.md');
+          if (!existsSync(skillPath)) return null;
+          rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
+        }
         if (!rawMermaid) return null;
         const stateNames = extractStateNames(rawMermaid);
         const stateName = await analyzeProgress(recentTurns, stateNames);

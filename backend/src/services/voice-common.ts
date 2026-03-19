@@ -8,10 +8,8 @@
  * - setupGlmCloseHandlers：GLM WebSocket close/error 处理
  */
 
-import { existsSync, readFileSync } from 'fs';
-import { resolve } from 'path';
-import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 import { extractMermaidFromContent, stripMermaidMarkers, extractStateNames, extractTransitions, highlightMermaidProgress } from '../services/mermaid';
+import { getSkillMermaid } from '../engine/skills';
 import { translateMermaid } from '../services/translate-lang';
 import { analyzeHandoff } from '../agent/card/handoff-analyzer';
 import { analyzeEmotion } from '../agent/card/emotion-analyzer';
@@ -43,9 +41,7 @@ export async function sendSkillDiagram(
   channel: string,
 ): Promise<void> {
   try {
-    const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
-    if (!existsSync(skillPath)) return;
-    const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
+    const rawMermaid = getSkillMermaid(skillName);
     if (!rawMermaid) return;
     const translated = await translateMermaid(rawMermaid, lang);
     const mermaid = stripMermaidMarkers(translated);
@@ -91,12 +87,7 @@ export function runProgressTracking(
   channel: string,
 ): void {
   logger.info(channel, 'progress_tracking_start', { session: sessionId, skill: skillName, turnsCount: recentTurns.length });
-  const skillPath = resolve(SKILLS_DIR, skillName, 'SKILL.md');
-  if (!existsSync(skillPath)) {
-    logger.warn(channel, 'progress_tracking_skip', { session: sessionId, reason: 'skill_not_found', path: skillPath });
-    return;
-  }
-  const rawMermaid = extractMermaidFromContent(readFileSync(skillPath, 'utf-8'));
+  const rawMermaid = getSkillMermaid(skillName);
   if (!rawMermaid) {
     logger.warn(channel, 'progress_tracking_skip', { session: sessionId, reason: 'no_mermaid' });
     return;

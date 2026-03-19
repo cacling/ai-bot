@@ -136,8 +136,31 @@ if [[ "$RESET_MODE" == true ]]; then
   rm -f "$BASE_DIR/backend/data/telecom.db"
   ok "数据库已删除"
 
-  # 清理 .versions/：每个 skill 只保留最新 2 个版本
+  # 清理非默认技能（biz-skills 和 .versions 中只保留默认 7 个）
+  DEFAULT_SKILLS=("bill-inquiry" "fault-diagnosis" "outbound-collection" "outbound-marketing" "plan-inquiry" "service-cancel" "telecom-app")
+
+  BIZ_DIR="$BASE_DIR/backend/skills/biz-skills"
+  for dir in "$BIZ_DIR"/*/; do
+    [[ ! -d "$dir" ]] && continue
+    name=$(basename "$dir")
+    if [[ ! " ${DEFAULT_SKILLS[*]} " =~ " $name " ]]; then
+      rm -rf "$dir"
+      ok "删除非默认技能 biz-skills/$name"
+    fi
+  done
+
   VERSIONS_DIR="$BASE_DIR/backend/skills/.versions"
+  for dir in "$VERSIONS_DIR"/*/; do
+    [[ ! -d "$dir" ]] && continue
+    name=$(basename "$dir")
+    if [[ ! " ${DEFAULT_SKILLS[*]} " =~ " $name " ]]; then
+      rm -rf "$dir"
+      ok "删除非默认版本 .versions/$name"
+    fi
+  done
+  ok "非默认技能清理完成"
+
+  # 清理 .versions/：每个 skill 只保留最新 2 个版本
   if [[ -d "$VERSIONS_DIR" ]]; then
     for skill_dir in "$VERSIONS_DIR"/*/; do
       [[ ! -d "$skill_dir" ]] && continue
