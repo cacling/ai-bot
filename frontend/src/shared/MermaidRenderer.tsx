@@ -10,6 +10,7 @@
 
 import { memo, useEffect, useState, useRef, useCallback } from 'react';
 import { Loader2, AlertTriangle, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { renderMermaid } from './mermaid';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -239,13 +240,13 @@ export const MermaidRenderer = memo(function MermaidRenderer({
   /* ── renders ── */
 
   if (!mermaidSrc) {
-    return <div className="flex items-center justify-center py-8 text-xs text-gray-400">{emptyText}</div>;
+    return <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">{emptyText}</div>;
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8 gap-2 text-gray-400">
-        <Loader2 size={18} className="animate-spin text-indigo-400" />
+      <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+        <Loader2 size={18} className="animate-spin text-primary" />
         <span className="text-xs">{loadingText}</span>
       </div>
     );
@@ -254,9 +255,9 @@ export const MermaidRenderer = memo(function MermaidRenderer({
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-6 space-y-2 px-4">
-        <AlertTriangle size={20} className="text-amber-400" />
-        <p className="text-xs text-gray-500">{errorText}</p>
-        <pre className="text-[11px] text-red-400 bg-red-50 px-3 py-2 rounded-lg max-w-full whitespace-pre-wrap">{error}</pre>
+        <AlertTriangle size={20} className="text-muted-foreground" />
+        <p className="text-xs text-muted-foreground">{errorText}</p>
+        <pre className="text-[11px] text-destructive bg-destructive/10 px-3 py-2 rounded-lg max-w-full whitespace-pre-wrap">{error}</pre>
       </div>
     );
   }
@@ -267,7 +268,7 @@ export const MermaidRenderer = memo(function MermaidRenderer({
     <div className="relative">
       <div
         ref={viewportRef}
-        className="w-full overflow-auto border border-gray-100 rounded-lg bg-white"
+        className="w-full overflow-auto border border-border rounded-lg bg-background"
         style={{ height }}
       >
         <div
@@ -287,9 +288,9 @@ export const MermaidRenderer = memo(function MermaidRenderer({
 
       {zoomEnabled && (
         <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
-          <button onClick={zoomInFn}    className="w-7 h-7 rounded bg-white/90 shadow border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors" title="放大"><ZoomIn   size={14} className="text-gray-600" /></button>
-          <button onClick={zoomOutFn}   className="w-7 h-7 rounded bg-white/90 shadow border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors" title="缩小"><ZoomOut  size={14} className="text-gray-600" /></button>
-          <button onClick={resetZoomFn} className="w-7 h-7 rounded bg-white/90 shadow border border-gray-200 flex items-center justify-center hover:bg-gray-50 transition-colors" title="适应窗口"><Maximize size={14} className="text-gray-600" /></button>
+          <Button variant="outline" size="icon-sm" onClick={zoomInFn}    className="bg-background/90 shadow" title="放大"><ZoomIn   size={14} className="text-muted-foreground" /></Button>
+          <Button variant="outline" size="icon-sm" onClick={zoomOutFn}   className="bg-background/90 shadow" title="缩小"><ZoomOut  size={14} className="text-muted-foreground" /></Button>
+          <Button variant="outline" size="icon-sm" onClick={resetZoomFn} className="bg-background/90 shadow" title="适应窗口"><Maximize size={14} className="text-muted-foreground" /></Button>
         </div>
       )}
     </div>

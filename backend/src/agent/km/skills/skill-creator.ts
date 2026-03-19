@@ -15,7 +15,7 @@
  */
 
 import { Hono } from 'hono';
-import { generateText, tool } from 'ai';
+import { generateText, streamText, tool } from 'ai';
 import { z } from 'zod';
 import { skillCreatorModel, skillCreatorThinkingModel } from '../../../engine/llm';
 import { logger } from '../../../services/logger';
@@ -195,36 +195,108 @@ skillCreator.post('/chat', async (c) => {
   const skillIndex = loadSkillIndex();
   const systemPrompt = buildSystemPrompt(session, skillIndex);
 
+  const skillTools = {
+    read_skill: tool({
+      description: '读取已有业务技能的 SKILL.md 内容',
+      parameters: z.object({ skill_name: z.string().describe('技能名称（kebab-case）') }),
+      execute: async ({ skill_name }) => readSkillContent(skill_name) ?? `技能 "${skill_name}" 不存在`,
+    }),
+    read_reference: tool({
+      description: '读取业务技能的参考文档',
+      parameters: z.object({
+        skill_name: z.string().describe('技能名称'),
+        ref_name: z.string().describe('参考文档文件名'),
+      }),
+      execute: async ({ skill_name, ref_name }) => readSkillReference(skill_name, ref_name) ?? `参考文档 "${ref_name}" 不存在`,
+    }),
+    list_skills: tool({
+      description: '列出所有已有业务技能及其参考文档',
+      parameters: z.object({}),
+      execute: async () => JSON.stringify(skillIndex.map(s => ({ ...s, references: listSkillReferences(s.name) }))),
+    }),
+  };
+
+  const model = body.enable_thinking ? skillCreatorThinkingModel : skillCreatorModel;
+
+  // ── 流式模式（thinking 开启时）──
+  if (body.enable_thinking) {
+    try {
+      const result = streamText({
+        model,
+        system: systemPrompt,
+        messages: session.history,
+        tools: skillTools,
+        maxSteps: 5,
+        temperature: 0.3,
+      });
+
+      const encoder = new TextEncoder();
+      const sseStream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const part of result.fullStream) {
+              if (part.type === 'reasoning') {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'thinking', text: part.textDelta })}\n\n`));
+              } else if (part.type === 'text-delta') {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', text: part.textDelta })}\n\n`));
+              }
+            }
+
+            // 流结束后，获取完整文本并解析
+            const text = await result.text;
+            const reasoning = await result.reasoning;
+            const cleaned = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+            let parsed: { reply: string; phase: Phase; draft: Draft | null };
+            try {
+              parsed = JSON.parse(cleaned);
+            } catch {
+              parsed = { reply: cleaned, phase: session.phase, draft: null };
+            }
+
+            session.phase = parsed.phase ?? session.phase;
+            if (parsed.draft) session.draft = parsed.draft;
+            session.history.push({ role: 'assistant', content: parsed.reply });
+
+            // 发送最终结果事件
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'done',
+              session_id: session.id,
+              reply: parsed.reply,
+              phase: session.phase,
+              draft: session.draft,
+              thinking: reasoning || null,
+            })}\n\n`));
+
+            logger.info('skill-creator', 'chat_stream', { session_id: session.id, phase: session.phase, has_reasoning: !!reasoning });
+          } catch (err) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: String(err) })}\n\n`));
+            logger.error('skill-creator', 'chat_stream_error', { error: String(err) });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(sseStream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    } catch (err) {
+      logger.error('skill-creator', 'chat_error', { error: String(err) });
+      return c.json({ error: `对话失败: ${String(err)}` }, 500);
+    }
+  }
+
+  // ── 非流式模式（thinking 关闭时）──
   try {
-    const model = body.enable_thinking ? skillCreatorThinkingModel : skillCreatorModel;
-    logger.info('skill-creator', 'chat_model_selected', {
-      enable_thinking: body.enable_thinking,
-      model_type: body.enable_thinking ? 'thinking' : 'normal',
-    });
-    const { text, reasoning } = await generateText({
+    const { text } = await generateText({
       model,
       system: systemPrompt,
       messages: session.history,
-      tools: {
-        read_skill: tool({
-          description: '读取已有业务技能的 SKILL.md 内容',
-          parameters: z.object({ skill_name: z.string().describe('技能名称（kebab-case）') }),
-          execute: async ({ skill_name }) => readSkillContent(skill_name) ?? `技能 "${skill_name}" 不存在`,
-        }),
-        read_reference: tool({
-          description: '读取业务技能的参考文档',
-          parameters: z.object({
-            skill_name: z.string().describe('技能名称'),
-            ref_name: z.string().describe('参考文档文件名'),
-          }),
-          execute: async ({ skill_name, ref_name }) => readSkillReference(skill_name, ref_name) ?? `参考文档 "${ref_name}" 不存在`,
-        }),
-        list_skills: tool({
-          description: '列出所有已有业务技能及其参考文档',
-          parameters: z.object({}),
-          execute: async () => JSON.stringify(skillIndex.map(s => ({ ...s, references: listSkillReferences(s.name) }))),
-        }),
-      },
+      tools: skillTools,
       maxSteps: 5,
       temperature: 0.3,
     });
@@ -241,25 +313,9 @@ skillCreator.post('/chat', async (c) => {
     if (parsed.draft) session.draft = parsed.draft;
     session.history.push({ role: 'assistant', content: parsed.reply });
 
-    // reasoning 在 AI SDK v4.x 中是 string | undefined
-    const thinkingText = reasoning || null;
-
-    logger.info('skill-creator', 'chat_reasoning_debug', {
-      session_id: session.id,
-      reasoning_type: typeof reasoning,
-      reasoning_is_undefined: reasoning === undefined,
-      reasoning_is_null: reasoning === null,
-      reasoning_is_empty_string: reasoning === '',
-      reasoning_length: typeof reasoning === 'string' ? reasoning.length : -1,
-      reasoning_preview: typeof reasoning === 'string' ? reasoning.substring(0, 200) : String(reasoning),
-      thinkingText_value: thinkingText === null ? 'null' : `length=${thinkingText?.length}`,
-      raw_text_has_think_tag: text.includes('<think>') || text.includes('</think>'),
-      raw_text_preview: text.substring(0, 300),
-    });
-
     logger.info('skill-creator', 'chat', { session_id: session.id, phase: session.phase, has_draft: !!session.draft });
 
-    return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft, thinking: thinkingText });
+    return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft, thinking: null });
   } catch (err) {
     logger.error('skill-creator', 'chat_error', { error: String(err) });
     return c.json({ error: `对话失败: ${String(err)}` }, 500);

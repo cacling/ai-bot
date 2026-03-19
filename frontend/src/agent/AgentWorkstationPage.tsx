@@ -16,6 +16,7 @@ import { EditorPage } from '../km/EditorPage';
 import { SkillManagerPage } from '../km/SkillManagerPage';
 import { KnowledgeManagementPage } from '../km/KnowledgeManagementPage';
 import { McpManagementPage } from '../km/mcp/McpManagementPage';
+import { Button } from '@/components/ui/button';
 
 interface AgentMessage {
   id: number;
@@ -306,19 +307,19 @@ export function AgentWorkstationPage() {
 
   const t = T[lang];
   return (
-    <div className="flex flex-col h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
+    <div className="flex flex-col h-screen bg-muted font-sans text-foreground overflow-hidden">
 
       {/* Top Nav */}
-      <nav className="bg-white border-b border-gray-200 shadow-sm flex-shrink-0 h-12 flex items-center px-4 gap-3">
-        <div className="flex items-center space-x-2 text-gray-800 font-semibold">
-          <Headset size={17} className="text-blue-600" />
+      <nav className="bg-background border-b border-border shadow-sm flex-shrink-0 h-12 flex items-center px-4 gap-3">
+        <div className="flex items-center space-x-2 text-foreground font-semibold">
+          <Headset size={17} className="text-primary" />
           <span className="text-sm">{t.agent_title}</span>
         </div>
 
         {isConnected && (
-          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
-            <Radio size={11} className="text-green-500 animate-pulse" />
-            <span className="text-[11px] text-green-600 font-medium">{t.agent_status_active}</span>
+          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full">
+            <Radio size={11} className="text-primary animate-pulse" />
+            <span className="text-[11px] text-primary font-medium">{t.agent_status_active}</span>
           </div>
         )}
 
@@ -326,32 +327,36 @@ export function AgentWorkstationPage() {
         <select
           value={lang}
           onChange={e => setLang(e.target.value as Lang)}
-          className="text-sm text-gray-500 bg-transparent outline-none cursor-pointer"
+          className="text-sm text-muted-foreground bg-transparent outline-none cursor-pointer"
         >
           <option value="zh">中文</option>
           <option value="en">EN</option>
         </select>
 
         {/* Tab selector — right side */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 ml-auto">
-          <button
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 ml-auto">
+          <Button
+            variant={agentTab === 'chat' ? 'outline' : 'ghost'}
+            size="sm"
             onClick={() => setAgentTab('chat')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              agentTab === 'chat' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            className={`flex items-center gap-1.5 text-xs font-medium ${
+              agentTab === 'chat' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <MessageSquare size={12} />
             {t.agent_tab_chat}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={agentTab === 'editor' ? 'outline' : 'ghost'}
+            size="sm"
             onClick={() => setAgentTab('editor')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              agentTab === 'editor' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            className={`flex items-center gap-1.5 text-xs font-medium ${
+              agentTab === 'editor' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <BookOpen size={12} />
             {t.agent_tab_editor}
-          </button>
+          </Button>
         </div>
       </nav>
 
@@ -359,40 +364,46 @@ export function AgentWorkstationPage() {
       {agentTab === 'editor' && (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Secondary menu */}
-          <div className="bg-white border-b border-gray-200 px-4 flex items-center h-9 flex-shrink-0">
-            <button
+          <div className="bg-background border-b border-border px-4 flex items-center h-9 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setKnowledgeSubTab('knowledge')}
-              className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 px-4 h-full rounded-none text-xs font-medium border-b-2 transition-colors ${
                 knowledgeSubTab === 'knowledge'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
               }`}
             >
               <Library size={13} />
               知识管理
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setKnowledgeSubTab('skill')}
-              className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 px-4 h-full rounded-none text-xs font-medium border-b-2 transition-colors ${
                 knowledgeSubTab === 'skill'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
               }`}
             >
               <Wrench size={13} />
               技能管理
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setKnowledgeSubTab('mcp')}
-              className={`flex items-center gap-1.5 px-4 h-full text-xs font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-1.5 px-4 h-full rounded-none text-xs font-medium border-b-2 transition-colors ${
                 knowledgeSubTab === 'mcp'
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
               }`}
             >
               <Server size={13} />
               MCP管理
-            </button>
+            </Button>
           </div>
           <div className="flex-1 overflow-hidden">
             {knowledgeSubTab === 'knowledge' ? <KnowledgeManagementPage /> : knowledgeSubTab === 'skill' ? <SkillManagerPage /> : <McpManagementPage />}
@@ -404,24 +415,24 @@ export function AgentWorkstationPage() {
       <div className={`flex flex-1 overflow-hidden p-4 gap-4 ${agentTab !== 'chat' ? 'hidden' : ''}`}>
 
         {/* Left: Chat dialog */}
-        <div className="w-[400px] flex-shrink-0 bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col overflow-hidden">
+        <div className="w-[400px] flex-shrink-0 bg-background rounded-2xl shadow-md border border-border flex flex-col overflow-hidden">
 
           {/* Dialog header */}
-          <div className="flex items-center px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
-            <MessageSquare size={15} className="text-gray-500 mr-2" />
-            <span className="text-sm font-medium text-gray-700">{t.agent_dialog_title}</span>
+          <div className="flex items-center px-4 py-2.5 border-b border-border bg-muted flex-shrink-0">
+            <MessageSquare size={15} className="text-muted-foreground mr-2" />
+            <span className="text-sm font-medium text-foreground">{t.agent_dialog_title}</span>
           </div>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center select-none space-y-3">
-                <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center">
-                  <Bot size={28} className="text-blue-200" />
+                <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Bot size={28} className="text-primary/30" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm font-medium text-gray-400">{t.agent_empty_title}</p>
-                  <p className="text-xs text-gray-300">{t.agent_empty_subtitle}</p>
+                  <p className="text-sm font-medium text-muted-foreground">{t.agent_empty_title}</p>
+                  <p className="text-xs text-muted-foreground/60">{t.agent_empty_subtitle}</p>
                 </div>
               </div>
             )}
@@ -433,12 +444,12 @@ export function AgentWorkstationPage() {
                 <div key={msg.id} className={`flex items-start gap-2 ${isLeft ? 'justify-start' : 'justify-end'}`}>
                   {/* Left-side avatar */}
                   {msg.sender === 'bot' && (
-                    <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
                       <Bot size={14} />
                     </div>
                   )}
                   {msg.sender === 'customer' && (
-                    <div className="w-7 h-7 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div className="w-7 h-7 rounded-full bg-secondary text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
                       <User size={14} />
                     </div>
                   )}
@@ -446,19 +457,19 @@ export function AgentWorkstationPage() {
                   <div className={`flex flex-col ${isLeft ? 'flex-1 min-w-0' : 'max-w-[70%] items-end'}`}>
                     {/* Role label */}
                     {msg.sender === 'customer' && (
-                      <span className="text-[10px] text-green-600 font-medium mb-0.5 px-0.5">{t.agent_label_customer}</span>
+                      <span className="text-[10px] text-primary font-medium mb-0.5 px-0.5">{t.agent_label_customer}</span>
                     )}
                     {isAgent && (
-                      <span className="text-[10px] text-blue-500 font-medium mb-0.5 px-0.5">{t.agent_label_agent}</span>
+                      <span className="text-[10px] text-primary font-medium mb-0.5 px-0.5">{t.agent_label_agent}</span>
                     )}
 
                     {msg.text?.trim() && (
                       <div className={`px-3.5 py-2.5 rounded-xl text-sm leading-relaxed ${
                         msg.sender === 'bot'
-                          ? 'bg-gray-50 text-gray-800 border border-gray-100 rounded-tl-none'
+                          ? 'bg-muted text-foreground border border-border rounded-tl-none'
                           : msg.sender === 'customer'
-                          ? 'bg-green-50 text-gray-800 border border-green-100 rounded-tl-none'
-                          : 'bg-blue-600 text-white rounded-tr-none'
+                          ? 'bg-secondary text-foreground border border-border rounded-tl-none'
+                          : 'bg-primary text-primary-foreground rounded-tr-none'
                       }`}>
                         {msg.sender !== 'agent'
                           ? <div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown></div>
@@ -467,8 +478,8 @@ export function AgentWorkstationPage() {
                         {msg.translated_text?.trim() && (
                           <div className={`mt-1.5 pt-1.5 text-sm leading-relaxed ${
                             msg.sender === 'customer'
-                              ? 'border-t border-green-100 text-blue-600'
-                              : 'border-t border-gray-100 text-blue-600'
+                              ? 'border-t border-border text-primary'
+                              : 'border-t border-border text-primary'
                           }`}>
                             <div className="markdown-body">
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.translated_text}</ReactMarkdown>
@@ -480,17 +491,17 @@ export function AgentWorkstationPage() {
                     {msg.card && (
                       <div className="mt-2 w-full"><CardMessage card={msg.card} lang={lang} /></div>
                     )}
-                    <div className="text-[11px] text-gray-400 mt-1 px-0.5">
+                    <div className="text-[11px] text-muted-foreground mt-1 px-0.5">
                       {msg.time}
                       {msg.sender === 'bot' && msg._ms != null && (
-                        <span className="ml-1.5 text-gray-300">· {(msg._ms / 1000).toFixed(1)}s</span>
+                        <span className="ml-1.5 text-muted-foreground/60">· {(msg._ms / 1000).toFixed(1)}s</span>
                       )}
                     </div>
                   </div>
 
                   {/* Right-side avatar for agent */}
                   {isAgent && (
-                    <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 mt-0.5">
                       <Headset size={14} />
                     </div>
                   )}
@@ -500,13 +511,13 @@ export function AgentWorkstationPage() {
 
             {isTyping && (
               <div className="flex items-center space-x-2">
-                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
+                <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                   <Bot size={14} />
                 </div>
-                <div className="bg-gray-50 border border-gray-100 px-3 py-2 rounded-xl rounded-tl-none flex items-center space-x-1">
-                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="bg-muted border border-border px-3 py-2 rounded-xl rounded-tl-none flex items-center space-x-1">
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
               </div>
             )}
@@ -514,25 +525,27 @@ export function AgentWorkstationPage() {
           </div>
 
           {/* Toolbar */}
-          <div className="bg-white/60 backdrop-blur-md border-t border-gray-100 px-3 py-2.5 flex-shrink-0">
+          <div className="bg-background/60 backdrop-blur-md border-t border-border px-3 py-2.5 flex-shrink-0">
             <div className="flex items-center space-x-2 overflow-x-auto scrollbar-hide">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleTransferToBot}
                 disabled={!isConnected}
-                className="whitespace-nowrap px-3.5 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs rounded-full shadow-sm hover:border-green-400 hover:text-green-600 transition disabled:opacity-50"
+                className="whitespace-nowrap rounded-full text-xs shadow-sm hover:border-primary hover:text-primary transition"
               >
                 {t.transfer_to_bot}
-              </button>
+              </Button>
             </div>
           </div>
 
           {/* Input area */}
-          <div className="bg-white p-3 pt-2 pb-3 border-t border-gray-100 flex-shrink-0">
+          <div className="bg-background p-3 pt-2 pb-3 border-t border-border flex-shrink-0">
             <div className="flex items-end space-x-2">
-              <button className="p-2 text-gray-400 hover:text-blue-600 transition flex-shrink-0 mb-1">
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary flex-shrink-0 mb-1">
                 <PlusCircle size={24} strokeWidth={1.5} />
-              </button>
-              <div className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl flex items-end relative overflow-hidden focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-all">
+              </Button>
+              <div className="flex-1 bg-muted border border-border rounded-2xl flex items-end relative overflow-hidden focus-within:border-ring focus-within:ring-1 focus-within:ring-ring transition-all">
                 <textarea
                   ref={textareaRef}
                   value={inputValue}
@@ -540,24 +553,26 @@ export function AgentWorkstationPage() {
                   onKeyDown={handleKeyDown}
                   placeholder={t.agent_reply_placeholder}
                   disabled={isTyping || !isConnected}
-                  className="w-full bg-transparent max-h-24 min-h-[40px] px-3 py-2.5 outline-none text-sm text-gray-800 resize-none scrollbar-hide disabled:opacity-60"
+                  className="w-full bg-transparent max-h-24 min-h-[40px] px-3 py-2.5 outline-none text-sm text-foreground resize-none scrollbar-hide disabled:opacity-60"
                   rows={1}
                 />
-                <button className="p-2 text-gray-400 hover:text-gray-600 transition flex-shrink-0 mb-0.5">
+                <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-foreground flex-shrink-0 mb-0.5">
                   <Smile size={20} strokeWidth={1.5} />
-                </button>
+                </Button>
               </div>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => handleSend()}
                 disabled={!inputValue.trim() || isTyping || !isConnected}
                 className={`p-2.5 rounded-full flex-shrink-0 mb-0.5 transition-all shadow-sm ${
                   inputValue.trim() && !isTyping && isConnected
-                    ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
-                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    : 'bg-muted text-muted-foreground cursor-not-allowed'
                 }`}
               >
                 <Send size={18} />
-              </button>
+              </Button>
             </div>
           </div>
         </div>

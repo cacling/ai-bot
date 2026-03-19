@@ -16,7 +16,7 @@ export const UserDetailContent = memo(function UserDetailContent({ data, lang }:
     return (
       <div className="flex flex-col items-center justify-center py-6 space-y-1.5 text-center select-none px-3">
         <span className="text-2xl opacity-30">👤</span>
-        <p className="text-[11px] text-gray-400">等待客户接入</p>
+        <p className="text-[11px] text-muted-foreground">等待客户接入</p>
       </div>
     );
   }
@@ -39,12 +39,12 @@ export const UserDetailContent = memo(function UserDetailContent({ data, lang }:
     <div className="p-3 space-y-2">
       {/* Name + tag */}
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
+        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
           <User size={16} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-semibold text-gray-800">{name}</span>
+            <span className="text-sm font-semibold text-foreground">{name}</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${persona.tagColor}`}>
               {persona.tag}
             </span>
@@ -53,11 +53,11 @@ export const UserDetailContent = memo(function UserDetailContent({ data, lang }:
       </div>
 
       {/* Detail rows */}
-      <div className="space-y-1 border-t border-gray-50 pt-2">
+      <div className="space-y-1 border-t border-border pt-2">
         {rows.map(r => (
           <div key={r.label} className="flex justify-between text-xs py-0.5">
-            <span className="text-gray-400">{r.label}</span>
-            <span className={r.highlight ? 'font-medium text-gray-800' : 'text-gray-600'}>{r.value}</span>
+            <span className="text-muted-foreground">{r.label}</span>
+            <span className={r.highlight ? 'font-medium text-foreground' : 'text-muted-foreground'}>{r.value}</span>
           </div>
         ))}
       </div>

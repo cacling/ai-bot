@@ -85,20 +85,20 @@ function BillCard({ data, lang = 'zh' }: { data: BillCardData; lang?: Lang }) {
   const tc = T[lang];
   const statusLabel = data.status === 'paid' ? tc.card_bill_paid : data.status === 'overdue' ? tc.card_bill_overdue : tc.card_bill_pending;
   return (
-    <div className="bg-white rounded-2xl rounded-tl-none shadow-sm border border-gray-100 overflow-hidden w-full mb-1">
-      <div className="bg-gradient-to-r from-blue-500 to-blue-400 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-2 text-white">
+    <div className="bg-background rounded-2xl rounded-tl-none shadow-sm border border-border overflow-hidden w-full mb-1">
+      <div className="bg-primary px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center space-x-2 text-primary-foreground">
           <Receipt size={16} />
           <span className="text-sm font-semibold">{data.month} {tc.card_bill_title}</span>
         </div>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full bg-white/20 text-white`}>{statusLabel}</span>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full bg-white/20 text-primary-foreground`}>{statusLabel}</span>
       </div>
       <div className="px-4 py-3">
         <div className="flex items-end justify-between mb-3">
-          <span className="text-xs text-gray-400">{tc.card_bill_total}</span>
-          <span className="text-2xl font-bold text-gray-800">¥{data.total.toFixed(2)}</span>
+          <span className="text-xs text-muted-foreground">{tc.card_bill_total}</span>
+          <span className="text-2xl font-bold text-foreground">¥{data.total.toFixed(2)}</span>
         </div>
-        <div className="space-y-1.5 border-t border-gray-50 pt-3">
+        <div className="space-y-1.5 border-t border-border pt-3">
           {[
             { label: tc.card_bill_plan_fee,  value: data.plan_fee },
             { label: tc.card_bill_data_fee,  value: data.data_fee },
@@ -107,8 +107,8 @@ function BillCard({ data, lang = 'zh' }: { data: BillCardData; lang?: Lang }) {
             { label: tc.card_bill_tax,       value: data.tax },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between text-sm">
-              <span className="text-gray-500">{label}</span>
-              <span className={value > 0 ? 'text-gray-700' : 'text-gray-300'}>¥{value.toFixed(2)}</span>
+              <span className="text-muted-foreground">{label}</span>
+              <span className={value > 0 ? 'text-foreground' : 'text-muted-foreground/50'}>¥{value.toFixed(2)}</span>
             </div>
           ))}
         </div>
@@ -120,29 +120,29 @@ function BillCard({ data, lang = 'zh' }: { data: BillCardData; lang?: Lang }) {
 function CancelCard({ data, lang = 'zh' }: { data: CancelCardData; lang?: Lang }) {
   const tc = T[lang];
   return (
-    <div className="bg-white rounded-2xl rounded-tl-none shadow-sm border border-gray-100 overflow-hidden w-full mb-1">
-      <div className="bg-gradient-to-r from-orange-400 to-orange-300 px-4 py-3 flex items-center space-x-2 text-white">
+    <div className="bg-background rounded-2xl rounded-tl-none shadow-sm border border-border overflow-hidden w-full mb-1">
+      <div className="bg-accent px-4 py-3 flex items-center space-x-2 text-accent-foreground">
         <Trash2 size={16} />
         <span className="text-sm font-semibold">{tc.card_cancel_title}</span>
       </div>
       <div className="px-4 py-3 space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="text-gray-400">{tc.card_cancel_service}</span>
-          <span className="text-gray-800 font-medium">{data.service_name}</span>
+          <span className="text-muted-foreground">{tc.card_cancel_service}</span>
+          <span className="text-foreground font-medium">{data.service_name}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-gray-400">{tc.card_cancel_savings}</span>
-          <span className="text-green-600 font-medium">-¥{data.monthly_fee.toFixed(2)}{tc.card_plan_per_month}</span>
+          <span className="text-muted-foreground">{tc.card_cancel_savings}</span>
+          <span className="text-primary font-medium">-¥{data.monthly_fee.toFixed(2)}{tc.card_plan_per_month}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-gray-400">{tc.card_cancel_effective}</span>
-          <span className="text-gray-800">{data.effective_end}</span>
+          <span className="text-muted-foreground">{tc.card_cancel_effective}</span>
+          <span className="text-foreground">{data.effective_end}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-gray-400">{tc.card_cancel_phone}</span>
-          <span className="text-gray-800">{data.phone}</span>
+          <span className="text-muted-foreground">{tc.card_cancel_phone}</span>
+          <span className="text-foreground">{data.phone}</span>
         </div>
-        <div className="mt-2 p-2 bg-orange-50 rounded-lg text-xs text-orange-700 flex items-start space-x-1.5">
+        <div className="mt-2 p-2 bg-accent rounded-lg text-xs text-muted-foreground flex items-start space-x-1.5">
           <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
           <span>{tc.card_cancel_notice.replace('{date}', data.effective_end)}</span>
         </div>
@@ -156,38 +156,38 @@ function PlanCard({ data, lang = 'zh' }: { data: PlanCardData; lang?: Lang }) {
   const dataLabel = data.data_gb === -1 ? tc.card_plan_unlimited : `${data.data_gb}GB`;
   const voiceLabel = data.voice_min === -1 ? tc.card_plan_unlimited : `${data.voice_min}${tc.card_plan_voice_unit}`;
   return (
-    <div className="bg-white rounded-2xl rounded-tl-none shadow-sm border border-gray-100 overflow-hidden w-full mb-1">
-      <div className="bg-gradient-to-r from-purple-500 to-purple-400 px-4 py-3 flex items-center space-x-2 text-white">
+    <div className="bg-background rounded-2xl rounded-tl-none shadow-sm border border-border overflow-hidden w-full mb-1">
+      <div className="bg-primary px-4 py-3 flex items-center space-x-2 text-primary-foreground">
         <Package size={16} />
         <span className="text-sm font-semibold">{tc.card_plan_title}</span>
       </div>
       <div className="px-4 py-3">
         <div className="flex items-end justify-between mb-3">
-          <span className="text-base font-semibold text-gray-800">{data.name}</span>
+          <span className="text-base font-semibold text-foreground">{data.name}</span>
           <div className="text-right">
-            <span className="text-2xl font-bold text-purple-600">¥{data.monthly_fee}</span>
-            <span className="text-xs text-gray-400">{tc.card_plan_per_month}</span>
+            <span className="text-2xl font-bold text-primary">¥{data.monthly_fee}</span>
+            <span className="text-xs text-muted-foreground">{tc.card_plan_per_month}</span>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 mb-3">
-          <div className="bg-purple-50 rounded-xl p-2 text-center">
-            <div className="text-lg font-bold text-purple-700">{dataLabel}</div>
-            <div className="text-xs text-gray-500">{tc.card_plan_data_label}</div>
+          <div className="bg-muted rounded-xl p-2 text-center">
+            <div className="text-lg font-bold text-primary">{dataLabel}</div>
+            <div className="text-xs text-muted-foreground">{tc.card_plan_data_label}</div>
           </div>
-          <div className="bg-purple-50 rounded-xl p-2 text-center">
-            <div className="text-lg font-bold text-purple-700">{voiceLabel}</div>
-            <div className="text-xs text-gray-500">{tc.card_plan_voice_label}</div>
+          <div className="bg-muted rounded-xl p-2 text-center">
+            <div className="text-lg font-bold text-primary">{voiceLabel}</div>
+            <div className="text-xs text-muted-foreground">{tc.card_plan_voice_label}</div>
           </div>
         </div>
         <div className="space-y-1">
           {data.features.map((f) => (
-            <div key={f} className="flex items-center space-x-1.5 text-xs text-gray-600">
-              <CheckCircle size={12} className="text-purple-400 flex-shrink-0" />
+            <div key={f} className="flex items-center space-x-1.5 text-xs text-muted-foreground">
+              <CheckCircle size={12} className="text-primary flex-shrink-0" />
               <span>{f}</span>
             </div>
           ))}
         </div>
-        <p className="mt-2 text-xs text-gray-400">{data.description}</p>
+        <p className="mt-2 text-xs text-muted-foreground">{data.description}</p>
       </div>
     </div>
   );
@@ -197,17 +197,17 @@ function DiagnosticCard({ data, lang = 'zh' }: { data: DiagnosticCardData; lang?
   const tc = T[lang];
   const issueLabels = tc.card_diag_labels;
   const hasError = data.diagnostic_steps.some((s) => s.status === 'error');
-  const conclusionColor = hasError ? 'text-red-600 bg-red-50' : 'text-yellow-700 bg-yellow-50';
+  const conclusionColor = hasError ? 'text-destructive bg-destructive/10' : 'text-muted-foreground bg-accent';
 
   const statusIcon = (status: DiagnosticStep['status']) => {
-    if (status === 'ok') return <CheckCircle size={14} className="text-green-500 flex-shrink-0" />;
-    if (status === 'warning') return <AlertTriangle size={14} className="text-yellow-500 flex-shrink-0" />;
-    return <XCircle size={14} className="text-red-500 flex-shrink-0" />;
+    if (status === 'ok') return <CheckCircle size={14} className="text-primary flex-shrink-0" />;
+    if (status === 'warning') return <AlertTriangle size={14} className="text-muted-foreground flex-shrink-0" />;
+    return <XCircle size={14} className="text-destructive flex-shrink-0" />;
   };
 
   return (
-    <div className="bg-white rounded-2xl rounded-tl-none shadow-sm border border-gray-100 overflow-hidden w-full mb-1">
-      <div className="bg-gradient-to-r from-teal-500 to-teal-400 px-4 py-3 flex items-center space-x-2 text-white">
+    <div className="bg-background rounded-2xl rounded-tl-none shadow-sm border border-border overflow-hidden w-full mb-1">
+      <div className="bg-primary px-4 py-3 flex items-center space-x-2 text-primary-foreground">
         <Wifi size={16} />
         <span className="text-sm font-semibold">{issueLabels[data.issue_type] ?? tc.card_diag_default}</span>
       </div>
@@ -216,8 +216,8 @@ function DiagnosticCard({ data, lang = 'zh' }: { data: DiagnosticCardData; lang?
           <div key={idx} className="flex items-start space-x-2">
             {statusIcon(step.status)}
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-gray-700">{step.step}</div>
-              <div className="text-xs text-gray-500 mt-0.5">{step.detail}</div>
+              <div className="text-sm font-medium text-foreground">{step.step}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{step.detail}</div>
             </div>
           </div>
         ))}
@@ -233,17 +233,17 @@ function DiagnosticCard({ data, lang = 'zh' }: { data: DiagnosticCardData; lang?
 function HandoffCard({ data, lang = 'zh' }: { data: HandoffCardData; lang?: Lang }) {
   const tc = T[lang];
   const priorityStyle =
-    data.priority === '高' ? 'bg-red-100 text-red-600' :
-    data.priority === '低' ? 'bg-gray-100 text-gray-500' :
-    'bg-yellow-100 text-yellow-700';
+    data.priority === '高' ? 'bg-destructive/10 text-destructive' :
+    data.priority === '低' ? 'bg-muted text-muted-foreground' :
+    'bg-accent text-muted-foreground';
   const statusStyle =
-    data.current_status === '已解决' ? 'bg-green-100 text-green-600' :
-    data.current_status === '未解决' ? 'bg-red-100 text-red-600' :
-    'bg-blue-100 text-blue-600';
+    data.current_status === '已解决' ? 'bg-primary/10 text-primary' :
+    data.current_status === '未解决' ? 'bg-destructive/10 text-destructive' :
+    'bg-primary/10 text-primary';
 
   return (
-    <div className="bg-white rounded-2xl rounded-tl-none shadow-sm border border-gray-100 overflow-hidden w-full mb-1">
-      <div className="bg-gradient-to-r from-orange-500 to-orange-400 px-4 py-3 flex items-center justify-between text-white">
+    <div className="bg-background rounded-2xl rounded-tl-none shadow-sm border border-border overflow-hidden w-full mb-1">
+      <div className="bg-accent px-4 py-3 flex items-center justify-between text-accent-foreground">
         <div className="flex items-center space-x-2">
           <Headset size={16} />
           <span className="text-sm font-semibold">{tc.card_handoff_title}</span>
@@ -255,38 +255,38 @@ function HandoffCard({ data, lang = 'zh' }: { data: HandoffCardData; lang?: Lang
       </div>
       <div className="px-4 py-3 space-y-2.5">
         {data.session_summary && (
-          <p className="text-xs text-gray-600 leading-relaxed border-l-2 border-orange-300 pl-2">{data.session_summary}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed border-l-2 border-border pl-2">{data.session_summary}</p>
         )}
-        <div className="space-y-1.5 border-t border-gray-50 pt-2">
+        <div className="space-y-1.5 border-t border-border pt-2">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-400">{tc.card_handoff_intent}</span>
-            <span className="text-gray-800 font-medium text-right max-w-[60%]">{data.customer_intent}</span>
+            <span className="text-muted-foreground">{tc.card_handoff_intent}</span>
+            <span className="text-foreground font-medium text-right max-w-[60%]">{data.customer_intent}</span>
           </div>
           {data.next_action && (
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">{tc.card_handoff_action}</span>
-              <span className="text-blue-700 text-right max-w-[60%]">{data.next_action}</span>
+              <span className="text-muted-foreground">{tc.card_handoff_action}</span>
+              <span className="text-primary text-right max-w-[60%]">{data.next_action}</span>
             </div>
           )}
           {data.handoff_reason && (
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400">{tc.card_handoff_reason}</span>
-              <span className="text-gray-600 text-right max-w-[60%]">{data.handoff_reason}</span>
+              <span className="text-muted-foreground">{tc.card_handoff_reason}</span>
+              <span className="text-muted-foreground text-right max-w-[60%]">{data.handoff_reason}</span>
             </div>
           )}
         </div>
         {data.actions_taken.length > 0 && (
           <details className="text-xs">
-            <summary className="text-gray-400 cursor-pointer">{tc.card_handoff_actions_taken}（{data.actions_taken.length}）</summary>
+            <summary className="text-muted-foreground cursor-pointer">{tc.card_handoff_actions_taken}（{data.actions_taken.length}）</summary>
             <ul className="mt-1 space-y-0.5 pl-2">
-              {data.actions_taken.map((a, i) => <li key={i} className="text-gray-600">· {a}</li>)}
+              {data.actions_taken.map((a, i) => <li key={i} className="text-muted-foreground">· {a}</li>)}
             </ul>
           </details>
         )}
         {data.risk_flags.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {data.risk_flags.map((f, i) => (
-              <span key={i} className="text-[10px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full">{f}</span>
+              <span key={i} className="text-[10px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded-full">{f}</span>
             ))}
           </div>
         )}

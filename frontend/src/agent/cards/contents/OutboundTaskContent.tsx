@@ -11,8 +11,8 @@ import type { OutboundTaskData as OutboundTaskCardData } from '../../../chat/out
 function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex justify-between text-xs py-0.5">
-      <span className="text-gray-400">{label}</span>
-      <span className={highlight ? 'font-semibold text-gray-800' : 'text-gray-600'}>{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className={highlight ? 'font-semibold text-foreground' : 'text-muted-foreground'}>{value}</span>
     </div>
   );
 }
@@ -39,7 +39,7 @@ export const OutboundTaskContent = memo(function OutboundTaskContent({ data, lan
     return (
       <div className="flex flex-col items-center justify-center py-6 space-y-1.5 text-center select-none px-3">
         <span className="text-2xl opacity-30">📋</span>
-        <p className="text-[11px] text-gray-400 leading-relaxed">{T[lang].card_outbound_empty}</p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">{T[lang].card_outbound_empty}</p>
       </div>
     );
   }

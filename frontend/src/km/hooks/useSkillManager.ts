@@ -451,27 +451,74 @@ export function useSkillManager() {
           throw new Error(errData.error ?? `HTTP ${res.status}`);
         }
 
-        const data = await res.json() as {
-          session_id: string;
-          reply: string;
-          phase: Phase;
-          draft: Draft | null;
-          thinking?: string | null;
-        };
+        const contentType = res.headers.get('content-type') ?? '';
 
-        setSessionId(data.session_id);
-        setPhase(data.phase);
+        // ── 流式模式（SSE）──
+        if (contentType.includes('text/event-stream') && res.body) {
+          const msgId = Date.now();
+          setMessages((prev) => [...prev, { id: msgId, role: 'assistant', text: '', thinking: '' }]);
 
-        // 显示 AI 回复
-        setMessages((prev) => [
-          ...prev,
-          { id: Date.now(), role: 'assistant', text: data.reply, thinking: data.thinking },
-        ]);
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
 
-        // 如果有 draft，实时更新右侧编辑器
-        if (data.draft) {
-          setDraft(data.draft);
-          applyDraftToEditor(data.draft);
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop() ?? '';
+
+            for (const part of parts) {
+              const line = part.trim();
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'thinking') {
+                  setMessages((prev) => prev.map((m) =>
+                    m.id === msgId ? { ...m, thinking: (m.thinking ?? '') + data.text } : m
+                  ));
+                } else if (data.type === 'done') {
+                  setSessionId(data.session_id);
+                  setPhase(data.phase);
+                  setMessages((prev) => prev.map((m) =>
+                    m.id === msgId ? { ...m, text: data.reply, thinking: data.thinking } : m
+                  ));
+                  if (data.draft) {
+                    setDraft(data.draft);
+                    applyDraftToEditor(data.draft);
+                  }
+                } else if (data.type === 'error') {
+                  setMessages((prev) => prev.map((m) =>
+                    m.id === msgId ? { ...m, text: `请求失败: ${data.error}。请重试。`, thinking: undefined } : m
+                  ));
+                }
+              } catch { /* 忽略解析错误 */ }
+            }
+          }
+        } else {
+          // ── 非流式模式（JSON）──
+          const data = await res.json() as {
+            session_id: string;
+            reply: string;
+            phase: Phase;
+            draft: Draft | null;
+            thinking?: string | null;
+          };
+
+          setSessionId(data.session_id);
+          setPhase(data.phase);
+
+          setMessages((prev) => [
+            ...prev,
+            { id: Date.now(), role: 'assistant', text: data.reply, thinking: data.thinking },
+          ]);
+
+          if (data.draft) {
+            setDraft(data.draft);
+            applyDraftToEditor(data.draft);
+          }
         }
       } catch (err: any) {
         setMessages((prev) => [

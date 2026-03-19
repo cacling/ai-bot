@@ -45,30 +45,30 @@ export const CardShell = memo(function CardShell({
       onDragOver={onDragOver}
       onDrop={onDrop}
       className={[
-        'flex flex-col rounded-2xl shadow-md border border-gray-200 overflow-hidden bg-white transition-all',
+        'flex flex-col rounded-2xl shadow-md border border-border overflow-hidden bg-background transition-all',
         isDragging ? 'opacity-40 scale-[0.98]' : '',
-        isDragOver ? 'ring-2 ring-blue-400 ring-offset-1' : '',
+        isDragOver ? 'ring-2 ring-ring ring-offset-1' : '',
       ].join(' ')}
     >
       {/* Header — only this bar is draggable */}
       <div
         draggable
         onDragStart={onDragStart}
-        className="flex items-center px-3 py-1.5 flex-shrink-0 cursor-grab active:cursor-grabbing bg-gray-50 border-b border-gray-200"
+        className="flex items-center px-3 py-1.5 flex-shrink-0 cursor-grab active:cursor-grabbing bg-muted border-b border-border"
       >
-        <GripVertical size={12} className="text-gray-300 hover:text-gray-500 mr-1.5 flex-shrink-0" />
-        <span className="text-[11px] font-medium text-gray-600 flex-1 truncate">{title}</span>
+        <GripVertical size={12} className="text-muted-foreground/50 hover:text-muted-foreground mr-1.5 flex-shrink-0" />
+        <span className="text-[11px] font-medium text-muted-foreground flex-1 truncate">{title}</span>
 
         <button
           onClick={onToggleCollapse}
-          className="text-gray-400 hover:text-gray-600 transition ml-1 flex-shrink-0"
+          className="text-muted-foreground hover:text-foreground transition ml-1 flex-shrink-0"
           title={state.isCollapsed ? '展开' : '收起'}
         >
           {state.isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
         </button>
         <button
           onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 transition ml-1 flex-shrink-0"
+          className="text-muted-foreground hover:text-foreground transition ml-1 flex-shrink-0"
           title="关闭"
         >
           <X size={13} />

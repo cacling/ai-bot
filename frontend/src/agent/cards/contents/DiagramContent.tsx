@@ -21,12 +21,12 @@ export const DiagramContent = memo(function DiagramContent({ data, lang }: { dat
   if (!diagram) {
     return (
       <div className="flex flex-col items-center justify-center py-10 space-y-3 text-center select-none">
-        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-          <GitFork size={22} className="text-gray-300" />
+        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+          <GitFork size={22} className="text-muted-foreground/50" />
         </div>
         <div className="space-y-0.5">
-          <p className="text-xs font-medium text-gray-400">{t.diagram_empty_title}</p>
-          <p className="text-[11px] text-gray-300 whitespace-pre-line">{t.diagram_empty_subtitle}</p>
+          <p className="text-xs font-medium text-muted-foreground">{t.diagram_empty_title}</p>
+          <p className="text-[11px] text-muted-foreground/50 whitespace-pre-line">{t.diagram_empty_subtitle}</p>
         </div>
       </div>
     );
@@ -41,7 +41,7 @@ export const DiagramContent = memo(function DiagramContent({ data, lang }: { dat
         loadingText={t.diagram_loading}
         errorText={t.diagram_error}
       />
-      <p className="text-[10px] text-gray-400 text-center mt-2">
+      <p className="text-[10px] text-muted-foreground text-center mt-2">
         {t.diagram_footer_active} <span className="font-mono">{diagram.skill_name}</span>
       </p>
     </div>

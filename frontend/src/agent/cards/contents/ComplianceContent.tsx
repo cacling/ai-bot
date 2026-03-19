@@ -27,7 +27,7 @@ export const ComplianceContent = memo(function ComplianceContent({ data, lang }:
   if (!alerts || alerts.length === 0) {
     return (
       <div className="px-4 py-6 text-center">
-        <span className="text-[11px] text-gray-400">
+        <span className="text-[11px] text-muted-foreground">
           {lang === 'zh' ? '暂无合规告警' : 'No compliance alerts'}
         </span>
       </div>
@@ -37,26 +37,26 @@ export const ComplianceContent = memo(function ComplianceContent({ data, lang }:
   return (
     <div className="px-3 py-2 space-y-2 max-h-48 overflow-y-auto">
       {alerts.slice(-10).reverse().map((alert, i) => (
-        <div key={i} className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs">
+        <div key={i} className="p-2.5 rounded-lg bg-destructive/10 border border-destructive/20 text-xs">
           {/* 第一行：来源 + 关键词标签 + 时间 */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
-            <span className="font-medium text-red-700 flex-shrink-0">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive flex-shrink-0" />
+            <span className="font-medium text-destructive flex-shrink-0">
               {sourceLabel[lang]?.[alert.source] ?? alert.source}
             </span>
             {alert.keywords.map((kw, j) => (
-              <span key={j} className="px-1.5 py-0.5 rounded bg-red-100 text-red-600 font-mono text-[10px]">
+              <span key={j} className="px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-mono text-[10px]">
                 {kw}
               </span>
             ))}
             {alert.ts && (
-              <span className="text-gray-400 ml-auto flex-shrink-0 text-[10px]">
+              <span className="text-muted-foreground ml-auto flex-shrink-0 text-[10px]">
                 {new Date(alert.ts).toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
           </div>
           {/* 第二行：原文 */}
-          <div className="text-gray-500 mt-1 break-all">{alert.text}</div>
+          <div className="text-muted-foreground mt-1 break-all">{alert.text}</div>
         </div>
       ))}
     </div>

@@ -18,10 +18,10 @@ interface EmotionData {
 
 // Map color → position % along the bar and label color class
 const colorConfig: Record<string, { position: number; textClass: string; shadowColor: string }> = {
-  green:  { position: 12, textClass: 'text-green-600',  shadowColor: '#22c55e' },
-  amber:  { position: 42, textClass: 'text-amber-500',  shadowColor: '#f59e0b' },
-  orange: { position: 68, textClass: 'text-orange-500', shadowColor: '#f97316' },
-  red:    { position: 88, textClass: 'text-red-500',    shadowColor: '#ef4444' },
+  green:  { position: 12, textClass: 'text-primary',            shadowColor: '#22c55e' },
+  amber:  { position: 42, textClass: 'text-muted-foreground',   shadowColor: '#f59e0b' },
+  orange: { position: 68, textClass: 'text-muted-foreground',   shadowColor: '#f97316' },
+  red:    { position: 88, textClass: 'text-destructive',        shadowColor: '#ef4444' },
 };
 
 export const EmotionContent = memo(function EmotionContent({ data, lang }: { data: unknown; lang: Lang }) {
@@ -41,7 +41,7 @@ export const EmotionContent = memo(function EmotionContent({ data, lang }: { dat
       <div className="relative h-2 rounded-full bg-gradient-to-r from-green-400 via-yellow-400 via-orange-400 to-red-500">
         {cfg && (
           <div
-            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-white"
+            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-background border-2 border-background"
             style={{
               left: `${cfg.position}%`,
               boxShadow: `0 0 0 3px ${cfg.shadowColor}`,
@@ -58,7 +58,7 @@ export const EmotionContent = memo(function EmotionContent({ data, lang }: { dat
             {emotion.emoji} {tc.emotion_labels[emotion.label] ?? emotion.label}
           </span>
         ) : (
-          <span className="text-[11px] text-gray-400">{tc.card_emotion_empty}</span>
+          <span className="text-[11px] text-muted-foreground">{tc.card_emotion_empty}</span>
         )}
       </div>
     </div>

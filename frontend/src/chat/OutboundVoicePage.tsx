@@ -11,6 +11,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Square, Phone, Headset } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { nowTime } from '../App';
 import type { ActiveDiagram } from '../shared/DiagramPanel';
 import { T, type Lang } from '../i18n';
@@ -218,12 +219,12 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
   const isInCall = connState !== 'idle' && connState !== 'connecting' && connState !== 'transferred' && connState !== 'ended';
 
   const statusColor =
-    connState === 'ringing'    ? 'text-blue-500' :
-    connState === 'listening'  ? 'text-red-500'  :
-    connState === 'responding' ? 'text-green-600':
-    connState === 'thinking'   ? 'text-blue-500' :
-    connState === 'transferred'? 'text-orange-500':
-    'text-gray-500';
+    connState === 'ringing'    ? 'text-primary' :
+    connState === 'listening'  ? 'text-destructive'  :
+    connState === 'responding' ? 'text-primary':
+    connState === 'thinking'   ? 'text-primary' :
+    connState === 'transferred'? 'text-muted-foreground':
+    'text-muted-foreground';
 
   // ── 渲染 ──────────────────────────────────────────────────────────────────
   return (
@@ -231,20 +232,20 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
 
 
 
-    <div className="flex-1 min-h-0 bg-[#F4F5F7] rounded-3xl shadow-xl overflow-hidden flex flex-col border border-gray-200">
+    <div className="flex-1 min-h-0 bg-muted rounded-3xl shadow-xl overflow-hidden flex flex-col border border-border">
 
       {/* Header — 仅保留标题 */}
-      <div className="bg-gradient-to-r from-violet-600 to-violet-500 px-4 py-3 flex items-center rounded-b-xl shadow-sm z-10 relative flex-shrink-0">
-        <Phone size={18} className="text-white mr-2 flex-shrink-0" />
-        <h1 className="text-sm font-semibold text-white tracking-wide">{t.outbound_bot_name}</h1>
+      <div className="bg-primary px-4 py-3 flex items-center rounded-b-xl shadow-sm z-10 relative flex-shrink-0">
+        <Phone size={18} className="text-primary-foreground mr-2 flex-shrink-0" />
+        <h1 className="text-sm font-semibold text-primary-foreground tracking-wide">{t.outbound_bot_name}</h1>
       </div>
 
       {/* 对话记录 */}
       <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-2">
-            <div className="w-12 h-12 bg-violet-100 rounded-full flex items-center justify-center">
-              <Phone size={24} className="text-violet-500" />
+            <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+              <Phone size={24} className="text-primary" />
             </div>
             <p className={`text-sm font-medium ${statusColor}`}>{t.outbound_state[connState]}</p>
           </div>
@@ -252,7 +253,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
           <>
             {messages.length > 0 && (
               <div className="flex justify-center mb-6">
-                <span className="text-xs text-gray-400 bg-gray-200/50 px-3 py-1 rounded-full">
+                <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
                   {new Date().toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { month: 'long', day: 'numeric' })}
                 </span>
               </div>
@@ -262,7 +263,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
               <div key={msg.id} className={`flex w-full mb-4 ${msg.role === 'bot' ? 'justify-start' : 'justify-end'}`}>
                 {msg.role === 'bot' && (
                   <div className="flex-shrink-0 mr-3">
-                    <div className="w-8 h-8 bg-violet-100 text-violet-600 rounded-full flex items-center justify-center">
+                    <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
                       <Phone size={16} />
                     </div>
                   </div>
@@ -270,22 +271,22 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
                 <div className={`flex flex-col ${msg.role === 'bot' ? 'items-start' : 'items-end'} max-w-[82%]`}>
                   <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                     msg.role === 'bot'
-                      ? 'bg-white text-gray-800 rounded-tl-none shadow-sm border border-gray-100'
-                      : 'bg-violet-600 text-white rounded-tr-none shadow-sm'
+                      ? 'bg-background text-foreground rounded-tl-none shadow-sm border border-border'
+                      : 'bg-primary text-primary-foreground rounded-tr-none shadow-sm'
                   }`}>
                     {msg.role === 'bot' ? (
                       <div className="markdown-body">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                       </div>
                     ) : (
-                      <span className={msg.text === '...' ? 'text-violet-200 italic' : ''}>{msg.text}</span>
+                      <span className={msg.text === '...' ? 'text-primary-foreground/50 italic' : ''}>{msg.text}</span>
                     )}
                   </div>
-                  <span className="text-[11px] text-gray-400 mt-1 px-1">{msg.time}</span>
+                  <span className="text-[11px] text-muted-foreground mt-1 px-1">{msg.time}</span>
                 </div>
                 {msg.role === 'user' && (
                   <div className="flex-shrink-0 ml-3">
-                    <div className="w-8 h-8 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center text-xs font-medium">
+                    <div className="w-8 h-8 bg-muted text-muted-foreground rounded-full flex items-center justify-center text-xs font-medium">
                       客
                     </div>
                   </div>
@@ -296,30 +297,30 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
             {/* 思考中 */}
             {connState === 'thinking' && (
               <div className="flex w-full mb-4 justify-start items-center space-x-3">
-                <div className="w-8 h-8 bg-violet-100 text-violet-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center flex-shrink-0">
                   <Phone size={16} />
                 </div>
-                <div className="bg-white px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center space-x-1.5 border border-gray-100">
-                  <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="bg-background px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center space-x-1.5 border border-border">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
               </div>
             )}
 
             {/* 转人工状态提示 */}
             {handoffCtx && (
-              <div className="mx-1 mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-50 border border-orange-200 text-sm text-orange-700">
+              <div className="mx-1 mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent border border-border text-sm text-muted-foreground">
                 <Headset size={15} className="flex-shrink-0" />
                 <span className="font-medium">{t.outbound_handoff_title}</span>
-                <span className="text-orange-400 text-xs">
+                <span className="text-muted-foreground text-xs">
                   · {t.outbound_transfer_reason[handoffCtx.transfer_reason] ?? handoffCtx.transfer_reason}
                 </span>
               </div>
             )}
 
             {errorMsg && (
-              <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg text-center mb-2">{errorMsg}</p>
+              <p className="text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-lg text-center mb-2">{errorMsg}</p>
             )}
             <div ref={messagesEndRef} />
           </>
@@ -327,7 +328,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
       </div>
 
       {/* 控制区 */}
-      <div className="bg-white border-t border-gray-100 px-6 pt-3 pb-4 flex flex-col items-center space-y-2">
+      <div className="bg-background border-t border-border px-6 pt-3 pb-4 flex flex-col items-center space-y-2">
         <p className={`text-sm font-medium transition-colors ${statusColor}`}>
           {t.outbound_state[connState]}
         </p>
@@ -335,50 +336,52 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
         <div className="relative flex items-center justify-center">
           {connState === 'ringing' && (
             <>
-              <span className="absolute w-28 h-28 rounded-full bg-violet-400 opacity-15 animate-ping" />
-              <span className="absolute w-20 h-20 rounded-full bg-violet-300 opacity-20 animate-ping" style={{ animationDelay: '0.2s' }} />
+              <span className="absolute w-28 h-28 rounded-full bg-primary opacity-15 animate-ping" />
+              <span className="absolute w-20 h-20 rounded-full bg-primary opacity-20 animate-ping" style={{ animationDelay: '0.2s' }} />
             </>
           )}
           {connState === 'responding' && (
-            <span className="absolute w-24 h-24 rounded-full bg-green-400 opacity-15 animate-ping" />
+            <span className="absolute w-24 h-24 rounded-full bg-primary opacity-15 animate-ping" />
           )}
           {connState === 'listening' && (
-            <span className="absolute w-20 h-20 rounded-full bg-red-300 opacity-15 animate-pulse" />
+            <span className="absolute w-20 h-20 rounded-full bg-destructive opacity-15 animate-pulse" />
           )}
 
           {connState === 'idle' ? (
-            <button
+            <Button
               onClick={startCall}
-              className="relative w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 bg-violet-600 hover:bg-violet-700 shadow-violet-200 text-white"
+              className="relative w-16 h-16 rounded-full shadow-lg transition-all duration-200"
             >
               <Phone size={26} />
-            </button>
+            </Button>
           ) : connState === 'connecting' ? (
-            <button disabled className="relative w-16 h-16 rounded-full flex items-center justify-center shadow-lg bg-gray-300 text-white cursor-not-allowed">
-              <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            </button>
+            <Button disabled className="relative w-16 h-16 rounded-full shadow-lg bg-muted text-muted-foreground cursor-not-allowed">
+              <div className="w-6 h-6 border-2 border-background border-t-transparent rounded-full animate-spin" />
+            </Button>
           ) : connState === 'transferred' ? (
-            <button
+            <Button
               onClick={() => { disconnect(); setConnState('ended'); }}
-              className="relative w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 bg-red-500 hover:bg-red-600 shadow-red-200 text-white"
+              variant="destructive"
+              className="relative w-16 h-16 rounded-full shadow-lg transition-all duration-200 bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              <Square size={22} fill="white" />
-            </button>
+              <Square size={22} fill="currentColor" />
+            </Button>
           ) : connState === 'ended' ? (
-            <button disabled className="relative w-16 h-16 rounded-full flex items-center justify-center shadow-lg bg-gray-300 text-white cursor-not-allowed">
+            <Button disabled className="relative w-16 h-16 rounded-full shadow-lg bg-muted text-muted-foreground cursor-not-allowed">
               <Phone size={26} />
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               onClick={() => { disconnect(); setConnState('ended'); }}
-              className="relative w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 bg-red-500 hover:bg-red-600 shadow-red-200 text-white"
+              variant="destructive"
+              className="relative w-16 h-16 rounded-full shadow-lg transition-all duration-200 bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              <Square size={22} fill="white" />
-            </button>
+              <Square size={22} fill="currentColor" />
+            </Button>
           )}
         </div>
 
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-muted-foreground">
           {connState === 'idle'
             ? t.outbound_hint_idle
             : isInCall || connState === 'transferred'

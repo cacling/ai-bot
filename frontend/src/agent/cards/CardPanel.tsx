@@ -112,7 +112,7 @@ export const CardPanel = memo(function CardPanel({ cards, lang, onUpdate }: Prop
               <button
                 key={state.id}
                 onClick={() => reopenCard(state.id)}
-                className="flex items-center gap-1 px-2 py-1 rounded-full bg-white border border-gray-200 shadow-sm text-[11px] text-gray-500 hover:text-gray-700 hover:border-gray-300 transition"
+                className="flex items-center gap-1 px-2 py-1 rounded-full bg-background border border-border shadow-sm text-[11px] text-muted-foreground hover:text-foreground hover:border-border transition"
               >
                 <def.Icon size={11} />
                 <span>{def.title[lang]}</span>
@@ -124,7 +124,7 @@ export const CardPanel = memo(function CardPanel({ cards, lang, onUpdate }: Prop
 
       {/* Empty state when all cards closed */}
       {visible.length === 0 && closed.length === 0 && (
-        <div className="text-center text-xs text-gray-400 py-8">暂无卡片</div>
+        <div className="text-center text-xs text-muted-foreground py-8">暂无卡片</div>
       )}
     </div>
   );

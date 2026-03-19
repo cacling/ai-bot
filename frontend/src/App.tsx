@@ -9,6 +9,7 @@ import {
   Smile,
   ChevronRight,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { VoiceChatPage } from './chat/VoiceChatPage';
 import { OutboundVoicePage, type TaskType } from './chat/OutboundVoicePage';
 import { T, type Lang } from './i18n';
@@ -296,7 +297,7 @@ export default function App() {
       <div className={`flex w-full mb-4 ${isBot ? 'justify-start' : 'justify-end'}`}>
         {isBot && (
           <div className="flex-shrink-0 mr-3">
-            <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
+            <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
               <Bot size={18} />
             </div>
           </div>
@@ -311,8 +312,8 @@ export default function App() {
                 <div
                   className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                     isBot
-                      ? 'bg-white text-gray-800 rounded-tl-none shadow-sm border border-gray-100'
-                      : 'bg-blue-600 text-white rounded-tr-none shadow-sm'
+                      ? 'bg-background text-foreground rounded-tl-none shadow-sm border border-border'
+                      : 'bg-primary text-primary-foreground rounded-tr-none shadow-sm'
                   }`}
                 >
                   {isBot ? (
@@ -328,10 +329,10 @@ export default function App() {
                   <CardMessage card={msg.card} lang={lang} />
                 </div>
               )}
-              <span className="text-[11px] text-gray-400 mt-1 px-1">
+              <span className="text-[11px] text-muted-foreground mt-1 px-1">
                 {msg.time}
                 {msg.sender === 'bot' && msg._ms != null && (
-                  <span className="ml-1.5 text-gray-300">· {(msg._ms / 1000).toFixed(1)}s</span>
+                  <span className="ml-1.5 text-muted-foreground/60">· {(msg._ms / 1000).toFixed(1)}s</span>
                 )}
               </span>
             </div>
@@ -339,19 +340,20 @@ export default function App() {
 
           {/* 快捷选项卡片 */}
           {msg.type === 'faq' && (
-            <div className="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 w-full mb-1">
-              <p className="text-sm text-gray-500 mb-2 font-medium">{t.chat_faq_hint}</p>
+            <div className="bg-background p-3 rounded-2xl rounded-tl-none shadow-sm border border-border w-full mb-1">
+              <p className="text-sm text-muted-foreground mb-2 font-medium">{t.chat_faq_hint}</p>
               <div className="space-y-2">
                 {msg.options.map((opt, idx) => (
-                  <button
+                  <Button
                     key={idx}
+                    variant="outline"
                     onClick={() => handleSend(opt)}
                     disabled={isTyping}
-                    className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg flex items-center justify-between transition-colors border border-blue-50 disabled:opacity-50"
+                    className="w-full justify-between text-left px-3 py-2 text-sm text-primary hover:bg-accent rounded-lg h-auto"
                   >
                     <span>{opt}</span>
                     <ChevronRight size={14} />
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -360,7 +362,7 @@ export default function App() {
 
         {!isBot && (
           <div className="flex-shrink-0 ml-3">
-            <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center">
+            <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
               <User size={18} />
             </div>
           </div>
@@ -371,15 +373,15 @@ export default function App() {
 
   // ── 渲染 ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-gray-100 font-sans text-gray-800">
+    <div className="flex flex-col h-screen overflow-hidden bg-muted font-sans text-foreground">
       {/* Tab Bar */}
-      <nav className="bg-white border-b border-gray-200 shadow-sm flex-shrink-0">
+      <nav className="bg-background border-b border-border shadow-sm flex-shrink-0">
         <div className="max-w-screen-xl mx-auto px-4 flex items-center h-12">
           {/* Lang switcher — left side */}
           <select
             value={lang}
             onChange={e => handleLangChange(e.target.value as Lang)}
-            className="text-sm text-gray-500 bg-transparent outline-none cursor-pointer"
+            className="text-sm text-muted-foreground bg-transparent outline-none cursor-pointer"
           >
             <option value="zh">中文</option>
             <option value="en">EN</option>
@@ -391,7 +393,7 @@ export default function App() {
               value={chatUserPhone}
               onChange={e => handleChatUserChange(e.target.value)}
               disabled={isTyping}
-              className="ml-3 text-sm text-gray-500 bg-transparent outline-none cursor-pointer"
+              className="ml-3 text-sm text-muted-foreground bg-transparent outline-none cursor-pointer"
             >
               {inboundPersonas.map(p => (
                 <option key={p.id} value={(p.context.phone as string) ?? ''}>{(p.context.name as string) ?? p.label}</option>
@@ -404,7 +406,7 @@ export default function App() {
                 if (outboundTaskType === 'collection') setCollectionId(e.target.value);
                 else setMarketingId(e.target.value);
               }}
-              className="ml-3 text-sm text-gray-500 bg-transparent outline-none cursor-pointer"
+              className="ml-3 text-sm text-muted-foreground bg-transparent outline-none cursor-pointer"
             >
               {outboundTasks.filter(t => t.task_type === outboundTaskType).map(t => (
                 <option key={t.id} value={t.id}>{(t.data[lang]?.customer_name ?? t.id) as string}</option>
@@ -413,46 +415,48 @@ export default function App() {
           )}
 
           {/* Tab buttons — right side */}
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 ml-auto">
-            <button
+          <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 ml-auto">
+            <Button
+              variant={currentTab === 'chat' ? 'secondary' : 'ghost'}
+              size="sm"
               onClick={() => setCurrentTab('chat')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                currentTab === 'chat' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >{t.tab_chat}</button>
-            <button
+              className={currentTab === 'chat' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}
+            >{t.tab_chat}</Button>
+            <Button
+              variant={currentTab === 'voice' ? 'secondary' : 'ghost'}
+              size="sm"
               onClick={() => setCurrentTab('voice')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                currentTab === 'voice' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >{t.tab_voice}</button>
-            <button
+              className={currentTab === 'voice' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}
+            >{t.tab_voice}</Button>
+            <Button
+              variant={currentTab === 'outbound' ? 'secondary' : 'ghost'}
+              size="sm"
               onClick={() => setCurrentTab('outbound')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                currentTab === 'outbound' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >{t.tab_outbound}</button>
+              className={currentTab === 'outbound' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}
+            >{t.tab_outbound}</Button>
           </div>
         </div>
 
         {/* 二级菜单 — 语音外呼场景切换 */}
         {currentTab === 'outbound' && (
-          <div className="border-t border-gray-100 px-4 flex items-center justify-end h-9">
+          <div className="border-t border-border px-4 flex items-center justify-end h-9">
             {([
               { key: 'collection',    label: t.outbound_task_collection },
               { key: 'marketing',     label: t.outbound_task_marketing  },
             ] as { key: TaskType; label: string }[]).map(item => (
-              <button
+              <Button
                 key={item.key}
+                variant="ghost"
+                size="sm"
                 onClick={() => setOutboundTaskType(item.key)}
-                className={`px-4 h-full text-xs font-medium border-b-2 transition-colors ${
+                className={`px-4 h-full rounded-none border-b-2 ${
                   outboundTaskType === item.key
-                    ? 'border-violet-600 text-violet-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
                 }`}
               >
                 {item.label}
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -487,18 +491,18 @@ export default function App() {
           <div className="flex flex-col w-full max-w-md flex-shrink-0 gap-2">
 
             {/* Chat dialog */}
-            <div className="flex-1 bg-[#F4F5F7] rounded-3xl shadow-xl overflow-hidden flex flex-col border border-gray-200 min-h-0">
+            <div className="flex-1 bg-muted rounded-3xl shadow-xl overflow-hidden flex flex-col border border-border min-h-0">
 
             {/* Header — 仅保留标题 */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-3 flex items-center rounded-b-xl shadow-sm z-10 relative flex-shrink-0">
-              <Bot size={18} className="text-white mr-2 flex-shrink-0" />
-              <h1 className="text-sm font-semibold text-white tracking-wide">{t.chat_bot_name}</h1>
+            <div className="bg-primary px-4 py-3 flex items-center rounded-b-xl shadow-sm z-10 relative flex-shrink-0">
+              <Bot size={18} className="text-primary-foreground mr-2 flex-shrink-0" />
+              <h1 className="text-sm font-semibold text-primary-foreground tracking-wide">{t.chat_bot_name}</h1>
             </div>
 
             {/* 消息区域 */}
             <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
               <div className="flex justify-center mb-6">
-                <span className="text-xs text-gray-400 bg-gray-200/50 px-3 py-1 rounded-full">
+                <span className="text-xs text-muted-foreground bg-muted/50 px-3 py-1 rounded-full">
                   {new Date().toLocaleDateString(t.chat_date_locale, { month: 'long', day: 'numeric' })}
                 </span>
               </div>
@@ -510,13 +514,13 @@ export default function App() {
               {/* 打字指示器 */}
               {isTyping && (
                 <div className="flex w-full mb-4 justify-start items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center flex-shrink-0">
                     <Bot size={18} />
                   </div>
-                  <div className="bg-white px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center space-x-1.5 border border-gray-100">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div className="bg-background px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex items-center space-x-1.5 border border-border">
+                    <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                   </div>
                 </div>
               )}
@@ -524,29 +528,31 @@ export default function App() {
             </div>
 
             {/* 快捷问题栏 */}
-            <div className="bg-white/60 backdrop-blur-md border-t border-gray-100 px-3 py-2.5">
+            <div className="bg-background/60 backdrop-blur-md border-t border-border px-3 py-2.5">
               <div className="flex items-center space-x-2 overflow-x-auto scrollbar-hide pb-1">
                 {t.chat_faq.map((faq, idx) => (
-                  <button
+                  <Button
                     key={idx}
+                    variant="outline"
+                    size="sm"
                     onClick={() => handleSend(faq)}
                     disabled={isTyping}
-                    className="whitespace-nowrap px-3.5 py-1.5 bg-white border border-gray-200 text-gray-600 text-xs rounded-full shadow-sm hover:border-blue-300 hover:text-blue-600 transition disabled:opacity-50"
+                    className="whitespace-nowrap px-3.5 py-1.5 text-muted-foreground text-xs rounded-full shadow-sm hover:border-primary hover:text-primary"
                   >
                     {faq}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
 
             {/* 输入区域 */}
-            <div className="bg-white p-3 pt-2 pb-5 sm:pb-3 border-t border-gray-100">
+            <div className="bg-background p-3 pt-2 pb-5 sm:pb-3 border-t border-border">
               <div className="flex items-end space-x-2">
-                <button className="p-2 text-gray-400 hover:text-blue-600 transition flex-shrink-0 mb-1">
+                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary flex-shrink-0 mb-1">
                   <PlusCircle size={24} strokeWidth={1.5} />
-                </button>
+                </Button>
 
-                <div className="flex-1 bg-gray-50 border border-gray-200 rounded-2xl flex items-end relative overflow-hidden focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400 transition-all">
+                <div className="flex-1 bg-muted border border-border rounded-2xl flex items-end relative overflow-hidden focus-within:border-ring focus-within:ring-1 focus-within:ring-ring transition-all">
                   <textarea
                     ref={textareaRef}
                     value={inputValue}
@@ -554,25 +560,27 @@ export default function App() {
                     onKeyDown={handleKeyDown}
                     placeholder={t.chat_placeholder}
                     disabled={isTyping}
-                    className="w-full bg-transparent max-h-24 min-h-[40px] px-3 py-2.5 outline-none text-sm text-gray-800 resize-none scrollbar-hide disabled:opacity-60"
+                    className="w-full bg-transparent max-h-24 min-h-[40px] px-3 py-2.5 outline-none text-sm text-foreground resize-none scrollbar-hide disabled:opacity-60"
                     rows={1}
                   />
-                  <button className="p-2 text-gray-400 hover:text-gray-600 transition flex-shrink-0 mb-0.5">
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground flex-shrink-0 mb-0.5">
                     <Smile size={20} strokeWidth={1.5} />
-                  </button>
+                  </Button>
                 </div>
 
-                <button
+                <Button
+                  variant={inputValue.trim() && !isTyping ? 'default' : 'secondary'}
+                  size="icon"
                   onClick={() => handleSend()}
                   disabled={!inputValue.trim() || isTyping}
-                  className={`p-2.5 rounded-full flex-shrink-0 mb-0.5 transition-all shadow-sm ${
+                  className={`rounded-full flex-shrink-0 mb-0.5 shadow-sm ${
                     inputValue.trim() && !isTyping
-                      ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      ? ''
+                      : 'text-muted-foreground cursor-not-allowed'
                   }`}
                 >
                   <Send size={20} />
-                </button>
+                </Button>
               </div>
             </div>
 

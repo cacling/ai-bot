@@ -741,13 +741,15 @@ export function SkillManagerPage() {
                   </div>
                   <div className="max-w-[85%] flex flex-col gap-1">
                     {msg.role === 'assistant' && msg.thinking && (
-                      <div className="text-[10px] italic text-muted-foreground bg-muted border border-border/50 rounded-lg px-2.5 py-1.5 max-h-[80px] overflow-y-auto whitespace-pre-wrap">
+                      <div className="text-[10px] italic text-muted-foreground bg-muted border border-border/50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
                         {msg.thinking}
                       </div>
                     )}
-                    <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
-                      <InlineMarkdown text={msg.text} />
-                    </div>
+                    {msg.text && (
+                      <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
+                        <InlineMarkdown text={msg.text} />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -763,6 +765,14 @@ export function SkillManagerPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
+            {canPublish && (
+              <div className="px-3 pt-2 pb-1 bg-accent/50 border-t border-border flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">技能草稿已就绪</span>
+                <Button size="sm" onClick={publishSkill} className="text-xs h-7">
+                  保存技能
+                </Button>
+              </div>
+            )}
             <div className="p-3 bg-background border-t border-border">
               <form onSubmit={handleSubmit}>
                 <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
