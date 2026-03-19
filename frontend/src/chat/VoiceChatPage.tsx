@@ -15,7 +15,7 @@ import { Mic, Square, Bot, User, Headset } from 'lucide-react';
 import { nowTime } from '../App';
 import type { ActiveDiagram } from '../shared/DiagramPanel';
 import { T, type Lang } from '../i18n';
-import type { MockUser } from './mockUsers';
+import type { TestPersona } from './testPersonas';
 import { broadcastUserSwitch } from './userSync';
 import { useVoiceEngine, type VoiceMessage, type HandoffContext, type EmotionResult } from './hooks/useVoiceEngine';
 
@@ -33,12 +33,12 @@ const EMOTION_CLASS: Record<string, string> = {
 interface VoiceChatPageProps {
   onDiagramUpdate?: (diagram: ActiveDiagram) => void;
   lang?: Lang;
-  users?: MockUser[];
+  personas?: TestPersona[];
   selectedPhone?: string;
   onPhoneChange?: (phone: string) => void;
 }
 
-export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], selectedPhone, onPhoneChange }: VoiceChatPageProps = {}) {
+export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', personas = [], selectedPhone, onPhoneChange }: VoiceChatPageProps = {}) {
   const t = T[lang];
 
   // ── 共享 Hook ──
@@ -56,17 +56,17 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
   } = useVoiceEngine('disconnected');
 
   // ── 页面特有状态 ──
-  const [selectedUserPhone, setSelectedUserPhone] = useState<string>(selectedPhone ?? users[0]?.phone ?? '');
+  const [selectedUserPhone, setSelectedUserPhone] = useState<string>(selectedPhone ?? (personas[0]?.context.phone as string) ?? '');
   const transferredRef    = useRef(false);
   const needResumeRef     = useRef(false);
   const prevLangRef       = useRef(lang);
 
-  // 当 users 列表从空变为有值时，设定默认选中用户
+  // 当 personas 列表从空变为有值时，设定默认选中用户
   useEffect(() => {
-    if (users.length > 0 && !selectedUserPhone) {
-      setSelectedUserPhone(users[0].phone);
+    if (personas.length > 0 && !selectedUserPhone) {
+      setSelectedUserPhone((personas[0].context.phone as string) ?? '');
     }
-  }, [users, selectedUserPhone]);
+  }, [personas, selectedUserPhone]);
 
   // 外部 selectedPhone prop 变化时，同步内部状态并重置对话
   useEffect(() => {
@@ -295,7 +295,7 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', users = [], select
     'text-gray-500';
 
   const voiceUserSelectorDisabled = connState !== 'disconnected';
-  const voiceCurrentUser = users.find(u => u.phone === selectedUserPhone) ?? users[0];
+  const voiceCurrentUser = personas.find(p => (p.context.phone as string) === selectedUserPhone) ?? personas[0];
 
   // ── 渲染 ──────────────────────────────────────────────────────────────────
   return (

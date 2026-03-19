@@ -12,7 +12,7 @@ import {
 import { VoiceChatPage } from './chat/VoiceChatPage';
 import { OutboundVoicePage, type TaskType } from './chat/OutboundVoicePage';
 import { T, type Lang } from './i18n';
-import { fetchMockUsers, fetchInboundUsers, type MockUser } from './chat/mockUsers';
+import { fetchTestPersonas, type TestPersona } from './chat/testPersonas';
 import { broadcastUserSwitch } from './chat/userSync';
 import { fetchOutboundTasks, type OutboundTask } from './chat/outboundData';
 import { CardMessage, type CardData } from './chat/CardMessage';
@@ -90,8 +90,8 @@ export default function App() {
   const [marketingId,     setMarketingId]     = useState('M001');
   const [sessionId, setSessionId] = useState<string>(() => crypto.randomUUID());
   const [chatUserPhone, setChatUserPhone] = useState<string>('');
-  const [allUsers, setAllUsers] = useState<MockUser[]>([]);
-  const [inboundUsers, setInboundUsers] = useState<MockUser[]>([]);
+  const [allPersonas, setAllPersonas] = useState<TestPersona[]>([]);
+  const [inboundPersonas, setInboundPersonas] = useState<TestPersona[]>([]);
   const [messages, setMessages] = useState<Message[]>(() => makeInitialMessages('zh'));
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -112,10 +112,10 @@ export default function App() {
 
   // ── 初始加载用户数据 ──────────────────────────────────────────────────────────
   useEffect(() => {
-    fetchMockUsers().then(setAllUsers).catch(console.error);
-    fetchInboundUsers().then(users => {
-      setInboundUsers(users);
-      if (users.length > 0) setChatUserPhone(users[0].phone);
+    fetchTestPersonas(undefined, lang).then(setAllPersonas).catch(console.error);
+    fetchTestPersonas('inbound', lang).then(personas => {
+      setInboundPersonas(personas);
+      if (personas.length > 0) setChatUserPhone((personas[0].context.phone as string) ?? '');
     }).catch(console.error);
     fetchOutboundTasks().then(setOutboundTasks).catch(console.error);
   }, []);
@@ -393,8 +393,8 @@ export default function App() {
               disabled={isTyping}
               className="ml-3 text-sm text-gray-500 bg-transparent outline-none cursor-pointer"
             >
-              {inboundUsers.map(u => (
-                <option key={u.phone} value={u.phone}>{u.name}</option>
+              {inboundPersonas.map(p => (
+                <option key={p.id} value={(p.context.phone as string) ?? ''}>{(p.context.name as string) ?? p.label}</option>
               ))}
             </select>
           ) : (
@@ -461,7 +461,7 @@ export default function App() {
       {/* Voice Page */}
       {currentTab === 'voice' && (
         <div className="flex justify-center flex-1 p-4 gap-4 overflow-hidden">
-          <VoiceChatPage lang={lang} users={inboundUsers} selectedPhone={chatUserPhone} onPhoneChange={handleChatUserChange} />
+          <VoiceChatPage lang={lang} personas={inboundPersonas} selectedPhone={chatUserPhone} onPhoneChange={handleChatUserChange} />
         </div>
       )}
 

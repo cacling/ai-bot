@@ -13,7 +13,7 @@ import {
   bills,
   callbackTasks,
   deviceContexts,
-  mockUsers,
+  testPersonas,
   outboundTasks,
   plans,
   subscriberSubscriptions,
@@ -177,22 +177,31 @@ async function seed() {
     { phone: '13800000003', month: m2, total: 36.0,  plan_fee: 30.0, data_fee: 0, voice_fee: 0, sms_fee: 0, value_added_fee: 5.0, tax: 1.0, status: 'paid' },
   ]).run();
 
-  // ── 6. mock_users ────────────────────────────────────────────────────────────
-  console.log('[seed] 写入 mock_users 数据...');
-  db.delete(mockUsers).run();
-  db.insert(mockUsers).values([
+  // ── 6. test_personas ─────────────────────────────────────────────────────────
+  console.log('[seed] 写入 test_personas 数据...');
+  db.delete(testPersonas).run();
+  db.insert(testPersonas).values([
     // 入呼用户
-    { id: 'U001', phone: '13800000001', name: '张三', plan_zh: '畅享50G套餐 · 50元/月',    plan_en: '50G Data Plan · ¥50/mo',      status: 'active',    tag_zh: '正常用户', tag_en: 'Active',    tag_color: 'bg-green-100 text-green-600',   type: 'inbound'  },
-    { id: 'U002', phone: '13800000002', name: '李四', plan_zh: '无限流量套餐 · 128元/月',  plan_en: 'Unlimited Plan · ¥128/mo',    status: 'active',    tag_zh: 'VIP用户',  tag_en: 'VIP',       tag_color: 'bg-blue-100 text-blue-600',    type: 'inbound'  },
-    { id: 'U003', phone: '13800000003', name: '王五', plan_zh: '基础10G套餐 · 30元/月',    plan_en: '10G Basic Plan · ¥30/mo',     status: 'suspended', tag_zh: '欠费停机', tag_en: 'Suspended', tag_color: 'bg-red-100 text-red-600',      type: 'inbound'  },
+    { id: 'U001', label_zh: '张三 · 畅享50G套餐 · 50元/月', label_en: 'Zhang San · 50G Data Plan · ¥50/mo', category: 'inbound', tag_zh: '正常用户', tag_en: 'Active', tag_color: 'bg-green-100 text-green-600', sort_order: 0,
+      context: JSON.stringify({ phone: '13800000001', name: '张三', plan: '畅享50G套餐', status: 'active' }) },
+    { id: 'U002', label_zh: '李四 · 无限流量套餐 · 128元/月', label_en: 'Li Si · Unlimited Plan · ¥128/mo', category: 'inbound', tag_zh: 'VIP用户', tag_en: 'VIP', tag_color: 'bg-blue-100 text-blue-600', sort_order: 1,
+      context: JSON.stringify({ phone: '13800000002', name: '李四', plan: '无限流量套餐', status: 'active' }) },
+    { id: 'U003', label_zh: '王五 · 基础10G套餐 · 30元/月', label_en: 'Wang Wu · 10G Basic Plan · ¥30/mo', category: 'inbound', tag_zh: '欠费停机', tag_en: 'Suspended', tag_color: 'bg-red-100 text-red-600', sort_order: 2,
+      context: JSON.stringify({ phone: '13800000003', name: '王五', plan: '基础10G套餐', status: 'suspended' }) },
     // 外呼催收
-    { id: 'C001', phone: '13900000001', name: '张明', plan_zh: '宽带包年套餐',  plan_en: 'Annual Broadband',  status: 'suspended', tag_zh: '逾期30天', tag_en: '30d Overdue', tag_color: 'bg-red-100 text-red-600',       type: 'outbound' },
-    { id: 'C002', phone: '13900000002', name: '李华', plan_zh: '家庭融合套餐',  plan_en: 'Family Bundle',     status: 'suspended', tag_zh: '逾期45天', tag_en: '45d Overdue', tag_color: 'bg-red-100 text-red-600',       type: 'outbound' },
-    { id: 'C003', phone: '13900000003', name: '王芳', plan_zh: '流量月包',      plan_en: 'Monthly Data Pack', status: 'suspended', tag_zh: '逾期15天', tag_en: '15d Overdue', tag_color: 'bg-orange-100 text-orange-600', type: 'outbound' },
-    // 外呼营销（电信）
-    { id: 'M001', phone: '13900000004', name: '陈伟', plan_zh: '4G套餐 99元',       plan_en: '4G Plan ¥99',      status: 'active', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600',   type: 'outbound' },
-    { id: 'M002', phone: '13900000005', name: '刘丽', plan_zh: '个人套餐 79元',     plan_en: 'Personal ¥79',     status: 'active', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600',   type: 'outbound' },
-    { id: 'M003', phone: '13900000006', name: '赵强', plan_zh: '5G商务套餐 159元',  plan_en: '5G Business ¥159', status: 'active', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600',   type: 'outbound' },
+    { id: 'C001', label_zh: 'C001 · 张明 · 宽带包年 · 逾期30天 · ¥386', label_en: 'C001 · Zhang Ming · Annual Broadband · 30d overdue · ¥386', category: 'outbound_collection', tag_zh: '逾期30天', tag_en: '30d Overdue', tag_color: 'bg-red-100 text-red-600', sort_order: 0,
+      context: JSON.stringify({ phone: '13900000001', name: '张明', plan: '宽带包年套餐', status: 'suspended', task_type: 'collection', outbound_task_id: 'C001' }) },
+    { id: 'C002', label_zh: 'C002 · 李华 · 家庭融合 · 逾期45天 · ¥1,280', label_en: 'C002 · Li Hua · Family Bundle · 45d overdue · ¥1,280', category: 'outbound_collection', tag_zh: '逾期45天', tag_en: '45d Overdue', tag_color: 'bg-red-100 text-red-600', sort_order: 1,
+      context: JSON.stringify({ phone: '13900000002', name: '李华', plan: '家庭融合套餐', status: 'suspended', task_type: 'collection', outbound_task_id: 'C002' }) },
+    { id: 'C003', label_zh: 'C003 · 王芳 · 流量月包 · 逾期15天 · ¥520', label_en: 'C003 · Wang Fang · Monthly Data Pack · 15d overdue · ¥520', category: 'outbound_collection', tag_zh: '逾期15天', tag_en: '15d Overdue', tag_color: 'bg-orange-100 text-orange-600', sort_order: 2,
+      context: JSON.stringify({ phone: '13900000003', name: '王芳', plan: '流量月包', status: 'suspended', task_type: 'collection', outbound_task_id: 'C003' }) },
+    // 外呼营销
+    { id: 'M001', label_zh: 'M001 · 陈伟 · 5G升级专项活动 · ¥199/月', label_en: 'M001 · Chen Wei · 5G Upgrade Campaign · ¥199/mo', category: 'outbound_marketing', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600', sort_order: 0,
+      context: JSON.stringify({ phone: '13900000004', name: '陈伟', plan: '4G套餐 99元', status: 'active', task_type: 'marketing', outbound_task_id: 'M001' }) },
+    { id: 'M002', label_zh: 'M002 · 刘丽 · 家庭融合推广活动 · ¥299/月', label_en: 'M002 · Liu Li · Family Bundle Campaign · ¥299/mo', category: 'outbound_marketing', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600', sort_order: 1,
+      context: JSON.stringify({ phone: '13900000005', name: '刘丽', plan: '个人套餐 79元', status: 'active', task_type: 'marketing', outbound_task_id: 'M002' }) },
+    { id: 'M003', label_zh: 'M003 · 赵强 · 国际漫游出行季活动 · ¥98/月', label_en: 'M003 · Zhao Qiang · Roaming Season Campaign · ¥98/mo', category: 'outbound_marketing', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600', sort_order: 2,
+      context: JSON.stringify({ phone: '13900000006', name: '赵强', plan: '5G商务套餐 159元', status: 'active', task_type: 'marketing', outbound_task_id: 'M003' }) },
   ]).run();
 
   // ── 7a. callback_tasks（清空即可，运行时产生数据）────────────────────────────

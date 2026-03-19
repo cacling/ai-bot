@@ -56,17 +56,16 @@ export const bills = sqliteTable('bills', {
   status: text('status').notNull(), // 'paid' | 'unpaid' | 'overdue'
 });
 
-export const mockUsers = sqliteTable('mock_users', {
-  id:         text('id').primaryKey(),
-  phone:      text('phone').notNull().unique(),
-  name:       text('name').notNull(),
-  plan_zh:    text('plan_zh').notNull(),
-  plan_en:    text('plan_en').notNull(),
-  status:     text('status').notNull(),    // 'active' | 'suspended'
-  tag_zh:     text('tag_zh').notNull(),
-  tag_en:     text('tag_en').notNull(),
-  tag_color:  text('tag_color').notNull(),
-  type:       text('type').notNull(),      // 'inbound' | 'outbound'
+export const testPersonas = sqliteTable('test_personas', {
+  id:         text('id').primaryKey(),           // 'U001', 'C001', 'M001'
+  label_zh:   text('label_zh').notNull(),         // 下拉框显示文本（中文）
+  label_en:   text('label_en').notNull(),         // 下拉框显示文本（英文）
+  category:   text('category').notNull(),         // 'inbound' | 'outbound_collection' | 'outbound_marketing'
+  tag_zh:     text('tag_zh').notNull(),            // 标签："正常用户"
+  tag_en:     text('tag_en').notNull(),            // 标签："Active"
+  tag_color:  text('tag_color').notNull(),         // Tailwind 颜色类
+  context:    text('context').notNull(),           // JSON: 业务数据包，平台不解析，透传给 agent
+  sort_order: integer('sort_order').default(0),
 });
 
 export const outboundTasks = sqliteTable('outbound_tasks', {

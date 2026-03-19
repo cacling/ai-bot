@@ -245,7 +245,7 @@ function MockTab({ server, tool, onServerUpdated }: { server: McpServer; tool: M
             <input
               value={rule.match}
               onChange={e => { const n = [...rules]; n[i] = { ...n[i], match: e.target.value }; setRules(n); }}
-              placeholder='phone == "13800000001"'
+              placeholder='phone == "value"'
               className="w-full px-2 py-1 text-[11px] font-mono border rounded"
             />
           </div>
@@ -290,9 +290,7 @@ function TestTab({ server, tool }: { server: McpServer; tool: McpToolInfo }) {
     const firstRule = toolMockRules[0];
     if (!firstRule.match) return null; // default/fallback rule, no match expr
     try {
-      // Parse patterns like: phone == "value", args.phone === "value", phone == 123
       const example: Record<string, unknown> = {};
-      // Match: key ===/== "string" or key ===/== number
       const re = /(?:args\.)?(\w+)\s*={2,3}\s*(?:"([^"]*)"|([\d.]+)|(true|false))/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(firstRule.match)) !== null) {
@@ -313,6 +311,15 @@ function TestTab({ server, tool }: { server: McpServer; tool: McpToolInfo }) {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
+  // Load test personas for "fill from persona" feature
+  const [personas, setPersonas] = useState<Array<{ id: string; label: string; context: Record<string, unknown> }>>([]);
+  useEffect(() => {
+    fetch('/api/test-personas?lang=zh')
+      .then(r => r.json())
+      .then((data: Array<{ id: string; label: string; context: Record<string, unknown> }>) => setPersonas(data))
+      .catch(console.error);
+  }, []);
+
   const schemaProps = extractSchema(server, tool);
 
   const handleInvoke = async () => {
@@ -332,14 +339,22 @@ function TestTab({ server, tool }: { server: McpServer; tool: McpToolInfo }) {
     finally { setRunning(false); }
   };
 
-  // Auto-generate example args from schema
-  const generateExample = useCallback(() => {
+  // Generate example from schema, optionally filling values from a persona's context
+  const generateExample = useCallback((personaCtx?: Record<string, unknown>) => {
     const example: Record<string, unknown> = {};
     for (const [key, val] of schemaProps) {
-      if (val.enum) example[key] = val.enum[0];
-      else if (val.type === 'number') example[key] = 0;
-      else if (val.type === 'boolean') example[key] = true;
-      else example[key] = '';
+      // Try persona context first
+      if (personaCtx && key in personaCtx) {
+        example[key] = personaCtx[key];
+      } else if (val.enum) {
+        example[key] = val.enum[0];
+      } else if (val.type === 'number') {
+        example[key] = 0;
+      } else if (val.type === 'boolean') {
+        example[key] = true;
+      } else {
+        example[key] = '';
+      }
     }
     setArgsText(JSON.stringify(example, null, 2));
   }, [schemaProps]);
@@ -370,9 +385,24 @@ function TestTab({ server, tool }: { server: McpServer; tool: McpToolInfo }) {
       {/* Schema hint */}
       {schemaProps.length > 0 && (
         <div className="p-2 bg-gray-50 rounded border text-[11px] text-gray-500 space-y-0.5">
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center justify-between mb-1 gap-2">
             <span className="font-medium text-gray-600">参数</span>
-            <button onClick={generateExample} className="text-[10px] text-blue-500 hover:text-blue-700">生成示例</button>
+            <div className="flex items-center gap-1.5">
+              {personas.length > 0 && (
+                <select
+                  onChange={e => {
+                    const p = personas.find(p => p.id === e.target.value);
+                    if (p) generateExample(p.context);
+                  }}
+                  className="text-[10px] border rounded px-1 py-0.5 bg-white text-gray-600"
+                  defaultValue=""
+                >
+                  <option value="" disabled>从角色填充</option>
+                  {personas.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+              )}
+              <button onClick={() => generateExample()} className="text-[10px] text-blue-500 hover:text-blue-700">生成示例</button>
+            </div>
           </div>
           {schemaProps.map(([key, val]) => (
             <div key={key}>
@@ -389,7 +419,7 @@ function TestTab({ server, tool }: { server: McpServer; tool: McpToolInfo }) {
         value={argsText}
         onChange={e => setArgsText(e.target.value)}
         className="w-full h-28 px-3 py-2 text-xs font-mono border rounded-lg bg-gray-50 resize-none"
-        placeholder='{ "phone": "13800000001" }'
+        placeholder='{ ... }'
       />
 
       <button

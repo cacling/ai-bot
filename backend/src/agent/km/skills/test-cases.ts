@@ -38,7 +38,7 @@ testCaseRoutes.post('/', async (c) => {
     input_message?: string;
     expected_keywords?: string[];
     assertions?: Array<{ type: string; value: string }>;
-    phone?: string;
+    persona_id?: string;
   }>();
 
   if (!body.skill_name || !body.input_message) {
@@ -60,7 +60,7 @@ testCaseRoutes.post('/', async (c) => {
     input_message: body.input_message,
     expected_keywords: JSON.stringify(keywords.length ? keywords : ['_placeholder_']),
     assertions: body.assertions ? JSON.stringify(body.assertions) : null,
-    phone: body.phone ?? '13800000001',
+    persona_id: body.persona_id ?? null,
   }).returning({ id: testCases.id });
 
   logger.info('test-cases', 'created', { id: result[0]?.id, skill: body.skill_name });
@@ -74,7 +74,7 @@ testCaseRoutes.post('/batch', async (c) => {
     cases: Array<{
       input: string;
       assertions: Array<{ type: string; value: string }>;
-      phone?: string;
+      persona_id?: string;
     }>;
   }>();
 
@@ -90,7 +90,7 @@ testCaseRoutes.post('/batch', async (c) => {
       input_message: tc.input,
       expected_keywords: JSON.stringify(keywords.length ? keywords : ['_placeholder_']),
       assertions: JSON.stringify(tc.assertions),
-      phone: tc.phone ?? '13800000001',
+      persona_id: tc.persona_id ?? null,
     }).returning({ id: testCases.id });
     if (result[0]) ids.push(result[0].id);
   }
@@ -106,14 +106,14 @@ testCaseRoutes.put('/:id', async (c) => {
     input_message?: string;
     expected_keywords?: string[];
     assertions?: Array<{ type: string; value: string }>;
-    phone?: string;
+    persona_id?: string;
   }>();
 
   const updates: Record<string, unknown> = {};
   if (body.input_message) updates.input_message = body.input_message;
   if (body.expected_keywords) updates.expected_keywords = JSON.stringify(body.expected_keywords);
   if (body.assertions) updates.assertions = JSON.stringify(body.assertions);
-  if (body.phone) updates.phone = body.phone;
+  if (body.persona_id !== undefined) updates.persona_id = body.persona_id;
 
   if (Object.keys(updates).length === 0) {
     return c.json({ error: '没有可更新的字段' }, 400);

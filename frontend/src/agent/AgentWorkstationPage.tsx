@@ -6,7 +6,7 @@ import { nowTime } from '../App';
 import { CardMessage, type CardData } from '../chat/CardMessage';
 import { DEFAULT_USER_PHONE } from '../chat/api';
 import { T, type Lang } from '../i18n';
-import { fetchMockUsers, type MockUser } from '../chat/mockUsers';
+import { fetchTestPersonas, type TestPersona } from '../chat/testPersonas';
 import { useAgentUserSync } from '../chat/userSync';
 import { fetchOutboundTasks, findOutboundTaskByPhone, type OutboundTask } from '../chat/outboundData';
 import './cards/index';  // register all card defs (side-effect)
@@ -36,7 +36,7 @@ export function AgentWorkstationPage() {
   const [knowledgeSubTab, setKnowledgeSubTab] = useState<KnowledgeSubTab>('knowledge');
   const [lang, setLang] = useState<Lang>('zh');
   const [userPhone, setUserPhone] = useState(DEFAULT_USER_PHONE);
-  const [allUsers, setAllUsers] = useState<MockUser[]>([]);
+  const [allPersonas, setAllPersonas] = useState<TestPersona[]>([]);
   const [outboundTasksList, setOutboundTasksList] = useState<OutboundTask[]>([]);
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -62,7 +62,7 @@ export function AgentWorkstationPage() {
 
   // ── 初始加载用户及外呼任务数据 ────────────────────────────────────────────────
   useEffect(() => {
-    fetchMockUsers().then(setAllUsers).catch(console.error);
+    fetchTestPersonas().then(setAllPersonas).catch(console.error);
     fetchOutboundTasks().then(setOutboundTasksList).catch(console.error);
   }, []);
 
@@ -256,14 +256,14 @@ export function AgentWorkstationPage() {
 
   // ── 用户详情 & 外呼任务详情卡片：随客户手机号或数据变更自动注入 ────────────────
   useEffect(() => {
-    const user = allUsers.find(u => u.phone === userPhone) ?? null;
+    const user = allPersonas.find(p => (p.context.phone as string) === userPhone) ?? null;
     const task = findOutboundTaskByPhone(outboundTasksList, userPhone);
     setCardStates(prev => prev.map(c => {
       if (c.id === 'user_detail')   return { ...c, data: user, isOpen: true };
       if (c.id === 'outbound_task') return { ...c, data: task ?? null, isOpen: true };
       return c;
     }));
-  }, [userPhone, allUsers, outboundTasksList]);
+  }, [userPhone, allPersonas, outboundTasksList]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

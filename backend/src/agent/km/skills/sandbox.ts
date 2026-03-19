@@ -22,7 +22,7 @@ import { logger } from '../../../services/logger';
 import { requireRole } from '../../../services/auth';
 import { getRegisteredToolNames } from '../../../services/mock-engine';
 import { db } from '../../../db';
-import { testCases } from '../../../db/schema';
+import { testCases, testPersonas } from '../../../db/schema';
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
 const SANDBOX_ROOT = resolve(PROJECT_ROOT, 'skills', '.sandbox');
@@ -326,10 +326,20 @@ sandbox.post('/:id/regression', async (c) => {
       const toolsCalled: string[] = [];
       const skillsLoaded: string[] = [];
 
+      // 从 persona 获取 phone
+      let phone = '13800000001';
+      if (tc.persona_id) {
+        const persona = db.select().from(testPersonas).where(eq(testPersonas.id, tc.persona_id)).get();
+        if (persona) {
+          const ctx = JSON.parse(persona.context) as Record<string, unknown>;
+          phone = (ctx.phone as string) ?? phone;
+        }
+      }
+
       const agentResult = await runAgent(
         tc.input_message,
         [],
-        tc.phone ?? '13800000001',
+        phone,
         'zh',
         undefined, // onDiagramUpdate
         undefined, // onTextDelta

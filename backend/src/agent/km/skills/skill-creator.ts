@@ -49,7 +49,7 @@ interface Draft {
   test_cases?: Array<{
     input: string;
     assertions: Array<{ type: string; value: string }>;
-    phone?: string;
+    persona_id?: string;
   }>;
 }
 
@@ -255,7 +255,7 @@ skillCreator.post('/save', async (c) => {
     test_cases?: Array<{
       input: string;
       assertions: Array<{ type: string; value: string }>;
-      phone?: string;
+      persona_id?: string;
     }>;
   }>();
 
@@ -309,7 +309,7 @@ skillCreator.post('/save', async (c) => {
           input_message: tc.input,
           expected_keywords: JSON.stringify(keywords.length ? keywords : ['_placeholder_']),
           assertions: JSON.stringify(tc.assertions),
-          phone: tc.phone ?? '13800000001',
+          persona_id: tc.persona_id ?? null,
         });
       }
       logger.info('skill-creator', 'test_cases_saved', { skill: body.skill_name, count: body.test_cases.length });

@@ -1,32 +1,31 @@
 /**
  * mock-data.ts — REST endpoints for UI reference data
  *
- * GET /api/mock-users           → all users (inbound + outbound)
- * GET /api/mock-users?type=inbound  → inbound only
- * GET /api/outbound-tasks           → all outbound tasks
- * GET /api/outbound-tasks?type=collection → filtered by type
+ * GET /api/test-personas                       → all personas
+ * GET /api/test-personas?category=inbound      → filtered by category
+ * GET /api/outbound-tasks                      → all outbound tasks
+ * GET /api/outbound-tasks?type=collection      → filtered by type
  */
 import { Hono } from 'hono';
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { db } from '../db';
-import { mockUsers, outboundTasks } from '../db/schema';
+import { testPersonas, outboundTasks } from '../db/schema';
 
 const mockDataRoutes = new Hono();
 
-mockDataRoutes.get('/mock-users', async (c) => {
-  const typeFilter = c.req.query('type');
-  const rows = typeFilter
-    ? db.select().from(mockUsers).where(eq(mockUsers.type, typeFilter)).all()
-    : db.select().from(mockUsers).all();
+mockDataRoutes.get('/test-personas', async (c) => {
+  const category = c.req.query('category');
+  const lang = (c.req.query('lang') ?? 'zh') as 'zh' | 'en';
+  const rows = category
+    ? db.select().from(testPersonas).where(eq(testPersonas.category, category)).orderBy(asc(testPersonas.sort_order)).all()
+    : db.select().from(testPersonas).orderBy(asc(testPersonas.sort_order)).all();
   return c.json(rows.map(r => ({
     id: r.id,
-    phone: r.phone,
-    name: r.name,
-    plan: { zh: r.plan_zh, en: r.plan_en },
-    status: r.status as 'active' | 'suspended',
-    tag: { zh: r.tag_zh, en: r.tag_en },
+    label: lang === 'en' ? r.label_en : r.label_zh,
+    category: r.category,
+    tag: lang === 'en' ? r.tag_en : r.tag_zh,
     tagColor: r.tag_color,
-    type: r.type as 'inbound' | 'outbound',
+    context: JSON.parse(r.context) as Record<string, unknown>,
   })));
 });
 

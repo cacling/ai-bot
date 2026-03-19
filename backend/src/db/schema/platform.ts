@@ -77,7 +77,7 @@ export const testCases = sqliteTable('test_cases', {
   input_message: text('input_message').notNull(),
   expected_keywords: text('expected_keywords').notNull(), // JSON array of strings（兼容旧格式）
   assertions: text('assertions'),                        // JSON array of Assertion objects（新格式）
-  phone: text('phone').default('13800000001'),
+  persona_id: text('persona_id'),  // 引用 test_personas.id，可为空（用默认）
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
 });
 

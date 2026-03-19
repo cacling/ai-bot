@@ -1,18 +1,18 @@
 /**
  * UserDetailContent.tsx — current user profile card (colSpan: 1)
  *
- * data shape: MockUser | null
+ * data shape: TestPersona | null
  */
 
 import { memo } from 'react';
 import { User } from 'lucide-react';
 import type { Lang } from '../../../i18n';
-import type { MockUser } from '../../../chat/mockUsers';
+import type { TestPersona } from '../../../chat/testPersonas';
 
 export const UserDetailContent = memo(function UserDetailContent({ data, lang }: { data: unknown; lang: Lang }) {
-  const user = data as MockUser | null;
+  const persona = data as TestPersona | null;
 
-  if (!user) {
+  if (!persona) {
     return (
       <div className="flex flex-col items-center justify-center py-6 space-y-1.5 text-center select-none px-3">
         <span className="text-2xl opacity-30">👤</span>
@@ -21,10 +21,16 @@ export const UserDetailContent = memo(function UserDetailContent({ data, lang }:
     );
   }
 
+  const ctx = persona.context;
+  const phone = (ctx.phone as string) ?? '';
+  const name = (ctx.name as string) ?? '';
+  const plan = (ctx.plan as string) ?? '';
+  const status = (ctx.status as string) ?? 'active';
+
   const rows: { label: string; value: string; highlight?: boolean }[] = [
-    { label: lang === 'zh' ? '手机号' : 'Phone',  value: user.phone },
-    { label: lang === 'zh' ? '套餐'   : 'Plan',   value: user.plan[lang], highlight: true },
-    { label: lang === 'zh' ? '状态'   : 'Status', value: user.status === 'active'
+    { label: lang === 'zh' ? '手机号' : 'Phone',  value: phone },
+    { label: lang === 'zh' ? '套餐'   : 'Plan',   value: plan, highlight: true },
+    { label: lang === 'zh' ? '状态'   : 'Status', value: status === 'active'
         ? (lang === 'zh' ? '正常' : 'Active')
         : (lang === 'zh' ? '已停机' : 'Suspended') },
   ];
@@ -38,9 +44,9 @@ export const UserDetailContent = memo(function UserDetailContent({ data, lang }:
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-semibold text-gray-800">{user.name}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${user.tagColor}`}>
-              {user.tag[lang]}
+            <span className="text-sm font-semibold text-gray-800">{name}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${persona.tagColor}`}>
+              {persona.tag}
             </span>
           </div>
         </div>
