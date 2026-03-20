@@ -21,6 +21,9 @@ import { checkCompliance } from '../services/keyword-filter';
 import { VoiceSessionState, TRANSFER_PHRASE_RE, type HandoffContext } from '../services/voice-session';
 import { callMcpTool } from '../services/mcp-client';
 import { getMockedToolNames, matchMockRule } from '../services/mock-engine';
+import { executeDbTool, type DbExecutionConfig } from '../services/db-executor';
+import { mcpTools as mcpToolsTable } from '../db/schema';
+import { eq as dbEq } from 'drizzle-orm';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { getSkillsDescriptionByChannel } from '../engine/skills';
 
@@ -423,9 +426,27 @@ voice.get(
                   success = false;
                 }
               } else {
-                const mcpResult = await callMcpTool(sessionId, toolName, toolArgs);
-                result = mcpResult.text;
-                success = mcpResult.success;
+                // 检查是否有 DB 类型的 execution_config
+                let handled = false;
+                try {
+                  const toolRow = db.select().from(mcpToolsTable).where(dbEq(mcpToolsTable.name, toolName)).get();
+                  if (toolRow?.execution_config) {
+                    const cfg = JSON.parse(toolRow.execution_config) as { impl_type?: string; db?: DbExecutionConfig };
+                    if (cfg.impl_type === 'db' && cfg.db) {
+                      const dbResult = executeDbTool(cfg.db, toolArgs);
+                      result = JSON.stringify(dbResult);
+                      success = dbResult.success;
+                      logger.info('voice', 'db_tool_used', { session: sessionId, tool: toolName });
+                      handled = true;
+                    }
+                  }
+                } catch { /* 回退到 MCP */ }
+
+                if (!handled) {
+                  const mcpResult = await callMcpTool(sessionId, toolName, toolArgs);
+                  result = mcpResult.text;
+                  success = mcpResult.success;
+                }
               }
               state.recordTool(toolName, toolArgs, result, success);
               logger.info('voice', 'lang_chain_mcp_result', { session: sessionId, tool: toolName, lang, resultPreview: result.slice(0, 150) });

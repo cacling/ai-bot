@@ -155,4 +155,18 @@ app.post('/:id/discover', async (c) => {
   }
 });
 
+// ── DB Schema 查询（供前端执行配置用）─────────────────────────────────────────
+
+import { listTables, listColumns } from '../../../services/db-executor';
+
+app.get('/db-schema/tables', async (c) => {
+  return c.json({ tables: listTables() });
+});
+
+app.get('/db-schema/columns', async (c) => {
+  const table = c.req.query('table');
+  if (!table) return c.json({ error: 'table 参数必填' }, 400);
+  return c.json({ columns: listColumns(table) });
+});
+
 export default app;

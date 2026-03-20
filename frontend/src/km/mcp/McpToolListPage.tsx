@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import { mcpApi, type McpToolRecord, type McpServer } from './api';
+import { McpToolEditor } from './McpToolEditor';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
@@ -12,6 +13,7 @@ export function McpToolListPage() {
   const [tools, setTools] = useState<McpToolRecord[]>([]);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingToolId, setEditingToolId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -92,7 +94,7 @@ export function McpToolListPage() {
                 const status = configStatus(tool);
                 const mockRuleCount = tool.mock_rules ? (JSON.parse(tool.mock_rules) as unknown[]).length : 0;
                 return (
-                  <TableRow key={tool.id}>
+                  <TableRow key={tool.id} className="cursor-pointer" onClick={() => setEditingToolId(tool.id)}>
                     <TableCell className="font-mono font-semibold">{tool.name}</TableCell>
                     <TableCell className="text-muted-foreground text-[11px]">{serverName(tool.server_id)}</TableCell>
                     <TableCell className="text-muted-foreground truncate max-w-[200px]" title={tool.description}>{tool.description || '—'}</TableCell>
@@ -120,7 +122,7 @@ export function McpToolListPage() {
                     <TableCell className="text-center">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded ${status.color}`}>{status.label}</span>
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                       <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive" onClick={() => handleDelete(tool)}>删除</Button>
                     </TableCell>
                   </TableRow>
@@ -129,6 +131,15 @@ export function McpToolListPage() {
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {/* Tool Editor Dialog */}
+      {editingToolId && (
+        <McpToolEditor
+          toolId={editingToolId}
+          onClose={() => setEditingToolId(null)}
+          onUpdated={load}
+        />
       )}
     </div>
   );

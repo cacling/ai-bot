@@ -13,6 +13,9 @@ import { isNoDataResult } from '../services/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
 import { matchMockRule, getMockedToolNames, getMockedToolDefinitions } from '../services/mock-engine';
+import { executeDbTool, type DbExecutionConfig } from '../services/db-executor';
+import { mcpTools as mcpToolsTable } from '../db/schema';
+import { eq as dbEq } from 'drizzle-orm';
 import { SOPGuard } from './sop-guard';
 
 // Re-export for test file
@@ -250,6 +253,31 @@ export async function runAgent(
     };
     logger.info('agent', 'mock_tool_injected', { tool: def.name });
   }
+
+  // 注入 DB 类型工具：execution_config.impl_type === 'db' 且非 mocked
+  try {
+    const dbToolRows = db.select().from(mcpToolsTable).all()
+      .filter(t => !t.mocked && !t.disabled && t.execution_config);
+    for (const row of dbToolRows) {
+      if (row.name in mockWrappedTools) continue; // 已有（真实 MCP 或 mock），跳过
+      try {
+        const cfg = JSON.parse(row.execution_config!) as { impl_type?: string; db?: DbExecutionConfig };
+        if (cfg.impl_type !== 'db' || !cfg.db) continue;
+        const dbConfig = cfg.db;
+        const schema = row.input_schema ? JSON.parse(row.input_schema) : { type: 'object', properties: {} };
+        mockWrappedTools[row.name] = {
+          description: row.description,
+          parameters: jsonSchema(schema as any),
+          execute: async (args: Record<string, unknown>) => {
+            logger.info('agent', 'db_tool_execute', { tool: row.name, table: dbConfig.table });
+            const result = executeDbTool(dbConfig, args);
+            return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+          },
+        };
+        logger.info('agent', 'db_tool_injected', { tool: row.name, table: dbConfig.table });
+      } catch { /* 解析失败跳过 */ }
+    }
+  } catch { /* mcp_tools 表不存在时跳过 */ }
 
   // Wrap MCP tools to translate results when lang !== 'zh'
   const effectiveMcpTools = mockWrappedTools;
