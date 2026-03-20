@@ -78,6 +78,13 @@ NO_PROXY=localhost,127.0.0.1,api.siliconflow.cn,open.bigmodel.cn
 no_proxy=localhost,127.0.0.1,api.siliconflow.cn,open.bigmodel.cn
 ```
 
+### 当前基线说明
+
+- **认证**：当前仓库默认用于本地开发/演示。管理端 API 使用 `X-User-Id` 做轻量 RBAC；客户侧聊天和语音接口未接入正式生产认证
+- **数据库**：`drizzle-kit push` 仅用于本地/演示环境快速同步 schema；生产环境应切换为 PostgreSQL + 版本化 migration
+- **浏览器**：文字客服、坐席工作台、知识管理建议使用最新桌面版 Chromium；语音/外呼仅正式支持桌面版 Chromium 最近两个稳定版本
+- **覆盖率目标**：团队目标为文件覆盖率 ≥ 90%，但当前仓库尚未在 CI 中强制设置覆盖率阈值
+
 ---
 
 ## 3. 一键启动（推荐）
@@ -103,7 +110,7 @@ start.sh 执行流程：
      ├── backend:       bun install --frozen-lockfile
      ├── mcp_servers:   npm install
      └── frontend:      npm install
-  5. 初始化 SQLite Schema（bunx drizzle-kit push）
+  5. 初始化 SQLite Schema（本地开发使用 `bunx drizzle-kit push`）
   6. 若数据库为空，自动 seed
   7. 启动服务（依赖顺序：MCP → 后端 → 前端）
      ├── 5 个 MCP Server（:18003-18007）  ← 必须先启动，后端依赖
@@ -139,7 +146,7 @@ start.sh 执行流程：
 ## 5. 手动分步启动
 
 ```bash
-# 步骤一：初始化数据库
+# 步骤一：初始化数据库（仅本地/演示环境）
 cd backend && bunx drizzle-kit push && bun run db:seed
 
 # 步骤二：启动 5 个 MCP Server（各开一个终端或后台运行）
@@ -185,6 +192,55 @@ VSCode `launch.json` 配置：
 ### 前端调试
 
 直接使用浏览器 DevTools。Vite 自动配置了 Source Map。
+
+#### 通过 Playwright 自动捕获前端 console 日志
+
+当无法手动打开浏览器 DevTools 时（如 CLI 环境、自动化排查），可以用项目已安装的 Playwright（Chromium 146）程序化捕获 console 日志：
+
+```bash
+# 在项目根目录执行
+node -e "
+const { chromium } = require('playwright');
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  // 捕获所有 console 日志
+  page.on('console', msg => console.log('[CONSOLE]', msg.type(), msg.text()));
+
+  // 打开坐席工作台（/agent 路径）
+  await page.goto('http://localhost:5173/agent', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2000);
+
+  // 导航到目标页面（示例：MCP 管理 → 点击工具 → 执行配置 Tab）
+  await page.click('button:has-text(\"知识库\")');
+  await page.waitForTimeout(500);
+  await page.click('button:has-text(\"MCP管理\")');
+  await page.waitForTimeout(1000);
+  await page.locator('table tbody tr').first().click();
+  await page.waitForTimeout(1000);
+  await page.click('button:has-text(\"执行配置\")');
+  await page.waitForTimeout(1000);
+
+  // 截图保存
+  await page.screenshot({ path: '/tmp/debug-screenshot.png' });
+  console.log('Screenshot: /tmp/debug-screenshot.png');
+
+  await browser.close();
+})();
+"
+```
+
+**使用场景**：
+- 排查前端组件状态渲染异常（如 RadioGroup 受控值不生效）
+- 验证 API 返回数据在前端的解析结果
+- CI 环境中自动化前端回归检测
+
+**技巧**：
+- 在前端代码中临时加 `console.log('DEBUG', ...)` → Playwright 的 `page.on('console')` 自动捕获
+- `page.screenshot()` 可以看到当前渲染状态，快速定位 UI 问题
+- 客户端页面路径为 `/`，坐席工作台为 `/agent`
+- Playwright 的 Chromium 版本与 Chrome 146 兼容，渲染行为一致
 
 ### WebSocket 调试
 
@@ -239,7 +295,7 @@ seed 自动写入 3 个测试用户：
 # 方式一：一键重置
 ./start.sh --reset
 
-# 方式二：手动重置
+# 方式二：手动重置（仅本地/演示环境）
 cd backend && rm -f data/telecom.db && bunx drizzle-kit push && bun run db:seed
 
 # 方式三：测试专用（保留服务运行）
@@ -254,6 +310,9 @@ cd backend && bun test ../tests/unittest/backend/
 
 # 前端单元测试（~15s）
 cd tests/unittest/frontend && npx vitest run
+
+# 前端覆盖率报告（当前生成报告，但未在 CI 强制阈值）
+cd tests/unittest/frontend && npx vitest run --coverage
 
 # E2E 测试（需先启动服务，耗时较长）
 bash tests/scripts/start.sh
@@ -293,8 +352,10 @@ cd tests/e2e && npx playwright show-report
 | 项目 | 当前（原型） | 生产建议 |
 |------|------------|---------|
 | 数据库 | SQLite 本地文件 | 托管 PostgreSQL |
+| Schema 变更 | `drizzle-kit push` | 版本化 migration + rollback |
 | MCP Server 数据 | 内存模拟 | 接入真实业务系统 |
 | 通信加密 | HTTP 明文 | HTTPS + TLS |
+| 认证 | `X-User-Id`（仅管理端/开发） | 统一认证网关 + Bearer Token/JWT |
 | 进程管理 | Shell 脚本 | PM2 / Docker Compose / K8s |
 | 日志 | 本地文件 | ELK / CloudWatch |
 
