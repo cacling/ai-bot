@@ -305,3 +305,47 @@ export const mcpServers = sqliteTable('mcp_servers', {
   created_at:      text('created_at').$defaultFn(() => new Date().toISOString()),
   updated_at:      text('updated_at').$defaultFn(() => new Date().toISOString()),
 });
+
+// ── MCP 资源（Server 下的连接资源）──────────────────────────────────────────
+
+export const mcpResources = sqliteTable('mcp_resources', {
+  id:              text('id').primaryKey(),
+  server_id:       text('server_id').notNull(),       // FK → mcp_servers.id
+  name:            text('name').notNull(),
+  type:            text('type').notNull(),             // 'db' | 'api' | 'remote_mcp'
+  status:          text('status').notNull().default('active'), // 'active' | 'planned' | 'disabled'
+  // DB 类型
+  db_mode:         text('db_mode'),                    // 'readonly' | 'readwrite'
+  // Remote MCP 类型
+  mcp_transport:   text('mcp_transport'),              // 'http' | 'stdio' | 'sse'
+  mcp_url:         text('mcp_url'),
+  mcp_headers:     text('mcp_headers'),                // JSON object
+  // API 类型（V1 预留）
+  api_base_url:    text('api_base_url'),
+  api_headers:     text('api_headers'),                // JSON object
+  api_timeout:     integer('api_timeout'),
+  // 环境变量
+  env_json:        text('env_json'),                   // JSON object
+  env_prod_json:   text('env_prod_json'),
+  env_test_json:   text('env_test_json'),
+  description:     text('description'),
+  created_at:      text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at:      text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// ── MCP 工具（独立管理，选择所属 Server + 绑定资源）────────────────────────────
+
+export const mcpTools = sqliteTable('mcp_tools', {
+  id:                text('id').primaryKey(),
+  name:              text('name').notNull().unique(),
+  description:       text('description').notNull().default(''),
+  server_id:         text('server_id'),                // FK → mcp_servers.id（可为空 = 未分配）
+  input_schema:      text('input_schema'),             // JSON: { type: 'object', properties: {...}, required: [...] }
+  execution_config:  text('execution_config'),          // JSON: { impl_type, resource_id, db:{...}, remote_mcp:{...} }
+  mock_rules:        text('mock_rules'),                // JSON: [{ tool_name, match, response }]
+  mocked:            integer('mocked', { mode: 'boolean' }).notNull().default(false),
+  disabled:          integer('disabled', { mode: 'boolean' }).notNull().default(false),
+  response_example:  text('response_example'),
+  created_at:        text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at:        text('updated_at').$defaultFn(() => new Date().toISOString()),
+});

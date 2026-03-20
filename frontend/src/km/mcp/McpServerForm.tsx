@@ -166,11 +166,11 @@ function ToolEditDialog({ tool, onSave, onCancel }: {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">工具名 (snake_case)</label>
-            <Input value={name} onChange={e => setName(e.target.value)} className="text-xs font-mono" placeholder="apply_service_suspension" />
+            <Input value={name} onChange={e => setName(e.target.value)} className="text-xs font-mono" placeholder="query_usage_detail" />
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">描述</label>
-            <Input value={description} onChange={e => setDescription(e.target.value)} className="text-xs" placeholder="执行停机保号操作" />
+            <Input value={description} onChange={e => setDescription(e.target.value)} className="text-xs" placeholder="查询用户指定月份的流量使用明细" />
           </div>
         </div>
 
@@ -185,7 +185,7 @@ function ToolEditDialog({ tool, onSave, onCancel }: {
             value={responseExample}
             onChange={e => setResponseExample(e.target.value)}
             className="text-xs font-mono"
-            placeholder='{"success": true, "message": "操作成功"}'
+            placeholder='{"success": true, "total_gb": 12.5, "used_gb": 8.3}'
           />
         </div>
 

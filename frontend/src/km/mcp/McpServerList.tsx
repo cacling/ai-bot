@@ -45,8 +45,7 @@ export function McpServerList() {
   const getStatus = (server: McpServer): { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' } => {
     if (server.status === 'planned') return { label: '规划中', variant: 'outline' };
     if (!server.enabled) return { label: '已禁用', variant: 'secondary' };
-    if (server.last_connected_at) return { label: '已连接', variant: 'default' };
-    return { label: '待连接', variant: 'outline' };
+    return { label: '运行中', variant: 'default' };
   };
 
   return (
