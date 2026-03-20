@@ -66,6 +66,47 @@ export interface MockRule {
   response: string;   // JSON string
 }
 
+export interface McpResource {
+  id: string;
+  server_id: string;
+  name: string;
+  type: 'db' | 'api' | 'remote_mcp';
+  status: 'active' | 'planned' | 'disabled';
+  db_mode: string | null;
+  mcp_transport: string | null;
+  mcp_url: string | null;
+  mcp_headers: string | null;
+  api_base_url: string | null;
+  api_headers: string | null;
+  api_timeout: number | null;
+  env_json: string | null;
+  env_prod_json: string | null;
+  env_test_json: string | null;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface McpToolRecord {
+  id: string;
+  name: string;
+  description: string;
+  server_id: string | null;
+  input_schema: string | null;
+  execution_config: string | null;
+  mock_rules: string | null;
+  mocked: boolean;
+  disabled: boolean;
+  response_example: string | null;
+  created_at: string;
+  updated_at: string;
+  // 附加字段（API 返回）
+  skills?: string[];
+  impl_type?: string | null;
+  resource_id?: string | null;
+  resource?: { id: string; name: string; type: string } | null;
+}
+
 export interface ToolOverviewItem {
   name: string;
   description: string;
@@ -99,7 +140,37 @@ export const mcpApi = {
       body: JSON.stringify({ tool_name: toolName, arguments: args }),
     }),
 
-  // Tools overview
+  // Tools overview (legacy aggregation)
   getToolsOverview: () =>
     request<{ items: ToolOverviewItem[] }>('/tools'),
+
+  // Resources
+  listResources: (serverId?: string) =>
+    request<{ items: McpResource[] }>(serverId ? `/resources?server_id=${serverId}` : '/resources'),
+  getResource: (id: string) => request<McpResource>(`/resources/${id}`),
+  createResource: (body: Partial<McpResource>) =>
+    request<{ id: string }>('/resources', { method: 'POST', body: JSON.stringify(body) }),
+  updateResource: (id: string, body: Partial<McpResource>) =>
+    request<{ ok: boolean }>(`/resources/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteResource: (id: string) =>
+    request<{ ok: boolean }>(`/resources/${id}`, { method: 'DELETE' }),
+  discoverFromResource: (id: string) =>
+    request<{ tools: number; created: number; updated: number }>(`/resources/${id}/discover`, { method: 'POST' }),
+
+  // Tool management (独立 CRUD)
+  listTools: (serverId?: string) =>
+    request<{ items: McpToolRecord[] }>(serverId ? `/tool-management?server_id=${serverId}` : '/tool-management'),
+  getTool: (id: string) => request<McpToolRecord>(`/tool-management/${id}`),
+  createTool: (body: Partial<McpToolRecord>) =>
+    request<{ id: string }>('/tool-management', { method: 'POST', body: JSON.stringify(body) }),
+  updateTool: (id: string, body: Partial<McpToolRecord>) =>
+    request<{ ok: boolean }>(`/tool-management/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteTool: (id: string) =>
+    request<{ ok: boolean }>(`/tool-management/${id}`, { method: 'DELETE' }),
+  updateExecutionConfig: (id: string, config: Record<string, unknown>) =>
+    request<{ ok: boolean }>(`/tool-management/${id}/execution-config`, { method: 'PUT', body: JSON.stringify(config) }),
+  updateToolMockRules: (id: string, rules: MockRule[]) =>
+    request<{ ok: boolean }>(`/tool-management/${id}/mock-rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
+  toggleToolMock: (id: string) =>
+    request<{ ok: boolean; mocked: boolean }>(`/tool-management/${id}/toggle-mock`, { method: 'PUT' }),
 };
