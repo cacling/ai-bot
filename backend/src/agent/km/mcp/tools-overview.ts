@@ -9,7 +9,8 @@
  */
 import { Hono } from 'hono';
 import { db } from '../../../db';
-import { mcpServers } from '../../../db/schema';
+import { mcpServers, mcpTools, mcpResources } from '../../../db/schema';
+import { eq } from 'drizzle-orm';
 import { getToolToSkillsMap } from '../../../engine/skills';
 
 const app = new Hono();
@@ -72,7 +73,33 @@ export function getToolsOverview(): ToolOverviewItem[] {
   const skillRefs = getSkillToolRefs();
   const items: ToolOverviewItem[] = [];
 
-  // 1. MCP Server tools
+  // 优先从 mcp_tools 表读取
+  try {
+    const toolRows = db.select().from(mcpTools).all();
+    if (toolRows.length > 0) {
+      // 预加载 server 名称映射
+      const serverMap = new Map(db.select().from(mcpServers).all().map(s => [s.id, s]));
+
+      for (const tool of toolRows) {
+        const server = tool.server_id ? serverMap.get(tool.server_id) : null;
+        items.push({
+          name: tool.name,
+          description: tool.description || '',
+          source: server?.name ?? '(未分配)',
+          source_type: 'mcp',
+          status: tool.disabled ? 'disabled' : 'available',
+          mocked: tool.mocked ?? false,
+          skills: skillRefs.get(tool.name) ?? [],
+        });
+      }
+
+      // 加 built-in + missing，然后直接返回
+      addBuiltinAndMissing(items, skillRefs);
+      return items;
+    }
+  } catch { /* mcp_tools 表可能不存在（过渡期），回退旧逻辑 */ }
+
+  // 回退：从 mcp_servers.tools_json 读取
   const rawMap = loadRawToolMap();
   for (const [name, info] of rawMap) {
     const toolStatus = info.serverStatus === 'planned' ? 'planned'
@@ -88,7 +115,12 @@ export function getToolsOverview(): ToolOverviewItem[] {
     });
   }
 
-  // 2. Built-in tools
+  addBuiltinAndMissing(items, skillRefs);
+  return items;
+}
+
+function addBuiltinAndMissing(items: ToolOverviewItem[], skillRefs: Map<string, string[]>): void {
+  // Built-in tools
   const builtinTools = [
     { name: 'get_skill_instructions', description: '加载指定 Skill 的操作指南' },
     { name: 'get_skill_reference', description: '加载 Skill 的参考文档' },
@@ -106,7 +138,7 @@ export function getToolsOverview(): ToolOverviewItem[] {
     });
   }
 
-  // 3. Missing tools: referenced by skills but not registered anywhere
+  // Missing tools: referenced by skills but not registered anywhere
   const registeredNames = new Set(items.map(i => i.name));
   for (const [toolName, skills] of skillRefs) {
     if (!registeredNames.has(toolName)) {
@@ -121,14 +153,35 @@ export function getToolsOverview(): ToolOverviewItem[] {
       });
     }
   }
-
-  return items;
 }
 
 // ── 共享函数：获取单个工具的详细信息（含 inputSchema / responseExample）──────
 
 export function getToolDetail(toolName: string): ToolDetailItem | null {
   const skillRefs = getSkillToolRefs();
+
+  // 优先从 mcp_tools 读
+  try {
+    const tool = db.select().from(mcpTools).where(eq(mcpTools.name, toolName)).get();
+    if (tool) {
+      const server = tool.server_id
+        ? db.select().from(mcpServers).where(eq(mcpServers.id, tool.server_id)).get()
+        : null;
+      return {
+        name: tool.name,
+        description: tool.description || '',
+        source: server?.name ?? '(未分配)',
+        source_type: 'mcp',
+        status: tool.disabled ? 'disabled' : 'available',
+        mocked: tool.mocked ?? false,
+        skills: skillRefs.get(tool.name) ?? [],
+        inputSchema: tool.input_schema ? JSON.parse(tool.input_schema) : null,
+        responseExample: tool.response_example ?? null,
+      };
+    }
+  } catch { /* 过渡期回退 */ }
+
+  // 回退：从 mcp_servers.tools_json
   const rawMap = loadRawToolMap();
   const info = rawMap.get(toolName);
 
