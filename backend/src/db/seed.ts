@@ -642,57 +642,35 @@ async function seed() {
   db.delete(mcpResources).run();
   db.delete(mcpTools).run();
 
-  // 资源：每个 Server 的 URL → 一个 Remote MCP 资源
-  const resourceDefs = [
-    { id: 'res-user-info', server_id: 'mcp-user-info', name: 'user_info_mcp', mcp_url: 'http://127.0.0.1:18003/mcp' },
-    { id: 'res-business', server_id: 'mcp-business', name: 'business_mcp', mcp_url: 'http://127.0.0.1:18004/mcp' },
-    { id: 'res-diagnosis', server_id: 'mcp-diagnosis', name: 'diagnosis_mcp', mcp_url: 'http://127.0.0.1:18005/mcp' },
-    { id: 'res-outbound', server_id: 'mcp-outbound', name: 'outbound_mcp', mcp_url: 'http://127.0.0.1:18006/mcp' },
-    { id: 'res-account', server_id: 'mcp-account', name: 'account_mcp', mcp_url: 'http://127.0.0.1:18007/mcp' },
-  ];
+  // 方案 B：一个资源 = 一个工具的完整数据端点
+  // 资源包含连接信息 + 执行配置（Remote MCP 工具名 / DB 表+条件 / API 路径）
 
-  for (const r of resourceDefs) {
-    db.insert(mcpResources).values({
-      id: r.id,
-      server_id: r.server_id,
-      name: r.name,
-      type: 'remote_mcp',
-      status: 'active',
-      mcp_transport: 'http',
-      mcp_url: r.mcp_url,
-      created_at: now,
-      updated_at: now,
-    }).onConflictDoNothing().run();
-  }
-
-  // 工具：从各 Server 的 tools_json 拆出独立行
-  const toolDefs: Array<{
-    name: string;
-    description: string;
-    server_id: string;
-    resource_id: string;
+  const toolResourceDefs: Array<{
+    res_id: string; res_name: string; server_id: string;
+    mcp_url: string; mcp_tool_name: string;
+    tool_name: string; tool_desc: string;
     input_schema: Record<string, unknown>;
-    mock_rules_source: string; // 从哪个 server 的 mock_rules 提取
+    mock_source: string;
   }> = [
-    // user-info-service
-    { name: 'query_subscriber', description: '根据手机号查询电信用户信息（套餐、状态、余额、流量使用情况）', server_id: 'mcp-user-info', resource_id: 'res-user-info', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_rules_source: 'mcp-user-info' },
-    { name: 'query_bill', description: '查询用户指定月份的账单明细', server_id: 'mcp-user-info', resource_id: 'res-user-info', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份，格式 YYYY-MM' } }, required: ['phone'] }, mock_rules_source: 'mcp-user-info' },
-    { name: 'query_plans', description: '获取所有可用套餐列表，或查询指定套餐详情', server_id: 'mcp-user-info', resource_id: 'res-user-info', input_schema: { type: 'object', properties: { plan_id: { type: 'string', description: '套餐 ID' } } }, mock_rules_source: 'mcp-user-info' },
-    // business-service
-    { name: 'cancel_service', description: '退订用户已订阅的增值业务', server_id: 'mcp-business', resource_id: 'res-business', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, service_id: { type: 'string', description: '要退订的业务 ID' } }, required: ['phone', 'service_id'] }, mock_rules_source: 'mcp-business' },
-    { name: 'issue_invoice', description: '为指定用户的指定月份账单开具电子发票', server_id: 'mcp-business', resource_id: 'res-business', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份' }, email: { type: 'string', description: '邮箱' } }, required: ['phone', 'month', 'email'] }, mock_rules_source: 'mcp-business' },
-    // diagnosis-service
-    { name: 'diagnose_network', description: '对指定手机号进行网络故障诊断', server_id: 'mcp-diagnosis', resource_id: 'res-diagnosis', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, issue_type: { type: 'string', enum: ['no_signal', 'slow_data', 'call_drop', 'no_network'], description: '故障类型' } }, required: ['phone', 'issue_type'] }, mock_rules_source: 'mcp-diagnosis' },
-    { name: 'diagnose_app', description: '对指定手机号的营业厅 App 进行问题诊断', server_id: 'mcp-diagnosis', resource_id: 'res-diagnosis', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, issue_type: { type: 'string', enum: ['app_locked', 'login_failed', 'device_incompatible', 'suspicious_activity'], description: '问题类型' } }, required: ['phone', 'issue_type'] }, mock_rules_source: 'mcp-diagnosis' },
-    // outbound-service
-    { name: 'record_call_result', description: '记录本次外呼通话结果', server_id: 'mcp-outbound', resource_id: 'res-outbound', input_schema: { type: 'object', properties: { result: { type: 'string', enum: ['ptp', 'refusal', 'dispute', 'no_answer', 'busy', 'converted', 'callback', 'not_interested', 'non_owner', 'verify_failed'], description: '通话结果' }, remark: { type: 'string', description: '备注' } }, required: ['result'] }, mock_rules_source: 'mcp-outbound' },
-    { name: 'send_followup_sms', description: '向客户发送跟进短信', server_id: 'mcp-outbound', resource_id: 'res-outbound', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '客户手机号' }, sms_type: { type: 'string', enum: ['payment_link', 'plan_detail', 'callback_reminder', 'product_detail'], description: '短信类型' } }, required: ['phone', 'sms_type'] }, mock_rules_source: 'mcp-outbound' },
-    { name: 'create_callback_task', description: '创建回访任务', server_id: 'mcp-outbound', resource_id: 'res-outbound', input_schema: { type: 'object', properties: { original_task_id: { type: 'string', description: '原始任务 ID' }, callback_phone: { type: 'string', description: '回访电话' }, preferred_time: { type: 'string', description: '回访时间' } }, required: ['original_task_id', 'callback_phone', 'preferred_time'] }, mock_rules_source: 'mcp-outbound' },
-    { name: 'record_marketing_result', description: '记录营销外呼的通话结果', server_id: 'mcp-outbound', resource_id: 'res-outbound', input_schema: { type: 'object', properties: { campaign_id: { type: 'string', description: '营销活动 ID' }, phone: { type: 'string', description: '客户手机号' }, result: { type: 'string', enum: ['converted', 'callback', 'not_interested', 'no_answer', 'busy', 'wrong_number', 'dnd'], description: '营销结果' } }, required: ['campaign_id', 'phone', 'result'] }, mock_rules_source: 'mcp-outbound' },
-    // account-service
-    { name: 'verify_identity', description: '验证用户身份（通过短信验证码）', server_id: 'mcp-account', resource_id: 'res-account', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, otp: { type: 'string', description: '短信验证码' } }, required: ['phone', 'otp'] }, mock_rules_source: 'mcp-account' },
-    { name: 'check_account_balance', description: '查询用户账户余额和欠费状态', server_id: 'mcp-account', resource_id: 'res-account', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_rules_source: 'mcp-account' },
-    { name: 'check_contracts', description: '查询用户当前有效合约列表', server_id: 'mcp-account', resource_id: 'res-account', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_rules_source: 'mcp-account' },
+    // user-info-service (:18003)
+    { res_id: 'res-query-subscriber', res_name: 'subscriber_query', server_id: 'mcp-user-info', mcp_url: 'http://127.0.0.1:18003/mcp', mcp_tool_name: 'query_subscriber', tool_name: 'query_subscriber', tool_desc: '根据手机号查询电信用户信息（套餐、状态、余额、流量使用情况）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-user-info' },
+    { res_id: 'res-query-bill', res_name: 'bill_query', server_id: 'mcp-user-info', mcp_url: 'http://127.0.0.1:18003/mcp', mcp_tool_name: 'query_bill', tool_name: 'query_bill', tool_desc: '查询用户指定月份的账单明细', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份，格式 YYYY-MM' } }, required: ['phone'] }, mock_source: 'mcp-user-info' },
+    { res_id: 'res-query-plans', res_name: 'plans_query', server_id: 'mcp-user-info', mcp_url: 'http://127.0.0.1:18003/mcp', mcp_tool_name: 'query_plans', tool_name: 'query_plans', tool_desc: '获取所有可用套餐列表，或查询指定套餐详情', input_schema: { type: 'object', properties: { plan_id: { type: 'string', description: '套餐 ID' } } }, mock_source: 'mcp-user-info' },
+    // business-service (:18004)
+    { res_id: 'res-cancel-service', res_name: 'cancel_service_exec', server_id: 'mcp-business', mcp_url: 'http://127.0.0.1:18004/mcp', mcp_tool_name: 'cancel_service', tool_name: 'cancel_service', tool_desc: '退订用户已订阅的增值业务', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, service_id: { type: 'string', description: '要退订的业务 ID' } }, required: ['phone', 'service_id'] }, mock_source: 'mcp-business' },
+    { res_id: 'res-issue-invoice', res_name: 'invoice_exec', server_id: 'mcp-business', mcp_url: 'http://127.0.0.1:18004/mcp', mcp_tool_name: 'issue_invoice', tool_name: 'issue_invoice', tool_desc: '为指定用户的指定月份账单开具电子发票', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份' }, email: { type: 'string', description: '邮箱' } }, required: ['phone', 'month', 'email'] }, mock_source: 'mcp-business' },
+    // diagnosis-service (:18005)
+    { res_id: 'res-diagnose-network', res_name: 'network_diag', server_id: 'mcp-diagnosis', mcp_url: 'http://127.0.0.1:18005/mcp', mcp_tool_name: 'diagnose_network', tool_name: 'diagnose_network', tool_desc: '对指定手机号进行网络故障诊断', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, issue_type: { type: 'string', enum: ['no_signal', 'slow_data', 'call_drop', 'no_network'], description: '故障类型' } }, required: ['phone', 'issue_type'] }, mock_source: 'mcp-diagnosis' },
+    { res_id: 'res-diagnose-app', res_name: 'app_diag', server_id: 'mcp-diagnosis', mcp_url: 'http://127.0.0.1:18005/mcp', mcp_tool_name: 'diagnose_app', tool_name: 'diagnose_app', tool_desc: '对指定手机号的营业厅 App 进行问题诊断', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, issue_type: { type: 'string', enum: ['app_locked', 'login_failed', 'device_incompatible', 'suspicious_activity'], description: '问题类型' } }, required: ['phone', 'issue_type'] }, mock_source: 'mcp-diagnosis' },
+    // outbound-service (:18006)
+    { res_id: 'res-record-call', res_name: 'call_result_record', server_id: 'mcp-outbound', mcp_url: 'http://127.0.0.1:18006/mcp', mcp_tool_name: 'record_call_result', tool_name: 'record_call_result', tool_desc: '记录本次外呼通话结果', input_schema: { type: 'object', properties: { result: { type: 'string', enum: ['ptp', 'refusal', 'dispute', 'no_answer', 'busy', 'converted', 'callback', 'not_interested', 'non_owner', 'verify_failed'], description: '通话结果' }, remark: { type: 'string', description: '备注' } }, required: ['result'] }, mock_source: 'mcp-outbound' },
+    { res_id: 'res-followup-sms', res_name: 'followup_sms', server_id: 'mcp-outbound', mcp_url: 'http://127.0.0.1:18006/mcp', mcp_tool_name: 'send_followup_sms', tool_name: 'send_followup_sms', tool_desc: '向客户发送跟进短信', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '客户手机号' }, sms_type: { type: 'string', enum: ['payment_link', 'plan_detail', 'callback_reminder', 'product_detail'], description: '短信类型' } }, required: ['phone', 'sms_type'] }, mock_source: 'mcp-outbound' },
+    { res_id: 'res-callback-task', res_name: 'callback_task', server_id: 'mcp-outbound', mcp_url: 'http://127.0.0.1:18006/mcp', mcp_tool_name: 'create_callback_task', tool_name: 'create_callback_task', tool_desc: '创建回访任务', input_schema: { type: 'object', properties: { original_task_id: { type: 'string', description: '原始任务 ID' }, callback_phone: { type: 'string', description: '回访电话' }, preferred_time: { type: 'string', description: '回访时间' } }, required: ['original_task_id', 'callback_phone', 'preferred_time'] }, mock_source: 'mcp-outbound' },
+    { res_id: 'res-marketing-result', res_name: 'marketing_result', server_id: 'mcp-outbound', mcp_url: 'http://127.0.0.1:18006/mcp', mcp_tool_name: 'record_marketing_result', tool_name: 'record_marketing_result', tool_desc: '记录营销外呼的通话结果', input_schema: { type: 'object', properties: { campaign_id: { type: 'string', description: '营销活动 ID' }, phone: { type: 'string', description: '客户手机号' }, result: { type: 'string', enum: ['converted', 'callback', 'not_interested', 'no_answer', 'busy', 'wrong_number', 'dnd'], description: '营销结果' } }, required: ['campaign_id', 'phone', 'result'] }, mock_source: 'mcp-outbound' },
+    // account-service (:18007)
+    { res_id: 'res-verify-identity', res_name: 'identity_verify', server_id: 'mcp-account', mcp_url: 'http://127.0.0.1:18007/mcp', mcp_tool_name: 'verify_identity', tool_name: 'verify_identity', tool_desc: '验证用户身份（通过短信验证码）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, otp: { type: 'string', description: '短信验证码' } }, required: ['phone', 'otp'] }, mock_source: 'mcp-account' },
+    { res_id: 'res-check-balance', res_name: 'balance_check', server_id: 'mcp-account', mcp_url: 'http://127.0.0.1:18007/mcp', mcp_tool_name: 'check_account_balance', tool_name: 'check_account_balance', tool_desc: '查询用户账户余额和欠费状态', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-account' },
+    { res_id: 'res-check-contracts', res_name: 'contracts_check', server_id: 'mcp-account', mcp_url: 'http://127.0.0.1:18007/mcp', mcp_tool_name: 'check_contracts', tool_name: 'check_contracts', tool_desc: '查询用户当前有效合约列表', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-account' },
   ];
 
   // 从 server 的 mock_rules 中提取每个 tool 的 rules
@@ -703,21 +681,32 @@ async function seed() {
     }
   }
 
-  for (const t of toolDefs) {
-    const serverRules = allServerRules.get(t.mock_rules_source) ?? [];
-    const toolRules = serverRules.filter(r => r.tool_name === t.name);
+  for (const t of toolResourceDefs) {
+    // 创建资源（每个工具一个独立的 Remote MCP 资源）
+    db.insert(mcpResources).values({
+      id: t.res_id,
+      server_id: t.server_id,
+      name: t.res_name,
+      type: 'remote_mcp',
+      status: 'active',
+      mcp_transport: 'http',
+      mcp_url: t.mcp_url,
+      mcp_tool_name: t.mcp_tool_name,
+      created_at: now,
+      updated_at: now,
+    }).onConflictDoNothing().run();
+
+    // 创建工具（绑定到对应资源）
+    const serverRules = allServerRules.get(t.mock_source) ?? [];
+    const toolRules = serverRules.filter(r => r.tool_name === t.tool_name);
 
     db.insert(mcpTools).values({
-      id: `tool-${t.name}`,
-      name: t.name,
-      description: t.description,
+      id: `tool-${t.tool_name}`,
+      name: t.tool_name,
+      description: t.tool_desc,
       server_id: t.server_id,
       input_schema: JSON.stringify(t.input_schema),
-      execution_config: JSON.stringify({
-        impl_type: 'remote_mcp',
-        resource_id: t.resource_id,
-        remote_mcp: { tool_name: t.name },
-      }),
+      execution_config: JSON.stringify({ resource_id: t.res_id }),
       mock_rules: toolRules.length > 0 ? JSON.stringify(toolRules) : null,
       mocked: false,
       disabled: false,
@@ -726,17 +715,17 @@ async function seed() {
     }).onConflictDoNothing().run();
   }
 
-  // apply_service_suspension（Mock 模式，无 Remote MCP 资源）
+  // apply_service_suspension（Mock 模式，无资源）
   db.insert(mcpTools).values({
     id: 'tool-apply_service_suspension',
     name: 'apply_service_suspension',
     description: '执行停机保号操作',
     server_id: 'mcp-account',
     input_schema: JSON.stringify({ type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, suspension_type: { type: 'string', enum: ['temporary', 'permanent'], description: '停机类型' } }, required: ['phone'] }),
-    execution_config: null, // 未配置 Real 实现
+    execution_config: null,
     mock_rules: JSON.stringify([
       { tool_name: 'apply_service_suspension', match: 'phone == "13800000003"', response: '{"success":false,"message":"该号码已处于停机状态"}' },
-      { tool_name: 'apply_service_suspension', match: '', response: '{"success":true,"phone":"13800000001","suspension_type":"temporary","effective_date":"2026-03-20","message":"临时停机已生效"}' },
+      { tool_name: 'apply_service_suspension', match: '', response: '{"success":true,"phone":"13800000001","suspension_type":"temporary","effective_date":"2026-03-21","message":"临时停机已生效"}' },
     ]),
     mocked: true,
     disabled: false,
@@ -744,7 +733,7 @@ async function seed() {
     updated_at: now,
   }).onConflictDoNothing().run();
 
-  console.log(`[seed] MCP Resources: ${resourceDefs.length} 个, Tools: ${toolDefs.length + 1} 个`);
+  console.log(`[seed] MCP Resources: ${toolResourceDefs.length} 个, Tools: ${toolResourceDefs.length + 1} 个`);
 
   // ── 10. 技能注册 + v1 版本快照（upsert：已存在则跳过）─────────────────────
   console.log('[seed] 初始化技能注册表和版本快照...');

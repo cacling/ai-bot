@@ -14,7 +14,7 @@ import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch
 import { analyzeProgress } from '../agent/card/progress-tracker';
 import { matchMockRule, getMockedToolNames, getMockedToolDefinitions } from '../services/mock-engine';
 import { executeDbTool, type DbExecutionConfig } from '../services/db-executor';
-import { mcpTools as mcpToolsTable } from '../db/schema';
+import { mcpTools as mcpToolsTable, mcpResources as mcpResourcesTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { SOPGuard } from './sop-guard';
 
@@ -254,16 +254,27 @@ export async function runAgent(
     logger.info('agent', 'mock_tool_injected', { tool: def.name });
   }
 
-  // 注入 DB 类型工具：execution_config.impl_type === 'db' 且非 mocked
+  // 注入 DB 类型工具：resource.type === 'db' 且工具非 mocked
   try {
-    const dbToolRows = db.select().from(mcpToolsTable).all()
+    const allToolRows = db.select().from(mcpToolsTable).all()
       .filter(t => !t.mocked && !t.disabled && t.execution_config);
-    for (const row of dbToolRows) {
-      if (row.name in mockWrappedTools) continue; // 已有（真实 MCP 或 mock），跳过
+    for (const row of allToolRows) {
+      if (row.name in mockWrappedTools) continue;
       try {
-        const cfg = JSON.parse(row.execution_config!) as { impl_type?: string; db?: DbExecutionConfig };
-        if (cfg.impl_type !== 'db' || !cfg.db) continue;
-        const dbConfig = cfg.db;
+        const cfg = JSON.parse(row.execution_config!) as { resource_id?: string };
+        if (!cfg.resource_id) continue;
+        const resource = db.select().from(mcpResourcesTable).where(dbEq(mcpResourcesTable.id, cfg.resource_id)).get();
+        if (!resource || resource.type !== 'db') continue;
+        // 从资源读取 DB 配置
+        const dbConfig: DbExecutionConfig = {
+          table: resource.db_table ?? '',
+          operation: (resource.db_operation as any) ?? 'select_one',
+          where: resource.db_where ? JSON.parse(resource.db_where) : [],
+          columns: resource.db_columns ? JSON.parse(resource.db_columns) : undefined,
+          set_columns: resource.db_set_columns ? JSON.parse(resource.db_set_columns) : undefined,
+          set_fixed: resource.db_set_fixed ? JSON.parse(resource.db_set_fixed) : undefined,
+        };
+        if (!dbConfig.table) continue;
         const schema = row.input_schema ? JSON.parse(row.input_schema) : { type: 'object', properties: {} };
         mockWrappedTools[row.name] = {
           description: row.description,

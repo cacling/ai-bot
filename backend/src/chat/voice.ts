@@ -22,7 +22,7 @@ import { VoiceSessionState, TRANSFER_PHRASE_RE, type HandoffContext } from '../s
 import { callMcpTool } from '../services/mcp-client';
 import { getMockedToolNames, matchMockRule } from '../services/mock-engine';
 import { executeDbTool, type DbExecutionConfig } from '../services/db-executor';
-import { mcpTools as mcpToolsTable } from '../db/schema';
+import { mcpTools as mcpToolsTable, mcpResources as mcpResourcesTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { getSkillsDescriptionByChannel } from '../engine/skills';
@@ -426,18 +426,27 @@ voice.get(
                   success = false;
                 }
               } else {
-                // 检查是否有 DB 类型的 execution_config
+                // 检查绑定的资源类型，DB 资源直接查库
                 let handled = false;
                 try {
                   const toolRow = db.select().from(mcpToolsTable).where(dbEq(mcpToolsTable.name, toolName)).get();
                   if (toolRow?.execution_config) {
-                    const cfg = JSON.parse(toolRow.execution_config) as { impl_type?: string; db?: DbExecutionConfig };
-                    if (cfg.impl_type === 'db' && cfg.db) {
-                      const dbResult = executeDbTool(cfg.db, toolArgs);
-                      result = JSON.stringify(dbResult);
-                      success = dbResult.success;
-                      logger.info('voice', 'db_tool_used', { session: sessionId, tool: toolName });
-                      handled = true;
+                    const cfg = JSON.parse(toolRow.execution_config) as { resource_id?: string };
+                    if (cfg.resource_id) {
+                      const resource = db.select().from(mcpResourcesTable).where(dbEq(mcpResourcesTable.id, cfg.resource_id)).get();
+                      if (resource?.type === 'db' && resource.db_table) {
+                        const dbConfig: DbExecutionConfig = {
+                          table: resource.db_table,
+                          operation: (resource.db_operation as any) ?? 'select_one',
+                          where: resource.db_where ? JSON.parse(resource.db_where) : [],
+                          columns: resource.db_columns ? JSON.parse(resource.db_columns) : undefined,
+                        };
+                        const dbResult = executeDbTool(dbConfig, toolArgs);
+                        result = JSON.stringify(dbResult);
+                        success = dbResult.success;
+                        logger.info('voice', 'db_tool_used', { session: sessionId, tool: toolName });
+                        handled = true;
+                      }
                     }
                   }
                 } catch { /* 回退到 MCP */ }

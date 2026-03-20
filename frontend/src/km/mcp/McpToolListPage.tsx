@@ -82,7 +82,7 @@ export function McpToolListPage() {
                 <TableHead className="w-44">工具名</TableHead>
                 <TableHead className="w-28">Server</TableHead>
                 <TableHead>描述</TableHead>
-                <TableHead className="w-24 text-center">Real 实现</TableHead>
+                <TableHead className="w-24 text-center">数据来源</TableHead>
                 <TableHead className="w-28 text-center">关联 Skill</TableHead>
                 <TableHead className="w-32 text-center">模式</TableHead>
                 <TableHead className="w-20 text-center">状态</TableHead>

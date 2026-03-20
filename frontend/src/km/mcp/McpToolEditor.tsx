@@ -44,8 +44,8 @@ export function McpToolEditor({ toolId, onClose, onUpdated }: Props) {
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-[650px] max-h-[88vh] flex flex-col p-0">
-        <DialogHeader className="px-4 py-3 border-b flex-shrink-0">
+      <DialogContent className="max-w-[860px] max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
           <DialogTitle className="text-sm font-semibold font-mono">{tool.name}</DialogTitle>
           <div className="text-[11px] text-muted-foreground">
             Server: {servers.find(s => s.id === tool.server_id)?.name ?? '未分配'}
@@ -71,16 +71,16 @@ export function McpToolEditor({ toolId, onClose, onUpdated }: Props) {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="info" className="flex-1 overflow-auto mt-0 p-4">
+          <TabsContent value="info" className="flex-1 overflow-auto mt-0 p-6">
             <InfoTab tool={tool} servers={servers} onUpdated={() => { mcpApi.getTool(toolId).then(setTool); onUpdated?.(); }} />
           </TabsContent>
-          <TabsContent value="execution" className="flex-1 overflow-auto mt-0 p-4">
+          <TabsContent value="execution" className="flex-1 overflow-auto mt-0 p-6">
             <ExecutionTab tool={tool} resources={resources.filter(r => r.server_id === tool.server_id)} onUpdated={() => { mcpApi.getTool(toolId).then(setTool); onUpdated?.(); }} />
           </TabsContent>
-          <TabsContent value="mock" className="flex-1 overflow-auto mt-0 p-4">
+          <TabsContent value="mock" className="flex-1 overflow-auto mt-0 p-6">
             <MockTab tool={tool} onUpdated={() => { mcpApi.getTool(toolId).then(setTool); onUpdated?.(); }} />
           </TabsContent>
-          <TabsContent value="test" className="flex-1 overflow-auto mt-0 p-4">
+          <TabsContent value="test" className="flex-1 overflow-auto mt-0 p-6">
             <TestTab tool={tool} />
           </TabsContent>
         </Tabs>
@@ -107,7 +107,7 @@ function InfoTab({ tool, servers, onUpdated }: { tool: McpToolRecord; servers: M
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1 block">工具名</label>
@@ -116,7 +116,9 @@ function InfoTab({ tool, servers, onUpdated }: { tool: McpToolRecord; servers: M
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1 block">所属 Server</label>
           <Select value={serverId} onValueChange={v => { if (v) setServerId(v); }}>
-            <SelectTrigger className="text-xs h-8"><SelectValue placeholder="选择 Server" /></SelectTrigger>
+            <SelectTrigger className="text-xs h-8">
+              <SelectValue placeholder="选择 Server">{servers.find(s => s.id === serverId)?.name ?? serverId}</SelectValue>
+            </SelectTrigger>
             <SelectContent>
               {servers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
             </SelectContent>
@@ -199,20 +201,31 @@ function ExecutionTab({ tool, resources, onUpdated }: { tool: McpToolRecord; res
   const filteredResources = (type: string) => resources.filter(r => r.type === type);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <label className="text-xs font-medium text-muted-foreground mb-1 block">Real 实现方式</label>
-        <RadioGroup value={implType} onValueChange={v => setImplType(v)} className="flex gap-4">
-          <Label className="flex items-center gap-1.5 text-xs font-normal cursor-pointer">
-            <RadioGroupItem value="db" className="size-3" /> DB 查询
-          </Label>
-          <Label className="flex items-center gap-1.5 text-xs font-normal cursor-pointer">
-            <RadioGroupItem value="remote_mcp" className="size-3" /> Remote MCP
-          </Label>
-          <Label className="flex items-center gap-1.5 text-xs font-normal cursor-pointer text-muted-foreground">
-            <RadioGroupItem value="api" className="size-3" disabled /> API（即将支持）
-          </Label>
-        </RadioGroup>
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">数据来源</label>
+        <div className="flex gap-2">
+          {[
+            { value: 'db', label: 'DB 查询' },
+            { value: 'remote_mcp', label: 'Remote MCP' },
+            { value: 'api', label: 'API（即将支持）', disabled: true },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => !opt.disabled && setImplType(opt.value)}
+              disabled={opt.disabled}
+              className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${
+                implType === opt.value
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : opt.disabled
+                    ? 'text-muted-foreground border-border opacity-50 cursor-not-allowed'
+                    : 'text-foreground border-border hover:bg-accent cursor-pointer'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {implType === 'db' && (
@@ -221,7 +234,9 @@ function ExecutionTab({ tool, resources, onUpdated }: { tool: McpToolRecord; res
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">资源</label>
               <Select value={resourceId} onValueChange={v => { if (v) setResourceId(v); }}>
-                <SelectTrigger className="text-xs h-8"><SelectValue placeholder="选择 DB 资源" /></SelectTrigger>
+                <SelectTrigger className="text-xs h-8">
+                  <SelectValue placeholder="选择 DB 资源">{filteredResources('db').find(r => r.id === resourceId)?.name ?? resourceId}</SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {filteredResources('db').map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
                 </SelectContent>
@@ -301,7 +316,9 @@ function ExecutionTab({ tool, resources, onUpdated }: { tool: McpToolRecord; res
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">资源</label>
               <Select value={resourceId} onValueChange={v => { if (v) setResourceId(v); }}>
-                <SelectTrigger className="text-xs h-8"><SelectValue placeholder="选择 Remote MCP 资源" /></SelectTrigger>
+                <SelectTrigger className="text-xs h-8">
+                  <SelectValue placeholder="选择 Remote MCP 资源">{filteredResources('remote_mcp').find(r => r.id === resourceId)?.name ?? resourceId}</SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {filteredResources('remote_mcp').map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
                 </SelectContent>

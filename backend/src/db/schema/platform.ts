@@ -314,17 +314,27 @@ export const mcpResources = sqliteTable('mcp_resources', {
   name:            text('name').notNull(),
   type:            text('type').notNull(),             // 'db' | 'api' | 'remote_mcp'
   status:          text('status').notNull().default('active'), // 'active' | 'planned' | 'disabled'
-  // DB 类型
-  db_mode:         text('db_mode'),                    // 'readonly' | 'readwrite'
-  // Remote MCP 类型
+  // ── Remote MCP 类型 ──
   mcp_transport:   text('mcp_transport'),              // 'http' | 'stdio' | 'sse'
   mcp_url:         text('mcp_url'),
   mcp_headers:     text('mcp_headers'),                // JSON object
-  // API 类型（V1 预留）
+  mcp_tool_name:   text('mcp_tool_name'),              // 远程工具名（如 query_subscriber）
+  // ── DB 类型 ──
+  db_mode:         text('db_mode'),                    // 'readonly' | 'readwrite'
+  db_table:        text('db_table'),                   // 表名
+  db_operation:    text('db_operation'),                // 'select_one' | 'select_many' | 'update_one'
+  db_where:        text('db_where'),                   // JSON: [{ param, column, op }]
+  db_columns:      text('db_columns'),                 // JSON: ["phone","name","balance"]
+  db_set_columns:  text('db_set_columns'),             // JSON（update_one 用）
+  db_set_fixed:    text('db_set_fixed'),               // JSON（update_one 用）
+  // ── API 类型（V1 预留）──
   api_base_url:    text('api_base_url'),
+  api_method:      text('api_method'),
+  api_path:        text('api_path'),
   api_headers:     text('api_headers'),                // JSON object
+  api_body_template: text('api_body_template'),
   api_timeout:     integer('api_timeout'),
-  // 环境变量
+  // ── 通用 ──
   env_json:        text('env_json'),                   // JSON object
   env_prod_json:   text('env_prod_json'),
   env_test_json:   text('env_test_json'),
