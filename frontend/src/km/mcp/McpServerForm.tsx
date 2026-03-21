@@ -463,6 +463,9 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
         </CardContent>
       </Card>
 
+      {/* ── Resources ─────────────── */}
+      {isEdit && <ResourceSection serverId={serverId!} />}
+
       {/* ── Tool Management ─────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -637,6 +640,64 @@ export function McpServerForm({ serverId, onBack, onSaved }: Props) {
             setEditingToolIndex(null);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+// ── Resource Section ─────────────────────────────────────────────────────────
+
+function ResourceSection({ serverId }: { serverId: string }) {
+  const [resources, setResources] = useState<Array<{ id: string; name: string; type: string; status: string; mcp_url?: string | null }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    mcpApi.listResources(serverId)
+      .then(r => setResources(r.items))
+      .catch(() => setResources([]))
+      .finally(() => setLoading(false));
+  }, [serverId]);
+
+  return (
+    <div className="mb-6">
+      <h3 className="text-sm font-semibold mb-3">资源 ({resources.length})</h3>
+      {loading ? (
+        <div className="text-xs text-muted-foreground">加载中...</div>
+      ) : resources.length === 0 ? (
+        <div className="text-xs text-muted-foreground border rounded-lg p-4 text-center">暂无资源</div>
+      ) : (
+        <div className="rounded-lg border overflow-hidden">
+          <Table className="text-xs">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-36">资源名</TableHead>
+                <TableHead className="w-24">类型</TableHead>
+                <TableHead>连接目标</TableHead>
+                <TableHead className="w-20 text-center">状态</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {resources.map(res => (
+                <TableRow key={res.id}>
+                  <TableCell className="font-mono font-medium">{res.name}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-[10px]">
+                      {res.type === 'db' ? 'DB' : res.type === 'remote_mcp' ? 'Remote MCP' : 'API'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-[11px] font-mono truncate max-w-[200px]">
+                    {res.mcp_url ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Badge variant={res.status === 'active' ? 'default' : 'outline'} className="text-[10px]">
+                      {res.status === 'active' ? '正常' : res.status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
     </div>
   );
