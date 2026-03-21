@@ -20,12 +20,13 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import {
   Send, Bot, User, FileText, Folder, FileCode,
   ChevronRight, ChevronDown, Sparkles, CheckCircle2, Plus,
-  ArrowLeft, AlertCircle, GitBranch,
+  ArrowLeft, AlertCircle, GitBranch, Search,
   Mic, MicOff, Loader2, FlaskConical, ImagePlus, X, ScanEye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -617,23 +618,108 @@ export function SkillManagerPage() {
   }, [selectedFile, handleSelectFile, reloadVersions]);
 
   // ── 列表视图 ────────────────────────────────────────────────────────────────
-  // Load registry for list view
-  const [registry, setRegistry] = useState<Array<{ id: string; published_version: number | null; latest_version: number }>>([]);
+  interface SkillRegEntry { id: string; published_version: number | null; latest_version: number; channels: string | null; mode: string | null; tool_names: string | null; tags: string | null; updated_at: string | null }
+  const [registry, setRegistry] = useState<SkillRegEntry[]>([]);
+  const [listSearch, setListSearch] = useState('');
+  const [listModeFilter, setListModeFilter] = useState<string>('all');
+  type QuickFilter = 'all' | 'published' | 'draft' | 'inbound' | 'outbound';
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+
   useEffect(() => {
     if (view !== 'list') return;
     fetch('/api/skill-versions/registry').then(r => r.json()).then(d => setRegistry(d.items ?? [])).catch(() => {});
   }, [view]);
 
+  // 中间区模式（编辑器视图用，但 hook 必须在 early return 前声明）
+  type CenterMode = 'edit' | 'preview' | 'test' | 'error';
+  const [centerMode, setCenterMode] = useState<CenterMode>('edit');
+  const [fileLoadError, setFileLoadError] = useState<string | null>(null);
+
+  // Helper: parse JSON arrays stored as strings
+  const parseJsonArr = (s: string | null): string[] => {
+    if (!s) return [];
+    try { const a = JSON.parse(s); return Array.isArray(a) ? a : []; } catch { return []; }
+  };
+
+  // Stats
+  const listStats = useMemo(() => {
+    const published = registry.filter(r => r.published_version != null).length;
+    const hasDraft = registry.filter(r => r.latest_version > (r.published_version ?? 0)).length;
+    const inbound = registry.filter(r => r.mode === 'inbound').length;
+    const outbound = registry.filter(r => r.mode === 'outbound').length;
+    return { total: skills.length, published, hasDraft, inbound, outbound };
+  }, [skills, registry]);
+
+  // Filtered list
+  const filteredSkills = useMemo(() => {
+    let list = skills;
+    if (listSearch.trim()) {
+      const q = listSearch.toLowerCase();
+      list = list.filter(s => {
+        const reg = registry.find(r => r.id === s.id);
+        const tags = parseJsonArr(reg?.tags ?? null);
+        return s.id.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || tags.some(t => t.includes(q));
+      });
+    }
+    if (quickFilter === 'published') list = list.filter(s => { const r = registry.find(x => x.id === s.id); return r?.published_version != null; });
+    else if (quickFilter === 'draft') list = list.filter(s => { const r = registry.find(x => x.id === s.id); return r && r.latest_version > (r.published_version ?? 0); });
+    else if (quickFilter === 'inbound') list = list.filter(s => { const r = registry.find(x => x.id === s.id); return r?.mode === 'inbound'; });
+    else if (quickFilter === 'outbound') list = list.filter(s => { const r = registry.find(x => x.id === s.id); return r?.mode === 'outbound'; });
+    if (listModeFilter !== 'all') list = list.filter(s => { const r = registry.find(x => x.id === s.id); return r?.mode === listModeFilter; });
+    return list;
+  }, [skills, registry, listSearch, quickFilter, listModeFilter]);
+
   if (view === 'list') {
     return (
       <div className="h-full bg-background overflow-y-auto">
-        <div className="p-4">
-          {/* 头部 */}
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold">技能列表 ({skills.length})</h2>
+        <div className="p-4 space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">技能管理</h2>
             <Button size="sm" onClick={createNewSkill}><Plus size={12} /> 新建</Button>
           </div>
 
+          {/* Stats cards */}
+          {!loading && skills.length > 0 && (
+            <div className="grid grid-cols-5 gap-2">
+              {([
+                { key: 'all' as QuickFilter, label: '全部', value: listStats.total, color: 'text-foreground' },
+                { key: 'published' as QuickFilter, label: '已发布', value: listStats.published, color: 'text-emerald-600' },
+                { key: 'draft' as QuickFilter, label: '有草稿', value: listStats.hasDraft, color: 'text-amber-600' },
+                { key: 'inbound' as QuickFilter, label: '入站', value: listStats.inbound, color: 'text-primary' },
+                { key: 'outbound' as QuickFilter, label: '外呼', value: listStats.outbound, color: 'text-primary' },
+              ]).map(card => (
+                <button key={card.key} onClick={() => setQuickFilter(quickFilter === card.key ? 'all' : card.key)}
+                  className={`rounded-lg border p-3 text-left transition-colors ${quickFilter === card.key ? 'border-primary bg-primary/5' : 'hover:bg-accent'}`}>
+                  <div className={`text-lg font-bold ${card.color}`}>{card.value}</div>
+                  <div className="text-[11px] text-muted-foreground">{card.label}</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Search + filters */}
+          {!loading && skills.length > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 max-w-xs">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input value={listSearch} onChange={e => setListSearch(e.target.value)} placeholder="搜索技能名 / 描述 / 标签" className="pl-8 text-xs h-8" />
+              </div>
+              <Select value={listModeFilter} onValueChange={v => setListModeFilter(v)}>
+                <SelectTrigger className="w-28 text-xs h-8"><SelectValue placeholder="模式" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部模式</SelectItem>
+                  <SelectItem value="inbound">入站</SelectItem>
+                  <SelectItem value="outbound">外呼</SelectItem>
+                </SelectContent>
+              </Select>
+              {(listSearch || quickFilter !== 'all' || listModeFilter !== 'all') && (
+                <Button variant="ghost" size="xs" onClick={() => { setListSearch(''); setQuickFilter('all'); setListModeFilter('all'); }}>清除筛选</Button>
+              )}
+            </div>
+          )}
+
+          {/* Loading / Error */}
           {loading && (
             <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -645,57 +731,87 @@ export function SkillManagerPage() {
               <AlertCircle className="w-4 h-4" /> {loadError}
             </div>
           )}
+
+          {/* Table */}
           {!loading && !loadError && (
             <div className="rounded-lg border overflow-hidden">
               <Table className="text-xs">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>名称</TableHead>
-                    <TableHead>描述</TableHead>
-                    <TableHead className="w-20">发布版本</TableHead>
-                    <TableHead className="w-24">操作</TableHead>
+                    <TableHead className="w-40">名称</TableHead>
+                    <TableHead className="w-16 text-center">模式</TableHead>
+                    <TableHead className="w-24 text-center">渠道</TableHead>
+                    <TableHead className="w-16 text-center">工具</TableHead>
+                    <TableHead className="w-24 text-center">版本</TableHead>
+                    <TableHead>标签</TableHead>
+                    <TableHead className="w-24 text-center">更新</TableHead>
+                    <TableHead className="w-20 text-center">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {skills.map(skill => {
+                  {filteredSkills.map(skill => {
                     const reg = registry.find(r => r.id === skill.id);
+                    const channels = parseJsonArr(reg?.channels ?? null);
+                    const toolNames = parseJsonArr(reg?.tool_names ?? null);
+                    const tags = parseJsonArr(reg?.tags ?? null);
+                    const hasDraft = reg && reg.latest_version > (reg.published_version ?? 0);
                     return (
-                      <TableRow
-                        key={skill.id}
-                        className="cursor-pointer"
-                        onClick={() => openSkill(skill)}
-                      >
-                        <TableCell className="font-mono font-medium">{skill.id}</TableCell>
-                        <TableCell className="text-muted-foreground truncate max-w-[300px]">{skill.description}</TableCell>
+                      <TableRow key={skill.id} className="cursor-pointer" onClick={() => openSkill(skill)}>
                         <TableCell>
-                          {reg?.published_version ? (
-                            <Badge variant="secondary">v{reg.published_version}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
+                          <div className="font-mono font-semibold">{skill.id}</div>
+                          {skill.description && <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">{skill.description}</div>}
                         </TableCell>
-                        <TableCell onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="xs" onClick={() => openSkill(skill)}>编辑</Button>
-                            <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive"
-                              onClick={async () => {
-                                if (!confirm(`确定删除技能「${skill.id}」？此操作不可恢复。`)) return;
-                                try {
-                                  await deleteSkill(skill.id);
-                                } catch (err: any) {
-                                  alert(`删除失败: ${err.message ?? '未知错误'}`);
-                                }
-                              }}
-                            >删除</Button>
+                        <TableCell className="text-center">
+                          <Badge variant={reg?.mode === 'outbound' ? 'secondary' : 'outline'} className="text-[10px]">
+                            {reg?.mode === 'outbound' ? '外呼' : '入站'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex justify-center gap-0.5 flex-wrap">
+                            {channels.slice(0, 2).map(ch => (
+                              <Badge key={ch} variant="secondary" className="text-[9px]">{ch}</Badge>
+                            ))}
                           </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="text-[11px]" title={toolNames.join(', ')}>{toolNames.length}</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {reg?.published_version ? (
+                              <Badge variant="default" className="text-[9px]">v{reg.published_version}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-[10px]">未发布</span>
+                            )}
+                            {hasDraft && <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-300">草稿</Badge>}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-0.5 flex-wrap">
+                            {tags.slice(0, 3).map(t => (
+                              <span key={t} className="text-[9px] px-1.5 py-0.5 bg-muted rounded">{t}</span>
+                            ))}
+                            {tags.length > 3 && <span className="text-[9px] text-muted-foreground">+{tags.length - 3}</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center text-[10px] text-muted-foreground">
+                          {reg?.updated_at ? new Date(reg.updated_at).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) : '—'}
+                        </TableCell>
+                        <TableCell className="text-center" onClick={e => e.stopPropagation()}>
+                          <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive"
+                            onClick={async () => {
+                              if (!confirm(`确定删除技能「${skill.id}」？此操作不可恢复。`)) return;
+                              try { await deleteSkill(skill.id); } catch (err: any) { alert(`删除失败: ${err.message ?? '未知错误'}`); }
+                            }}
+                          >删除</Button>
                         </TableCell>
                       </TableRow>
                     );
                   })}
-                  {skills.length === 0 && (
+                  {filteredSkills.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                        暂无技能，点击「新建」开始创建
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        {skills.length === 0 ? '暂无技能，点击「新建」开始创建' : '无匹配技能'}
                       </TableCell>
                     </TableRow>
                   )}
@@ -712,17 +828,7 @@ export function SkillManagerPage() {
 
   const selectedIsMd = selectedFile ? isMdFile(selectedFile.name) : false;
 
-  // 中间区模式：edit（默认）/ preview（Markdown 渲染）/ test（测试对话）/ error
-  type CenterMode = 'edit' | 'preview' | 'test' | 'error';
-  const [centerMode, setCenterMode] = useState<CenterMode>('edit');
-  const [fileLoadError, setFileLoadError] = useState<string | null>(null);
-
-  // 文件加载失败时自动切到 error 模式
-  useEffect(() => {
-    if (editorContent === '' && !fileLoading && selectedFile) {
-      // 内容为空可能是正常的空文件，不自动切 error
-    }
-  }, [editorContent, fileLoading, selectedFile]);
+  // centerMode / fileLoadError 已在 early return 前声明
 
   // 已发布版本信息
   const publishedVersion = versions.find(v => v.status === 'published');
