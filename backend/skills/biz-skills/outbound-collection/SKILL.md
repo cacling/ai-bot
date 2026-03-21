@@ -38,15 +38,17 @@ metadata:
 
 | 客户反应 | 意向类型 |
 |---|---|
-| 表示会还、说出日期或"最近" | `ptp`（承诺还款） |
-| 现在不方便、要你晚点再打、预约回呼 | `callback`（预约回呼） |
+| 明确说出还款日期（如"周五还""15号还"）且口头承诺 | `ptp`（承诺还款） |
+| 只说"最近""回头""晚点看看"但无明确日期 | `callback`（预约回呼，不可记为 ptp） |
+| 现在不方便、要你晚点再打、预约回呼 | `callback_request`（预约回呼） |
 | 明确拒绝、不配合、情绪激动 | `refusal` |
 | 说已还了 / 金额不对 / 不是本人的欠款 | `dispute` |
 | 要求转人工 | `transfer` |
+| 严重疾病/丧失劳动能力/非本人且称机主已故/情绪极度脆弱 | `vulnerable`（特殊困难，立即停止施压并转人工） |
 
 ### 工具说明
 
-- `record_call_result(task_id, result, ptp_date?, notes?)` — 记录本次通话结果，result 取值为 ptp / refusal / dispute / transfer / callback_request
+- `record_call_result(task_id, result, ptp_date?, notes?)` — 记录本次通话结果，result 取值为 ptp / refusal / dispute / transfer / callback_request / vulnerable / dnd
 - `send_followup_sms(phone, sms_type)` — 发送跟进短信，sms_type 取值如 payment_link
 - `create_callback_task(task_id, preferred_time, callback_phone)` — 创建回呼任务，记录客户期望的回呼时间和号码
 - `transfer_to_human(task_id, reason)` — 转接人工坐席，reason 说明转接原因
@@ -93,14 +95,25 @@ stateDiagram-v2
 
     state 意向判断 <<choice>>
     客户回复意向 --> 意向判断
-    意向判断 --> 承诺还款: 表示会还、说出日期
+    意向判断 --> 承诺还款: 明确说出还款日期且口头承诺
+    意向判断 --> 模糊意愿: 只说"最近""回头""晚点看看"但无明确日期
     意向判断 --> 预约回呼: 现在不方便、要求晚点再打
     意向判断 --> 明确拒绝: 拒绝还款、不配合
     意向判断 --> 提出异议: 已还款、金额有误、非本人欠款
     意向判断 --> 转人工: 要求转人工
     意向判断 --> 声称已付: 客户称刚刚付款/正在付款
+    意向判断 --> 特殊困难: 严重疾病/丧失劳动能力/机主已故/情绪极度脆弱
 
-    %% OC4 — PTP 日期超限
+    模糊意愿 --> 追问日期: 温和追问具体还款日期
+    state 追问结果 <<choice>>
+    追问日期 --> 追问结果
+    追问结果 --> 承诺还款: 客户给出明确日期
+    追问结果 --> 预约回呼: 仍无法给出日期，转为回呼
+
+    特殊困难 --> 记录困难: 立即停止施压，表达理解 %% tool:record_call_result
+    记录困难 --> 转人工: record_call_result(vulnerable)，转人工跟进
+
+    %% OC4 — PTP 日期超限（PTP 必须同时满足：有明确日期 + 客户明确承诺）
     承诺还款 --> 检查还款日期: 确认还款日期 %% ref:collection-guide.md#承诺还款
     state 日期是否合规 <<choice>>
     检查还款日期 --> 日期是否合规
@@ -117,7 +130,7 @@ stateDiagram-v2
     号码确认 --> 回呼已预约: 使用当前号码
     号码确认 --> 回呼已预约: 客户提供新手机号
     回呼已预约 --> 创建回访任务: create_callback_task %% tool:create_callback_task
-    创建回访任务 --> 记录回呼: record_call_result(ptp) %% tool:record_call_result
+    创建回访任务 --> 记录回呼: record_call_result(callback_request) %% tool:record_call_result
     记录回呼 --> [*]: 礼貌挂断
 
     明确拒绝 --> 提醒后果: 提醒一次逾期后果（仅一次）
@@ -133,7 +146,7 @@ stateDiagram-v2
     提醒后果 --> DND请求: 客户明确要求停止拨打
     state DND请求处理 {
         DND请求 --> 记录DND: 记录客户要求不再来电
-        记录DND --> [*]: record_call_result(dnd)，从外呼名单移除，礼貌结束
+        记录DND --> [*]: record_call_result(dnd)，从外呼名单移除，不再安排后续催收，礼貌结束
     }
 
     提出异议 --> 收集异议详情: 收集详情（已还款时间渠道、金额差异、非本人说明）
@@ -177,6 +190,10 @@ stateDiagram-v2
 - **禁止**：凭空编造欠款数据，所有欠款信息必须来自任务平台注入的数据
 - **禁止**：在 `allowed_hours` 允许时段之外拨打电话
 - **禁止**：索要完整身份证号、银行卡号、密码、OTP 验证码
+- **禁止**：将无明确日期的模糊意愿（"最近""回头""晚点看看"）记录为 `ptp`
+- **禁止**：对特殊困难客户（严重疾病、丧失劳动能力、机主已故、情绪极度脆弱）继续施压
+- **必须**：`ptp` 记录需同时满足两个条件——有明确还款日期 + 客户明确口头承诺
+- **必须**：`dnd` 一旦记录，不再安排后续催收拨打
 - **必须**：开场告知本通话可能被录音
 - **必须**：通话结束前调用 `record_call_result` 记录结果
 - **必须**：涉及变更操作须客户明确同意
