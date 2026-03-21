@@ -48,10 +48,10 @@ const ENGLISH_LANG_INSTRUCTION = `**LANGUAGE REQUIREMENT (MANDATORY — HIGHEST 
 You MUST respond ONLY in English for this entire conversation. All spoken responses must be in English. Do not switch to Chinese under any circumstances, even if the user speaks Chinese or tool results contain Chinese data. Always translate any Chinese data from tool results into English before including it in your response.
 When calling tools that accept a \`lang\` parameter (such as diagnose_network, diagnose_app), always pass \`lang: "en"\` to receive English diagnostic output.`;
 
-async function fetchSubscriberInfo(phone: string): Promise<{ name: string; planName: string } | null> {
+async function fetchSubscriberInfo(phone: string): Promise<{ name: string; gender: string; planName: string } | null> {
   try {
     const rows = await db
-      .select({ name: subscribers.name, planId: subscribers.plan_id })
+      .select({ name: subscribers.name, gender: subscribers.gender, planId: subscribers.plan_id })
       .from(subscribers)
       .where(eq(subscribers.phone, phone))
       .limit(1);
@@ -61,21 +61,29 @@ async function fetchSubscriberInfo(phone: string): Promise<{ name: string; planN
       .from(plans)
       .where(eq(plans.plan_id, rows[0].planId))
       .limit(1);
-    return { name: rows[0].name, planName: planRows[0]?.name ?? '' };
+    return { name: rows[0].name, gender: rows[0].gender, planName: planRows[0]?.name ?? '' };
   } catch {
     return null;
   }
 }
 
-function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberName?: string, planName?: string): string {
+function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberName?: string, planName?: string, gender?: string): string {
   const locale = lang === 'en' ? 'en-US' : 'zh-CN';
   const today = new Date().toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
   const defaultName = lang === 'en' ? 'Customer' : '用户';
   const defaultPlan = lang === 'en' ? 'Unknown Plan' : '未知套餐';
+  // 根据性别生成带称呼的姓名
+  let displayName = subscriberName ?? defaultName;
+  if (subscriberName && gender) {
+    const title = lang === 'en'
+      ? (gender === 'male' ? 'Mr. ' : gender === 'female' ? 'Ms. ' : '')
+      : (gender === 'male' ? '先生' : gender === 'female' ? '女士' : '');
+    displayName = lang === 'en' ? `${title}${subscriberName}` : `${subscriberName}${title}`;
+  }
   const voiceSkills = getSkillsDescriptionByChannel('voice');
   const base = VOICE_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
-    .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? defaultName)
+    .replace('{{SUBSCRIBER_NAME}}', displayName)
     .replace('{{PLAN_NAME}}', planName ?? defaultPlan)
     .replace('{{CURRENT_DATE}}', today)
     .replace('{{AVAILABLE_SKILLS}}', voiceSkills || '（暂无可用技能）');
@@ -214,7 +222,7 @@ voice.get(
 
         glmWs.on('open', () => {
           logger.info('voice', 'glm_connected', { session: sessionId, model: GLM_REALTIME_MODEL });
-          const instructions = buildVoicePrompt(userPhone, lang, subInfo?.name, subInfo?.planName);
+          const instructions = buildVoicePrompt(userPhone, lang, subInfo?.name, subInfo?.planName, subInfo?.gender);
           const hasEnInstruction = instructions.includes('LANGUAGE REQUIREMENT');
           logger.info('voice', 'lang_chain_prompt', { session: sessionId, lang, hasEnInstruction, promptLen: instructions.length, promptHead: instructions.slice(0, 120) });
           glmWs!.send(JSON.stringify({

@@ -129,8 +129,14 @@ const messages: Record<string, Record<Lang, MsgFn>> = {
 
   // ── 问候 ──
   greeting_with_subscriber:     {
-    zh: (name: string, plan: string) => `您好，${name}！我是客服小通，您当前使用的是${plan}，请问今天有什么可以帮您？`,
-    en: (name: string, plan: string) => `Hello, ${name}! I'm Xiaotong from customer service. You're currently on the ${plan} plan. How can I help you today?`,
+    zh: (name: string, plan: string, gender?: string) => {
+      const title = gender === 'male' ? '先生' : gender === 'female' ? '女士' : '';
+      return `您好，${name}${title}！我是客服小通，您当前使用的是${plan}，请问今天有什么可以帮您？`;
+    },
+    en: (name: string, plan: string, gender?: string) => {
+      const title = gender === 'male' ? 'Mr. ' : gender === 'female' ? 'Ms. ' : '';
+      return `Hello, ${title}${name}! I'm Xiaotong from customer service. You're currently on the ${plan} plan. How can I help you today?`;
+    },
   },
   greeting_generic:             {
     zh: '您好！我是客服小通，请问今天有什么可以帮您？',

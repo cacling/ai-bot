@@ -44,6 +44,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
   let botEnabled = true;
   let cachedSubscriberName: string | undefined;
   let cachedPlanName: string | undefined;
+  let cachedGender: string | undefined;
   let lastActiveSkill: string | null = null;
   // ── 会话级指标 ────────────────────────────────────────────────────────────
   const sessionStartTs = Date.now();
@@ -100,7 +101,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       // 查询用户身份，推送个性化问候
       try {
         const subRows = await db
-          .select({ name: subscribers.name, planId: subscribers.plan_id })
+          .select({ name: subscribers.name, gender: subscribers.gender, planId: subscribers.plan_id })
           .from(subscribers)
           .where(eq(subscribers.phone, phone))
           .limit(1);
@@ -113,9 +114,11 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
             .limit(1);
           cachedSubscriberName = subRows[0].name;
           cachedPlanName = planRows[0]?.name ?? '';
+          cachedGender = subRows[0].gender;
           const name = cachedSubscriberName;
           const planName = cachedPlanName;
-          greetingText = t('greeting_with_subscriber', langParam, name, planName);
+          const gender = cachedGender;
+          greetingText = t('greeting_with_subscriber', langParam, name, planName, gender);
         } else {
           greetingText = t('greeting_generic', langParam);
         }
@@ -205,6 +208,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           undefined,
           cachedSubscriberName,
           cachedPlanName,
+          cachedGender,
         );
       } catch (err) {
         logger.error('chat-ws', 'agent_error', { session: sessionId, error: String(err) });

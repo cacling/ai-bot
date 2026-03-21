@@ -41,14 +41,22 @@ const SYSTEM_PROMPT_TEMPLATE =
 
 const ENGLISH_LANG_INSTRUCTION = `**LANGUAGE REQUIREMENT (MANDATORY — HIGHEST PRIORITY)**\nYou MUST reply ONLY in English for this entire conversation. All responses must be in English. Do not switch to Chinese under any circumstances, even if the user writes in Chinese or tool results contain Chinese data. Always translate any Chinese data from tool results into English before including it in your response.\nWhen calling tools that accept a \`lang\` parameter (such as diagnose_network, diagnose_app), always pass \`lang: "en"\` to receive English diagnostic output.`;
 
-function buildSystemPrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberName?: string, planName?: string): string {
+function buildSystemPrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberName?: string, planName?: string, gender?: string): string {
   const locale = lang === 'en' ? 'en-US' : 'zh-CN';
   const today = new Date().toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
   const defaultName = lang === 'en' ? 'Customer' : '用户';
   const defaultPlan = lang === 'en' ? 'Unknown Plan' : '未知套餐';
+  // 根据性别生成带称呼的姓名
+  let displayName = subscriberName ?? defaultName;
+  if (subscriberName && gender) {
+    const title = lang === 'en'
+      ? (gender === 'male' ? 'Mr. ' : gender === 'female' ? 'Ms. ' : '')
+      : (gender === 'male' ? '先生' : gender === 'female' ? '女士' : '');
+    displayName = lang === 'en' ? `${title}${subscriberName}` : `${subscriberName}${title}`;
+  }
   const base = SYSTEM_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
-    .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? defaultName)
+    .replace('{{SUBSCRIBER_NAME}}', displayName)
     .replace('{{PLAN_NAME}}', planName ?? defaultPlan)
     .replace('{{CURRENT_DATE}}', today)
     .replace('{{AVAILABLE_SKILLS}}', getSkillsDescriptionByChannel('online'));
@@ -216,6 +224,7 @@ export async function runAgent(
   onTextDelta?: TextDeltaCallback,
   subscriberName?: string,
   planName?: string,
+  subscriberGender?: string,
   overrideSkillsDir?: string,
   options?: RunAgentOptions,
 ): Promise<AgentResult> {
@@ -387,7 +396,7 @@ export async function runAgent(
 
   let lastActiveSkill: string | undefined = options?.skillName;
 
-  let systemPrompt = buildSystemPrompt(userPhone, lang, subscriberName, planName);
+  let systemPrompt = buildSystemPrompt(userPhone, lang, subscriberName, planName, subscriberGender);
   // Inject pre-loaded skill content (for test endpoint — ensures SOP is visible without get_skill_instructions)
   if (options?.skillContent) {
     systemPrompt += '\n\n---\n### 当前测试技能操作指南\n\n' + options.skillContent;
