@@ -134,6 +134,22 @@ describe('user-info-service integration', () => {
     expect(result.primary_cause).toBeDefined();
     expect(result.recommendation).toBeDefined();
   });
+
+  test('query_plans returns all plans', async () => {
+    if (skipIfUnavailable()) return;
+    const result = await mcpCall(SERVERS.userInfo.url, 'query_plans', {});
+    expect(result.found).toBe(true);
+    expect(result.plans).toBeDefined();
+    expect(result.plans.length).toBeGreaterThan(0);
+  });
+
+  test('query_plans with plan_id returns single plan', async () => {
+    if (skipIfUnavailable()) return;
+    const result = await mcpCall(SERVERS.userInfo.url, 'query_plans', { plan_id: 'plan_50g' });
+    expect(result.found).toBe(true);
+    expect(result.plan).toBeDefined();
+    expect(result.plan.name).toBeDefined();
+  });
 });
 
 // ── business-service ─────────────────────────────────────────────────────────
@@ -144,6 +160,16 @@ describe('business-service integration', () => {
     const tools = await mcpListTools(SERVERS.business.url);
     expect(tools).toContain('cancel_service');
     expect(tools).toContain('issue_invoice');
+  });
+
+  test('issue_invoice returns invoice number', async () => {
+    if (skipIfUnavailable()) return;
+    const result = await mcpCall(SERVERS.business.url, 'issue_invoice', {
+      phone: '13800000001', month: '2026-03', email: 'test@example.com',
+    });
+    expect(result.success).toBe(true);
+    expect(result.invoice_no).toBeDefined();
+    expect(result.email).toContain('*');
   });
 });
 
@@ -201,6 +227,15 @@ describe('outbound-service integration', () => {
     expect(r2.result_category).toBe('negative');
   });
 
+  test('create_callback_task creates task', async () => {
+    if (skipIfUnavailable()) return;
+    const result = await mcpCall(SERVERS.outbound.url, 'create_callback_task', {
+      original_task_id: 'test-task', callback_phone: '13800000001', preferred_time: '2026-03-25 14:00',
+    });
+    expect(result.success).toBe(true);
+    expect(result.callback_task_id).toBeDefined();
+  });
+
   test('record_marketing_result returns conversion_tag', async () => {
     if (skipIfUnavailable()) return;
     const result = await mcpCall(SERVERS.outbound.url, 'record_marketing_result', {
@@ -229,5 +264,29 @@ describe('account-service integration', () => {
     expect(result.success).toBe(true);
     expect(result.balance).toBeDefined();
     expect(result.has_arrears).toBeDefined();
+  });
+
+  test('verify_identity accepts valid OTP', async () => {
+    if (skipIfUnavailable()) return;
+    const result = await mcpCall(SERVERS.account.url, 'verify_identity', { phone: '13800000001', otp: '1234' });
+    expect(result.success).toBe(true);
+    expect(result.verified).toBe(true);
+    expect(result.customer_name).toBeDefined();
+  });
+
+  test('check_contracts returns contracts from real table', async () => {
+    if (skipIfUnavailable()) return;
+    const result = await mcpCall(SERVERS.account.url, 'check_contracts', { phone: '13800000001' });
+    expect(result.success).toBe(true);
+    expect(result.contracts).toBeDefined();
+    expect(result.has_active_contracts).toBe(true);
+    expect(result.has_high_risk).toBe(true);
+  });
+
+  test('check_contracts returns empty for user without contracts', async () => {
+    if (skipIfUnavailable()) return;
+    const result = await mcpCall(SERVERS.account.url, 'check_contracts', { phone: '13800000002' });
+    expect(result.success).toBe(true);
+    expect(result.has_active_contracts).toBe(false);
   });
 });

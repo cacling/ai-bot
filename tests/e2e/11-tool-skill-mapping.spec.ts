@@ -13,12 +13,13 @@ const API = 'http://127.0.0.1:18472/api';
 // ── 工具-技能映射 ────────────────────────────────────────────────────────────
 
 test.describe('工具-技能自动映射', () => {
-  test('TC-TSM-01 技能列表包含 suspend-service', async ({ request }) => {
+  test('TC-TSM-01 技能列表包含 bill-inquiry', async ({ request }) => {
     const res = await request.get(`${API}/skills`);
     expect(res.ok()).toBeTruthy();
     const { skills } = await res.json();
     const names = skills.map((s: { id: string }) => s.id);
-    expect(names).toContain('suspend-service');
+    expect(names).toContain('bill-inquiry');
+    expect(names).not.toContain('suspend-service');
   });
 
   test('TC-TSM-02 MCP 工具概览返回 account-service 工具', async ({ request }) => {
@@ -82,29 +83,28 @@ test.describe('Skill Creator MCP 工具查询', () => {
 
 // ── 停机保号技能测试（通过版本测试 API）──────────────────────────────────────
 
-test.describe('停机保号技能执行', () => {
+test.describe('技能版本测试', () => {
   test.setTimeout(120_000);
 
-  test('TC-TSM-06 suspend-service 版本测试可执行', async ({ request }) => {
-    // 获取已发布版本
-    const listRes = await request.get(`${API}/skill-versions?skill=suspend-service`);
+  test('TC-TSM-06 bill-inquiry 版本测试可执行', async ({ request }) => {
+    const listRes = await request.get(`${API}/skill-versions?skill=bill-inquiry`);
     if (!listRes.ok()) {
-      test.skip(true, 'suspend-service 未注册版本');
+      test.skip(true, 'bill-inquiry 未注册版本');
       return;
     }
     const { versions } = await listRes.json();
     const published = versions?.find((v: { status: string }) => v.status === 'published');
     if (!published) {
-      test.skip(true, 'suspend-service 无已发布版本');
+      test.skip(true, 'bill-inquiry 无已发布版本');
       return;
     }
 
     // 执行测试
     const testRes = await request.post(`${API}/skill-versions/test`, {
       data: {
-        skill: 'suspend-service',
+        skill: 'bill-inquiry',
         version_no: published.version_no,
-        message: '我想停机保号',
+        message: '查询本月话费',
         persona: { phone: '13800000001', name: '张三', plan: '畅享50G套餐', status: 'active' },
       },
       timeout: 90_000,
