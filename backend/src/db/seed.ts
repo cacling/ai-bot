@@ -770,7 +770,22 @@ async function seed() {
     }).where(eq(mcpTools.name, dbt.name)).run();
   }
 
-  console.log(`[seed] MCP Resources: ${toolResourceDefs.length} 个, Tools: ${toolResourceDefs.length} 个 (含 ${dbBindingTools.length} 个 DB Binding)`);
+  // API Binding 工具：覆盖 impl_type 和 execution_config
+  const apiBindingTools: Array<{ name: string; url: string; method?: string }> = [
+    { name: 'verify_identity', url: 'http://127.0.0.1:18008/api/identity/verify' },
+    { name: 'issue_invoice', url: 'http://127.0.0.1:18008/api/invoice/issue' },
+    { name: 'create_callback_task', url: 'http://127.0.0.1:18008/api/callback/create' },
+  ];
+  for (const api of apiBindingTools) {
+    db.update(mcpTools).set({
+      impl_type: 'api',
+      handler_key: null,
+      execution_config: JSON.stringify({ impl_type: 'api', api: { url: api.url, method: api.method ?? 'POST', timeout: 10000 } }),
+      updated_at: now,
+    }).where(eq(mcpTools.name, api.name)).run();
+  }
+
+  console.log(`[seed] MCP Resources: ${toolResourceDefs.length} 个, Tools: ${toolResourceDefs.length} 个 (含 ${dbBindingTools.length} 个 DB, ${apiBindingTools.length} 个 API)`);
 
   // ── 10. 技能注册 + v1 版本快照（upsert：已存在则跳过）─────────────────────
   console.log('[seed] 初始化技能注册表和版本快照...');

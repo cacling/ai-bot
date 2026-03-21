@@ -225,6 +225,10 @@ for i in "${!MCP_SERVICES[@]}"; do
   sleep 0.5
 done
 
+# Mock APIs
+start_service "mock-apis" "$BASE_DIR/mock_apis" \
+  "$NODE --import tsx/esm src/server.ts"
+
 # Backend
 start_service "backend" "$BASE_DIR/backend" "$BUN src/index.ts"
 

@@ -207,18 +207,15 @@ function ExecutionTab({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () 
           {[
             { value: 'script', label: '脚本', icon: <FileCode2 size={13} />, desc: '代码实现（TypeScript handler）' },
             { value: 'db', label: 'DB Binding', icon: <Database size={13} />, desc: '声明式数据库查询' },
-            { value: 'api', label: 'API', icon: <Settings2 size={13} />, desc: '外部 API 调用（即将支持）', disabled: true },
+            { value: 'api', label: 'API', icon: <Settings2 size={13} />, desc: '外部 REST API 调用' },
           ].map(opt => (
             <button
               key={opt.value}
-              onClick={() => !opt.disabled && setImplType(opt.value)}
-              disabled={opt.disabled}
+              onClick={() => setImplType(opt.value)}
               className={`flex-1 p-3 rounded-lg border text-left transition-colors ${
                 implType === opt.value
                   ? 'border-primary bg-primary/5'
-                  : opt.disabled
-                    ? 'border-border opacity-40 cursor-not-allowed'
-                    : 'border-border hover:bg-accent cursor-pointer'
+                  : 'border-border hover:bg-accent cursor-pointer'
               }`}
             >
               <div className="flex items-center gap-1.5 text-xs font-medium">{opt.icon} {opt.label}</div>
@@ -270,6 +267,11 @@ function ExecutionTab({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () 
       {/* DB Binding 模式配置 */}
       {implType === 'db' && (
         <DbBindingPanel toolId={tool.id} config={tool.execution_config} onUpdated={onUpdated} />
+      )}
+
+      {/* API 模式配置 */}
+      {implType === 'api' && (
+        <ApiPanel toolId={tool.id} config={tool.execution_config} onUpdated={onUpdated} />
       )}
 
       <div className="pt-2 border-t">
@@ -474,6 +476,71 @@ function DbBindingPanel({ toolId, config, onUpdated }: { toolId: string; config:
       <div className="pt-2 border-t">
         <Button size="sm" onClick={handleSave} disabled={saving}>
           <Save size={12} /> {saving ? '保存中...' : '保存 DB 配置'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── API Panel ────────────────────────────────────────────────────────────────
+
+function ApiPanel({ toolId, config, onUpdated }: { toolId: string; config: string | null; onUpdated: () => void }) {
+  const existing = config ? JSON.parse(config) as Record<string, any> : {};
+  const apiCfg = existing.api ?? {};
+
+  const [url, setUrl] = useState(apiCfg.url ?? '');
+  const [method, setMethod] = useState(apiCfg.method ?? 'POST');
+  const [timeout, setTimeout_] = useState(apiCfg.timeout ?? 10000);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!url.trim()) { alert('URL 不能为空'); return; }
+    setSaving(true);
+    try {
+      await mcpApi.updateExecutionConfig(toolId, {
+        impl_type: 'api',
+        api: { url: url.trim(), method, timeout },
+      });
+      onUpdated();
+    } catch (e) { alert(`保存失败: ${e}`); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-4 border rounded-lg p-4">
+      <h3 className="text-xs font-semibold">API 配置</h3>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2">
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">URL</label>
+          <Input value={url} onChange={e => setUrl(e.target.value)} className="text-xs font-mono" placeholder="http://127.0.0.1:18008/api/..." />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">Method</label>
+          <Select value={method} onValueChange={v => { if (v) setMethod(v); }}>
+            <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="POST">POST</SelectItem>
+              <SelectItem value="GET">GET</SelectItem>
+              <SelectItem value="PUT">PUT</SelectItem>
+              <SelectItem value="DELETE">DELETE</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="w-32">
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">超时 (ms)</label>
+        <Input type="number" value={timeout} onChange={e => setTimeout_(Number(e.target.value))} className="text-xs" />
+      </div>
+
+      <div className="text-[11px] text-muted-foreground p-2 bg-muted rounded">
+        工具参数将作为 JSON body 直接发送到该 URL。返回的 JSON 将作为工具结果返回给 Agent。
+      </div>
+
+      <div className="pt-2 border-t">
+        <Button size="sm" onClick={handleSave} disabled={saving}>
+          <Save size={12} /> {saving ? '保存中...' : '保存 API 配置'}
         </Button>
       </div>
     </div>

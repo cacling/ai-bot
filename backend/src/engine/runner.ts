@@ -333,6 +333,32 @@ export async function runAgent(
     }
   } catch { /* mcp_tools 表不存在时跳过 */ }
 
+  // 注入 API 类型工具：impl_type === 'api' 且工具非 mocked
+  try {
+    const apiToolRows = db.select().from(mcpToolsTable).all()
+      .filter(t => !t.mocked && !t.disabled && t.impl_type === 'api' && t.execution_config);
+    for (const row of apiToolRows) {
+      if (row.name in mockWrappedTools) continue;
+      try {
+        const cfg = JSON.parse(row.execution_config!) as { api?: { url: string; method?: string; timeout?: number; headers?: Record<string, string> } };
+        if (!cfg.api?.url) continue;
+        const schema = row.input_schema ? JSON.parse(row.input_schema) : { type: 'object', properties: {} };
+        const apiConfig = cfg.api;
+        mockWrappedTools[row.name] = {
+          description: row.description,
+          parameters: jsonSchema(schema as any),
+          execute: async (args: Record<string, unknown>) => {
+            logger.info('agent', 'api_tool_execute', { tool: row.name, url: apiConfig.url });
+            const { executeApiTool } = await import('../services/api-executor');
+            const result = await executeApiTool(apiConfig, args);
+            return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+          },
+        };
+        logger.info('agent', 'api_tool_injected', { tool: row.name, url: apiConfig.url });
+      } catch { /* 解析失败跳过 */ }
+    }
+  } catch { /* mcp_tools 表不存在时跳过 */ }
+
   // Wrap MCP tools to translate results when lang !== 'zh'
   const effectiveMcpTools = mockWrappedTools;
   const mcpTools = lang === 'zh' ? effectiveMcpTools : Object.fromEntries(

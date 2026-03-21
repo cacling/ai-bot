@@ -5,6 +5,7 @@
     "backend",
     "frontend",
     "mcp_servers",
+    "mock_apis",
     "packages/*"
   ],
   "scripts": {
