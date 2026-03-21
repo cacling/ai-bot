@@ -785,6 +785,20 @@ async function seed() {
     }).where(eq(mcpTools.name, api.name)).run();
   }
 
+  // Output Schema（输出契约）— 存文件路径，实际内容在 packages/shared-db/src/schemas/*.json
+  const SCHEMA_DIR = 'packages/shared-db/src/schemas';
+  const toolNames = [
+    'query_subscriber', 'query_bill', 'query_plans', 'analyze_bill_anomaly',
+    'cancel_service', 'issue_invoice', 'diagnose_network', 'diagnose_app',
+    'record_call_result', 'send_followup_sms', 'create_callback_task',
+    'record_marketing_result', 'verify_identity', 'check_account_balance', 'check_contracts',
+  ];
+  for (const toolName of toolNames) {
+    const schemaPath = `${SCHEMA_DIR}/${toolName}.json`;
+    db.update(mcpTools).set({ output_schema: schemaPath, updated_at: now }).where(eq(mcpTools.name, toolName)).run();
+  }
+  console.log(`[seed] Output Schema: ${toolNames.length} 个工具已关联契约文件`);
+
   console.log(`[seed] MCP Resources: ${toolResourceDefs.length} 个, Tools: ${toolResourceDefs.length} 个 (含 ${dbBindingTools.length} 个 DB, ${apiBindingTools.length} 个 API)`);
 
   // ── 10. 技能注册 + v1 版本快照（upsert：已存在则跳过）─────────────────────

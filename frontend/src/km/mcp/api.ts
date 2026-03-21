@@ -193,4 +193,12 @@ export const mcpApi = {
   // SQL preview
   sqlPreview: (id: string, config: { table: string; operation: string; where?: Array<{ param: string; column: string; op?: string }>; columns?: string[] }) =>
     request<{ sql: string }>(`/tool-management/${id}/sql-preview`, { method: 'POST', body: JSON.stringify(config) }),
+
+  // Output schema validation
+  validateOutput: (id: string, data: unknown) =>
+    request<{ valid: boolean; errors?: string[] }>(`/tool-management/${id}/validate-output`, { method: 'POST', body: JSON.stringify({ data }) }),
+
+  // Infer schema from example
+  inferSchema: (example: unknown) =>
+    request<{ schema: Record<string, unknown> }>('/tool-management/infer-schema', { method: 'POST', body: JSON.stringify({ example }) }),
 };

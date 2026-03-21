@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "required": ["count", "plans"],
+  "properties": {
+    "requested_plan_id": { "type": ["string", "null"] },
+    "count": { "type": "integer" },
+    "plans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["plan_id", "name", "monthly_fee", "data_gb", "voice_min", "sms", "features", "description"],
+        "properties": {
+          "plan_id": { "type": "string" },
+          "name": { "type": "string" },
+          "monthly_fee": { "type": "number" },
+          "data_gb": { "type": "integer" },
+          "voice_min": { "type": "integer" },
+          "sms": { "type": "integer" },
+          "features": { "type": "array", "items": { "type": "string" } },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

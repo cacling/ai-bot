@@ -1,0 +1,1 @@
+{"type":"object","required":["invoice_no","phone","month","total","email","status"],"properties":{"invoice_no":{"type":"string"},"phone":{"type":"string"},"month":{"type":"string"},"total":{"type":"number"},"email":{"type":"string"},"status":{"type":"string"}}}

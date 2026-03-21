@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "required": ["count", "bills"],
+  "properties": {
+    "requested_month": { "type": ["string", "null"] },
+    "count": { "type": "integer" },
+    "note": { "type": ["string", "null"] },
+    "bills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["phone", "month", "total", "status", "payable", "breakdown"],
+        "properties": {
+          "id": { "type": "integer" },
+          "phone": { "type": "string" },
+          "month": { "type": "string" },
+          "month_label": { "type": "string" },
+          "total": { "type": "number" },
+          "plan_fee": { "type": "number" },
+          "data_fee": { "type": "number" },
+          "voice_fee": { "type": "number" },
+          "sms_fee": { "type": "number" },
+          "value_added_fee": { "type": "number" },
+          "tax": { "type": "number" },
+          "status": { "type": "string", "enum": ["paid", "unpaid", "overdue"] },
+          "payable": { "type": "boolean" },
+          "breakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item": { "type": "string" },
+                "amount": { "type": "number" },
+                "ratio": { "type": "number" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

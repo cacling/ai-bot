@@ -1,0 +1,1 @@
+{"type":"object","required":["phone","balance","has_arrears","arrears_amount","status"],"properties":{"phone":{"type":"string"},"balance":{"type":"number"},"has_arrears":{"type":"boolean"},"arrears_amount":{"type":"number"},"status":{"type":"string","enum":["active","suspended","cancelled"]}}}

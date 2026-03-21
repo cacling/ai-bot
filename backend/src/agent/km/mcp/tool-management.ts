@@ -49,10 +49,13 @@ app.post('/', async (c) => {
     name: body.name.trim(),
     description: body.description ?? '',
     server_id: body.server_id ?? null,
+    impl_type: body.impl_type ?? null,
+    handler_key: body.handler_key ?? null,
     input_schema: body.input_schema ?? null,
+    output_schema: body.output_schema ?? null,
     execution_config: body.execution_config ?? null,
     mock_rules: body.mock_rules ?? null,
-    mocked: body.mocked ?? true, // 新建工具默认 Mock 模式
+    mocked: body.mocked ?? true,
     disabled: body.disabled ?? false,
     response_example: body.response_example ?? null,
     created_at: now(),
@@ -122,7 +125,10 @@ app.put('/:id', async (c) => {
     name: body.name ?? existing.name,
     description: body.description ?? existing.description,
     server_id: body.server_id ?? existing.server_id,
+    impl_type: body.impl_type ?? existing.impl_type,
+    handler_key: body.handler_key ?? existing.handler_key,
     input_schema: body.input_schema ?? existing.input_schema,
+    output_schema: body.output_schema ?? existing.output_schema,
     execution_config: body.execution_config ?? existing.execution_config,
     mock_rules: body.mock_rules ?? existing.mock_rules,
     mocked: body.mocked ?? existing.mocked,
@@ -207,6 +213,107 @@ app.post('/:id/sql-preview', async (c) => {
   }
 
   return c.json({ sql, table: body.table, operation: body.operation ?? 'select_one' });
+});
+
+// ── Validate output（校验数据是否符合 output_schema）────────────────────────
+app.post('/:id/validate-output', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json() as { data: unknown };
+  const tool = db.select().from(mcpTools).where(eq(mcpTools.id, id)).get();
+  if (!tool) return c.json({ error: 'Not found' }, 404);
+  if (!tool.output_schema) return c.json({ valid: true, message: 'No output_schema defined, skipping validation' });
+
+  try {
+    // output_schema 可能是文件路径或 JSON 内容
+    let schemaStr: string;
+    if (tool.output_schema.endsWith('.json')) {
+      const { readFileSync, existsSync } = await import('node:fs');
+      const { resolve } = await import('node:path');
+      const schemaPath = resolve(import.meta.dir, '../../../..', tool.output_schema);
+      if (!existsSync(schemaPath)) return c.json({ valid: false, errors: [`schema file not found: ${tool.output_schema}`] });
+      schemaStr = readFileSync(schemaPath, 'utf-8');
+    } else {
+      schemaStr = tool.output_schema;
+    }
+    const schema = JSON.parse(schemaStr) as Record<string, unknown>;
+    const errors: string[] = [];
+    const data = body.data as Record<string, unknown> | null;
+
+    if (!data || typeof data !== 'object') {
+      errors.push('data must be an object');
+    } else {
+      // Check required fields
+      const required = (schema.required ?? []) as string[];
+      for (const field of required) {
+        if (!(field in data)) errors.push(`missing required field: ${field}`);
+      }
+
+      // Check property types
+      const properties = (schema.properties ?? {}) as Record<string, { type?: string | string[] }>;
+      for (const [key, val] of Object.entries(data)) {
+        const prop = properties[key];
+        if (!prop) {
+          if (schema.additionalProperties === false) errors.push(`unexpected field: ${key}`);
+          continue;
+        }
+        if (prop.type) {
+          const types = Array.isArray(prop.type) ? prop.type : [prop.type];
+          const actualType = val === null ? 'null' : Array.isArray(val) ? 'array' : typeof val;
+          const jsToSchema: Record<string, string> = { number: 'number', string: 'string', boolean: 'boolean', object: 'object' };
+          const schemaType = jsToSchema[actualType] ?? actualType;
+          if (!types.includes(schemaType) && !(schemaType === 'number' && types.includes('integer'))) {
+            errors.push(`field "${key}": expected ${types.join('|')}, got ${schemaType}`);
+          }
+        }
+      }
+    }
+
+    return c.json({ valid: errors.length === 0, errors });
+  } catch (e) {
+    return c.json({ valid: false, errors: [`schema parse error: ${String(e)}`] });
+  }
+});
+
+// ── Infer schema（从示例 JSON 推断 output_schema）────────────────────────────
+app.post('/infer-schema', async (c) => {
+  const body = await c.req.json() as { example: unknown };
+  if (!body.example || typeof body.example !== 'object') {
+    return c.json({ error: 'example must be a JSON object' }, 400);
+  }
+
+  function inferType(val: unknown): string | string[] {
+    if (val === null) return ['string', 'null'];
+    if (Array.isArray(val)) return 'array';
+    return typeof val;
+  }
+
+  function inferSchema(obj: Record<string, unknown>): Record<string, unknown> {
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+
+    for (const [key, val] of Object.entries(obj)) {
+      if (val !== null && val !== undefined) required.push(key);
+
+      if (val === null) {
+        properties[key] = { type: ['string', 'null'] };
+      } else if (Array.isArray(val)) {
+        if (val.length > 0 && typeof val[0] === 'object' && val[0] !== null) {
+          properties[key] = { type: 'array', items: inferSchema(val[0] as Record<string, unknown>) };
+        } else {
+          properties[key] = { type: 'array', items: { type: val.length > 0 ? typeof val[0] : 'string' } };
+        }
+      } else if (typeof val === 'object') {
+        properties[key] = inferSchema(val as Record<string, unknown>);
+      } else {
+        properties[key] = { type: typeof val === 'number' ? (Number.isInteger(val) ? 'integer' : 'number') : typeof val };
+      }
+    }
+
+    return { type: 'object', required, properties, additionalProperties: false };
+  }
+
+  const schema = inferSchema(body.example as Record<string, unknown>);
+  return c.json({ schema });
 });
 
 export default app;

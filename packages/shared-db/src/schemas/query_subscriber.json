@@ -1,0 +1,99 @@
+{
+  "type": "object",
+  "required": [
+    "phone",
+    "name",
+    "status",
+    "balance",
+    "is_arrears",
+    "arrears_level",
+    "overdue_days",
+    "services",
+    "vas_total_fee"
+  ],
+  "properties": {
+    "phone": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "gender": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "suspended",
+        "cancelled"
+      ]
+    },
+    "balance": {
+      "type": "number"
+    },
+    "is_arrears": {
+      "type": "boolean"
+    },
+    "arrears_level": {
+      "type": "string",
+      "enum": [
+        "none",
+        "normal",
+        "pre_cancel",
+        "recycled"
+      ]
+    },
+    "overdue_days": {
+      "type": "integer"
+    },
+    "plan_fee": {
+      "type": "number"
+    },
+    "data_used_gb": {
+      "type": "number"
+    },
+    "data_total_gb": {
+      "type": "integer"
+    },
+    "data_usage_ratio": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "voice_used_min": {
+      "type": "integer"
+    },
+    "voice_total_min": {
+      "type": "integer"
+    },
+    "voice_usage_ratio": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "service_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "monthly_fee": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "vas_total_fee": {
+      "type": "number"
+    }
+  },
+  "additionalProperties": false
+}

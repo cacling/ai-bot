@@ -1,0 +1,1 @@
+{"type":"object","required":["verified","customer_name"],"properties":{"verified":{"type":"boolean"},"customer_name":{"type":"string"},"verification_method":{"type":"string","enum":["otp"]}}}
