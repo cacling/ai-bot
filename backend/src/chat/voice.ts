@@ -31,7 +31,7 @@ import { getSkillsDescriptionByChannel } from '../engine/skills';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
-import { getToolSkillMap } from '../engine/skills';
+import { getToolSkillMap, getToolToSkillsMap } from '../engine/skills';
 
 const ZHIPU_API_KEY      = process.env.ZHIPU_API_KEY ?? '';
 const GLM_REALTIME_URL   = process.env.GLM_REALTIME_URL ?? 'wss://open.bigmodel.cn/api/paas/v4/realtime';
@@ -460,10 +460,23 @@ voice.get(
               state.recordTool(toolName, toolArgs, result, success);
               logger.info('voice', 'lang_chain_mcp_result', { session: sessionId, tool: toolName, lang, resultPreview: result.slice(0, 150) });
 
-              // 若该工具对应某个 skill，推送无高亮版流程图（progressHL 由后续 progress tracker 异步添加）
-              const toolSkillMap = getToolSkillMap();
-              if (toolSkillMap[toolName]) {
-                activeSkillName = toolSkillMap[toolName];
+              // 若该工具对应某个 skill，推送流程图
+              // 优先用唯一映射；共享工具（query_bill 等）用完整映射推断
+              if (!activeSkillName) {
+                const toolSkillMap = getToolSkillMap();
+                if (toolSkillMap[toolName]) {
+                  activeSkillName = toolSkillMap[toolName];
+                } else {
+                  const allMap = getToolToSkillsMap();
+                  const candidates = allMap.get(toolName);
+                  if (candidates && candidates.length > 0) {
+                    // 对共享工具，取第一个入站 skill（排除外呼 skill）
+                    const inbound = candidates.filter(s => !s.startsWith('outbound-'));
+                    if (inbound.length > 0) activeSkillName = inbound[0];
+                  }
+                }
+              }
+              if (activeSkillName) {
                 await sendSkillDiagram(ws, userPhone, activeSkillName, null, lang, sessionId, 'voice');
               }
 
