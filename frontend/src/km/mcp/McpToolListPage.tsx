@@ -33,19 +33,10 @@ export function McpToolListPage() {
     return servers.find(s => s.id === id)?.name ?? id;
   };
 
-  const implLabel = (tool: McpToolRecord) => {
-    const impl = tool.impl_type;
-    if (!impl) return '未配置';
-    if (impl === 'remote_mcp') return 'Remote MCP';
-    if (impl === 'db') return 'DB';
-    if (impl === 'api') return 'API';
-    return impl;
-  };
-
   const configStatus = (tool: McpToolRecord) => {
-    if (tool.mocked && !tool.execution_config) return { label: 'Mock', color: 'bg-amber-100 text-amber-700' };
-    if (!tool.execution_config) return { label: '待配置', color: 'bg-muted text-muted-foreground' };
-    return { label: '已完成', color: 'bg-emerald-100 text-emerald-700' };
+    if (tool.mocked) return { label: 'Mock', color: 'bg-amber-100 text-amber-700' };
+    if (!tool.server_id) return { label: '待配置', color: 'bg-muted text-muted-foreground' };
+    return { label: '已就绪', color: 'bg-emerald-100 text-emerald-700' };
   };
 
   const handleDelete = async (tool: McpToolRecord) => {
@@ -82,7 +73,6 @@ export function McpToolListPage() {
                 <TableHead className="w-44">工具名</TableHead>
                 <TableHead className="w-28">Server</TableHead>
                 <TableHead>描述</TableHead>
-                <TableHead className="w-24 text-center">数据来源</TableHead>
                 <TableHead className="w-28 text-center">关联 Skill</TableHead>
                 <TableHead className="w-32 text-center">模式</TableHead>
                 <TableHead className="w-20 text-center">状态</TableHead>
@@ -98,9 +88,6 @@ export function McpToolListPage() {
                     <TableCell className="font-mono font-semibold">{tool.name}</TableCell>
                     <TableCell className="text-muted-foreground text-[11px]">{serverName(tool.server_id)}</TableCell>
                     <TableCell className="text-muted-foreground truncate max-w-[200px]" title={tool.description}>{tool.description || '—'}</TableCell>
-                    <TableCell className="text-center">
-                      <span className="text-[11px]">{implLabel(tool)}</span>
-                    </TableCell>
                     <TableCell className="text-center">
                       {(tool.skills ?? []).length > 0
                         ? (tool.skills ?? []).map(s => <Badge key={s} variant="secondary" className="text-[10px] mr-0.5">{s}</Badge>)
