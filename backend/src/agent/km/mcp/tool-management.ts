@@ -33,15 +33,79 @@ app.get('/', async (c) => {
   const allResources = db.select().from(mcpResources).all();
   const resourceMap = new Map(allResources.map(r => [r.id, { id: r.id, name: r.name, type: r.type }]));
 
-  const items = rows.map(t => {
+  // 预加载所有 schema 文件内容用于对齐检查
+  const schemaCache = new Map<string, Record<string, unknown>>();
+  const loadSchema = async (schemaPath: string | null): Promise<Record<string, unknown> | null> => {
+    if (!schemaPath) return null;
+    if (schemaCache.has(schemaPath)) return schemaCache.get(schemaPath)!;
+    try {
+      if (schemaPath.endsWith('.json')) {
+        const { readFileSync, existsSync } = await import('node:fs');
+        const { resolve } = await import('node:path');
+        const fullPath = resolve(import.meta.dir, '../../../../..', schemaPath);
+        if (existsSync(fullPath)) {
+          const schema = JSON.parse(readFileSync(fullPath, 'utf-8'));
+          schemaCache.set(schemaPath, schema);
+          return schema;
+        }
+      } else {
+        const schema = JSON.parse(schemaPath);
+        schemaCache.set(schemaPath, schema);
+        return schema;
+      }
+    } catch { /* ignore */ }
+    return null;
+  };
+
+  const items = await Promise.all(rows.map(async (t) => {
     const cfg = t.execution_config ? JSON.parse(t.execution_config) as { resource_id?: string } : null;
     const resource = cfg?.resource_id ? resourceMap.get(cfg.resource_id) ?? null : null;
+
+    // 轻量对齐检查：第一条 mock vs output_schema
+    const risks: string[] = [];
+    let mockAligned = true;
+    const schema = await loadSchema(t.output_schema);
+    const schemaFields = schema ? new Set(Object.keys((schema as any).properties ?? {})) : null;
+
+    if (t.impl_type && !t.output_schema) risks.push('有实现但无契约');
+    if (t.impl_type && !t.mock_rules) risks.push('无 Mock 场景');
+
+    if (schemaFields && t.mock_rules) {
+      try {
+        const rules = JSON.parse(t.mock_rules) as Array<{ response: string }>;
+        if (rules.length > 0) {
+          const firstData = JSON.parse(rules[0].response);
+          if (typeof firstData === 'object' && firstData !== null) {
+            const mockFields = new Set(Object.keys(firstData));
+            const missing = [...schemaFields].filter(f => !mockFields.has(f));
+            const extra = [...mockFields].filter(f => !schemaFields.has(f));
+            if (missing.length > 0 || extra.length > 0) {
+              mockAligned = false;
+              risks.push(`Mock 漂移 (${missing.length > 0 ? `-${missing.length}` : ''}${extra.length > 0 ? `+${extra.length}` : ''})`);
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    // DB 工具检查列覆盖
+    if (t.impl_type === 'db' && schemaFields && cfg) {
+      const dbCfg = (cfg as any).db;
+      if (dbCfg?.columns && Array.isArray(dbCfg.columns)) {
+        const dbCols = new Set(dbCfg.columns as string[]);
+        const missing = [...schemaFields].filter(f => !dbCols.has(f));
+        if (missing.length > 0) risks.push(`DB 覆盖缺口 -${missing.length}`);
+      }
+    }
+
     return {
       ...t,
       skills: toolSkillsMap.get(t.name) ?? [],
       resource,
+      mock_aligned: mockAligned,
+      risk_flags: risks,
     };
-  });
+  }));
 
   return c.json({ items });
 });

@@ -112,6 +112,10 @@ export interface McpToolRecord {
   // 附加字段（API 返回）
   skills?: string[];
   resource?: { id: string; name: string; type: string } | null;
+  /** Mock 是否与 output_schema 对齐（列表接口返回） */
+  mock_aligned?: boolean;
+  /** 风险标记列表（列表接口返回） */
+  risk_flags?: string[];
 }
 
 export interface McpHandler {

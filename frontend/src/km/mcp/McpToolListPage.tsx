@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 
 type View = 'list' | 'edit';
-type QuickFilter = 'all' | 'no_contract' | 'mock_on' | 'incomplete' | 'ready';
+type QuickFilter = 'all' | 'no_contract' | 'mock_on' | 'has_risk' | 'ready';
 
 interface Props {
   navigateToTool?: { toolId: string; step?: string; fromServer?: string } | null;
@@ -82,6 +82,9 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
     if (!tool.impl_type || (!tool.output_schema && !tool.input_schema)) return { label: '待配置', variant: 'outline' as const };
     if (tool.impl_type === 'script' && !tool.handler_key) return { label: '不完整', variant: 'destructive' as const };
     if (!tool.output_schema) return { label: '缺契约', variant: 'destructive' as const };
+    // 有风险信号的不算已就绪
+    if (tool.risk_flags && tool.risk_flags.length > 0) return { label: '有风险', variant: 'destructive' as const };
+    if (tool.mock_aligned === false) return { label: 'Mock 漂移', variant: 'destructive' as const };
     return { label: '已就绪', variant: 'default' as const };
   };
 
@@ -89,13 +92,12 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
     if (!tool.input_schema && !tool.output_schema) return { label: '未定义', ok: false };
     if (!tool.output_schema) return { label: '缺输出', ok: false };
     if (!tool.input_schema) return { label: '缺输入', ok: false };
+    if (tool.mock_aligned === false) return { label: '已定义(漂移)', ok: false };
     return { label: '已定义', ok: true };
   };
 
-  const hasRisk = (tool: McpToolRecord): string | null => {
-    if (!tool.output_schema && tool.impl_type) return '有实现但无契约';
-    if (tool.impl_type && !tool.mock_rules) return '无 Mock 场景';
-    return null;
+  const getToolRisks = (tool: McpToolRecord): string[] => {
+    return tool.risk_flags ?? [];
   };
 
   // ── Stats ───────────────────────────────────────────────────────────────────
@@ -103,12 +105,9 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
   const stats = useMemo(() => {
     const noContract = tools.filter(t => !t.output_schema).length;
     const mockOn = tools.filter(t => t.mocked).length;
-    const incomplete = tools.filter(t => !t.impl_type || (t.impl_type === 'script' && !t.handler_key)).length;
-    const ready = tools.filter(t => {
-      const s = toolStatus(t);
-      return s.label === '已就绪';
-    }).length;
-    return { total: tools.length, noContract, mockOn, incomplete, ready };
+    const hasRisks = tools.filter(t => (t.risk_flags?.length ?? 0) > 0 || t.mock_aligned === false).length;
+    const ready = tools.filter(t => toolStatus(t).label === '已就绪').length;
+    return { total: tools.length, noContract, mockOn, hasRisks, ready };
   }, [tools]);
 
   // ── Filtered list ───────────────────────────────────────────────────────────
@@ -130,7 +129,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
     // Quick filter
     if (quickFilter === 'no_contract') list = list.filter(t => !t.output_schema);
     else if (quickFilter === 'mock_on') list = list.filter(t => t.mocked);
-    else if (quickFilter === 'incomplete') list = list.filter(t => !t.impl_type || (t.impl_type === 'script' && !t.handler_key));
+    else if (quickFilter === 'has_risk') list = list.filter(t => (t.risk_flags?.length ?? 0) > 0 || t.mock_aligned === false);
     else if (quickFilter === 'ready') list = list.filter(t => toolStatus(t).label === '已就绪');
 
     // Impl filter
@@ -204,7 +203,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
           {([
             { key: 'all' as QuickFilter, label: '全部', value: stats.total, color: 'text-foreground' },
             { key: 'no_contract' as QuickFilter, label: '待补契约', value: stats.noContract, color: 'text-destructive' },
-            { key: 'incomplete' as QuickFilter, label: '待配置', value: stats.incomplete, color: 'text-amber-600' },
+            { key: 'has_risk' as QuickFilter, label: '有风险', value: stats.hasRisks, color: 'text-destructive' },
             { key: 'mock_on' as QuickFilter, label: 'Mock 中', value: stats.mockOn, color: 'text-amber-600' },
             { key: 'ready' as QuickFilter, label: '已就绪', value: stats.ready, color: 'text-emerald-600' },
           ]).map(card => (
@@ -285,7 +284,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
                 const status = toolStatus(tool);
                 const impl = implLabel(tool);
                 const contract = contractStatus(tool);
-                const risk = hasRisk(tool);
+                const risks = getToolRisks(tool);
                 return (
                   <TableRow key={tool.id} className="cursor-pointer" onClick={() => { setEditId(tool.id); setView('edit'); }}>
                     <TableCell>
@@ -327,8 +326,8 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
                       <Badge variant={status.variant} className="text-[10px]">{status.label}</Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      {risk
-                        ? <span className="text-[10px] text-amber-600 flex items-center justify-center gap-0.5"><AlertTriangle size={10} /> {risk}</span>
+                      {risks.length > 0
+                        ? <span className="text-[10px] text-amber-600 flex items-center justify-center gap-0.5" title={risks.join('\n')}><AlertTriangle size={10} /> {risks[0]}</span>
                         : <span className="text-[10px] text-emerald-500">—</span>
                       }
                     </TableCell>
