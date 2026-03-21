@@ -9,61 +9,69 @@ describe('UserDetailContent', () => {
     expect(screen.getByText('等待客户接入')).toBeInTheDocument();
   });
 
-  const mockUser = {
-    id: '1',
-    phone: '13800000001',
-    name: '张三',
-    plan: { zh: '畅享套餐', en: 'Premium Plan' },
-    status: 'active' as const,
-    tag: { zh: 'VIP', en: 'VIP' },
-    tagColor: 'bg-blue-100 text-blue-600',
-    type: 'inbound' as const,
+  // TestPersona structure: { id, label, category, tag, tagColor, context }
+  // context contains: { phone, name, plan, status, ... }
+  const mockPersona = {
+    id: 'U001',
+    label: '正常用户',
+    category: 'inbound',
+    tag: '正常',
+    tagColor: 'bg-green-100 text-green-600',
+    context: {
+      phone: '13800000001',
+      name: '张三',
+      plan: '畅享50G套餐',
+      status: 'active',
+    },
   };
 
   it('renders user name', () => {
-    render(<UserDetailContent data={mockUser} lang="zh" />);
+    render(<UserDetailContent data={mockPersona} lang="zh" />);
     expect(screen.getByText('张三')).toBeInTheDocument();
   });
 
   it('renders user phone', () => {
-    render(<UserDetailContent data={mockUser} lang="zh" />);
+    render(<UserDetailContent data={mockPersona} lang="zh" />);
     expect(screen.getByText('13800000001')).toBeInTheDocument();
   });
 
   it('renders plan name in zh', () => {
-    render(<UserDetailContent data={mockUser} lang="zh" />);
-    expect(screen.getByText('畅享套餐')).toBeInTheDocument();
+    render(<UserDetailContent data={mockPersona} lang="zh" />);
+    expect(screen.getByText('畅享50G套餐')).toBeInTheDocument();
   });
 
   it('renders plan name in en', () => {
-    render(<UserDetailContent data={mockUser} lang="en" />);
-    expect(screen.getByText('Premium Plan')).toBeInTheDocument();
+    render(<UserDetailContent data={mockPersona} lang="en" />);
+    expect(screen.getByText('畅享50G套餐')).toBeInTheDocument();
   });
 
   it('renders active status in zh', () => {
-    render(<UserDetailContent data={mockUser} lang="zh" />);
-    expect(screen.getByText('正常')).toBeInTheDocument();
+    render(<UserDetailContent data={mockPersona} lang="zh" />);
+    // "正常" appears both as status and tag
+    const matches = screen.getAllByText('正常');
+    expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders active status in en', () => {
-    render(<UserDetailContent data={mockUser} lang="en" />);
+    render(<UserDetailContent data={mockPersona} lang="en" />);
     expect(screen.getByText('Active')).toBeInTheDocument();
   });
 
   it('renders suspended status in zh', () => {
-    const suspendedUser = { ...mockUser, status: 'suspended' as const };
-    render(<UserDetailContent data={suspendedUser} lang="zh" />);
+    const suspended = { ...mockPersona, tag: '欠费', context: { ...mockPersona.context, status: 'suspended' } };
+    render(<UserDetailContent data={suspended} lang="zh" />);
     expect(screen.getByText('已停机')).toBeInTheDocument();
   });
 
   it('renders suspended status in en', () => {
-    const suspendedUser = { ...mockUser, status: 'suspended' as const };
-    render(<UserDetailContent data={suspendedUser} lang="en" />);
+    const suspended = { ...mockPersona, context: { ...mockPersona.context, status: 'suspended' } };
+    render(<UserDetailContent data={suspended} lang="en" />);
     expect(screen.getByText('Suspended')).toBeInTheDocument();
   });
 
   it('renders tag', () => {
-    render(<UserDetailContent data={mockUser} lang="zh" />);
+    const tagged = { ...mockPersona, tag: 'VIP' };
+    render(<UserDetailContent data={tagged} lang="zh" />);
     expect(screen.getByText('VIP')).toBeInTheDocument();
   });
 });

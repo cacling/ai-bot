@@ -2,7 +2,7 @@
 paths:
   - "backend/src/**"
 ---
-<!-- auto-generated on 2026-03-19 from standards.md -->
+<!-- auto-generated on 2026-03-21 from standards.md -->
 
 # 后端编码规则
 

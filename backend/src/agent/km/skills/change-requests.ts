@@ -75,6 +75,7 @@ changeRequestRoutes.post('/:id/approve', requireRole('reviewer'), async (c) => {
     })
     .where(eq(changeRequests.id, id));
 
+  const versionId = `cr-${id}`;
   logger.info('change-request', 'approved', { id, reviewer, versionId });
   return c.json({ ok: true, versionId });
 });

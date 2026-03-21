@@ -33,8 +33,9 @@ metadata:
 
 ### 工具说明
 
-- `query_subscriber(phone)` — 确认用户身份和账号状态
-- `query_bill(phone, month)` — 获取指定月份账单明细
+- `query_subscriber(phone)` — 确认用户身份和账号状态（返回欠费分层、用量比率等增强信息）
+- `query_bill(phone, month)` — 获取指定月份账单明细（返回费用拆解 breakdown）
+- `analyze_bill_anomaly(phone, month)` — 分析账单异常：自动对比当月与上月，定位原因，给出建议。当用户反映"话费变高了"时优先使用此工具
 - `get_skill_reference("bill-inquiry", "billing-rules.md")` — 加载计费规则和处理指引
 
 ## 客户引导状态图
@@ -110,20 +111,20 @@ stateDiagram-v2
     }
 
     state 异常费用分析流程 {
-        异常分析 --> 拉取账单: query_bill(phone, month) %% tool:query_bill
-        state 拉取账单结果 <<choice>>
-        拉取账单 --> 拉取账单结果
-        拉取账单结果 --> 对比分析: 成功
-        拉取账单结果 --> 拉取账单异常: 系统异常
-        拉取账单异常 --> [*]: 提示稍后重试或拨打10086
+        异常分析 --> 分析结果: analyze_bill_anomaly(phone, month) %% tool:analyze_bill_anomaly
+        state 分析结果判定 <<choice>>
+        分析结果 --> 分析结果判定
+        分析结果判定 --> 非异常: 涨幅≤20%
+        分析结果判定 --> 异常原因判定: 涨幅>20%
+        分析结果判定 --> 分析异常: 系统异常
+        分析异常 --> [*]: 提示稍后重试或拨打10086
+        非异常 --> [*]: 告知用户费用在正常范围
 
-        对比分析: 与上月对比，定位差异项 %% ref:billing-rules.md#异常费用分析
-        state 异常原因 <<choice>>
-        对比分析 --> 异常原因
-        异常原因 --> 解释超额: 流量/通话超出套餐
-        异常原因 --> 定位增值扣费: 增值业务产生费用
-        异常原因 --> 漫游费用说明: 漫游费用 %% ref:billing-rules.md#通话计费规则
-        异常原因 --> 无法定位: 原因不明
+        state 异常原因判定 <<choice>>
+        异常原因判定 --> 解释超额: primary_cause=data_overage/voice_overage
+        异常原因判定 --> 定位增值扣费: primary_cause=new_vas
+        异常原因判定 --> 漫游费用说明: primary_cause=roaming %% ref:billing-rules.md#通话计费规则
+        异常原因判定 --> 无法定位: primary_cause=unknown
 
         解释超额 --> 超额反馈: 建议升级套餐或购买加油包
         state 超额反馈 <<choice>>

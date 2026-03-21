@@ -119,6 +119,16 @@ interface Translations {
   card_diag_default:     string;
   card_diag_labels:      Record<string, string>;
 
+  card_anomaly_title:         string;
+  card_anomaly_normal:        string;
+  card_anomaly_detected:      string;
+  card_anomaly_current:       string;
+  card_anomaly_previous:      string;
+  card_anomaly_change:        string;
+  card_anomaly_cause:         string;
+  card_anomaly_recommendation: string;
+  card_anomaly_cause_labels:  Record<string, string>;
+
   card_handoff_title:         string;
   card_handoff_priority:      string;
   card_handoff_intent:        string;
@@ -301,6 +311,22 @@ export const T: Record<Lang, Translations> = {
       no_network: '无法上网诊断',
     },
 
+    card_anomaly_title:         '账单异常分析',
+    card_anomaly_normal:        '费用正常',
+    card_anomaly_detected:      '检测到异常',
+    card_anomaly_current:       '本月',
+    card_anomaly_previous:      '上月',
+    card_anomaly_change:        '变化',
+    card_anomaly_cause:         '主要原因',
+    card_anomaly_recommendation: '建议',
+    card_anomaly_cause_labels: {
+      data_overage:  '流量超额',
+      voice_overage: '通话超额',
+      new_vas:       '增值业务变动',
+      roaming:       '漫游费用',
+      unknown:       '原因不明',
+    },
+
     card_handoff_title:         '已转接人工客服',
     card_handoff_priority:      '优先级',
     card_handoff_intent:        '用户诉求',
@@ -479,6 +505,22 @@ export const T: Record<Lang, Translations> = {
       slow_data:  'Slow Data Diagnosis',
       call_drop:  'Call Drop Diagnosis',
       no_network: 'No Internet Diagnosis',
+    },
+
+    card_anomaly_title:         'Bill Anomaly Analysis',
+    card_anomaly_normal:        'Normal',
+    card_anomaly_detected:      'Anomaly Detected',
+    card_anomaly_current:       'This Month',
+    card_anomaly_previous:      'Last Month',
+    card_anomaly_change:        'Change',
+    card_anomaly_cause:         'Primary Cause',
+    card_anomaly_recommendation: 'Recommendation',
+    card_anomaly_cause_labels: {
+      data_overage:  'Data Overage',
+      voice_overage: 'Voice Overage',
+      new_vas:       'New VAS Charges',
+      roaming:       'Roaming Charges',
+      unknown:       'Unknown',
     },
 
     card_handoff_title:         'Transferred to Agent',

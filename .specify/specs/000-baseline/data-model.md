@@ -714,7 +714,7 @@ export const mcpServers = sqliteTable('mcp_servers', {
 | business-service | 18004 | 2（cancel_service, issue_invoice） |
 | diagnosis-service | 18005 | 2（diagnose_network, diagnose_app） |
 | outbound-service | 18006 | 4（record_call_result, send_followup_sms, create_callback_task, record_marketing_result） |
-| account-service | 18007 | 4（verify_identity, check_account_balance, check_contracts, apply_service_suspension） |
+| account-service | 18007 | 3（verify_identity, check_account_balance, check_contracts） |
 
 **Mock 规则：** 共 42 条 mock 规则覆盖全部技能场景，测试时通过 `useMock: true` 启用。
 

@@ -1,1 +1,18 @@
-{}
+{
+  "name": "ai-bot-monorepo",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "mcp_servers",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:backend": "npm --workspace backend run dev",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev:mcp": "npm --workspace @ai-bot/mcp-servers run dev:all",
+    "test:mcp": "npm --workspace @ai-bot/mcp-servers run test",
+    "check:shared-db": "npm --workspace @ai-bot/shared-db run check",
+    "check:mcp": "npm --workspace @ai-bot/mcp-servers run check"
+  }
+}

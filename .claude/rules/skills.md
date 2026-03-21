@@ -2,7 +2,7 @@
 paths:
   - "backend/skills/**"
 ---
-<!-- auto-generated on 2026-03-19 from standards.md -->
+<!-- auto-generated on 2026-03-21 from standards.md -->
 
 # Skill 编写规则
 

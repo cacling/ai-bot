@@ -69,13 +69,17 @@ function extractToolDependencies(mermaid: string): ToolDependency[] {
 
     while (queue.length > 0) {
       const current = queue.shift()!;
+      // Don't expand [*] — it connects all end states to the start,
+      // and expanding it would let BFS cross from one branch to another
+      if (current === '[*]') continue;
       // Find ALL transitions that lead TO this state (not just tool-marked)
       for (const t of allTransitions) {
         if (t.to === current && !visited.has(t.from)) {
           visited.add(t.from);
           // If this predecessor state has a tool marker, record it as required
+          // (exclude self-dependency: a tool should never require itself)
           const predTool = toolAtState.get(t.from);
-          if (predTool) {
+          if (predTool && predTool !== toolName) {
             required.add(predTool);
           }
           queue.push(t.from);
@@ -127,12 +131,13 @@ function buildGlobalDependencies(): Map<string, ToolDependency> {
         }
         const required = [...common];
 
-        // Across skills: merge (union) with existing
+        // Across skills: intersect with existing (a tool is only blocked
+        // if ALL skills that reference it agree on the prerequisite)
         const existing = map.get(toolName);
         if (existing) {
-          const merged = new Set([...existing.requiredTools, ...required]);
-          existing.requiredTools = [...merged];
-          existing.description = `${toolName} 需要先完成: ${existing.requiredTools.join(', ')}`;
+          const intersected = existing.requiredTools.filter(t => required.includes(t));
+          existing.requiredTools = intersected;
+          existing.description = `${toolName} 需要先完成: ${intersected.join(', ') || '(无前置工具)'}`;
         } else {
           map.set(toolName, {
             tool: toolName,
@@ -146,8 +151,10 @@ function buildGlobalDependencies(): Map<string, ToolDependency> {
     logger.warn('sop-guard', 'build_deps_error', { error: String(e) });
   }
 
-  // 操作类工具 = 有前置依赖的工具（自动从状态图推断）
-  _operationTools = new Set(map.keys());
+  // 操作类工具 = 有非空前置依赖的工具（自动从状态图推断）
+  _operationTools = new Set(
+    [...map.entries()].filter(([, dep]) => dep.requiredTools.length > 0).map(([name]) => name),
+  );
 
   return map;
 }

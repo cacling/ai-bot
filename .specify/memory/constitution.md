@@ -4,14 +4,59 @@
 
 ## Core Principles
 
-### I. 知行分离（Knowledge-Action Separation）
+### I. 知行分离与职责边界（Knowledge-Action Separation & Responsibility Boundary）
 
-系统核心设计理念：将"领域知识（Skills）"与"执行能力（MCP Tools）"分层设计。
+系统核心设计理念：将"领域知识（Skills）"与"执行能力（MCP Tools）"分层设计，Agent 和 MCP Server 各司其职。
 
 - **Skills（知识层）**：按需懒加载领域知识文档（Markdown），如计费规则、退订政策、套餐详情、故障排查指南
 - **MCP Tools（执行层）**：连接外部业务系统，执行查询账单、退订业务、网络诊断等实际操作
-- 两层职责严格分离，Skills 不执行操作，MCP Tools 不包含业务逻辑
+- 两层职责严格分离，Skills 不执行操作，MCP Tools 不包含对话逻辑
 - 类比：Skills = 员工培训手册，MCP Tools = 员工使用的业务系统
+
+#### Agent 侧职责（LLM + Runner）
+
+以下职责**必须**由 Agent 侧承担，不得下沉到 MCP Server：
+
+- 用户意图理解与 Skill 选择
+- SOP 流程推进（按状态图逐步执行）
+- 多工具编排（先查订户再查账单、并行调用等）
+- 何时追问、何时转人工的决策
+- 最终回复生成（把工具返回的结构化数据说成人话）
+
+#### MCP Server 侧职责
+
+以下职责**应该**由 MCP Server 内部完成，不得在 Agent 侧或中间层实现：
+
+- 与某个能力强绑定的领域规则（欠费分层阈值、PTP 天数校验、静默时段等）
+- 数据清洗、聚合、归一化（费用 breakdown、用量比率、转化标签等）
+- 固定决策树、诊断逻辑（severity 分级、risk_level 判定）
+- 单能力内部推理（如 Text2SQL、异常归因分析）
+- 某个后端系统专属的执行逻辑
+
+#### 禁止中间层
+
+- **不得**在 Agent 与 MCP 之间引入"Skill 脚本"等中间编排层来承接 MCP 应返回的数据或规则
+- 如果一段逻辑是确定性的、可测试的、不依赖对话上下文的，它属于 MCP Server
+- 如果一段逻辑需要理解用户意图或选择下一步行动，它属于 Agent
+
+#### Tool 一等公民，Server 透明
+
+- Agent 调用的是 Tool（如 `query_bill`），不关心 Tool 在哪个 Server 上
+- Runner 从 `mcp_servers` 表读取所有启用 Server，merge 全部 tools 到扁平 namespace
+- Skill 只声明"我需要哪些 Tool"（`%% tool:xxx`），不声明 Server 归属
+
+#### 控制面与执行面分离
+
+- **Backend = 控制面（Control Plane）**：管理 MCP 配置、discover、mock、RBAC/审计，读写 platform 表
+- **MCP Servers = 执行面（Data Plane）**：提供运行时工具执行，读写 business 表
+- 前端只访问 backend 的管理 API（`/api/mcp/*`），不直接连接 MCP Server
+- Backend 在需要时代理访问 MCP Server（discover、healthcheck）
+
+#### 数据域归属
+
+- **Platform 域（Backend 拥有）**：sessions、messages、users、skill_registry、km_*、mcp_servers、testPersonas、outboundTasks
+- **Business 域（MCP Servers 拥有）**：subscribers、plans、bills、value_added_services、subscriber_subscriptions、callback_tasks、device_contexts
+- Backend 不直接读写 business 域表，通过 MCP Tool 间接获取业务数据
 
 ### II. 状态图驱动（State Diagram as Single Source of Truth）
 
@@ -81,4 +126,4 @@
 - 原则 I-VI 为架构性原则，修改需架构评审
 - 原则 VII-XI 为工程治理原则，修改需技术负责人批准
 
-**Version**: 2.0.0 | **Ratified**: 2026-03-19 | **Last Amended**: 2026-03-19
+**Version**: 3.0.0 | **Ratified**: 2026-03-19 | **Last Amended**: 2026-03-21

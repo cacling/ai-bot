@@ -91,6 +91,7 @@ canary.post('/promote', requireRole('flow_manager'), async (c) => {
     const promotedConfig = { ...canaryConfig };
     canaryConfig = null;
 
+    const versionId = (promotedConfig as Record<string, unknown>).version as string ?? 'promoted';
     logger.info('canary', 'promoted', { skillPath: promotedConfig.skill_path, versionId });
     return c.json({ ok: true, versionId });
   } catch (err) {

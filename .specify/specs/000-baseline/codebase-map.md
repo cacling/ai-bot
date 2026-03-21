@@ -170,13 +170,13 @@ backend/src/services/
 ### MCP Server（mcp_servers/）
 
 ```
-backend/mcp_servers/ts/
+mcp_servers/src/services/
 ├── shared.ts                    # 共享工具函数（DB 连接、Hono 路由等）
 ├── user_info_service.ts         # :18003 — query_subscriber / query_bill / query_plans
 ├── business_service.ts          # :18004 — cancel_service / issue_invoice
 ├── diagnosis_service.ts         # :18005 — diagnose_network / diagnose_app
 ├── outbound_service.ts          # :18006 — record_call_result / send_followup_sms / create_callback_task / record_marketing_result
-└── account_service.ts           # :18007 — verify_identity / check_account_balance / check_contracts / apply_service_suspension
+└── account_service.ts           # :18007 — verify_identity / check_account_balance / check_contracts
 ```
 
 ### Skills 知识层（skills/）
@@ -194,9 +194,6 @@ backend/skills/
 │   ├── service-cancel/
 │   │   ├── SKILL.md                     # 退订流程（含用户确认步骤）
 │   │   └── references/cancellation-policy.md
-│   ├── service-suspension/
-│   │   ├── SKILL.md                     # 停机业务流程
-│   │   └── references/service-suspension-guide.md
 │   ├── fault-diagnosis/
 │   │   ├── SKILL.md                     # 故障诊断流程（4 种故障类型）
 │   │   ├── references/troubleshoot-guide.md
@@ -491,7 +488,7 @@ tests/unittest/frontend/
 
 | 步骤 | 文件 | 说明 |
 |------|------|------|
-| 1 | `backend/mcp_servers/ts/account_service.ts` | 在对应 Server 中添加 `server.tool(...)` |
+| 1 | `mcp_servers/src/services/account_service.ts` | 在对应 Server 中添加 `server.tool(...)` |
 | 2 | `backend/src/db/schema/business.ts` | 若需要新表，在此添加 |
 | 3 | `backend/src/db/seed.ts` | 添加种子数据 |
 | 4 | 相关 SKILL.md | 在"工具与分类"节添加工具说明 + 状态图中打 `%% tool:` 标记 |
@@ -539,7 +536,7 @@ tests/unittest/frontend/
 | **系统提示词** | `backend/src/engine/*-system-prompt.md`（5 个文件） |
 | **业务技能** | `backend/skills/biz-skills/<skill-name>/SKILL.md` |
 | **技术技能** | `backend/skills/tech-skills/<skill-name>/SKILL.md` |
-| **MCP Server** | `backend/mcp_servers/ts/<service>.ts`（5 个文件） |
+| **MCP Server** | `mcp_servers/src/services/<service>.ts`（5 个文件） |
 | **启动/停止脚本** | 根目录 `start.sh` / `stop.sh` |
 | **测试脚本** | `tests/scripts/start.sh` / `stop.sh` / `seed.sh` |
 | **后端测试** | `tests/unittest/backend/`（Bun:test） |

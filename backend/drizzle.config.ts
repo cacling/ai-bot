@@ -5,6 +5,6 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.SQLITE_PATH ?? './data/telecom.db',
+    url: process.env.SQLITE_PATH ?? '../data/telecom.db',
   },
 });

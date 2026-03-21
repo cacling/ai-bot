@@ -317,7 +317,7 @@
 │       ├── business-service：cancel_service / issue_invoice
 │       ├── diagnosis-service：diagnose_network / diagnose_app
 │       ├── outbound-service：record_call_result / send_followup_sms / create_callback_task / record_marketing_result
-│       └── account-service：verify_identity / check_account_balance / check_contracts / apply_service_suspension
+│       └── account-service：verify_identity / check_account_balance / check_contracts
 ├── 7.7 数据持久化
 │   ├── SQLite + Drizzle ORM（WAL 模式）
 │   ├── 30 张表（业务表 9 张 business.ts + 平台表 21 张 platform.ts）

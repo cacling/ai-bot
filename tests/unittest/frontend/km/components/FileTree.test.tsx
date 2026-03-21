@@ -55,6 +55,6 @@ describe('FileTree', () => {
     ];
     render(<FileTree nodes={nodes} selectedPath="/test.md" onSelect={onSelect} loading={false} />);
     const button = screen.getByText('test.md').closest('button');
-    expect(button?.className).toContain('bg-blue-50');
+    expect(button?.className).toContain('bg-accent');
   });
 });

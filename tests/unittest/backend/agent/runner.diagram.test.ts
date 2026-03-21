@@ -256,8 +256,7 @@ describe('fault-diagnosis SKILL.md — stateDiagram 高亮集成验证', () => {
     const raw = extractMermaidFromContent(skillContent)!;
     const { highlightMermaidProgress } = require('../../../../backend/src/services/mermaid');
     const highlighted = highlightMermaidProgress(raw, '网络拥塞');
-    expect(highlighted).toContain('classDef progressHL');
-    expect(highlighted).toContain('网络拥塞:::progressHL');
+    expect(highlighted).toContain('%% progress:网络拥塞');
   });
 
   test('progressHL 不高亮 <<choice>> 节点', () => {

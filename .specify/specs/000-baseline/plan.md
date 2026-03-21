@@ -112,6 +112,78 @@ flowchart TD
 
 > 完整功能清单详见 [feature-map.md](feature-map.md)。源码文件树及每个文件的职责详见 [codebase-map.md](codebase-map.md)。
 
+### 2.1 Agent / Skill / MCP 分层关系
+
+```mermaid
+flowchart TD
+    A["Agent / Runner\n意图理解 · Skill选择 · SOP推进 · 多工具编排 · 回复生成"]
+    S["Skill Layer\nSKILL.md + references"]
+    T["Merged MCP Tool Namespace\n对 Agent 透明，不区分 Server"]
+
+    A -->|"加载 SOP"| S
+    A -->|"调用工具"| T
+
+    S --> S1["声明依赖工具\n%% tool:query_bill"]
+    S --> S2["提供 Mermaid 状态图\n流程逻辑唯一来源"]
+    S --> S3["参考文档\nbilling-rules.md"]
+
+    T --> MCP1["user-info-service\nquery_subscriber · query_bill · query_plans · analyze_bill_anomaly"]
+    T --> MCP2["business-service\ncancel_service · issue_invoice"]
+    T --> MCP3["diagnosis-service\ndiagnose_network · diagnose_app"]
+    T --> MCP4["outbound-service\nrecord_call_result · send_followup_sms · create_callback_task · record_marketing_result"]
+    T --> MCP5["account-service\nverify_identity · check_account_balance · check_contracts"]
+
+    MCP1 --> BDB["Business Data\nsubscribers · bills · plans · ..."]
+    MCP2 --> BDB
+    MCP3 --> BDB
+    MCP4 --> BDB
+    MCP5 --> BDB
+```
+
+**核心设计原则：**
+
+| 角色 | 职责 | 不负责 |
+|------|------|--------|
+| **Agent（编排层）** | 用户意图理解、Skill 选择、SOP 流程推进、多工具编排、何时追问/转人工、最终回复生成 | 不执行数据查询、不实现业务规则 |
+| **Skill（知识层）** | 定义领域 SOP（Mermaid 状态图）、声明依赖工具（`%% tool:xxx`）、提供参考文档 | 不执行操作、不包含代码逻辑 |
+| **MCP（执行层）** | 数据聚合与归一化、领域规则（欠费分层/PTP 校验等）、固定决策树、参数校验 | 不理解对话上下文、不选择下一步行动 |
+
+**关键约束：**
+
+- **Tool 是运行时一等公民，Server 对 Agent 透明。** Agent 调用 `query_bill`，不关心它在哪个 Server 上。Runner 从 `mcp_servers` 表读取所有启用 Server，merge 全部 tools 到一个扁平 namespace。
+- **Skill 不绑定 Server。** Skill 只声明"我需要 `query_subscriber` 和 `query_bill`"，不声明"它们在 user-info-service 上"。
+- **Agent 与 MCP 之间无中间编排层。** 不存在 Skill 脚本拦截或代理 MCP 调用的机制。
+
+### 2.2 控制面 / 执行面分离
+
+```
+frontend → /api/mcp/* → backend（Control Plane）→ platform schema
+                              ↓ discover / healthcheck
+                        mcp_servers（Data Plane）→ business schema
+```
+
+| 面 | 职责 | 数据 |
+|---|------|------|
+| **Backend（控制面）** | MCP server/tool/resource 配置 CRUD、discover、mock 管理、tools overview、RBAC/审计 | platform 表（mcp_servers、skill_registry、sessions 等） |
+| **MCP Servers（执行面）** | 真实工具执行、参数校验、领域规则、业务数据聚合 | business 表（subscribers、bills、plans 等） |
+
+前端只访问 backend 的 `/api/mcp/*` 管理接口，不直接连接 MCP Server。
+
+### 2.3 Workspace 结构
+
+| Workspace | 包名 | 职责 |
+|-----------|------|------|
+| `backend/` | telecom-support-backend | Agent runtime + 管理 API + 控制面 |
+| `frontend/` | — | React UI |
+| `mcp_servers/` | @ai-bot/mcp-servers | 5 个 MCP 执行服务 |
+| `packages/shared-db/` | @ai-bot/shared-db | 共享 schema（business + platform）+ env helper |
+
+### 2.4 已知边界违反（待清理）
+
+| 文件 | 违反 | 原因 |
+|------|------|------|
+| `backend/src/chat/voice.ts` | 直接读 subscribers/plans | 语音通道启动时需要用户名/套餐名注入 prompt，应改为调 MCP |
+
 ---
 
 ## 3. 关键调用链路
@@ -283,7 +355,7 @@ flowchart TD
 
 | # | 原则 | 状态 | 说明 |
 |---|------|------|------|
-| I | 知行分离 | ✅ 通过 | Skills 与 MCP Tools 严格分层 |
+| I | 知行分离与职责边界 | ✅ 通过 | Skills 与 MCP Tools 严格分层；Agent 负责意图/编排/回复，MCP 负责数据聚合/领域规则/诊断逻辑；禁止中间编排层 |
 | II | 状态图驱动 | ✅ 通过 | 所有 Skill 使用 Mermaid 状态图 |
 | III | 并行优先 | ✅ 通过 | system-prompt 约束并行调用 |
 | IV | 安全操作确认 | ✅ 通过 | 退订等不可逆操作有确认流程 |

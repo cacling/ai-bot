@@ -202,7 +202,7 @@ runDiagnosis(subscriber, issue_type)
 | business-service | 18004 | `cancel_service`, `issue_invoice` |
 | diagnosis-service | 18005 | `diagnose_network`, `diagnose_app` |
 | outbound-service | 18006 | `record_call_result`, `send_followup_sms`, `create_callback_task`, `record_marketing_result` |
-| account-service | 18007 | `verify_identity`, `check_account_balance`, `check_contracts`, `apply_service_suspension` |
+| account-service | 18007 | `verify_identity`, `check_account_balance`, `check_contracts` |
 
 **传输：** StreamableHTTP（stateless，每请求独立）
 
@@ -224,7 +224,6 @@ runDiagnosis(subscriber, issue_type)
 | `verify_identity` | 身份验证 | account-service | `phone`, `id_type`, `id_number` |
 | `check_account_balance` | 查询账户余额 | account-service | `phone` |
 | `check_contracts` | 查询合约 | account-service | `phone` |
-| `apply_service_suspension` | 申请停机 | account-service | `phone`, `reason` |
 
 ### 3.2 MCP 管理功能
 

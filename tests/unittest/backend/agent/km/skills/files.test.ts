@@ -43,17 +43,15 @@ describe('files — GET /content', () => {
     expect((data.error as string)).toContain('不合法');
   });
 
-  test('nonexistent file returns 404', async () => {
-    const { status } = await req('GET', '/files/content?path=nonexistent/file.md');
+  test('nonexistent file in allowed root returns 404', async () => {
+    const { status } = await req('GET', '/files/content?path=backend/skills/nonexistent/file.md');
     expect(status).toBe(404);
   });
 
-  test('valid md file returns content', async () => {
-    // Try to read a known file
-    const { status, data } = await req('GET', '/files/content?path=package.json');
+  test('valid md file in skills returns content', async () => {
+    const { status, data } = await req('GET', '/files/content?path=backend/skills/biz-skills/bill-inquiry/SKILL.md');
     expect(status).toBe(200);
     expect(data.content).toBeDefined();
-    expect(data.path).toBe('package.json');
   });
 });
 

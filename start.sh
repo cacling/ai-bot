@@ -95,8 +95,8 @@ log "backend: bun install"
 cd "$BASE_DIR/backend" && "$BUN" install --frozen-lockfile 2>&1 | tail -3
 ok "backend 依赖就绪"
 
-log "backend/mcp_servers/ts: npm install"
-cd "$BASE_DIR/backend/mcp_servers/ts" && "$NPM" install --prefer-offline 2>&1 | tail -3
+log "mcp_servers: npm install"
+cd "$BASE_DIR/mcp_servers" && "$NPM" install --prefer-offline 2>&1 | tail -3
 ok "mcp_servers 依赖就绪"
 
 log "frontend: npm install"
@@ -108,7 +108,8 @@ ok "frontend 依赖就绪"
 # ════════════════════════════════════════════════════════════════════════════
 echo -e "\n${BLU}══════ 数据库准备 ══════${NC}"
 
-mkdir -p "$BASE_DIR/backend/data"
+mkdir -p "$BASE_DIR/data"
+export SQLITE_PATH="$BASE_DIR/data/telecom.db"
 
 # Schema 同步（非交互模式：如果有破坏性变更，先删表再 push）
 log "同步数据库 Schema..."
@@ -118,7 +119,7 @@ if echo "$PUSH_OUTPUT" | grep -q "rename column\|created or renamed"; then
   warn "检测到 Schema 破坏性变更，重建数据库表..."
   "$BUN" -e "
     import Database from 'bun:sqlite';
-    const db = new Database('./data/telecom.db');
+    const db = new Database(process.env.SQLITE_PATH || '../data/telecom.db');
     const tables = db.prepare(\"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'\").all();
     for (const t of tables) { db.exec('DROP TABLE IF EXISTS ' + t.name); }
     console.log('Dropped', tables.length, 'tables');
@@ -219,8 +220,8 @@ echo -e "\n${BLU}══════ 启动服务 ══════${NC}"
 
 # MCP 服务（顺序启动，避免 DB WAL 锁竞争）
 for i in "${!MCP_SERVICES[@]}"; do
-  start_service "${MCP_LABELS[$i]}-mcp" "$BASE_DIR/backend/mcp_servers/ts" \
-    "$NODE --import tsx/esm ${MCP_SERVICES[$i]}.ts"
+  start_service "${MCP_LABELS[$i]}-mcp" "$BASE_DIR/mcp_servers" \
+    "$NODE --import tsx/esm src/services/${MCP_SERVICES[$i]}.ts"
   sleep 0.5
 done
 

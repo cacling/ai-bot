@@ -46,11 +46,12 @@ describe('getSkillsDescriptionByChannel', () => {
     expect(typeof desc).toBe('string');
   });
 
-  test('包含箭头分隔的技能描述', () => {
+  test('包含技能名和描述', () => {
     const desc = getSkillsDescriptionByChannel('online');
     if (desc) {
-      // 格式：description→name；description→name
-      expect(desc).toContain('→');
+      // 格式：- name：description
+      expect(desc).toContain('bill-inquiry');
+      expect(desc).toContain('：');
     }
   });
 });

@@ -60,7 +60,7 @@ ok "测试数据就绪"
 > "$PID_FILE"
 
 log "启动 telecom-mcp..."
-cd "$BASE_DIR/backend/mcp_servers/ts" && nohup "$NODE" --import tsx/esm telecom_service.ts >> "$LOG_DIR/telecom-mcp.log" 2>&1 &
+cd "$BASE_DIR/mcp_servers" && nohup "$NODE" --import tsx/esm src/all.ts >> "$LOG_DIR/telecom-mcp.log" 2>&1 &
 echo $! >> "$PID_FILE"
 ok "telecom-mcp (pid=$!)"
 

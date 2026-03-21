@@ -34,8 +34,8 @@ describe('schema — 表定义完整性', () => {
     expect(schema.subscriberSubscriptions).toBeDefined();
   });
 
-  test('mockUsers 表已定义', () => {
-    expect(schema.mockUsers).toBeDefined();
+  test('testPersonas 表已定义', () => {
+    expect(schema.testPersonas).toBeDefined();
   });
 
   test('users 表已定义', () => {

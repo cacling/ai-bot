@@ -148,6 +148,7 @@ export type CardData =
   | { type: 'cancel_card'; data: CancelCardData }
   | { type: 'plan_card'; data: PlanCardData }
   | { type: 'diagnostic_card'; data: DiagnosticCardData }
+  | { type: 'anomaly_card'; data: AnomalyCardData }
   | { type: 'handoff_card'; data: HandoffAnalysis };
 
 export interface BillCardData {
@@ -183,6 +184,19 @@ export interface DiagnosticCardData {
   conclusion: string;
 }
 
+export interface AnomalyCardData {
+  is_anomaly: boolean;
+  current_month: string;
+  previous_month: string;
+  current_total: number;
+  previous_total: number;
+  diff: number;
+  change_ratio: number;
+  primary_cause: string;
+  causes: Array<{ type: string; item: string; current_amount: number; previous_amount: number; diff: number }>;
+  recommendation: string;
+}
+
 export type DiagramUpdateCallback = (skillName: string, mermaid: string) => void;
 export type TextDeltaCallback = (delta: string) => void;
 
@@ -207,7 +221,27 @@ export async function runAgent(
 ): Promise<AgentResult> {
   const effectiveSkillsDir = overrideSkillsDir ?? SKILLS_DIR;
   const t_run_start = Date.now();
-  const { tools: rawMcpTools } = await getMCPTools();
+  const { tools: rawMcpToolsRaw } = await getMCPTools();
+
+  // 修复 MCP client 的 arguments 序列化问题：
+  // AI SDK 可能把 LLM 返回的 arguments 作为 JSON string 传递给 MCP client，
+  // 而 MCP SDK 1.27+ 期望 arguments 是 Record<string, unknown>。
+  // 在这里统一拦截，确保 arguments 是对象。
+  const rawMcpTools = Object.fromEntries(
+    Object.entries(rawMcpToolsRaw as Record<string, any>).map(([name, tool]) => [
+      name,
+      {
+        ...tool,
+        execute: async (...args: any[]) => {
+          // args[0] 是 LLM 传的参数对象，可能被序列化为 string
+          if (args[0] && typeof args[0] === 'string') {
+            try { args[0] = JSON.parse(args[0]); } catch { /* keep as-is */ }
+          }
+          return tool.execute(...args);
+        },
+      },
+    ]),
+  );
 
   // 工具级 mock 控制：从 MCP 管理读取哪些工具标记为 mock 模式
   const mockedToolNames = getMockedToolNames();
@@ -351,6 +385,8 @@ export async function runAgent(
   const t_mcp_ready = Date.now();
   logger.info('agent', 'mcp_ready', { mcp_init_ms: t_mcp_ready - t_run_start });
 
+  let lastActiveSkill: string | undefined = options?.skillName;
+
   let systemPrompt = buildSystemPrompt(userPhone, lang, subscriberName, planName);
   // Inject pre-loaded skill content (for test endpoint — ensures SOP is visible without get_skill_instructions)
   if (options?.skillContent) {
@@ -368,7 +404,6 @@ export async function runAgent(
   const t0 = t_mcp_ready; // LLM 阶段计时起点（MCP 初始化结束后）
   let stepCount = 0;
   let prevStepEnd = t_mcp_ready; // 用于计算每步增量耗时
-  let lastActiveSkill: string | undefined = options?.skillName; // 追踪当前活跃 skill，用于通用工具的流程图高亮
 
   try {
     const result = await generateText({
@@ -492,6 +527,12 @@ export async function runAgent(
           });
 
           const parsed = JSON.parse(content);
+
+          // analyze_bill_anomaly 返回不含 found/success，单独提取卡片
+          if ((toolResult.toolName as string) === 'analyze_bill_anomaly' && parsed.current_month) {
+            card = { type: 'anomaly_card', data: parsed as AnomalyCardData };
+            continue;
+          }
 
           if (!parsed.found && !parsed.success) continue;
 

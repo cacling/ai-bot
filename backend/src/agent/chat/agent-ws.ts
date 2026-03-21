@@ -127,8 +127,8 @@ agentWs.get('/ws/agent', upgradeWebSocket((c) => {
         }
 
         // Forward compliance_alert from any source (agent, voice, model_filter)
-        if (event.type === 'compliance_alert') {
-          logger.info('agent-ws', 'compliance_alert_forwarded', { phone, source: event.source, data: (event as Record<string,unknown>).data });
+        if ((event.type as string) === 'compliance_alert') {
+          logger.info('agent-ws', 'compliance_alert_forwarded', { phone, source: (event as Record<string,unknown>).source, data: (event as Record<string,unknown>).data });
           try { ws.send(JSON.stringify(event)); } catch { /* ws closed */ }
           return;
         }

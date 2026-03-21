@@ -34,7 +34,7 @@ export const skillCreatorVisionModel = skillCreatorProvider(
 const skillCreatorThinkingProvider = createOpenAI({
   baseURL: process.env.SKILL_CREATOR_BASE_URL ?? process.env.SILICONFLOW_BASE_URL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   apiKey: process.env.SKILL_CREATOR_API_KEY ?? process.env.SILICONFLOW_API_KEY ?? '',
-  fetch: async (url, init) => {
+  fetch: (async (url: RequestInfo | URL, init: RequestInit | undefined) => {
     let isStreaming = false;
     if (init?.body && typeof init.body === 'string') {
       const body = JSON.parse(init.body);
@@ -140,7 +140,7 @@ const skillCreatorThinkingProvider = createOpenAI({
       logger.warn('llm-thinking', 'response_transform_failed', { error: String(e) });
       return response;
     }
-  },
+  }) as typeof fetch,
 });
 
 export const skillCreatorThinkingModel = wrapLanguageModel({

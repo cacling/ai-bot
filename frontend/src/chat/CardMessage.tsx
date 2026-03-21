@@ -14,6 +14,8 @@ import {
   Package,
   Trash2,
   Headset,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import { T, type Lang } from '../i18n';
 
@@ -58,6 +60,19 @@ export interface DiagnosticCardData {
   conclusion: string;
 }
 
+export interface AnomalyCardData {
+  is_anomaly: boolean;
+  current_month: string;
+  previous_month: string;
+  current_total: number;
+  previous_total: number;
+  diff: number;
+  change_ratio: number;
+  primary_cause: string;
+  causes: Array<{ type: string; item: string; current_amount: number; previous_amount: number; diff: number }>;
+  recommendation: string;
+}
+
 export interface HandoffCardData {
   customer_intent: string;
   main_issue: string;
@@ -77,6 +92,7 @@ export type CardData =
   | { type: 'cancel_card'; data: CancelCardData }
   | { type: 'plan_card'; data: PlanCardData }
   | { type: 'diagnostic_card'; data: DiagnosticCardData }
+  | { type: 'anomaly_card'; data: AnomalyCardData }
   | { type: 'handoff_card'; data: HandoffCardData };
 
 // ── 卡片组件 ──────────────────────────────────────────────────────────────────
@@ -230,6 +246,72 @@ function DiagnosticCard({ data, lang = 'zh' }: { data: DiagnosticCardData; lang?
   );
 }
 
+function AnomalyCard({ data, lang = 'zh' }: { data: AnomalyCardData; lang?: Lang }) {
+  const tc = T[lang];
+  const isUp = data.diff > 0;
+  const statusLabel = data.is_anomaly ? tc.card_anomaly_detected : tc.card_anomaly_normal;
+  const statusClass = data.is_anomaly ? 'bg-destructive/20 text-destructive' : 'bg-primary/20 text-primary';
+  const causeLabel = tc.card_anomaly_cause_labels[data.primary_cause] ?? tc.card_anomaly_cause_labels.unknown;
+
+  return (
+    <div className="bg-background rounded-2xl rounded-tl-none shadow-sm border border-border overflow-hidden w-full mb-1">
+      <div className="bg-primary px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center space-x-2 text-primary-foreground">
+          <Receipt size={16} />
+          <span className="text-sm font-semibold">{tc.card_anomaly_title}</span>
+        </div>
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusClass}`}>{statusLabel}</span>
+      </div>
+      <div className="px-4 py-3">
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="text-center">
+            <div className="text-xs text-muted-foreground">{tc.card_anomaly_current}</div>
+            <div className="text-lg font-bold text-foreground">¥{data.current_total.toFixed(0)}</div>
+            <div className="text-[10px] text-muted-foreground">{data.current_month}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-muted-foreground">{tc.card_anomaly_previous}</div>
+            <div className="text-lg font-bold text-foreground">¥{data.previous_total.toFixed(0)}</div>
+            <div className="text-[10px] text-muted-foreground">{data.previous_month}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xs text-muted-foreground">{tc.card_anomaly_change}</div>
+            <div className={`text-lg font-bold flex items-center justify-center ${isUp ? 'text-destructive' : 'text-primary'}`}>
+              {isUp ? <TrendingUp size={14} className="mr-0.5" /> : <TrendingDown size={14} className="mr-0.5" />}
+              {data.change_ratio}%
+            </div>
+            <div className={`text-[10px] ${isUp ? 'text-destructive' : 'text-primary'}`}>
+              {isUp ? '+' : ''}¥{data.diff.toFixed(0)}
+            </div>
+          </div>
+        </div>
+        {data.is_anomaly && (
+          <div className="space-y-2 border-t border-border pt-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">{tc.card_anomaly_cause}</span>
+              <span className="text-foreground font-medium">{causeLabel}</span>
+            </div>
+            {data.causes.length > 0 && (
+              <div className="space-y-1">
+                {data.causes.map((c, i) => (
+                  <div key={i} className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">{c.item}</span>
+                    <span className="text-destructive">+¥{c.diff.toFixed(0)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="rounded-lg p-2 bg-accent text-xs text-muted-foreground flex items-start space-x-1.5">
+              <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+              <span>{data.recommendation}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HandoffCard({ data, lang = 'zh' }: { data: HandoffCardData; lang?: Lang }) {
   const tc = T[lang];
   const priorityStyle =
@@ -300,6 +382,7 @@ export function CardMessage({ card, lang = 'zh' }: { card: CardData; lang?: Lang
   if (card.type === 'cancel_card') return <CancelCard data={card.data} lang={lang} />;
   if (card.type === 'plan_card') return <PlanCard data={card.data} lang={lang} />;
   if (card.type === 'diagnostic_card') return <DiagnosticCard data={card.data} lang={lang} />;
+  if (card.type === 'anomaly_card') return <AnomalyCard data={card.data} lang={lang} />;
   if (card.type === 'handoff_card') return <HandoffCard data={card.data} lang={lang} />;
   return null;
 }

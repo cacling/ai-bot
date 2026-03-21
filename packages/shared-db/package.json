@@ -1,0 +1,22 @@
+{
+  "name": "@ai-bot/shared-db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./schema/business": "./src/schema/business.ts",
+    "./schema/platform": "./src/schema/platform.ts",
+    "./env": "./src/env.ts"
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.43.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

@@ -21,7 +21,7 @@ test.describe('工具-技能自动映射', () => {
     expect(names).toContain('suspend-service');
   });
 
-  test('TC-TSM-02 MCP 工具概览返回 apply_service_suspension', async ({ request }) => {
+  test('TC-TSM-02 MCP 工具概览返回 account-service 工具', async ({ request }) => {
     const res = await request.get(`${API}/mcp/tools`);
     expect(res.ok()).toBeTruthy();
     const { items } = await res.json();

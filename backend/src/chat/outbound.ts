@@ -401,8 +401,8 @@ outbound.get(
 
               // 补充上下文参数（MCP server 可能需要）
               if (toolName === 'create_callback_task') {
-                const customerName = (resolvedTask as Record<string, unknown>).customer_name as string ?? '';
-                const productName  = (resolvedTask as Record<string, unknown>).product_name as string ?? '';
+                const customerName = (resolvedTask as unknown as Record<string, unknown>).customer_name as string ?? '';
+                const productName  = (resolvedTask as unknown as Record<string, unknown>).product_name as string ?? '';
                 if (!toolArgs.original_task_id) toolArgs.original_task_id = taskId;
                 if (!toolArgs.callback_phone) toolArgs.callback_phone = userPhone;
                 if (!toolArgs.customer_name) toolArgs.customer_name = customerName;

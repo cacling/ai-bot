@@ -150,7 +150,7 @@ start.sh 执行流程：
 cd backend && bunx drizzle-kit push && bun run db:seed
 
 # 步骤二：启动 5 个 MCP Server（各开一个终端或后台运行）
-cd backend/mcp_servers/ts && npm install
+cd mcp_servers/src/services && npm install
 node --import tsx/esm user_info_service.ts     # → :18003
 node --import tsx/esm business_service.ts      # → :18004
 node --import tsx/esm diagnosis_service.ts     # → :18005

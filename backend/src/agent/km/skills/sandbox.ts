@@ -372,7 +372,7 @@ sandbox.post('/:id/regression', async (c) => {
         }
       }
       if (agentResult.transferData) toolsCalled.push('transfer_to_human');
-      if (agentResult.skill_diagram?.skillName) skillsLoaded.push(agentResult.skill_diagram.skillName);
+      if (agentResult.skill_diagram?.skill_name) skillsLoaded.push(agentResult.skill_diagram.skill_name);
 
       const assertionResults = runAssertions(assertions, responseText, toolsCalled, skillsLoaded);
       const allPassed = assertionResults.every(r => r.passed);

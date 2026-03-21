@@ -43,12 +43,7 @@ const SKILL_TESTS = [
       { name: '未知扣费', message: '我的账单里有一笔不认识的扣费', expectContains: ['扣费', '账单'], expectMock: true },
     ],
   },
-  {
-    skill: 'service-suspension',
-    scenarios: [
-      { name: '停机保号', message: '我想办理停机保号', expectContains: ['停机', '保号'], expectMock: true },
-    ],
-  },
+  // service-suspension has been removed
   {
     skill: 'telecom-app',
     scenarios: [

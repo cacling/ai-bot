@@ -79,18 +79,16 @@ stateDiagram-v2
     记录忙线 --> [*]: record_call_result(busy)
     记录关机 --> [*]: record_call_result(power_off)
 
-    开场说明 --> 身份核验: 告知录音 + 确认客户姓名/证件后四位
+    开场说明 --> 身份确认: 告知录音 + 用已知姓名确认"请问您是XX先生/女士吗？"
     %% ref:collection-guide.md#开场白
 
-    %% OC3 — 身份核验
+    %% OC3 — 身份确认（客户信息已在任务中注入，不需要客户提供姓名/证件号）
     %% ref:collection-guide.md#身份核验
-    state 核验结果 <<choice>>
-    身份核验 --> 核验结果
-    核验结果 --> 告知欠款: 核验通过，告知欠款详情
-    核验结果 --> 记录非本人: 非本人接听 %% tool:record_call_result
-    核验结果 --> 记录核验失败: 核验失败 %% tool:record_call_result
+    state 确认结果 <<choice>>
+    身份确认 --> 确认结果
+    确认结果 --> 告知欠款: 确认是本人，告知欠款详情
+    确认结果 --> 记录非本人: 非本人接听 %% tool:record_call_result
     记录非本人 --> [*]: record_call_result(non_owner)，请转告机主
-    记录核验失败 --> [*]: record_call_result(verify_failed)，建议拨打10086
     告知欠款 --> 客户回复意向: 询问还款计划
 
     state 意向判断 <<choice>>

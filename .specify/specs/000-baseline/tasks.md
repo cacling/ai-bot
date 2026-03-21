@@ -59,9 +59,9 @@
 
 ### MCP Server 基础设施
 
-- [x] T026 Implement user-info-service MCP Server (:18003) with query_subscriber, query_bill, query_plans `backend/mcp_servers/ts/user-info-service.ts`
-- [x] T027 Implement business-service MCP Server (:18004) with cancel_service, issue_invoice `backend/mcp_servers/ts/business-service.ts`
-- [x] T028 Implement diagnosis-service MCP Server (:18005) with diagnose_network, diagnose_app `backend/mcp_servers/ts/diagnosis-service.ts`
+- [x] T026 Implement user-info-service MCP Server (:18003) with query_subscriber, query_bill, query_plans `mcp_servers/src/services/user-info-service.ts`
+- [x] T027 Implement business-service MCP Server (:18004) with cancel_service, issue_invoice `mcp_servers/src/services/business-service.ts`
+- [x] T028 Implement diagnosis-service MCP Server (:18005) with diagnose_network, diagnose_app `mcp_servers/src/services/diagnosis-service.ts`
 - [x] T029 Implement MCP client connector `backend/src/services/mcp-client.ts`
 - [x] T030 Unit tests for mcp-client error handling (3 tests) `tests/unittest/backend/services/mcp-client.test.ts`
 
@@ -244,8 +244,8 @@
 ### 后端
 
 - [x] T107 [US7] Implement outbound WebSocket route with GLM-Realtime proxy `backend/src/chat/outbound.ts`
-- [x] T108 [US7] Implement outbound-service MCP Server (:18006) `backend/mcp_servers/ts/outbound-service.ts`
-- [x] T109 [US7] Implement account-service MCP Server (:18007) `backend/mcp_servers/ts/account-service.ts`
+- [x] T108 [US7] Implement outbound-service MCP Server (:18006) `mcp_servers/src/services/outbound-service.ts`
+- [x] T109 [US7] Implement account-service MCP Server (:18007) `mcp_servers/src/services/account-service.ts`
 - [x] T110 [US7] Create outbound-collection SKILL.md `backend/skills/biz-skills/outbound-collection/SKILL.md`
 - [x] T111 [US7] Create outbound-marketing SKILL.md `backend/skills/biz-skills/outbound-marketing/SKILL.md`
 - [x] T112 [US7] Create outbound voice system prompt `backend/src/engine/outbound-voice-system-prompt.md`

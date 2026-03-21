@@ -167,7 +167,7 @@ GET /api/files/content?path=bill-inquiry/SKILL.md
 | business-service | 18004 | cancel_service, issue_invoice |
 | diagnosis-service | 18005 | diagnose_network, diagnose_app |
 | outbound-service | 18006 | record_call_result, send_followup_sms, create_callback_task, record_marketing_result |
-| account-service | 18007 | verify_identity, check_account_balance, check_contracts, apply_service_suspension |
+| account-service | 18007 | verify_identity, check_account_balance, check_contracts |
 
 ---
 

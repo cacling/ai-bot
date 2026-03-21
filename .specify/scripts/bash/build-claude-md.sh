@@ -111,7 +111,7 @@ extract_scope "$STANDARDS" "frontend" >> "$RULES_DIR/frontend.md"
 cat > "$RULES_DIR/mcp.md" << EOF
 ---
 paths:
-  - "backend/mcp_servers/**"
+  - "mcp_servers/**"
 ---
 $HEADER_NOTE
 
@@ -263,7 +263,7 @@ cat >> "$OUTPUT" << 'EOF'
 | `rules/general.md` | 全局（始终加载） | 通用命名、导入顺序、TypeScript 约定、国际化 |
 | `rules/backend.md` | `backend/src/**` | 后端命名、导出、日志、错误处理 |
 | `rules/frontend.md` | `frontend/src/**` | 前端命名、导出、组件结构 |
-| `rules/mcp.md` | `backend/mcp_servers/**` | MCP 工具定义、Zod 校验、返回格式 |
+| `rules/mcp.md` | `mcp_servers/**` | MCP 工具定义、Zod 校验、返回格式 |
 | `rules/skills.md` | `backend/skills/**` | Skill 目录结构、SKILL.md 编写、状态图标记 |
 EOF
 

@@ -1,8 +1,8 @@
 ---
 paths:
-  - "backend/mcp_servers/**"
+  - "mcp_servers/**"
 ---
-<!-- auto-generated on 2026-03-19 from standards.md -->
+<!-- auto-generated on 2026-03-21 from standards.md -->
 
 # MCP 工具编码规则
 

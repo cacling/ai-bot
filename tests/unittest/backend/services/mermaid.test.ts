@@ -200,8 +200,7 @@ describe('extractTransitions', () => {
 describe('highlightMermaidProgress', () => {
   test('高亮存在的状态节点', () => {
     const result = highlightMermaidProgress(STATE_DIAGRAM, '分析结果');
-    expect(result).toContain('progressHL');
-    expect(result).toContain('classDef');
+    expect(result).toContain('%% progress:分析结果');
   });
 
   test('不存在的状态名返回原文', () => {

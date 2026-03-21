@@ -1,5 +1,5 @@
 /**
- * mock-data.test.ts — Tests for mock data API routes
+ * mock-data.test.ts — Tests for mock data API routes (test-personas + outbound-tasks)
  */
 import { describe, test, expect } from 'bun:test';
 import { Hono } from 'hono';
@@ -13,46 +13,41 @@ async function req(path: string) {
   return { status: res.status, data: await res.json() as unknown };
 }
 
-describe('mock-data — GET /api/mock-users', () => {
-  test('returns array of users', async () => {
-    const { status, data } = await req('/api/mock-users');
+describe('mock-data — GET /api/test-personas', () => {
+  test('returns array', async () => {
+    const { status, data } = await req('/api/test-personas');
     expect(status).toBe(200);
     expect(Array.isArray(data)).toBe(true);
   });
 
-  test('users have expected shape', async () => {
-    const { data } = await req('/api/mock-users');
-    const users = data as Array<Record<string, unknown>>;
-    if (users.length > 0) {
-      const user = users[0];
-      expect(user.id).toBeDefined();
-      expect(user.phone).toBeDefined();
-      expect(user.name).toBeDefined();
-      expect(user.plan).toBeDefined();
-      expect(user.status).toBeDefined();
-      expect(user.type).toBeDefined();
-      // plan should be { zh, en }
-      const plan = user.plan as Record<string, string>;
-      expect(plan.zh).toBeDefined();
-      expect(plan.en).toBeDefined();
+  test('personas have expected shape', async () => {
+    const { data } = await req('/api/test-personas');
+    const personas = data as Array<Record<string, unknown>>;
+    if (personas.length > 0) {
+      const p = personas[0];
+      expect(p.id).toBeDefined();
+      expect(p.label).toBeDefined();
+      expect(p.category).toBeDefined();
+      expect(p.tag).toBeDefined();
+      expect(p.context).toBeDefined();
     }
   });
 
-  test('filter by type=inbound', async () => {
-    const { status, data } = await req('/api/mock-users?type=inbound');
+  test('filter by category=inbound', async () => {
+    const { status, data } = await req('/api/test-personas?category=inbound');
     expect(status).toBe(200);
-    const users = data as Array<{ type: string }>;
-    for (const u of users) {
-      expect(u.type).toBe('inbound');
+    const personas = data as Array<{ category: string }>;
+    for (const p of personas) {
+      expect(p.category).toBe('inbound');
     }
   });
 
-  test('filter by type=outbound', async () => {
-    const { status, data } = await req('/api/mock-users?type=outbound');
+  test('filter by category=outbound_collection', async () => {
+    const { status, data } = await req('/api/test-personas?category=outbound_collection');
     expect(status).toBe(200);
-    const users = data as Array<{ type: string }>;
-    for (const u of users) {
-      expect(u.type).toBe('outbound');
+    const personas = data as Array<{ category: string }>;
+    for (const p of personas) {
+      expect(p.category).toBe('outbound_collection');
     }
   });
 });
@@ -74,7 +69,6 @@ describe('mock-data — GET /api/outbound-tasks', () => {
       expect(task.task_type).toBeDefined();
       expect(task.label).toBeDefined();
       expect(task.data).toBeDefined();
-      // label should be { zh, en }
       const label = task.label as Record<string, string>;
       expect(label.zh).toBeDefined();
       expect(label.en).toBeDefined();

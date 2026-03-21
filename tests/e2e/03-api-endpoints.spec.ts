@@ -48,7 +48,7 @@ test.describe('GET /api/files/tree', () => {
     expect(childNames).toContain('outbound-marketing');
     expect(childNames).toContain('plan-inquiry');
     expect(childNames).toContain('service-cancel');
-    expect(childNames).toContain('service-suspension');
+    // service-suspension has been removed
     expect(childNames).toContain('telecom-app');
   });
 

@@ -7,8 +7,17 @@ import { requireRole } from '../../../services/auth';
 
 const files = new Hono();
 
-// Project root is the backend/ directory itself (skills/ and mcp_servers/ now live inside it)
-const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
+// Repo root (backend/ is one level inside)
+const REPO_ROOT = resolve(import.meta.dir, '../../../../..');
+
+// Allowed roots for file scanning — only these directories are visible to the file API
+const ALLOWED_ROOTS = [
+  resolve(REPO_ROOT, 'backend/skills'),
+  resolve(REPO_ROOT, 'mcp_servers'),
+];
+
+// PROJECT_ROOT kept for backward compat — now points to repo root
+const PROJECT_ROOT = REPO_ROOT;
 
 // Directories to exclude from scanning
 const EXCLUDED_DIRS = new Set([
@@ -70,12 +79,20 @@ async function scanDir(absPath: string, relPath: string): Promise<FileNode[]> {
 
 function isPathSafe(filePath: string): boolean {
   const resolved = resolve(PROJECT_ROOT, filePath);
-  return resolved.startsWith(PROJECT_ROOT + '/') || resolved === PROJECT_ROOT;
+  return ALLOWED_ROOTS.some(root => resolved.startsWith(root + '/') || resolved === root);
 }
 
 // GET /api/files/tree
 files.get('/tree', async (c) => {
-  const nodes = await scanDir(PROJECT_ROOT, '');
+  // Scan each allowed root and present as top-level entries
+  const allNodes: FileNode[] = [];
+  for (const root of ALLOWED_ROOTS) {
+    const label = relative(REPO_ROOT, root); // e.g., "backend/skills" or "mcp_servers"
+    if (!existsSync(root)) continue;
+    const children = await scanDir(root, label);
+    allNodes.push({ name: basename(root), path: label, type: 'dir', children });
+  }
+  const nodes = allNodes;
   const count = nodes.reduce(function count(acc: number, n: FileNode): number {
     return acc + 1 + (n.children ? n.children.reduce(count, 0) : 0);
   }, 0);

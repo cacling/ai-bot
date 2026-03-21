@@ -10,11 +10,11 @@ const API = 'http://127.0.0.1:18472/api/mcp';
 
 // Seed server IDs (from seed.ts)
 const SERVERS = {
-  userInfo:  { id: 'mcp-user-info',  port: 18003, tools: ['query_subscriber', 'query_bill', 'query_plans'] },
+  userInfo:  { id: 'mcp-user-info',  port: 18003, tools: ['query_subscriber', 'query_bill', 'query_plans', 'analyze_bill_anomaly'] },
   business:  { id: 'mcp-business',   port: 18004, tools: ['cancel_service', 'issue_invoice'] },
   diagnosis: { id: 'mcp-diagnosis',  port: 18005, tools: ['diagnose_network', 'diagnose_app'] },
   outbound:  { id: 'mcp-outbound',   port: 18006, tools: ['record_call_result', 'send_followup_sms', 'create_callback_task', 'record_marketing_result'] },
-  account:   { id: 'mcp-account',    port: 18007, tools: ['verify_identity', 'check_account_balance', 'check_contracts', 'apply_service_suspension'] },
+  account:   { id: 'mcp-account',    port: 18007, tools: ['verify_identity', 'check_account_balance', 'check_contracts'] },
 };
 
 const ALL_TOOLS = Object.values(SERVERS).flatMap(s => s.tools);
@@ -182,9 +182,9 @@ test.describe('工具 Real 调用', () => {
     expect(data.has_high_risk).toBe(true);
   });
 
-  test('TC-MCP-24 apply_service_suspension', async ({ request }) => {
+  test('TC-MCP-24 check_contracts', async ({ request }) => {
     const res = await request.post(`${API}/servers/${SERVERS.account.id}/invoke`, {
-      data: { tool_name: 'apply_service_suspension', arguments: { phone: '13800000002' } },
+      data: { tool_name: 'check_contracts', arguments: { phone: '13800000002' } },
     });
     expect(res.ok()).toBeTruthy();
     const data = JSON.parse((await res.json()).result.content[0].text);
