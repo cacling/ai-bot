@@ -267,12 +267,9 @@ function ExecutionTab({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () 
         </div>
       )}
 
-      {/* DB Binding 模式配置（占位） */}
+      {/* DB Binding 模式配置 */}
       {implType === 'db' && (
-        <div className="border rounded-lg p-4 text-xs text-muted-foreground">
-          <h3 className="font-semibold text-foreground mb-2">DB Binding 配置</h3>
-          <p>声明式数据库查询配置（资源、表、条件映射、返回字段、SQL 预览）将在下一阶段实现。</p>
-        </div>
+        <DbBindingPanel toolId={tool.id} config={tool.execution_config} onUpdated={onUpdated} />
       )}
 
       <div className="pt-2 border-t">
@@ -341,6 +338,144 @@ function TestTab({ tool }: { tool: McpToolRecord }) {
         {tool.handler_key && <div className="flex justify-between"><span>Handler</span><span className="font-mono text-foreground">{tool.handler_key}</span></div>}
       </div>
       <p className="text-xs text-muted-foreground italic">测试功能开发中，请使用技能管理的测试面板进行集成测试。</p>
+    </div>
+  );
+}
+
+// ── DB Binding Panel ─────────────────────────────────────────────────────────
+
+function DbBindingPanel({ toolId, config, onUpdated }: { toolId: string; config: string | null; onUpdated: () => void }) {
+  const existing = config ? JSON.parse(config) as Record<string, any> : {};
+  const dbCfg = existing.db ?? {};
+
+  const [table, setTable] = useState<string>(dbCfg.table ?? '');
+  const [operation, setOperation] = useState<string>(dbCfg.operation ?? 'select_one');
+  const [conditions, setConditions] = useState<Array<{ param: string; column: string; op: string }>>(dbCfg.where ?? []);
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(dbCfg.columns ?? []);
+  const [tables, setTables] = useState<string[]>([]);
+  const [columns, setColumns] = useState<Array<{ name: string; type: string }>>([]);
+  const [sqlPreview, setSqlPreview] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Load tables
+  useEffect(() => {
+    fetch('/api/mcp/resources/db-schema/tables').then(r => r.json()).then(d => setTables(d.tables ?? [])).catch(() => {});
+  }, []);
+
+  // Load columns when table changes
+  useEffect(() => {
+    if (!table) { setColumns([]); return; }
+    fetch(`/api/mcp/resources/db-schema/columns?table=${table}`).then(r => r.json()).then(d => setColumns(d.columns ?? [])).catch(() => {});
+  }, [table]);
+
+  // Update SQL preview
+  useEffect(() => {
+    if (!table) { setSqlPreview(''); return; }
+    mcpApi.sqlPreview(toolId, { table, operation, where: conditions, columns: selectedColumns })
+      .then(r => setSqlPreview(r.sql))
+      .catch(() => setSqlPreview(''));
+  }, [table, operation, conditions, selectedColumns, toolId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await mcpApi.updateExecutionConfig(toolId, {
+        impl_type: 'db',
+        db: { table, operation, where: conditions, columns: selectedColumns },
+      });
+      onUpdated();
+    } catch (e) { alert(`保存失败: ${e}`); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-4 border rounded-lg p-4">
+      <h3 className="text-xs font-semibold">DB Binding 配置</h3>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">表</label>
+          <Select value={table} onValueChange={v => { if (v) { setTable(v); setSelectedColumns([]); } }}>
+            <SelectTrigger className="text-xs h-8 font-mono"><SelectValue placeholder="选择表" /></SelectTrigger>
+            <SelectContent>
+              {tables.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">操作类型</label>
+          <Select value={operation} onValueChange={v => { if (v) setOperation(v); }}>
+            <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="select_one">查询单条</SelectItem>
+              <SelectItem value="select_many">查询多条</SelectItem>
+              <SelectItem value="update_one">更新单条</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* 条件映射 */}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">条件映射（工具参数 → 表字段）</label>
+        {conditions.map((w, i) => (
+          <div key={i} className="flex gap-1.5 items-center mb-1">
+            <Input value={w.param} onChange={e => { const n = [...conditions]; n[i] = { ...n[i], param: e.target.value }; setConditions(n); }} placeholder="参数名" className="w-28 text-[11px] font-mono" />
+            <Select value={w.op || '='} onValueChange={v => { if (!v) return; const n = [...conditions]; n[i] = { ...n[i], op: v }; setConditions(n); }}>
+              <SelectTrigger className="w-16 text-[11px] h-7"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="=">=</SelectItem>
+                <SelectItem value="!=">!=</SelectItem>
+                <SelectItem value="LIKE">LIKE</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={w.column || ''} onValueChange={v => { if (!v) return; const n = [...conditions]; n[i] = { ...n[i], column: v }; setConditions(n); }}>
+              <SelectTrigger className="w-36 text-[11px] font-mono h-7"><SelectValue placeholder="列名" /></SelectTrigger>
+              <SelectContent>
+                {columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name} <span className="text-muted-foreground">({c.type})</span></SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" size="icon-xs" className="text-destructive" onClick={() => setConditions(conditions.filter((_, j) => j !== i))}><Trash2 size={11} /></Button>
+          </div>
+        ))}
+        <Button variant="ghost" size="xs" onClick={() => setConditions([...conditions, { param: '', column: '', op: '=' }])}>
+          <Plus size={11} /> 添加条件
+        </Button>
+      </div>
+
+      {/* 返回字段 */}
+      {(operation === 'select_one' || operation === 'select_many') && columns.length > 0 && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">返回字段 <span className="text-[10px] opacity-50">(不选 = 全部)</span></label>
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {columns.map(c => (
+              <label key={c.name} className="flex items-center gap-1 text-[11px] font-mono cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedColumns.includes(c.name)}
+                  onChange={e => setSelectedColumns(e.target.checked ? [...selectedColumns, c.name] : selectedColumns.filter(n => n !== c.name))}
+                  className="size-3 rounded"
+                />
+                {c.name}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SQL 预览 */}
+      {sqlPreview && (
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">SQL 预览（只读）</label>
+          <pre className="text-[11px] font-mono bg-muted p-3 rounded-lg text-foreground">{sqlPreview}</pre>
+        </div>
+      )}
+
+      <div className="pt-2 border-t">
+        <Button size="sm" onClick={handleSave} disabled={saving}>
+          <Save size={12} /> {saving ? '保存中...' : '保存 DB 配置'}
+        </Button>
+      </div>
     </div>
   );
 }
