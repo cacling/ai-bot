@@ -27,4 +27,6 @@ export {
   kmRegressionWindows,
   kmAuditLogs,
   mcpServers,
+  mcpResources,
+  mcpTools,
 } from '../../../../packages/shared-db/src/schema/platform';

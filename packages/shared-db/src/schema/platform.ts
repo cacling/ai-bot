@@ -330,3 +330,53 @@ export const mcpServers = sqliteTable('mcp_servers', {
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
   updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
 });
+
+// ── MCP 资源（Server 下的连接资源）──────────────────────────────────────────
+
+export const mcpResources = sqliteTable('mcp_resources', {
+  id: text('id').primaryKey(),
+  server_id: text('server_id').notNull(),
+  name: text('name').notNull(),
+  type: text('type').notNull(),
+  status: text('status').notNull().default('active'),
+  mcp_transport: text('mcp_transport'),
+  mcp_url: text('mcp_url'),
+  mcp_headers: text('mcp_headers'),
+  mcp_tool_name: text('mcp_tool_name'),
+  db_mode: text('db_mode'),
+  db_table: text('db_table'),
+  db_operation: text('db_operation'),
+  db_where: text('db_where'),
+  db_columns: text('db_columns'),
+  db_set_columns: text('db_set_columns'),
+  db_set_fixed: text('db_set_fixed'),
+  api_base_url: text('api_base_url'),
+  api_method: text('api_method'),
+  api_path: text('api_path'),
+  api_headers: text('api_headers'),
+  api_body_template: text('api_body_template'),
+  api_timeout: integer('api_timeout'),
+  env_json: text('env_json'),
+  env_prod_json: text('env_prod_json'),
+  env_test_json: text('env_test_json'),
+  description: text('description'),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// ── MCP 工具（独立管理）─────────────────────────────────────────────────────
+
+export const mcpTools = sqliteTable('mcp_tools', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  description: text('description').notNull().default(''),
+  server_id: text('server_id'),
+  input_schema: text('input_schema'),
+  execution_config: text('execution_config'),
+  mock_rules: text('mock_rules'),
+  mocked: integer('mocked', { mode: 'boolean' }).notNull().default(false),
+  disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
+  response_example: text('response_example'),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
