@@ -31,7 +31,7 @@ export type BusEvent =
   | { source: 'system'; type: 'new_session';          channel: string; msg_id: string };
 
 /** Event types stored in per-phone history ring buffer (excludes streaming deltas and internal data). */
-const HISTORY_TYPES = new Set(['user_message', 'response', 'agent_message']);
+const HISTORY_TYPES = new Set(['user_message', 'response', 'agent_message', 'new_session']);
 const HISTORY_MAX   = 100;
 
 type Subscriber = (event: BusEvent) => void;
