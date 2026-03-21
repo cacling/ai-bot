@@ -94,6 +94,9 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
 
       logger.info('chat-ws', 'connected', { phone, session: sessionId });
 
+      // 只在首次创建 session 且 phone 非空时发送 greeting（避免重连/React re-render 重复推送）
+      if (!phone || existing.length > 0) return;
+
       // 查询用户身份，推送个性化问候
       try {
         const subRows = await db
