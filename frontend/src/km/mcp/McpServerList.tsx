@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Plus } from 'lucide-react';
-import { mcpApi, type McpServer, type McpResource } from './api';
+import { mcpApi, type McpServer } from './api';
 import { McpServerForm } from './McpServerForm';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ type View = 'list' | 'create' | 'edit';
 
 export function McpServerList() {
   const [servers, setServers] = useState<McpServer[]>([]);
-  const [resources, setResources] = useState<McpResource[]>([]);
+  const [tools, setTools] = useState<Array<{ server_id: string | null }>>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('list');
   const [editId, setEditId] = useState<string | null>(null);
@@ -22,10 +22,10 @@ export function McpServerList() {
     setLoading(true);
     Promise.all([
       mcpApi.listServers(),
-      mcpApi.listResources(),
-    ]).then(([serversRes, resourcesRes]) => {
+      mcpApi.listTools(),
+    ]).then(([serversRes, toolsRes]) => {
       setServers(serversRes.items);
-      setResources(resourcesRes.items);
+      setTools(toolsRes.items);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
@@ -48,16 +48,7 @@ export function McpServerList() {
     return { label: '运行中', variant: 'default' };
   };
 
-  const getResourceCount = (serverId: string) => resources.filter(r => r.server_id === serverId).length;
-
-  const getResourceSummary = (serverId: string) => {
-    const serverResources = resources.filter(r => r.server_id === serverId);
-    if (serverResources.length === 0) return '—';
-    return serverResources.map(r => {
-      const typeLabel = r.type === 'db' ? 'DB' : r.type === 'remote_mcp' ? 'Remote' : 'API';
-      return `${r.name} (${typeLabel})`;
-    }).join(', ');
-  };
+  const getToolCount = (serverId: string) => tools.filter(t => t.server_id === serverId).length;
 
   return (
     <div className="p-4 space-y-4">
@@ -77,7 +68,7 @@ export function McpServerList() {
               <TableRow>
                 <TableHead className="w-40">名称</TableHead>
                 <TableHead>描述</TableHead>
-                <TableHead className="w-64">资源</TableHead>
+                <TableHead className="w-24 text-center">工具数</TableHead>
                 <TableHead className="w-20 text-center">状态</TableHead>
                 <TableHead className="w-24 text-center">操作</TableHead>
               </TableRow>
@@ -85,7 +76,7 @@ export function McpServerList() {
             <TableBody>
               {servers.map(server => {
                 const status = getStatus(server);
-                const resSummary = getResourceSummary(server.id);
+                const toolCount = getToolCount(server.id);
                 return (
                   <TableRow
                     key={server.id}
@@ -94,9 +85,7 @@ export function McpServerList() {
                   >
                     <TableCell className="font-mono font-semibold">{server.name}</TableCell>
                     <TableCell className="text-muted-foreground truncate max-w-[200px]" title={server.description}>{server.description || '—'}</TableCell>
-                    <TableCell className="text-muted-foreground text-[11px] truncate max-w-[250px]" title={resSummary}>
-                      {resSummary}
-                    </TableCell>
+                    <TableCell className="text-center">{toolCount}</TableCell>
                     <TableCell className="text-center"><Badge variant={status.variant}>{status.label}</Badge></TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-3">
