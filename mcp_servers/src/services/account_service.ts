@@ -2,12 +2,7 @@
  * 账户操作服务 — verify_identity, check_account_balance, check_contracts
  * Port: 18007
  */
-import { db, subscribers, mcpLog, startMcpHttpServer, eq, z, McpServer } from "../shared/server.js";
-
-const MOCK_CONTRACTS: Record<string, Array<{ contract_id: string; name: string; end_date: string; penalty: number; risk_level: string }>> = {
-  "13800000001": [{ contract_id: "CT001", name: "24个月合约套餐", end_date: "2027-06-30", penalty: 200, risk_level: "high" }],
-  "13800000002": [],
-};
+import { db, subscribers, contracts, mcpLog, startMcpHttpServer, eq, z, McpServer } from "../shared/server.js";
 
 function createServer(): McpServer {
   const server = new McpServer({ name: "account-service", version: "1.0.0" });
@@ -37,9 +32,10 @@ function createServer(): McpServer {
     phone: z.string().describe("用户手机号"),
   }, async ({ phone }) => {
     mcpLog("account", "check_contracts", { phone });
-    const contracts = MOCK_CONTRACTS[phone] ?? [];
-    const hasHighRisk = contracts.some(c => c.risk_level === "high");
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, phone, contracts, has_active_contracts: contracts.length > 0, has_high_risk: hasHighRisk, message: hasHighRisk ? `存在高风险合约，停机需支付违约金` : contracts.length > 0 ? `存在 ${contracts.length} 个合约，不影响停机` : "无有效合约，可直接办理停机" }) }] };
+    const rows = await db.select().from(contracts).where(eq(contracts.phone, phone)).all();
+    const activeContracts = rows.filter(c => c.status === "active");
+    const hasHighRisk = activeContracts.some(c => c.risk_level === "high");
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, phone, contracts: activeContracts, has_active_contracts: activeContracts.length > 0, has_high_risk: hasHighRisk, message: hasHighRisk ? `存在高风险合约，停机需支付违约金` : activeContracts.length > 0 ? `存在 ${activeContracts.length} 个合约，不影响停机` : "无有效合约，可直接办理停机" }) }] };
   });
 
   return server;

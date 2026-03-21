@@ -12,6 +12,7 @@ export {
   subscriberSubscriptions,
   bills,
   callbackTasks,
+  contracts,
   deviceContexts,
 } from '../../../../packages/shared-db/src/schema/business';
 

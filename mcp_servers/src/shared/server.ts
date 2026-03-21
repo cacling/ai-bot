@@ -30,7 +30,7 @@ export const db = drizzle(client, { schema: businessSchema });
 // Re-export business schema tables for convenience
 export const {
   plans, valueAddedServices, subscribers, subscriberSubscriptions,
-  bills, callbackTasks, deviceContexts,
+  bills, callbackTasks, contracts, deviceContexts,
 } = businessSchema;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

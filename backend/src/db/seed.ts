@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import {
   bills,
   callbackTasks,
+  contracts,
   deviceContexts,
   testPersonas,
   outboundTasks,
@@ -174,6 +175,14 @@ async function seed() {
     { phone: '13800000001', service_id: 'video_pkg' },
     { phone: '13800000001', service_id: 'sms_100' },
     { phone: '13800000002', service_id: 'video_pkg' },
+  ]).run();
+
+  // ── 4b. 合约（依赖用户）──────────────────────────────────────────────────────
+  console.log('[seed] 写入合约数据...');
+  db.delete(contracts).run();
+  db.insert(contracts).values([
+    { contract_id: 'CT001', phone: '13800000001', name: '24个月合约套餐', start_date: '2025-07-01', end_date: '2027-06-30', penalty: 200, risk_level: 'high', status: 'active' },
+    { contract_id: 'CT002', phone: '13800000003', name: '12个月宽带合约', start_date: '2025-01-20', end_date: '2026-01-19', penalty: 100, risk_level: 'medium', status: 'expired' },
   ]).run();
 
   // ── 5. 账单（依赖用户）──────────────────────────────────────────────────────
@@ -750,6 +759,7 @@ async function seed() {
   const dbBindingTools: Array<{ name: string; table: string; operation: string; where: Array<{ param: string; column: string; op: string }>; columns: string[] }> = [
     { name: 'query_plans', table: 'plans', operation: 'select_many', where: [{ param: 'plan_id', column: 'plan_id', op: '=' }], columns: ['plan_id', 'name', 'monthly_fee', 'data_gb', 'voice_min', 'sms', 'features', 'description'] },
     { name: 'check_account_balance', table: 'subscribers', operation: 'select_one', where: [{ param: 'phone', column: 'phone', op: '=' }], columns: ['phone', 'balance', 'status', 'overdue_days'] },
+    { name: 'check_contracts', table: 'contracts', operation: 'select_many', where: [{ param: 'phone', column: 'phone', op: '=' }], columns: ['contract_id', 'name', 'start_date', 'end_date', 'penalty', 'risk_level', 'status'] },
   ];
   for (const dbt of dbBindingTools) {
     db.update(mcpTools).set({

@@ -76,6 +76,18 @@ export const callbackTasks = sqliteTable('callback_tasks', {
   status: text('status').notNull().default('pending'),
 });
 
+export const contracts = sqliteTable('contracts', {
+  contract_id: text('contract_id').primaryKey(),
+  phone: text('phone').notNull().references(() => subscribers.phone, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  start_date: text('start_date').notNull(),
+  end_date: text('end_date').notNull(),
+  penalty: real('penalty').notNull().default(0),
+  risk_level: text('risk_level').notNull().default('low'), // 'low' | 'medium' | 'high'
+  status: text('status').notNull().default('active'), // 'active' | 'expired' | 'terminated'
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
 export const deviceContexts = sqliteTable('device_contexts', {
   phone: text('phone').primaryKey(),
   installed_app_version: text('installed_app_version').notNull().default('3.2.1'),
