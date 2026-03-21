@@ -21,6 +21,7 @@ metadata:
 | `task_id` | 催收任务 ID |
 | `phone` | 客户手机号 |
 | `customer_name` | 客户姓名 |
+| `gender` | 客户性别（male/female/unknown），用于确定称呼"先生"或"女士" |
 | `product_name` | 产品名称（如"宽带包年套餐"） |
 | `overdue_amount` | 逾期金额（元） |
 | `overdue_days` | 逾期天数 |

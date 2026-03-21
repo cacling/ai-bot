@@ -24,16 +24,28 @@ export const UserDetailContent = memo(function UserDetailContent({ data, lang }:
   const ctx = persona.context;
   const phone = (ctx.phone as string) ?? '';
   const name = (ctx.name as string) ?? '';
+  const gender = (ctx.gender as string) ?? 'unknown';
   const plan = (ctx.plan as string) ?? '';
   const status = (ctx.status as string) ?? 'active';
+  const region = (ctx.region as string) ?? '';
+  const email = (ctx.email as string) ?? '';
+  const contractEnd = (ctx.contract_end_date as string) ?? '';
+
+  const genderLabel = gender === 'male' ? (lang === 'zh' ? '男' : 'Male')
+    : gender === 'female' ? (lang === 'zh' ? '女' : 'Female')
+    : '';
+  const statusLabel = status === 'active'
+    ? (lang === 'zh' ? '正常' : 'Active')
+    : (lang === 'zh' ? '已停机' : 'Suspended');
 
   const rows: { label: string; value: string; highlight?: boolean }[] = [
     { label: lang === 'zh' ? '手机号' : 'Phone',  value: phone },
     { label: lang === 'zh' ? '套餐'   : 'Plan',   value: plan, highlight: true },
-    { label: lang === 'zh' ? '状态'   : 'Status', value: status === 'active'
-        ? (lang === 'zh' ? '正常' : 'Active')
-        : (lang === 'zh' ? '已停机' : 'Suspended') },
+    { label: lang === 'zh' ? '状态'   : 'Status', value: statusLabel },
   ];
+  if (region) rows.push({ label: lang === 'zh' ? '归属地' : 'Region', value: region });
+  if (contractEnd) rows.push({ label: lang === 'zh' ? '合约到期' : 'Contract End', value: contractEnd });
+  if (email) rows.push({ label: lang === 'zh' ? '邮箱' : 'Email', value: email });
 
   return (
     <div className="p-3 space-y-2">
@@ -45,6 +57,7 @@ export const UserDetailContent = memo(function UserDetailContent({ data, lang }:
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-semibold text-foreground">{name}</span>
+            {genderLabel && <span className="text-[10px] text-muted-foreground">{genderLabel}</span>}
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${persona.tagColor}`}>
               {persona.tag}
             </span>

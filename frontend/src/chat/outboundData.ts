@@ -35,8 +35,8 @@ export interface OutboundTask {
 }
 
 export type OutboundTaskData =
-  | { taskType: 'collection';     name: string; phone: string; product: Record<Lang, string>; amount: number; days: number }
-  | { taskType: 'marketing';      name: string; phone: string; currentPlan: Record<Lang, string>; targetPlan: Record<Lang, string>; targetFee: number; campaignName: Record<Lang, string> };
+  | { taskType: 'collection';     name: string; gender: string; phone: string; product: Record<Lang, string>; amount: number; days: number }
+  | { taskType: 'marketing';      name: string; gender: string; phone: string; currentPlan: Record<Lang, string>; targetPlan: Record<Lang, string>; targetFee: number; campaignName: Record<Lang, string> };
 
 export async function fetchOutboundTasks(): Promise<OutboundTask[]> {
   const res = await fetch('/api/outbound-tasks');
@@ -49,10 +49,12 @@ export function taskToCardData(task: OutboundTask): OutboundTaskData {
   const zh = task.data.zh ?? {};
   const en = task.data.en ?? zh;
 
+  const gender = (zh.gender ?? 'unknown') as string;
   if (task.task_type === 'collection') {
     return {
       taskType: 'collection',
       name: (zh.customer_name ?? '') as string,
+      gender,
       phone: task.phone,
       product: { zh: (zh.product_name ?? '') as string, en: (en.product_name ?? '') as string },
       amount: (zh.overdue_amount ?? 0) as number,
@@ -63,6 +65,7 @@ export function taskToCardData(task: OutboundTask): OutboundTaskData {
   return {
     taskType: 'marketing',
     name: (zh.customer_name ?? '') as string,
+    gender,
     phone: task.phone,
     currentPlan: { zh: (zh.current_plan ?? '') as string, en: (en.current_plan ?? '') as string },
     targetPlan: { zh: (zh.target_plan_name ?? '') as string, en: (en.target_plan_name ?? '') as string },

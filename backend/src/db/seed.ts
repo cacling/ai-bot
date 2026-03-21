@@ -119,36 +119,52 @@ async function seed() {
     {
       phone: '13800000001',
       name: '张三',
+      gender: 'male',
       id_type: '居民身份证',
+      id_last4: '1234',
       plan_id: 'plan_50g',
       status: 'active',
       balance: 45.8,
       data_used_gb: 32.5,
       voice_used_min: 280,
+      sms_used: 45,
       activated_at: '2023-06-15',
+      contract_end_date: '2026-06-15',
+      email: 'zhangsan@example.com',
+      region: '广州',
     },
     {
       phone: '13800000002',
       name: '李四',
+      gender: 'female',
       id_type: '居民身份证',
+      id_last4: '5678',
       plan_id: 'plan_unlimited',
       status: 'active',
       balance: 128.0,
       data_used_gb: 89.2,
       voice_used_min: 0,
+      sms_used: 0,
       activated_at: '2022-11-01',
+      email: 'lisi@example.com',
+      region: '深圳',
     },
     {
       phone: '13800000003',
       name: '王五',
+      gender: 'male',
       id_type: '居民身份证',
+      id_last4: '9012',
       plan_id: 'plan_10g',
       status: 'suspended',
       balance: -23.5,
       data_used_gb: 10,
       voice_used_min: 200,
+      sms_used: 120,
       activated_at: '2024-01-20',
+      contract_end_date: '2025-12-31',
       overdue_days: 25,
+      region: '北京',
     },
   ]).run();
 
@@ -186,25 +202,25 @@ async function seed() {
   db.insert(testPersonas).values([
     // 入呼用户
     { id: 'U001', label_zh: '张三 · 畅享50G套餐 · 50元/月', label_en: 'Zhang San · 50G Data Plan · ¥50/mo', category: 'inbound', tag_zh: '正常用户', tag_en: 'Active', tag_color: 'bg-green-100 text-green-600', sort_order: 0,
-      context: JSON.stringify({ phone: '13800000001', name: '张三', plan: '畅享50G套餐', status: 'active' }) },
+      context: JSON.stringify({ phone: '13800000001', name: '张三', gender: 'male', plan: '畅享50G套餐', status: 'active', region: '广州', contract_end_date: '2026-06-15', email: 'zhangsan@example.com' }) },
     { id: 'U002', label_zh: '李四 · 无限流量套餐 · 128元/月', label_en: 'Li Si · Unlimited Plan · ¥128/mo', category: 'inbound', tag_zh: 'VIP用户', tag_en: 'VIP', tag_color: 'bg-blue-100 text-blue-600', sort_order: 1,
-      context: JSON.stringify({ phone: '13800000002', name: '李四', plan: '无限流量套餐', status: 'active' }) },
+      context: JSON.stringify({ phone: '13800000002', name: '李四', gender: 'female', plan: '无限流量套餐', status: 'active', region: '深圳', email: 'lisi@example.com' }) },
     { id: 'U003', label_zh: '王五 · 基础10G套餐 · 30元/月', label_en: 'Wang Wu · 10G Basic Plan · ¥30/mo', category: 'inbound', tag_zh: '欠费停机', tag_en: 'Suspended', tag_color: 'bg-red-100 text-red-600', sort_order: 2,
-      context: JSON.stringify({ phone: '13800000003', name: '王五', plan: '基础10G套餐', status: 'suspended' }) },
+      context: JSON.stringify({ phone: '13800000003', name: '王五', gender: 'male', plan: '基础10G套餐', status: 'suspended', region: '北京', contract_end_date: '2025-12-31' }) },
     // 外呼催收
     { id: 'C001', label_zh: 'C001 · 张明 · 宽带包年 · 逾期30天 · ¥386', label_en: 'C001 · Zhang Ming · Annual Broadband · 30d overdue · ¥386', category: 'outbound_collection', tag_zh: '逾期30天', tag_en: '30d Overdue', tag_color: 'bg-red-100 text-red-600', sort_order: 0,
-      context: JSON.stringify({ phone: '13900000001', name: '张明', plan: '宽带包年套餐', status: 'suspended', task_type: 'collection', outbound_task_id: 'C001' }) },
+      context: JSON.stringify({ phone: '13900000001', name: '张明', gender: 'male', plan: '宽带包年套餐', status: 'suspended', task_type: 'collection', outbound_task_id: 'C001' }) },
     { id: 'C002', label_zh: 'C002 · 李华 · 家庭融合 · 逾期45天 · ¥1,280', label_en: 'C002 · Li Hua · Family Bundle · 45d overdue · ¥1,280', category: 'outbound_collection', tag_zh: '逾期45天', tag_en: '45d Overdue', tag_color: 'bg-red-100 text-red-600', sort_order: 1,
-      context: JSON.stringify({ phone: '13900000002', name: '李华', plan: '家庭融合套餐', status: 'suspended', task_type: 'collection', outbound_task_id: 'C002' }) },
+      context: JSON.stringify({ phone: '13900000002', name: '李华', gender: 'male', plan: '家庭融合套餐', status: 'suspended', task_type: 'collection', outbound_task_id: 'C002' }) },
     { id: 'C003', label_zh: 'C003 · 王芳 · 流量月包 · 逾期15天 · ¥520', label_en: 'C003 · Wang Fang · Monthly Data Pack · 15d overdue · ¥520', category: 'outbound_collection', tag_zh: '逾期15天', tag_en: '15d Overdue', tag_color: 'bg-orange-100 text-orange-600', sort_order: 2,
-      context: JSON.stringify({ phone: '13900000003', name: '王芳', plan: '流量月包', status: 'suspended', task_type: 'collection', outbound_task_id: 'C003' }) },
+      context: JSON.stringify({ phone: '13900000003', name: '王芳', gender: 'female', plan: '流量月包', status: 'suspended', task_type: 'collection', outbound_task_id: 'C003' }) },
     // 外呼营销
     { id: 'M001', label_zh: 'M001 · 陈伟 · 5G升级专项活动 · ¥199/月', label_en: 'M001 · Chen Wei · 5G Upgrade Campaign · ¥199/mo', category: 'outbound_marketing', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600', sort_order: 0,
-      context: JSON.stringify({ phone: '13900000004', name: '陈伟', plan: '4G套餐 99元', status: 'active', task_type: 'marketing', outbound_task_id: 'M001' }) },
+      context: JSON.stringify({ phone: '13900000004', name: '陈伟', gender: 'male', plan: '4G套餐 99元', status: 'active', task_type: 'marketing', outbound_task_id: 'M001' }) },
     { id: 'M002', label_zh: 'M002 · 刘丽 · 家庭融合推广活动 · ¥299/月', label_en: 'M002 · Liu Li · Family Bundle Campaign · ¥299/mo', category: 'outbound_marketing', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600', sort_order: 1,
-      context: JSON.stringify({ phone: '13900000005', name: '刘丽', plan: '个人套餐 79元', status: 'active', task_type: 'marketing', outbound_task_id: 'M002' }) },
+      context: JSON.stringify({ phone: '13900000005', name: '刘丽', gender: 'female', plan: '个人套餐 79元', status: 'active', task_type: 'marketing', outbound_task_id: 'M002' }) },
     { id: 'M003', label_zh: 'M003 · 赵强 · 国际漫游出行季活动 · ¥98/月', label_en: 'M003 · Zhao Qiang · Roaming Season Campaign · ¥98/mo', category: 'outbound_marketing', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600', sort_order: 2,
-      context: JSON.stringify({ phone: '13900000006', name: '赵强', plan: '5G商务套餐 159元', status: 'active', task_type: 'marketing', outbound_task_id: 'M003' }) },
+      context: JSON.stringify({ phone: '13900000006', name: '赵强', gender: 'male', plan: '5G商务套餐 159元', status: 'active', task_type: 'marketing', outbound_task_id: 'M003' }) },
   ]).run();
 
   // ── 7a. callback_tasks（清空即可，运行时产生数据）────────────────────────────
@@ -226,29 +242,29 @@ async function seed() {
   db.insert(outboundTasks).values([
     // 催收
     { id: 'C001', phone: '13900000001', task_type: 'collection', label_zh: 'C001 · 张明 · 宽带包年 · 逾期30天 · ¥386', label_en: 'C001 · Zhang Ming · Annual Broadband · 30 days overdue · ¥386', data: JSON.stringify({
-      zh: { case_id: 'C001', customer_name: '张明', overdue_amount: 386, overdue_days: 30, due_date: '2026-03-15', product_name: '宽带包年套餐', strategy: '轻催' },
-      en: { case_id: 'C001', customer_name: 'Zhang Ming', overdue_amount: 386, overdue_days: 30, due_date: '2026-03-15', product_name: 'Annual Broadband Plan', strategy: 'soft' },
+      zh: { case_id: 'C001', customer_name: '张明', gender: 'male', overdue_amount: 386, overdue_days: 30, due_date: '2026-03-15', product_name: '宽带包年套餐', strategy: '轻催' },
+      en: { case_id: 'C001', customer_name: 'Zhang Ming', gender: 'male', overdue_amount: 386, overdue_days: 30, due_date: '2026-03-15', product_name: 'Annual Broadband Plan', strategy: 'soft' },
     }) },
     { id: 'C002', phone: '13900000002', task_type: 'collection', label_zh: 'C002 · 李华 · 家庭融合 · 逾期45天 · ¥1,280', label_en: 'C002 · Li Hua · Family Bundle · 45 days overdue · ¥1,280', data: JSON.stringify({
-      zh: { case_id: 'C002', customer_name: '李华', overdue_amount: 1280, overdue_days: 45, due_date: '2026-03-10', product_name: '家庭融合套餐', strategy: '中催' },
-      en: { case_id: 'C002', customer_name: 'Li Hua', overdue_amount: 1280, overdue_days: 45, due_date: '2026-03-10', product_name: 'Family Bundle Plan', strategy: 'medium' },
+      zh: { case_id: 'C002', customer_name: '李华', gender: 'male', overdue_amount: 1280, overdue_days: 45, due_date: '2026-03-10', product_name: '家庭融合套餐', strategy: '中催' },
+      en: { case_id: 'C002', customer_name: 'Li Hua', gender: 'male', overdue_amount: 1280, overdue_days: 45, due_date: '2026-03-10', product_name: 'Family Bundle Plan', strategy: 'medium' },
     }) },
     { id: 'C003', phone: '13900000003', task_type: 'collection', label_zh: 'C003 · 王芳 · 流量月包 · 逾期15天 · ¥520', label_en: 'C003 · Wang Fang · Monthly Data Pack · 15 days overdue · ¥520', data: JSON.stringify({
-      zh: { case_id: 'C003', customer_name: '王芳', overdue_amount: 520, overdue_days: 15, due_date: '2026-03-20', product_name: '流量月包', strategy: '轻催' },
-      en: { case_id: 'C003', customer_name: 'Wang Fang', overdue_amount: 520, overdue_days: 15, due_date: '2026-03-20', product_name: 'Monthly Data Plan', strategy: 'soft' },
+      zh: { case_id: 'C003', customer_name: '王芳', gender: 'female', overdue_amount: 520, overdue_days: 15, due_date: '2026-03-20', product_name: '流量月包', strategy: '轻催' },
+      en: { case_id: 'C003', customer_name: 'Wang Fang', gender: 'female', overdue_amount: 520, overdue_days: 15, due_date: '2026-03-20', product_name: 'Monthly Data Plan', strategy: 'soft' },
     }) },
     // 营销
     { id: 'M001', phone: '13900000004', task_type: 'marketing', label_zh: 'M001 · 陈伟 · 5G升级专项活动 · ¥199/月', label_en: 'M001 · Chen Wei · 5G Upgrade Campaign · ¥199/mo', data: JSON.stringify({
-      zh: { campaign_id: 'M001', campaign_name: '5G升级专项活动', customer_name: '陈伟', current_plan: '4G畅享套餐 99元/月（100GB流量）', target_plan_name: '5G畅享套餐', target_plan_fee: 199, target_plan_data: '300GB（5G速率）', target_plan_voice: '600分钟', target_plan_features: ['解锁5G网速', '流量翻三倍', '首月免月租'], promo_note: '首月免月租，本月底前办理有效', talk_template: '5G_upgrade_v2' },
-      en: { campaign_id: 'M001', campaign_name: '5G Upgrade Campaign', customer_name: 'Chen Wei', current_plan: '4G Unlimited Plan ¥99/mo (100GB data)', target_plan_name: '5G Unlimited Plan', target_plan_fee: 199, target_plan_data: '300GB (5G speed)', target_plan_voice: '600 minutes', target_plan_features: ['Unlock 5G speed', '3x more data', 'First month free'], promo_note: 'First month free — offer valid through end of this month', talk_template: '5G_upgrade_v2' },
+      zh: { campaign_id: 'M001', campaign_name: '5G升级专项活动', customer_name: '陈伟', gender: 'male', current_plan: '4G畅享套餐 99元/月（100GB流量）', target_plan_name: '5G畅享套餐', target_plan_fee: 199, target_plan_data: '300GB（5G速率）', target_plan_voice: '600分钟', target_plan_features: ['解锁5G网速', '流量翻三倍', '首月免月租'], promo_note: '首月免月租，本月底前办理有效', talk_template: '5G_upgrade_v2' },
+      en: { campaign_id: 'M001', campaign_name: '5G Upgrade Campaign', customer_name: 'Chen Wei', gender: 'male', current_plan: '4G Unlimited Plan ¥99/mo (100GB data)', target_plan_name: '5G Unlimited Plan', target_plan_fee: 199, target_plan_data: '300GB (5G speed)', target_plan_voice: '600 minutes', target_plan_features: ['Unlock 5G speed', '3x more data', 'First month free'], promo_note: 'First month free — offer valid through end of this month', talk_template: '5G_upgrade_v2' },
     }) },
     { id: 'M002', phone: '13900000005', task_type: 'marketing', label_zh: 'M002 · 刘丽 · 家庭融合推广活动 · ¥299/月', label_en: 'M002 · Liu Li · Family Bundle Campaign · ¥299/mo', data: JSON.stringify({
-      zh: { campaign_id: 'M002', campaign_name: '家庭融合推广活动', customer_name: '刘丽', current_plan: '个人4G套餐 79元/月（50GB流量）+ 宽带 100元/月', target_plan_name: '家庭融合套餐', target_plan_fee: 299, target_plan_data: '主卡200GB + 3张副卡各50GB', target_plan_voice: '主卡不限分钟', target_plan_features: ['手机+宽带500M合一', '3张副卡共享流量', '每月节省约100元'], promo_note: '宽带免费升速至500M，24个月合约', talk_template: 'family_bundle_v1' },
-      en: { campaign_id: 'M002', campaign_name: 'Family Bundle Promotion', customer_name: 'Liu Li', current_plan: 'Personal 4G Plan ¥79/mo (50GB data) + Broadband ¥100/mo', target_plan_name: 'Family Bundle Plan', target_plan_fee: 299, target_plan_data: 'Primary line 200GB + 3 sub-lines 50GB each', target_plan_voice: 'Primary line unlimited minutes', target_plan_features: ['Mobile + 500M broadband combined', '3 shared sub-lines', 'Save ~¥100/month'], promo_note: 'Free broadband speed upgrade to 500M, 24-month contract', talk_template: 'family_bundle_v1' },
+      zh: { campaign_id: 'M002', campaign_name: '家庭融合推广活动', customer_name: '刘丽', gender: 'female', current_plan: '个人4G套餐 79元/月（50GB流量）+ 宽带 100元/月', target_plan_name: '家庭融合套餐', target_plan_fee: 299, target_plan_data: '主卡200GB + 3张副卡各50GB', target_plan_voice: '主卡不限分钟', target_plan_features: ['手机+宽带500M合一', '3张副卡共享流量', '每月节省约100元'], promo_note: '宽带免费升速至500M，24个月合约', talk_template: 'family_bundle_v1' },
+      en: { campaign_id: 'M002', campaign_name: 'Family Bundle Promotion', customer_name: 'Liu Li', gender: 'female', current_plan: 'Personal 4G Plan ¥79/mo (50GB data) + Broadband ¥100/mo', target_plan_name: 'Family Bundle Plan', target_plan_fee: 299, target_plan_data: 'Primary line 200GB + 3 sub-lines 50GB each', target_plan_voice: 'Primary line unlimited minutes', target_plan_features: ['Mobile + 500M broadband combined', '3 shared sub-lines', 'Save ~¥100/month'], promo_note: 'Free broadband speed upgrade to 500M, 24-month contract', talk_template: 'family_bundle_v1' },
     }) },
     { id: 'M003', phone: '13900000006', task_type: 'marketing', label_zh: 'M003 · 赵强 · 国际漫游出行季活动 · ¥98/月', label_en: 'M003 · Zhao Qiang · Roaming Season Campaign · ¥98/mo', data: JSON.stringify({
-      zh: { campaign_id: 'M003', campaign_name: '国际漫游出行季活动', customer_name: '赵强', current_plan: '5G商务套餐 159元/月', target_plan_name: '国际漫游月包', target_plan_fee: 98, target_plan_data: '日韩港澳台及东南亚10国每日1GB高速', target_plan_voice: '接听免费，拨出0.5元/分钟', target_plan_features: ['落地即用', '超量不断网', '比直接漫游省60%'], promo_note: '出境前1天激活即可，30天内有效', talk_template: 'roaming_v1' },
-      en: { campaign_id: 'M003', campaign_name: 'International Roaming Travel Season', customer_name: 'Zhao Qiang', current_plan: '5G Business Plan ¥159/mo', target_plan_name: 'International Roaming Monthly Pack', target_plan_fee: 98, target_plan_data: '1GB/day high-speed in Japan, Korea, HK, Macau, Taiwan & 10 SE Asian countries', target_plan_voice: 'Free incoming calls, outgoing ¥0.5/min', target_plan_features: ['Ready on arrival', 'No cutoff after cap', 'Save 60% vs. standard roaming'], promo_note: 'Activate 1 day before departure — valid for 30 days', talk_template: 'roaming_v1' },
+      zh: { campaign_id: 'M003', campaign_name: '国际漫游出行季活动', customer_name: '赵强', gender: 'male', current_plan: '5G商务套餐 159元/月', target_plan_name: '国际漫游月包', target_plan_fee: 98, target_plan_data: '日韩港澳台及东南亚10国每日1GB高速', target_plan_voice: '接听免费，拨出0.5元/分钟', target_plan_features: ['落地即用', '超量不断网', '比直接漫游省60%'], promo_note: '出境前1天激活即可，30天内有效', talk_template: 'roaming_v1' },
+      en: { campaign_id: 'M003', campaign_name: 'International Roaming Travel Season', customer_name: 'Zhao Qiang', gender: 'male', current_plan: '5G Business Plan ¥159/mo', target_plan_name: 'International Roaming Monthly Pack', target_plan_fee: 98, target_plan_data: '1GB/day high-speed in Japan, Korea, HK, Macau, Taiwan & 10 SE Asian countries', target_plan_voice: 'Free incoming calls, outgoing ¥0.5/min', target_plan_features: ['Ready on arrival', 'No cutoff after cap', 'Save 60% vs. standard roaming'], promo_note: 'Activate 1 day before departure — valid for 30 days', talk_template: 'roaming_v1' },
     }) },
   ]).run();
 

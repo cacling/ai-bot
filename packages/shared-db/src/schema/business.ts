@@ -26,14 +26,20 @@ export const valueAddedServices = sqliteTable('value_added_services', {
 export const subscribers = sqliteTable('subscribers', {
   phone: text('phone').primaryKey(),
   name: text('name').notNull(),
+  gender: text('gender').notNull().default('unknown'), // 'male' | 'female' | 'unknown'
   id_type: text('id_type').notNull(),
+  id_last4: text('id_last4'), // 证件号后四位（脱敏）
   plan_id: text('plan_id').notNull().references(() => plans.plan_id),
   status: text('status').notNull(), // 'active' | 'suspended' | 'cancelled'
   balance: real('balance').notNull(),
   data_used_gb: real('data_used_gb').notNull(),
   voice_used_min: integer('voice_used_min').notNull(),
+  sms_used: integer('sms_used').notNull().default(0),
   activated_at: text('activated_at').notNull(),
+  contract_end_date: text('contract_end_date'), // 合约到期日 YYYY-MM-DD，null=无合约
   overdue_days: integer('overdue_days').notNull().default(0),
+  email: text('email'),
+  region: text('region'), // 归属地区（如"广州"）
   createdAt: integer('created_at', { mode: 'timestamp' })
     .$defaultFn(() => new Date()).notNull(),
 });

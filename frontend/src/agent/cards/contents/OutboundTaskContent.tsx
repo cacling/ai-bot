@@ -44,10 +44,15 @@ export const OutboundTaskContent = memo(function OutboundTaskContent({ data, lan
     );
   }
 
+  const genderTitle = d.gender === 'male' ? (lang === 'zh' ? '先生' : 'Mr.')
+    : d.gender === 'female' ? (lang === 'zh' ? '女士' : 'Ms.')
+    : '';
+  const displayName = genderTitle ? `${d.name} ${genderTitle}` : d.name;
+
   if (d.taskType === 'collection') {
     return (
       <div className="p-3 space-y-1">
-        <Row label={lb.name}    value={d.name} highlight />
+        <Row label={lb.name}    value={displayName} highlight />
         <Row label={lb.product} value={d.product[lang]} />
         <Row label={lb.amount}  value={`¥${d.amount.toLocaleString()}`} highlight />
         <Row label={lb.days}    value={lang === 'zh' ? `${d.days} 天` : `${d.days} days`} />
@@ -58,7 +63,7 @@ export const OutboundTaskContent = memo(function OutboundTaskContent({ data, lan
   // marketing
   return (
     <div className="p-3 space-y-1">
-      <Row label={lb.name}         value={d.name} highlight />
+      <Row label={lb.name}         value={displayName} highlight />
       <Row label={lb.current_plan} value={d.currentPlan[lang]} />
       <Row label={lb.target_plan}  value={`${d.targetPlan[lang]}  ¥${d.targetFee}/${lang === 'zh' ? '月' : 'mo'}`} highlight />
       <Row label={lb.campaign}     value={d.campaignName[lang]} />
