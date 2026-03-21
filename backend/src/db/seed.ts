@@ -746,7 +746,21 @@ async function seed() {
     }).onConflictDoNothing().run();
   }
 
-  console.log(`[seed] MCP Resources: ${toolResourceDefs.length} 个, Tools: ${toolResourceDefs.length} 个`);
+  // DB Binding 工具：覆盖 impl_type 和 execution_config
+  const dbBindingTools: Array<{ name: string; table: string; operation: string; where: Array<{ param: string; column: string; op: string }>; columns: string[] }> = [
+    { name: 'query_plans', table: 'plans', operation: 'select_many', where: [{ param: 'plan_id', column: 'plan_id', op: '=' }], columns: ['plan_id', 'name', 'monthly_fee', 'data_gb', 'voice_min', 'sms', 'features', 'description'] },
+    { name: 'check_account_balance', table: 'subscribers', operation: 'select_one', where: [{ param: 'phone', column: 'phone', op: '=' }], columns: ['phone', 'balance', 'status', 'overdue_days'] },
+  ];
+  for (const dbt of dbBindingTools) {
+    db.update(mcpTools).set({
+      impl_type: 'db',
+      handler_key: null,
+      execution_config: JSON.stringify({ impl_type: 'db', db: { table: dbt.table, operation: dbt.operation, where: dbt.where, columns: dbt.columns } }),
+      updated_at: now,
+    }).where(eq(mcpTools.name, dbt.name)).run();
+  }
+
+  console.log(`[seed] MCP Resources: ${toolResourceDefs.length} 个, Tools: ${toolResourceDefs.length} 个 (含 ${dbBindingTools.length} 个 DB Binding)`);
 
   // ── 10. 技能注册 + v1 版本快照（upsert：已存在则跳过）─────────────────────
   console.log('[seed] 初始化技能注册表和版本快照...');
