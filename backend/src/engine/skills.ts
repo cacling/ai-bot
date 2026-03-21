@@ -34,6 +34,7 @@ export interface SkillEntry {
   name: string;
   description: string;
   channels: string[];
+  triggerKeywords: string[];
 }
 
 /** 标准 channel 类型 */
@@ -88,10 +89,12 @@ function buildCache(): SkillCache {
 
     for (const row of rows) {
       const channels: string[] = row.channels ? JSON.parse(row.channels) : DEFAULT_CHANNELS;
+      const triggerKeywords: string[] = row.trigger_keywords ? JSON.parse(row.trigger_keywords) : [];
       entries.push({
         name: row.id,
         description: row.description || row.id,
         channels,
+        triggerKeywords,
       });
 
       // tool_names
@@ -140,12 +143,17 @@ export function extractSkillMetadata(content: string): {
   const tagsMatch = content.match(/^\s*tags:\s*\[([^\]]*)\]/m);
   const mermaidMatch = content.match(/```mermaid\r?\n([\s\S]*?)```/);
 
-  // 触发条件：提取 ## 触发条件 后面的列表项
+  // 触发条件：提取 ## 触发条件 后面的列表项（支持普通 bullet 和带引号的列表项）
   const triggerSection = content.match(/## 触发条件\s*\n([\s\S]*?)(?=\n##|\n---|\Z)/);
   const triggerKeywords: string[] = [];
   if (triggerSection) {
-    for (const m of triggerSection[1].matchAll(/[-–]\s*(?:[""]([^""]+)[""]|"([^"]+)")/g)) {
-      triggerKeywords.push(m[1] ?? m[2]);
+    for (const m of triggerSection[1].matchAll(/^[-–*]\s+(.+)$/gm)) {
+      const line = m[1].trim();
+      // 跳过分流注意等非触发条件的说明行
+      if (line.startsWith('>') || line.startsWith('**分流')) continue;
+      // 提取带引号的内容或整行
+      const quoted = line.match(/[""]([^""]+)[""]|"([^"]+)"/);
+      triggerKeywords.push(quoted ? (quoted[1] ?? quoted[2]) : line);
     }
   }
 
@@ -307,9 +315,15 @@ export function getSkillsByChannel(channel: string): SkillEntry[] {
   return getAvailableSkills().filter(s => s.channels.includes(channel));
 }
 
-/** 获取指定 channel 的技能描述（用于 system prompt 注入） */
+/** 获取指定 channel 的技能描述（用于 system prompt 注入，含触发关键词） */
 export function getSkillsDescriptionByChannel(channel: string): string {
-  return getSkillsByChannel(channel).map(s => `- ${s.name}：${s.description}`).join('\n');
+  return getSkillsByChannel(channel).map(s => {
+    let line = `- ${s.name}：${s.description}`;
+    if (s.triggerKeywords.length > 0) {
+      line += `\n  典型问法：${s.triggerKeywords.slice(0, 5).join('、')}`;
+    }
+    return line;
+  }).join('\n');
 }
 
 /** 获取指定 channel 的技能完整内容（用于语音/外呼 prompt 注入，读文件） */
