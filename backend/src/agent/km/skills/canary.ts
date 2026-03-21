@@ -15,8 +15,9 @@ import { existsSync } from 'node:fs';
 import { requireRole } from '../../../services/auth';
 import { logger } from '../../../services/logger';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
-const CANARY_ROOT = resolve(PROJECT_ROOT, 'skills', '.canary');
+import { REPO_ROOT } from '../../../services/paths';
+const PROJECT_ROOT = REPO_ROOT;
+const CANARY_ROOT = resolve(PROJECT_ROOT, 'backend/skills', '.canary');
 
 interface CanaryConfig {
   skill_path: string;

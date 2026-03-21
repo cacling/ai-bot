@@ -16,6 +16,7 @@ import { db } from '../../../db';
 import { mcpTools, mcpResources, mcpServers } from '../../../db/schema';
 import { nanoid } from '../../../db/nanoid';
 import { logger } from '../../../services/logger';
+import { REPO_ROOT } from '../../../services/paths';
 import { getToolToSkillsMap } from '../../../engine/skills';
 
 const app = new Hono();
@@ -42,7 +43,7 @@ app.get('/', async (c) => {
       if (schemaPath.endsWith('.json')) {
         const { readFileSync, existsSync } = await import('node:fs');
         const { resolve } = await import('node:path');
-        const fullPath = resolve(import.meta.dir, '../../../../..', schemaPath);
+        const fullPath = resolve(REPO_ROOT,schemaPath);
         if (existsSync(fullPath)) {
           const schema = JSON.parse(readFileSync(fullPath, 'utf-8'));
           schemaCache.set(schemaPath, schema);
@@ -185,7 +186,7 @@ app.get('/:id', async (c) => {
     try {
       const { readFileSync, existsSync } = await import('node:fs');
       const { resolve } = await import('node:path');
-      const schemaPath = resolve(import.meta.dir, '../../../../..', row.output_schema);
+      const schemaPath = resolve(REPO_ROOT,row.output_schema);
       if (existsSync(schemaPath)) outputSchemaContent = JSON.parse(readFileSync(schemaPath, 'utf-8'));
     } catch { /* ignore */ }
   } else if (row.output_schema) {
@@ -315,7 +316,7 @@ app.post('/:id/validate-output', async (c) => {
     if (tool.output_schema.endsWith('.json')) {
       const { readFileSync, existsSync } = await import('node:fs');
       const { resolve } = await import('node:path');
-      const schemaPath = resolve(import.meta.dir, '../../../../..', tool.output_schema);
+      const schemaPath = resolve(REPO_ROOT,tool.output_schema);
       if (!existsSync(schemaPath)) return c.json({ valid: false, errors: [`schema file not found: ${tool.output_schema}`] });
       schemaStr = readFileSync(schemaPath, 'utf-8');
     } else {

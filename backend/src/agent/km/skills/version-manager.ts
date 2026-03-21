@@ -18,8 +18,8 @@ import { eq, desc, and } from 'drizzle-orm';
 import { logger } from '../../../services/logger';
 import { syncSkillMetadata, refreshSkillsCache } from '../../../engine/skills';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
-const SKILLS_ROOT = resolve(PROJECT_ROOT, 'skills');
+import { REPO_ROOT, SKILLS_ROOT } from '../../../services/paths';
+const PROJECT_ROOT = REPO_ROOT;
 const BIZ_SKILLS_DIR = resolve(SKILLS_ROOT, 'biz-skills');
 const VERSIONS_DIR = resolve(SKILLS_ROOT, '.versions');
 

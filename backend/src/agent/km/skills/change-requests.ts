@@ -63,8 +63,8 @@ changeRequestRoutes.post('/:id/approve', requireRole('reviewer'), async (c) => {
   // Apply the change — write directly to file
   const { writeFile } = await import('node:fs/promises');
   const { resolve } = await import('node:path');
-  const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
-  await writeFile(resolve(PROJECT_ROOT, cr.skill_path), cr.new_content, 'utf-8');
+  const { REPO_ROOT } = await import('../../../services/paths');
+  await writeFile(resolve(REPO_ROOT, cr.skill_path), cr.new_content, 'utf-8');
 
   await db
     .update(changeRequests)

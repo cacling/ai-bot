@@ -25,8 +25,9 @@ import { getToolsOverview } from '../mcp/tools-overview';
 import { db } from '../../../db';
 import { testCases, testPersonas } from '../../../db/schema';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
-const SANDBOX_ROOT = resolve(PROJECT_ROOT, 'skills', '.sandbox');
+import { REPO_ROOT } from '../../../services/paths';
+const PROJECT_ROOT = REPO_ROOT;
+const SANDBOX_ROOT = resolve(PROJECT_ROOT, 'backend/skills', '.sandbox');
 
 // In-memory sandbox registry
 interface SandboxInfo {

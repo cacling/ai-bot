@@ -24,7 +24,8 @@ import {
 import { logger } from '../../../services/logger';
 import { SKILLS_ROOT } from '../../../services/paths';
 
-const PROJECT_ROOT = resolve(import.meta.dir, '../../../..');
+import { REPO_ROOT } from '../../../services/paths';
+const PROJECT_ROOT = REPO_ROOT;
 
 const app = new Hono();
 

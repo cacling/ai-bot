@@ -219,7 +219,8 @@ skillEdit.post('/apply', requireRole('config_editor'), async (c) => {
     return c.json({ error: '参数不完整' }, 400);
   }
 
-  const fullPath = resolve(import.meta.dir, '../../../..', body.skill_path);
+  const { REPO_ROOT } = await import('../../../services/paths');
+  const fullPath = resolve(REPO_ROOT, body.skill_path);
   let content: string;
   try {
     content = await readFile(fullPath, 'utf-8');

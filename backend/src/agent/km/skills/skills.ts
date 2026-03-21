@@ -13,21 +13,8 @@ import { skillRegistry, skillVersions } from '../../../db/schema';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../../services/logger';
 
-// PROJECT_ROOT = 项目根目录（与 files.ts 的 REPO_ROOT 保持一致）
-// 路径相对于项目根，确保 /api/files/content 的 isPathSafe 能匹配
-import { existsSync } from 'node:fs';
-const _findProjectRoot = (): string => {
-  const candidates = [
-    resolve(import.meta.dir, '../../../../..'),  // backend/src/agent/km/skills → 5 up
-    resolve(process.cwd(), '..'),                // cwd = backend/ → 1 up
-    process.cwd(),
-  ];
-  for (const c of candidates) {
-    if (existsSync(resolve(c, 'backend/skills')) && existsSync(resolve(c, 'frontend'))) return c;
-  }
-  return candidates[0];
-};
-const PROJECT_ROOT = _findProjectRoot();
+import { REPO_ROOT } from '../../../services/paths';
+const PROJECT_ROOT = REPO_ROOT;
 
 const skills = new Hono();
 
