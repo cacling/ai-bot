@@ -371,8 +371,14 @@ export const mcpTools = sqliteTable('mcp_tools', {
   name: text('name').notNull().unique(),
   description: text('description').notNull().default(''),
   server_id: text('server_id'),
+  /** Real 实现类型：'script' | 'db' | 'api' | null（未配置） */
+  impl_type: text('impl_type'),
   input_schema: text('input_schema'),
+  /** 输出 Schema（JSON Schema），用于 Mock/Real 契约校验 */
+  output_schema: text('output_schema'),
   execution_config: text('execution_config'),
+  /** 脚本模式：handler key（如 'user_info.query_subscriber'） */
+  handler_key: text('handler_key'),
   mock_rules: text('mock_rules'),
   mocked: integer('mocked', { mode: 'boolean' }).notNull().default(false),
   disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),

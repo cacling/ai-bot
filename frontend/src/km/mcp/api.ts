@@ -92,7 +92,13 @@ export interface McpToolRecord {
   name: string;
   description: string;
   server_id: string | null;
+  /** Real 实现类型：'script' | 'db' | 'api' | null */
+  impl_type: string | null;
+  /** 脚本模式：handler key */
+  handler_key: string | null;
   input_schema: string | null;
+  /** 输出 Schema（JSON Schema） */
+  output_schema: string | null;
   execution_config: string | null;
   mock_rules: string | null;
   mocked: boolean;
@@ -102,9 +108,15 @@ export interface McpToolRecord {
   updated_at: string;
   // 附加字段（API 返回）
   skills?: string[];
-  impl_type?: string | null;
-  resource_id?: string | null;
   resource?: { id: string; name: string; type: string } | null;
+}
+
+export interface McpHandler {
+  key: string;
+  tool_name: string;
+  server_name: string;
+  server_id: string;
+  file: string;
 }
 
 export interface ToolOverviewItem {
@@ -173,4 +185,12 @@ export const mcpApi = {
     request<{ ok: boolean }>(`/tool-management/${id}/mock-rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
   toggleToolMock: (id: string) =>
     request<{ ok: boolean; mocked: boolean }>(`/tool-management/${id}/toggle-mock`, { method: 'PUT' }),
+
+  // Handlers
+  listHandlers: () =>
+    request<{ handlers: McpHandler[] }>('/tool-management/handlers'),
+
+  // SQL preview
+  sqlPreview: (id: string, config: { table: string; operation: string; where?: Array<{ param: string; column: string; op?: string }>; columns?: string[] }) =>
+    request<{ sql: string }>(`/tool-management/${id}/sql-preview`, { method: 'POST', body: JSON.stringify(config) }),
 };

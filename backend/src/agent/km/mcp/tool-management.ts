@@ -13,7 +13,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../../../db';
-import { mcpTools, mcpResources } from '../../../db/schema';
+import { mcpTools, mcpResources, mcpServers } from '../../../db/schema';
 import { nanoid } from '../../../db/nanoid';
 import { logger } from '../../../services/logger';
 import { getToolToSkillsMap } from '../../../engine/skills';
@@ -33,9 +33,6 @@ app.get('/', async (c) => {
   const items = rows.map(t => ({
     ...t,
     skills: toolSkillsMap.get(t.name) ?? [],
-    // 解析 execution_config 中的 impl_type 和 resource_id
-    impl_type: t.execution_config ? (JSON.parse(t.execution_config) as { impl_type?: string }).impl_type ?? null : null,
-    resource_id: t.execution_config ? (JSON.parse(t.execution_config) as { resource_id?: string }).resource_id ?? null : null,
   }));
 
   return c.json({ items });
@@ -63,6 +60,36 @@ app.post('/', async (c) => {
   }).run();
   logger.info('mcp', 'tool_created', { id, name: body.name });
   return c.json({ id });
+});
+
+// ── Handlers list（列出所有可用的脚本 handler）────────────────────────────────
+app.get('/handlers', async (c) => {
+  const servers = db.select().from(mcpServers).all();
+  const handlers: Array<{ key: string; tool_name: string; server_name: string; server_id: string; file: string }> = [];
+
+  const serverFileMap: Record<string, string> = {
+    'mcp-user-info': 'mcp_servers/src/services/user_info_service.ts',
+    'mcp-business': 'mcp_servers/src/services/business_service.ts',
+    'mcp-diagnosis': 'mcp_servers/src/services/diagnosis_service.ts',
+    'mcp-outbound': 'mcp_servers/src/services/outbound_service.ts',
+    'mcp-account': 'mcp_servers/src/services/account_service.ts',
+  };
+
+  for (const s of servers) {
+    const tools = s.tools_json ? JSON.parse(s.tools_json) as Array<{ name: string }> : [];
+    const prefix = s.name.replace(/-service$/, '').replace(/-/g, '_');
+    for (const t of tools) {
+      handlers.push({
+        key: `${prefix}.${t.name}`,
+        tool_name: t.name,
+        server_name: s.name,
+        server_id: s.id,
+        file: serverFileMap[s.id] ?? `mcp_servers/src/services/${s.name}.ts`,
+      });
+    }
+  }
+
+  return c.json({ handlers });
 });
 
 // ── Get ──────────────────────────────────────────────────────────────────────
@@ -155,6 +182,31 @@ app.put('/:id/toggle-mock', async (c) => {
   db.update(mcpTools).set({ mocked: newMocked, updated_at: now() }).where(eq(mcpTools.id, id)).run();
   logger.info('mcp', 'tool_mock_toggled', { id, mocked: newMocked });
   return c.json({ ok: true, mocked: newMocked });
+});
+
+// ── SQL preview（根据 DB Binding 配置生成 SQL 预览）─────────────────────────
+app.post('/:id/sql-preview', async (c) => {
+  const body = await c.req.json() as {
+    table?: string;
+    operation?: string;
+    where?: Array<{ param: string; column: string; op?: string }>;
+    columns?: string[];
+  };
+  if (!body.table) return c.json({ error: 'table 不能为空' }, 400);
+
+  const cols = body.columns?.length ? body.columns.join(', ') : '*';
+  const conditions = (body.where ?? []).map(w => `${w.column} ${w.op ?? '='} :${w.param}`).join(' AND ');
+
+  let sql = '';
+  if (body.operation === 'update_one') {
+    sql = `UPDATE ${body.table} SET ... WHERE ${conditions || '1=1'} LIMIT 1`;
+  } else if (body.operation === 'select_many') {
+    sql = `SELECT ${cols} FROM ${body.table}${conditions ? ' WHERE ' + conditions : ''}`;
+  } else {
+    sql = `SELECT ${cols} FROM ${body.table}${conditions ? ' WHERE ' + conditions : ''} LIMIT 1`;
+  }
+
+  return c.json({ sql, table: body.table, operation: body.operation ?? 'select_one' });
 });
 
 export default app;
