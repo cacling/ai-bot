@@ -1,5 +1,5 @@
 /**
- * McpToolListPage.tsx — MCP 工具独立管理页
+ * McpToolListPage.tsx — MCP 工具管理页（列表 + 编辑视图切换）
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Plus } from 'lucide-react';
@@ -9,11 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 
+type View = 'list' | 'edit';
+
 export function McpToolListPage() {
   const [tools, setTools] = useState<McpToolRecord[]>([]);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingToolId, setEditingToolId] = useState<string | null>(null);
+  const [view, setView] = useState<View>('list');
+  const [editId, setEditId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -33,9 +36,19 @@ export function McpToolListPage() {
     return servers.find(s => s.id === id)?.name ?? id;
   };
 
+  const implLabel = (tool: McpToolRecord) => {
+    if (!tool.impl_type) return null;
+    if (tool.impl_type === 'script') return '脚本';
+    if (tool.impl_type === 'db') return 'DB';
+    if (tool.impl_type === 'api') return 'API';
+    return tool.impl_type;
+  };
+
   const configStatus = (tool: McpToolRecord) => {
+    if (tool.disabled) return { label: '已禁用', color: 'bg-muted text-muted-foreground' };
     if (tool.mocked) return { label: 'Mock', color: 'bg-amber-100 text-amber-700' };
-    if (!tool.server_id) return { label: '待配置', color: 'bg-muted text-muted-foreground' };
+    if (!tool.impl_type) return { label: '待配置', color: 'bg-muted text-muted-foreground' };
+    if (tool.impl_type === 'script' && !tool.handler_key) return { label: '不完整', color: 'bg-orange-100 text-orange-700' };
     return { label: '已就绪', color: 'bg-emerald-100 text-emerald-700' };
   };
 
@@ -54,11 +67,23 @@ export function McpToolListPage() {
     load();
   };
 
+  // 编辑视图
+  if (view === 'edit' && editId) {
+    return (
+      <McpToolEditor
+        toolId={editId}
+        onBack={() => { setView('list'); setEditId(null); }}
+        onUpdated={load}
+      />
+    );
+  }
+
+  // 列表视图
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">MCP 工具 ({tools.length})</h2>
-        <Button size="sm" onClick={() => {/* TODO: 新建工具弹窗 */}}><Plus size={13} /> 新建</Button>
+        <Button size="sm" onClick={() => {/* TODO: 新建工具 */}}><Plus size={13} /> 新建</Button>
       </div>
 
       {loading ? (
@@ -73,6 +98,7 @@ export function McpToolListPage() {
                 <TableHead className="w-44">工具名</TableHead>
                 <TableHead className="w-28">Server</TableHead>
                 <TableHead>描述</TableHead>
+                <TableHead className="w-20 text-center">实现</TableHead>
                 <TableHead className="w-28 text-center">关联 Skill</TableHead>
                 <TableHead className="w-32 text-center">模式</TableHead>
                 <TableHead className="w-20 text-center">状态</TableHead>
@@ -82,19 +108,22 @@ export function McpToolListPage() {
             <TableBody>
               {tools.map(tool => {
                 const status = configStatus(tool);
-                const mockRuleCount = tool.mock_rules ? (JSON.parse(tool.mock_rules) as unknown[]).length : 0;
+                const impl = implLabel(tool);
                 return (
-                  <TableRow key={tool.id} className="cursor-pointer" onClick={() => setEditingToolId(tool.id)}>
+                  <TableRow key={tool.id} className="cursor-pointer" onClick={() => { setEditId(tool.id); setView('edit'); }}>
                     <TableCell className="font-mono font-semibold">{tool.name}</TableCell>
                     <TableCell className="text-muted-foreground text-[11px]">{serverName(tool.server_id)}</TableCell>
                     <TableCell className="text-muted-foreground truncate max-w-[200px]" title={tool.description}>{tool.description || '—'}</TableCell>
+                    <TableCell className="text-center">
+                      {impl ? <Badge variant="outline" className="text-[10px]">{impl}</Badge> : <span className="text-muted-foreground text-[10px]">—</span>}
+                    </TableCell>
                     <TableCell className="text-center">
                       {(tool.skills ?? []).length > 0
                         ? (tool.skills ?? []).map(s => <Badge key={s} variant="secondary" className="text-[10px] mr-0.5">{s}</Badge>)
                         : <span className="text-muted-foreground">—</span>
                       }
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1.5">
                         <span className={`text-[11px] ${!tool.mocked ? 'font-medium text-emerald-600' : 'text-muted-foreground'}`}>Real</span>
                         <button
@@ -118,15 +147,6 @@ export function McpToolListPage() {
             </TableBody>
           </Table>
         </div>
-      )}
-
-      {/* Tool Editor Dialog */}
-      {editingToolId && (
-        <McpToolEditor
-          toolId={editingToolId}
-          onClose={() => setEditingToolId(null)}
-          onUpdated={load}
-        />
       )}
     </div>
   );
