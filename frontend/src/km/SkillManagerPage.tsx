@@ -686,7 +686,7 @@ export function SkillManagerPage() {
                 { key: 'all' as QuickFilter, label: '全部', value: listStats.total, color: 'text-foreground' },
                 { key: 'published' as QuickFilter, label: '已发布', value: listStats.published, color: 'text-emerald-600' },
                 { key: 'draft' as QuickFilter, label: '有草稿', value: listStats.hasDraft, color: 'text-amber-600' },
-                { key: 'inbound' as QuickFilter, label: '入站', value: listStats.inbound, color: 'text-primary' },
+                { key: 'inbound' as QuickFilter, label: '呼入', value: listStats.inbound, color: 'text-primary' },
                 { key: 'outbound' as QuickFilter, label: '外呼', value: listStats.outbound, color: 'text-primary' },
               ]).map(card => (
                 <button key={card.key} onClick={() => setQuickFilter(quickFilter === card.key ? 'all' : card.key)}
@@ -709,7 +709,7 @@ export function SkillManagerPage() {
                 <SelectTrigger className="w-28 text-xs h-8"><SelectValue placeholder="模式" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部模式</SelectItem>
-                  <SelectItem value="inbound">入站</SelectItem>
+                  <SelectItem value="inbound">呼入</SelectItem>
                   <SelectItem value="outbound">外呼</SelectItem>
                 </SelectContent>
               </Select>
@@ -763,7 +763,7 @@ export function SkillManagerPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={reg?.mode === 'outbound' ? 'secondary' : 'outline'} className="text-[10px]">
-                            {reg?.mode === 'outbound' ? '外呼' : '入站'}
+                            {reg?.mode === 'outbound' ? '外呼' : '呼入'}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-center">
