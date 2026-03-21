@@ -25,7 +25,7 @@ import { executeDbTool, type DbExecutionConfig } from '../services/db-executor';
 import { mcpTools as mcpToolsTable, mcpResources as mcpResourcesTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
-import { getSkillsDescriptionByChannel, getSkillContentByChannel } from '../engine/skills';
+import { getSkillsDescriptionByChannel } from '../engine/skills';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -73,14 +73,12 @@ function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberNam
   const defaultName = lang === 'en' ? 'Customer' : '用户';
   const defaultPlan = lang === 'en' ? 'Unknown Plan' : '未知套餐';
   const voiceSkills = getSkillsDescriptionByChannel('voice');
-  const skillContent = getSkillContentByChannel('voice');
   const base = VOICE_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
     .replace('{{SUBSCRIBER_NAME}}', subscriberName ?? defaultName)
     .replace('{{PLAN_NAME}}', planName ?? defaultPlan)
     .replace('{{CURRENT_DATE}}', today)
-    .replace('{{AVAILABLE_SKILLS}}', voiceSkills || '（暂无可用技能）')
-    .replace('{{SKILL_CONTENT}}', skillContent || '');
+    .replace('{{AVAILABLE_SKILLS}}', voiceSkills || '（暂无可用技能）');
   return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 
