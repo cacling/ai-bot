@@ -13,6 +13,7 @@ import { ResourceModule } from './server-console/ResourceModule';
 import { ToolSummaryModule } from './server-console/ToolSummaryModule';
 import { HealthModule } from './server-console/HealthModule';
 import { Button } from '@/components/ui/button';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 
@@ -177,9 +178,10 @@ export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenT
       </div>
 
       {/* ── Body: Left Nav + Main Content ───────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <ResizablePanelGroup orientation="horizontal" className="flex-1" id="server-console">
         {/* Left Nav */}
-        <div className="w-40 bg-background border-r shrink-0 py-2">
+        <ResizablePanel id="server-left" defaultSize="15%" minSize="10%" maxSize="20%">
+        <div className="h-full bg-background border-r py-2">
           {MODULES.map(m => (
             <button
               key={m.id}
@@ -201,9 +203,13 @@ export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenT
             </button>
           ))}
         </div>
+        </ResizablePanel>
+
+        <ResizableHandle />
 
         {/* Main Content */}
-        <div className="flex-1 overflow-auto p-4">
+        <ResizablePanel id="server-main" defaultSize="85%" minSize="60%">
+        <div className="h-full overflow-auto p-4">
           {module === 'overview' && (
             <OverviewModule
               server={server}
@@ -242,7 +248,8 @@ export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenT
             />
           )}
         </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

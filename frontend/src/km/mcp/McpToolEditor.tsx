@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 
 /**
  * 从 MCP 工具调用结果中提取业务数据。
@@ -129,9 +130,10 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
       </div>
 
       {/* ── Three-column layout ────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <ResizablePanelGroup orientation="horizontal" className="flex-1" id="tool-editor">
         {/* Left: Step Navigation */}
-        <div className="w-[220px] border-r bg-background flex-shrink-0 flex flex-col">
+        <ResizablePanel id="tool-left" defaultSize="15%" minSize="10%" maxSize="25%">
+        <div className="h-full border-r bg-background flex flex-col">
           <div className="p-4 space-y-1 flex-1">
             {STEPS.map((s, i) => {
               const status = stepStatus(s.id);
@@ -182,9 +184,13 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
             </div>
           </div>
         </div>
+        </ResizablePanel>
+
+        <ResizableHandle />
 
         {/* Center: Main editing area */}
-        <div className="flex-1 overflow-auto p-6 pb-20">
+        <ResizablePanel id="tool-center" defaultSize="60%" minSize="30%">
+        <div className="h-full overflow-auto p-6 pb-20">
           <div className="max-w-[760px] mx-auto">
             {step === 'overview' && <OverviewStep tool={tool} servers={servers} onUpdated={handleUpdated} />}
             {step === 'input' && <InputContractStep tool={tool} onUpdated={handleUpdated} />}
@@ -194,12 +200,17 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
             {step === 'test' && <TestStep tool={tool} onTestResult={setLastTestPassed} />}
           </div>
         </div>
+        </ResizablePanel>
+
+        <ResizableHandle />
 
         {/* Right: Summary sidebar */}
-        <div className="w-[280px] border-l bg-background p-4 flex-shrink-0 overflow-auto">
+        <ResizablePanel id="tool-right" defaultSize="25%" minSize="15%" maxSize="35%">
+        <div className="h-full border-l bg-background p-4 overflow-auto">
           <SummarySidebar tool={tool} servers={servers} />
         </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       {/* ── Bottom sticky action bar ───────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 py-3 bg-background border-t shadow-[0_-2px_8px_rgba(0,0,0,0.04)]">
