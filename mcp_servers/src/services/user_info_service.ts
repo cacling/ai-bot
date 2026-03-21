@@ -54,7 +54,7 @@ function createServer(): McpServer {
     const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
     if (!sub) {
       mcpLog("user-info", "query_subscriber", { phone, found: false, ms: Math.round(performance.now() - t0) });
-      return { content: [{ type: "text", text: JSON.stringify({ found: false, message: `未找到手机号 ${phone} 的用户信息` }) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ phone, name: null, gender: null, status: null, balance: 0, plan_fee: 0, data_used_gb: 0, data_total_gb: 0, data_usage_ratio: 0, voice_used_min: 0, voice_total_min: 0, voice_usage_ratio: 0, is_arrears: false, arrears_level: null, overdue_days: 0, services: [], vas_total_fee: 0 }) }] };
     }
     const plan = await db.select().from(plans).where(eq(plans.plan_id, sub.plan_id)).get();
     const subs = await db.select({
@@ -73,22 +73,23 @@ function createServer(): McpServer {
 
     mcpLog("user-info", "query_subscriber", { phone, found: true, ms: Math.round(performance.now() - t0) });
     return { content: [{ type: "text", text: JSON.stringify({
-      found: true,
-      subscriber: {
-        ...sub,
-        plan: plan?.name ?? sub.plan_id,
-        plan_fee: plan?.monthly_fee ?? 0,
-        data_total_gb: dataTotal,
-        voice_total_min: voiceTotal,
-        data_usage_ratio: usageRatio(sub.data_used_gb, dataTotal),
-        voice_usage_ratio: usageRatio(sub.voice_used_min, voiceTotal),
-        is_arrears: sub.balance < 0,
-        arrears_level: arrearsLevel,
-        overdue_days: (sub as any).overdue_days ?? 0,
-        subscriptions: subs.map(s => s.service_id),
-        services,
-        vas_total_fee: vasTotalFee,
-      },
+      phone: sub.phone,
+      name: sub.name,
+      gender: (sub as any).gender ?? null,
+      status: sub.status,
+      balance: sub.balance,
+      plan_fee: plan?.monthly_fee ?? 0,
+      data_used_gb: sub.data_used_gb,
+      data_total_gb: dataTotal,
+      data_usage_ratio: usageRatio(sub.data_used_gb, dataTotal),
+      voice_used_min: sub.voice_used_min,
+      voice_total_min: voiceTotal,
+      voice_usage_ratio: usageRatio(sub.voice_used_min, voiceTotal),
+      is_arrears: sub.balance < 0,
+      arrears_level: arrearsLevel,
+      overdue_days: (sub as any).overdue_days ?? 0,
+      services,
+      vas_total_fee: vasTotalFee,
     }) }] };
   });
 
@@ -98,18 +99,19 @@ function createServer(): McpServer {
   }, async ({ phone, month }) => {
     const t0 = performance.now();
     const sub = await db.select({ phone: subscribers.phone }).from(subscribers).where(eq(subscribers.phone, phone)).get();
-    if (!sub) { mcpLog("user-info", "query_bill", { phone, found: false, ms: Math.round(performance.now() - t0) }); return { content: [{ type: "text", text: JSON.stringify({ found: false, message: `未找到手机号 ${phone} 的账单记录` }) }] }; }
+    if (!sub) { mcpLog("user-info", "query_bill", { phone, found: false, ms: Math.round(performance.now() - t0) }); return { content: [{ type: "text", text: JSON.stringify({ bills: [], count: 0, requested_month: month ?? null, note: `未找到手机号 ${phone} 的账单记录` }) }] }; }
     if (month) {
       const bill = await db.select().from(bills).where(and(eq(bills.phone, phone), eq(bills.month, month))).get();
-      if (!bill) { mcpLog("user-info", "query_bill", { phone, month, found: false, ms: Math.round(performance.now() - t0) }); return { content: [{ type: "text", text: JSON.stringify({ found: false, message: `未找到 ${month} 的账单` }) }] }; }
+      if (!bill) { mcpLog("user-info", "query_bill", { phone, month, found: false, ms: Math.round(performance.now() - t0) }); return { content: [{ type: "text", text: JSON.stringify({ bills: [], count: 0, requested_month: month, note: `未找到 ${month} 的账单` }) }] }; }
       mcpLog("user-info", "query_bill", { phone, month, found: true, ms: Math.round(performance.now() - t0) });
       const label = monthLabel(bill.month);
-      return { content: [{ type: "text", text: JSON.stringify({ found: true, note: `本结果为${label}账单`, bill: { ...bill, month_label: label, breakdown: buildBreakdown(bill), payable: bill.status === "unpaid" } }) }] };
+      const enriched = { ...bill, month_label: label, breakdown: buildBreakdown(bill), payable: bill.status === "unpaid" };
+      return { content: [{ type: "text", text: JSON.stringify({ bills: [enriched], count: 1, requested_month: month, note: `本结果为${label}账单` }) }] };
     }
     const recentBills = await db.select().from(bills).where(eq(bills.phone, phone)).orderBy(bills.month).limit(3).all();
     mcpLog("user-info", "query_bill", { phone, found: true, count: recentBills.length, ms: Math.round(performance.now() - t0) });
     const labeled = recentBills.map(b => ({ ...b, month_label: monthLabel(b.month), breakdown: buildBreakdown(b), payable: b.status === "unpaid" }));
-    return { content: [{ type: "text", text: JSON.stringify({ found: true, note: `以下为最近${labeled.length}个月账单`, bills: labeled }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ bills: labeled, count: labeled.length, requested_month: null, note: `以下为最近${labeled.length}个月账单` }) }] };
   });
 
   server.tool("query_plans", "获取所有可用套餐列表，或查询指定套餐详情", {
@@ -119,13 +121,13 @@ function createServer(): McpServer {
     const parsePlan = (p: typeof plans.$inferSelect) => ({ ...p, features: JSON.parse(p.features) as string[] });
     if (plan_id) {
       const plan = await db.select().from(plans).where(eq(plans.plan_id, plan_id)).get();
-      if (!plan) { mcpLog("user-info", "query_plans", { plan_id, found: false, ms: Math.round(performance.now() - t0) }); return { content: [{ type: "text", text: JSON.stringify({ found: false, message: `套餐 ${plan_id} 不存在` }) }] }; }
+      if (!plan) { mcpLog("user-info", "query_plans", { plan_id, found: false, ms: Math.round(performance.now() - t0) }); return { content: [{ type: "text", text: JSON.stringify({ plans: [], count: 0, requested_plan_id: plan_id }) }] }; }
       mcpLog("user-info", "query_plans", { plan_id, found: true, ms: Math.round(performance.now() - t0) });
-      return { content: [{ type: "text", text: JSON.stringify({ found: true, plan: parsePlan(plan) }) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ plans: [parsePlan(plan)], count: 1, requested_plan_id: plan_id }) }] };
     }
     const allPlans = await db.select().from(plans).all();
     mcpLog("user-info", "query_plans", { found: true, count: allPlans.length, ms: Math.round(performance.now() - t0) });
-    return { content: [{ type: "text", text: JSON.stringify({ found: true, plans: allPlans.map(parsePlan) }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ plans: allPlans.map(parsePlan), count: allPlans.length, requested_plan_id: null }) }] };
   });
 
   server.tool("analyze_bill_anomaly", "分析用户账单异常：自动对比当月与上月账单，计算差额和涨幅，定位费用异常原因，给出处理建议", {

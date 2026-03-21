@@ -1,28 +1,36 @@
 {
   "type": "object",
   "required": [
-    "phone",
-    "name",
-    "status",
     "balance",
     "is_arrears",
-    "arrears_level",
     "overdue_days",
     "services",
     "vas_total_fee"
   ],
   "properties": {
     "phone": {
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "name": {
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "gender": {
-      "type": "string"
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "status": {
-      "type": "string",
+      "type": [
+        "string",
+        "null"
+      ],
       "enum": [
         "active",
         "suspended",
@@ -36,7 +44,10 @@
       "type": "boolean"
     },
     "arrears_level": {
-      "type": "string",
+      "type": [
+        "string",
+        "null"
+      ],
       "enum": [
         "none",
         "normal",

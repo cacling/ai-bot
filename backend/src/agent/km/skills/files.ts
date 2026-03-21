@@ -7,8 +7,19 @@ import { requireRole } from '../../../services/auth';
 
 const files = new Hono();
 
-// Repo root (backend/ is one level inside)
-const REPO_ROOT = resolve(import.meta.dir, '../../../../..');
+// Repo root: import.meta.dir in bun may not match source path, so verify with directory checks
+const _findRepoRoot = (): string => {
+  const candidates = [
+    resolve(import.meta.dir, '../../../../..'),  // from source: backend/src/agent/km/skills → 5 up
+    resolve(process.cwd(), '..'),                // process.cwd() = backend/ → 1 up
+    process.cwd(),                               // might already be repo root
+  ];
+  for (const c of candidates) {
+    if (existsSync(resolve(c, 'backend/skills')) && existsSync(resolve(c, 'frontend'))) return c;
+  }
+  return candidates[0]; // fallback
+};
+const REPO_ROOT = _findRepoRoot();
 
 // Allowed roots for file scanning — only these directories are visible to the file API
 const ALLOWED_ROOTS = [

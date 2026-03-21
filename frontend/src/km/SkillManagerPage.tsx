@@ -582,6 +582,7 @@ export function SkillManagerPage() {
 
   // 从 SKILL.md 内容中解析 channels 和 version
   const parseMetaFromContent = (content: string) => {
+    if (!content) return { channels: ['online'], version: '1.0.0' };
     const chMatch = content.match(/channels:\s*\[([^\]]*)\]/);
     const channels = chMatch
       ? chMatch[1].split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean)

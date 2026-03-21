@@ -1,1 +1,39 @@
-{"type":"object","required":["phone","sms_type","status"],"properties":{"phone":{"type":"string"},"sms_type":{"type":"string","enum":["payment_link","plan_detail","callback_reminder","product_detail"]},"context":{"type":["string","null"]},"status":{"type":"string","enum":["sent"]}}}
+{
+  "type": "object",
+  "required": [],
+  "properties": {
+    "phone": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sms_type": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "payment_link",
+        "plan_detail",
+        "callback_reminder",
+        "product_detail"
+      ]
+    },
+    "context": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "sent"
+      ]
+    }
+  }
+}

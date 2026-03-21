@@ -62,8 +62,9 @@ export interface ManualTool {
 
 export interface MockRule {
   tool_name: string;
-  match: string;      // JS expression or '' for default
-  response: string;   // JSON string
+  scene_name?: string; // human-readable scenario name
+  match: string;       // JS expression or '' for default
+  response: string;    // JSON string
 }
 
 export interface McpResource {
@@ -106,6 +107,8 @@ export interface McpToolRecord {
   response_example: string | null;
   created_at: string;
   updated_at: string;
+  /** 输出 Schema 实际内容（GET /:id 时从文件读取） */
+  output_schema_content?: Record<string, unknown> | null;
   // 附加字段（API 返回）
   skills?: string[];
   resource?: { id: string; name: string; type: string } | null;
@@ -126,6 +129,23 @@ export interface ToolOverviewItem {
   source_type: 'mcp' | 'builtin' | 'local';
   status: 'available' | 'disabled' | 'planned';
   skills: string[];
+}
+
+export interface ServerHealthInfo {
+  server_id: string;
+  server_name: string;
+  status: string;
+  enabled: boolean;
+  last_connected_at: string | null;
+  resources: Array<{ id: string; name: string; type: string; status: string }>;
+  resource_count: number;
+  tools: {
+    total: number;
+    ready: number;
+    mocked: number;
+    disabled: number;
+    unconfigured: number;
+  };
 }
 
 export const mcpApi = {
@@ -152,6 +172,10 @@ export const mcpApi = {
       body: JSON.stringify({ tool_name: toolName, arguments: args }),
     }),
 
+  // Server health
+  getServerHealth: (id: string) =>
+    request<ServerHealthInfo>(`/servers/${id}/health`),
+
   // Tools overview (legacy aggregation)
   getToolsOverview: () =>
     request<{ items: ToolOverviewItem[] }>('/tools'),
@@ -168,6 +192,8 @@ export const mcpApi = {
     request<{ ok: boolean }>(`/resources/${id}`, { method: 'DELETE' }),
   discoverFromResource: (id: string) =>
     request<{ tools: number; created: number; updated: number }>(`/resources/${id}/discover`, { method: 'POST' }),
+  testResource: (id: string) =>
+    request<{ ok: boolean; error?: string; elapsed_ms?: number; tools_count?: number; tables_count?: number; http_status?: number }>(`/resources/${id}/test`, { method: 'POST' }),
 
   // Tool management (独立 CRUD)
   listTools: (serverId?: string) =>

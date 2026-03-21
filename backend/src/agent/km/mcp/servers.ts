@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../../../db';
-import { mcpServers } from '../../../db/schema';
+import { mcpServers, mcpResources, mcpTools } from '../../../db/schema';
 import { nanoid } from '../../../db/nanoid';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -182,6 +182,42 @@ app.post('/:id/discover', async (c) => {
     logger.error('mcp', 'discover_error', { id: c.req.param('id'), error: msg });
     return c.json({ error: `Connection failed: ${msg}` }, 502);
   }
+});
+
+// ── Health info (aggregated) ─────────────────────────────────────────────────
+app.get('/:id/health', async (c) => {
+  const row = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
+  if (!row) return c.json({ error: 'Not found' }, 404);
+
+  // Aggregate resource health
+  const resources = db.select().from(mcpResources).where(eq(mcpResources.server_id, row.id)).all();
+  const tools = db.select().from(mcpTools).where(eq(mcpTools.server_id, row.id)).all();
+
+  const resourceSummary = resources.map(r => ({
+    id: r.id,
+    name: r.name,
+    type: r.type,
+    status: r.status,
+  }));
+
+  const toolsSummary = {
+    total: tools.length,
+    ready: tools.filter(t => t.impl_type && !t.disabled).length,
+    mocked: tools.filter(t => t.mocked).length,
+    disabled: tools.filter(t => t.disabled).length,
+    unconfigured: tools.filter(t => !t.impl_type && !t.disabled).length,
+  };
+
+  return c.json({
+    server_id: row.id,
+    server_name: row.name,
+    status: row.status,
+    enabled: row.enabled,
+    last_connected_at: row.last_connected_at,
+    resources: resourceSummary,
+    resource_count: resources.length,
+    tools: toolsSummary,
+  });
 });
 
 // ── Invoke a tool (real MCP call) ────────────────────────────────────────────

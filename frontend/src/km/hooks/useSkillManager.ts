@@ -267,9 +267,9 @@ export function useSkillManager() {
     setFileLoading(true);
     // Fetch file content — API returns isDraft flag if .draft file exists
     fetch(`/api/files/content?path=${encodeURIComponent(node.path)}`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((data: { content: string; isDraft?: boolean }) => {
-        setEditorContent(data.content);
+        setEditorContent(data.content ?? '');
         editorContentRef.current = data.content;
         if (data.isDraft) {
           // Draft exists — mark as dirty so yellow dot shows

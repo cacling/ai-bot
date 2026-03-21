@@ -175,6 +175,58 @@ app.post('/:id/discover', async (c) => {
   }
 });
 
+// ── Test connection ──────────────────────────────────────────────────────────
+app.post('/:id/test', async (c) => {
+  const resource = db.select().from(mcpResources).where(eq(mcpResources.id, c.req.param('id'))).get();
+  if (!resource) return c.json({ error: 'Resource not found' }, 404);
+
+  const t0 = Date.now();
+  try {
+    if (resource.type === 'remote_mcp') {
+      if (!resource.mcp_url) return c.json({ ok: false, error: 'No URL configured' });
+      const mcpClient = new Client({ name: 'resource-test', version: '1.0' });
+      await mcpClient.connect(new StreamableHTTPClientTransport(new URL(resource.mcp_url)));
+      const { tools } = await mcpClient.listTools();
+      await mcpClient.close();
+      const elapsed = Date.now() - t0;
+      logger.info('mcp', 'resource_test_ok', { resource_id: resource.id, tools: tools.length, ms: elapsed });
+      return c.json({ ok: true, elapsed_ms: elapsed, tools_count: tools.length });
+    }
+
+    if (resource.type === 'db') {
+      // DB resources use local SQLite — just verify we can list tables
+      const { listTables: lt } = await import('../../../services/db-executor');
+      const tables = lt();
+      const elapsed = Date.now() - t0;
+      logger.info('mcp', 'resource_test_ok', { resource_id: resource.id, tables: tables.length, ms: elapsed });
+      return c.json({ ok: true, elapsed_ms: elapsed, tables_count: tables.length });
+    }
+
+    if (resource.type === 'api') {
+      if (!resource.api_base_url) return c.json({ ok: false, error: 'No base URL configured' });
+      // Simple connectivity check: HEAD request to base URL
+      const headers: Record<string, string> = {};
+      if (resource.api_headers) {
+        try { Object.assign(headers, JSON.parse(resource.api_headers)); } catch { /* ignore */ }
+      }
+      const resp = await fetch(resource.api_base_url, {
+        method: 'HEAD',
+        headers,
+        signal: AbortSignal.timeout(resource.api_timeout ?? 10000),
+      });
+      const elapsed = Date.now() - t0;
+      logger.info('mcp', 'resource_test_ok', { resource_id: resource.id, status: resp.status, ms: elapsed });
+      return c.json({ ok: resp.ok, elapsed_ms: elapsed, http_status: resp.status });
+    }
+
+    return c.json({ ok: false, error: `Unknown resource type: ${resource.type}` });
+  } catch (err) {
+    const elapsed = Date.now() - t0;
+    logger.error('mcp', 'resource_test_error', { resource_id: resource.id, error: String(err), ms: elapsed });
+    return c.json({ ok: false, error: String(err), elapsed_ms: elapsed });
+  }
+});
+
 // ── DB Schema 查询（供前端执行配置用）─────────────────────────────────────────
 
 import { listTables, listColumns } from '../../../services/db-executor';

@@ -13,9 +13,9 @@ function createServer(): McpServer {
   }, async ({ phone, otp }) => {
     mcpLog("account", "verify_identity", { phone, otp: "***" });
     const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
-    if (!sub) return { content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到手机号 ${phone}` }) }] };
+    if (!sub) return { content: [{ type: "text", text: JSON.stringify({ verified: false, customer_name: null, verification_method: "otp" }) }] };
     const valid = otp === "1234" || otp === "0000" || otp.length === 6;
-    return { content: [{ type: "text", text: JSON.stringify({ success: valid, verified: valid, customer_name: sub.name, message: valid ? `身份验证通过，用户：${sub.name}` : "验证码错误，请重新输入" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ verified: valid, customer_name: valid ? sub.name : null, verification_method: "otp" }) }] };
   });
 
   server.tool("check_account_balance", "查询用户账户余额和欠费状态", {
@@ -23,9 +23,9 @@ function createServer(): McpServer {
   }, async ({ phone }) => {
     mcpLog("account", "check_account_balance", { phone });
     const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
-    if (!sub) return { content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到手机号 ${phone}` }) }] };
+    if (!sub) return { content: [{ type: "text", text: JSON.stringify({ phone, balance: 0, has_arrears: false, arrears_amount: 0, status: null }) }] };
     const hasArrears = sub.balance < 0;
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, phone, balance: sub.balance, has_arrears: hasArrears, arrears_amount: hasArrears ? Math.abs(sub.balance) : 0, status: sub.status, message: hasArrears ? `账户存在欠费 ¥${Math.abs(sub.balance).toFixed(2)}` : `账户余额 ¥${sub.balance.toFixed(2)}，无欠费` }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ phone, balance: sub.balance, has_arrears: hasArrears, arrears_amount: hasArrears ? Math.abs(sub.balance) : 0, status: sub.status }) }] };
   });
 
   server.tool("check_contracts", "查询用户当前有效合约列表", {
@@ -35,7 +35,7 @@ function createServer(): McpServer {
     const rows = await db.select().from(contracts).where(eq(contracts.phone, phone)).all();
     const activeContracts = rows.filter(c => c.status === "active");
     const hasHighRisk = activeContracts.some(c => c.risk_level === "high");
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, phone, contracts: activeContracts, has_active_contracts: activeContracts.length > 0, has_high_risk: hasHighRisk, message: hasHighRisk ? `存在高风险合约，停机需支付违约金` : activeContracts.length > 0 ? `存在 ${activeContracts.length} 个合约，不影响停机` : "无有效合约，可直接办理停机" }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ phone, contracts: activeContracts, has_active_contracts: activeContracts.length > 0, has_high_risk: hasHighRisk }) }] };
   });
 
   return server;

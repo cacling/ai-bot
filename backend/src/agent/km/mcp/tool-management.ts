@@ -28,12 +28,20 @@ app.get('/', async (c) => {
     ? db.select().from(mcpTools).where(eq(mcpTools.server_id, serverId)).all()
     : db.select().from(mcpTools).all();
 
-  // 附加 skill 引用信息
+  // 附加 skill 引用 + 资源信息
   const toolSkillsMap = getToolToSkillsMap();
-  const items = rows.map(t => ({
-    ...t,
-    skills: toolSkillsMap.get(t.name) ?? [],
-  }));
+  const allResources = db.select().from(mcpResources).all();
+  const resourceMap = new Map(allResources.map(r => [r.id, { id: r.id, name: r.name, type: r.type }]));
+
+  const items = rows.map(t => {
+    const cfg = t.execution_config ? JSON.parse(t.execution_config) as { resource_id?: string } : null;
+    const resource = cfg?.resource_id ? resourceMap.get(cfg.resource_id) ?? null : null;
+    return {
+      ...t,
+      skills: toolSkillsMap.get(t.name) ?? [],
+      resource,
+    };
+  });
 
   return c.json({ items });
 });
@@ -107,10 +115,24 @@ app.get('/:id', async (c) => {
     ? db.select().from(mcpResources).where(eq(mcpResources.id, cfg.resource_id)).get()
     : null;
 
+  // 如果 output_schema 是文件路径，读取实际内容
+  let outputSchemaContent: unknown = null;
+  if (row.output_schema?.endsWith('.json')) {
+    try {
+      const { readFileSync, existsSync } = await import('node:fs');
+      const { resolve } = await import('node:path');
+      const schemaPath = resolve(import.meta.dir, '../../../../..', row.output_schema);
+      if (existsSync(schemaPath)) outputSchemaContent = JSON.parse(readFileSync(schemaPath, 'utf-8'));
+    } catch { /* ignore */ }
+  } else if (row.output_schema) {
+    try { outputSchemaContent = JSON.parse(row.output_schema); } catch { /* ignore */ }
+  }
+
   return c.json({
     ...row,
     skills: toolSkillsMap.get(row.name) ?? [],
     resource: resource ? { id: resource.id, name: resource.name, type: resource.type } : null,
+    output_schema_content: outputSchemaContent,
   });
 });
 
@@ -229,7 +251,7 @@ app.post('/:id/validate-output', async (c) => {
     if (tool.output_schema.endsWith('.json')) {
       const { readFileSync, existsSync } = await import('node:fs');
       const { resolve } = await import('node:path');
-      const schemaPath = resolve(import.meta.dir, '../../../..', tool.output_schema);
+      const schemaPath = resolve(import.meta.dir, '../../../../..', tool.output_schema);
       if (!existsSync(schemaPath)) return c.json({ valid: false, errors: [`schema file not found: ${tool.output_schema}`] });
       schemaStr = readFileSync(schemaPath, 'utf-8');
     } else {

@@ -1,1 +1,93 @@
-{"type":"object","required":["phone","issue_type","diagnostic_steps","conclusion","escalation_path","customer_actions","risk_level","next_step","action_count"],"properties":{"phone":{"type":"string"},"issue_type":{"type":"string"},"lock_reason":{"type":"string"},"diagnostic_steps":{"type":"array","items":{"type":"object","properties":{"step":{"type":"string"},"status":{"type":"string"},"detail":{"type":"string"},"action":{"type":["string","null"]},"escalate":{"type":["boolean","null"]}}}},"conclusion":{"type":"string"},"escalation_path":{"type":"string","enum":["self_service","frontline","security_team"]},"customer_actions":{"type":"array","items":{"type":"string"}},"risk_level":{"type":"string","enum":["none","low","medium","high"]},"next_step":{"type":"string"},"action_count":{"type":"integer"}}}
+{
+  "type": "object",
+  "required": [
+    "diagnostic_steps",
+    "conclusion",
+    "escalation_path",
+    "customer_actions",
+    "risk_level",
+    "next_step",
+    "action_count"
+  ],
+  "properties": {
+    "phone": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "issue_type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "lock_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "diagnostic_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "action": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "escalate": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "conclusion": {
+      "type": "string"
+    },
+    "escalation_path": {
+      "type": "string",
+      "enum": [
+        "self_service",
+        "frontline",
+        "security_team"
+      ]
+    },
+    "customer_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": [
+        "none",
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "next_step": {
+      "type": "string"
+    },
+    "action_count": {
+      "type": "integer"
+    }
+  }
+}

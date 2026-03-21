@@ -12,6 +12,28 @@ type McpTab = 'tools' | 'servers';
 export function McpManagementPage() {
   const [tab, setTab] = useState<McpTab>('tools');
 
+  // Cross-tab navigation: Server Console → Tool Studio
+  const [navigateToTool, setNavigateToTool] = useState<{
+    toolId: string;
+    step?: string;
+    fromServer?: string;
+  } | null>(null);
+
+  const handleOpenTool = (toolId: string, step?: string, fromServer?: string) => {
+    if (!toolId) {
+      // Empty toolId = just switch to tools tab (e.g. "前往工具页")
+      setTab('tools');
+      return;
+    }
+    setNavigateToTool({ toolId, step, fromServer });
+    setTab('tools');
+  };
+
+  // Reverse navigation: Tool Studio → back to Server Console
+  const handleBackToServers = () => {
+    setTab('servers');
+  };
+
   return (
     <div className="flex flex-col h-full bg-background overflow-auto">
       {/* Tab 切换 */}
@@ -27,7 +49,7 @@ export function McpManagementPage() {
           }`}
         >
           <Wrench size={13} />
-          MCP 工具
+          Tool Studio
         </Button>
         <Button
           variant="ghost"
@@ -46,7 +68,10 @@ export function McpManagementPage() {
 
       {/* 内容区 */}
       <div className="flex-1 overflow-auto">
-        {tab === 'tools' ? <McpToolListPage /> : <McpServerList />}
+        {tab === 'tools'
+          ? <McpToolListPage navigateToTool={navigateToTool} onNavigateHandled={() => setNavigateToTool(null)} onBackToServers={handleBackToServers} />
+          : <McpServerList onOpenTool={handleOpenTool} />
+        }
       </div>
     </div>
   );

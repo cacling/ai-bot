@@ -18,10 +18,9 @@ function createServer(): McpServer {
   }, async ({ phone, issue_type, lang = "zh" }) => {
     const t0 = performance.now();
     const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
-    if (!sub) { return { content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到手机号 ${phone}` }) }] }; }
+    if (!sub) { return { content: [{ type: "text", text: JSON.stringify({ phone, issue_type, diagnostic_steps: [], conclusion: null, severity: null, should_escalate: false, next_action: null }) }] }; }
     const subs = await db.select({ service_id: subscriberSubscriptions.service_id }).from(subscriberSubscriptions).where(eq(subscriberSubscriptions.phone, phone)).all();
     const result = runDiagnosis({ ...sub, subscriptions: subs.map(s => s.service_id) } as any, issue_type as IssueType, lang as 'zh' | 'en');
-    // 增强：severity 分级、是否建议转人工、针对性建议
     const steps = result.diagnostic_steps;
     const hasError = steps.some(s => s.status === "error");
     const hasWarning = steps.some(s => s.status === "warning");
@@ -39,7 +38,7 @@ function createServer(): McpServer {
       ? (lang === "en" ? "Multiple critical issues detected. Recommend transferring to a human agent." : "检测到多项严重问题，建议转接人工客服处理。")
       : (suggestions[issue_type]?.[lang] ?? (lang === "en" ? "Please follow the diagnostic suggestions." : "请按照诊断建议操作。"));
     mcpLog("diagnosis", "diagnose_network", { phone, issue_type, severity, success: true, ms: Math.round(performance.now() - t0) });
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, phone, ...result, severity, should_escalate: shouldEscalate, next_action: nextAction }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ phone, issue_type: result.issue_type, diagnostic_steps: result.diagnostic_steps, conclusion: result.conclusion, severity, should_escalate: shouldEscalate, next_action: nextAction }) }] };
   });
 
   server.tool("diagnose_app", "对指定手机号的营业厅 App 进行问题诊断", {
@@ -48,7 +47,7 @@ function createServer(): McpServer {
   }, async ({ phone, issue_type }) => {
     const t0 = performance.now();
     const sub = await db.select().from(subscribers).where(eq(subscribers.phone, phone)).get();
-    if (!sub) { return { content: [{ type: "text", text: JSON.stringify({ success: false, message: `未找到手机号 ${phone}` }) }] }; }
+    if (!sub) { return { content: [{ type: "text", text: JSON.stringify({ phone, issue_type, diagnostic_steps: [], conclusion: null, escalation_path: null, customer_actions: [], risk_level: "none", next_step: null, action_count: 0, lock_reason: null }) }] }; }
     const accountStatus = sub.status === "active" ? "active" : sub.status === "suspended" ? "temp_locked" : "active";
     const deviceRow = await db.select().from(deviceContexts).where(eq(deviceContexts.phone, phone)).get();
     const ctx: AppUserContext = {
@@ -75,7 +74,7 @@ function createServer(): McpServer {
       ? "发现可修复问题，请引导客户按建议操作后重新尝试。"
       : "所有检查项通过，请引导客户重新尝试登录。";
     mcpLog("diagnosis", "diagnose_app", { phone, issue_type, risk_level: riskLevel, success: true, ms: Math.round(performance.now() - t0) });
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, phone, ...result, risk_level: riskLevel, next_step: nextStep, action_count: result.customer_actions.length }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ phone, issue_type: result.issue_type, diagnostic_steps: result.diagnostic_steps, conclusion: result.conclusion, escalation_path: result.escalation_path, customer_actions: result.customer_actions, risk_level: riskLevel, next_step: nextStep, action_count: result.customer_actions.length, lock_reason: ctx.lock_reason !== "unknown" ? ctx.lock_reason : null }) }] };
   });
 
   return server;

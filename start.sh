@@ -133,8 +133,9 @@ if [[ "$RESET_MODE" == true ]]; then
   warn "重置模式：清空数据库 + 清理版本快照..."
   cd "$BASE_DIR/backend"
 
-  # 删除 DB
-  rm -f "$BASE_DIR/backend/data/telecom.db"
+  # 删除 DB + WAL/SHM（主数据库在项目根目录 data/，backend/data/ 可能有残留副本）
+  rm -f "$BASE_DIR/data/telecom.db" "$BASE_DIR/data/telecom.db-wal" "$BASE_DIR/data/telecom.db-shm"
+  rm -f "$BASE_DIR/backend/data/telecom.db" "$BASE_DIR/backend/data/telecom.db-wal" "$BASE_DIR/backend/data/telecom.db-shm"
   ok "数据库已删除"
 
   # 清理非默认技能（biz-skills 和 .versions 中只保留默认 7 个）

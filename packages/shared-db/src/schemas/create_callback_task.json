@@ -1,1 +1,47 @@
-{"type":"object","required":["callback_task_id","original_task_id","callback_phone","preferred_time"],"properties":{"callback_task_id":{"type":"string"},"original_task_id":{"type":"string"},"callback_phone":{"type":"string"},"preferred_time":{"type":"string"},"customer_name":{"type":["string","null"]},"product_name":{"type":["string","null"]},"status":{"type":"string"}}}
+{
+  "type": "object",
+  "required": [
+    "callback_task_id"
+  ],
+  "properties": {
+    "callback_task_id": {
+      "type": "string"
+    },
+    "original_task_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "callback_phone": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "preferred_time": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "customer_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "product_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

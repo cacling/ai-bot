@@ -1,1 +1,45 @@
-{"type":"object","required":["phone","service_id","service_name","monthly_fee","effective_end","refund_eligible","refund_note"],"properties":{"phone":{"type":"string"},"service_id":{"type":"string"},"service_name":{"type":"string"},"monthly_fee":{"type":"number"},"effective_end":{"type":"string"},"refund_eligible":{"type":"boolean"},"refund_note":{"type":"string"}}}
+{
+  "type": "object",
+  "required": [
+    "monthly_fee",
+    "refund_eligible"
+  ],
+  "properties": {
+    "phone": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "service_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "service_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "monthly_fee": {
+      "type": "number"
+    },
+    "effective_end": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "refund_eligible": {
+      "type": "boolean"
+    },
+    "refund_note": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

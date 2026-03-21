@@ -443,81 +443,81 @@ async function seed() {
   // ── Mock 规则定义（覆盖所有 Skill 分支场景）───────────────────────────────
   const userInfoMockRules = JSON.stringify([
     // query_subscriber（含 arrears_level, usage_ratio, services, vas_total_fee）
-    { tool_name: 'query_subscriber', match: 'phone == "13800000001"', response: '{"found":true,"subscriber":{"phone":"13800000001","name":"张三","plan":"畅享50G套餐","plan_id":"plan_50g","plan_fee":50,"status":"active","balance":45.8,"data_used_gb":32.5,"data_total_gb":50,"voice_used_min":280,"voice_total_min":500,"data_usage_ratio":0.65,"voice_usage_ratio":0.56,"is_arrears":false,"arrears_level":"none","overdue_days":0,"subscriptions":["video_pkg","sms_100"],"services":[{"service_id":"video_pkg","name":"视频会员流量包（20GB/月）","monthly_fee":20},{"service_id":"sms_100","name":"短信百条包（100条/月）","monthly_fee":5}],"vas_total_fee":25}}' },
-    { tool_name: 'query_subscriber', match: 'phone == "13800000002"', response: '{"found":true,"subscriber":{"phone":"13800000002","name":"李四","plan":"无限流量套餐","plan_id":"plan_unlimited","plan_fee":128,"status":"active","balance":128,"data_used_gb":89.2,"data_total_gb":-1,"voice_used_min":0,"voice_total_min":-1,"data_usage_ratio":null,"voice_usage_ratio":null,"is_arrears":false,"arrears_level":"none","overdue_days":0,"subscriptions":["video_pkg"],"services":[{"service_id":"video_pkg","name":"视频会员流量包（20GB/月）","monthly_fee":20}],"vas_total_fee":20}}' },
-    { tool_name: 'query_subscriber', match: 'phone == "13800000003"', response: '{"found":true,"subscriber":{"phone":"13800000003","name":"王五","plan":"基础10G套餐","plan_id":"plan_10g","plan_fee":30,"status":"suspended","balance":-23.5,"data_used_gb":10,"data_total_gb":10,"voice_used_min":200,"voice_total_min":200,"data_usage_ratio":1,"voice_usage_ratio":1,"is_arrears":true,"arrears_level":"normal","overdue_days":25,"subscriptions":[],"services":[],"vas_total_fee":0}}' },
-    { tool_name: 'query_subscriber', match: '', response: '{"found":false,"message":"未找到该手机号的用户信息"}' },
+    { tool_name: 'query_subscriber', match: 'phone == "13800000001"', response: '{"phone": "13800000001", "name": "张三", "plan_fee": 50, "status": "active", "balance": 45.8, "data_used_gb": 32.5, "data_total_gb": 50, "voice_used_min": 280, "voice_total_min": 500, "data_usage_ratio": 0.65, "voice_usage_ratio": 0.56, "is_arrears": false, "arrears_level": "none", "overdue_days": 0, "services": [{"service_id": "video_pkg", "name": "视频会员流量包（20GB/月）", "monthly_fee": 20}, {"service_id": "sms_100", "name": "短信百条包（100条/月）", "monthly_fee": 5}], "vas_total_fee": 25, "gender": null}' },
+    { tool_name: 'query_subscriber', match: 'phone == "13800000002"', response: '{"phone": "13800000002", "name": "李四", "plan_fee": 128, "status": "active", "balance": 128, "data_used_gb": 89.2, "data_total_gb": -1, "voice_used_min": 0, "voice_total_min": -1, "data_usage_ratio": null, "voice_usage_ratio": null, "is_arrears": false, "arrears_level": "none", "overdue_days": 0, "services": [{"service_id": "video_pkg", "name": "视频会员流量包（20GB/月）", "monthly_fee": 20}], "vas_total_fee": 20, "gender": null}' },
+    { tool_name: 'query_subscriber', match: 'phone == "13800000003"', response: '{"phone": "13800000003", "name": "王五", "plan_fee": 30, "status": "suspended", "balance": -23.5, "data_used_gb": 10, "data_total_gb": 10, "voice_used_min": 200, "voice_total_min": 200, "data_usage_ratio": 1, "voice_usage_ratio": 1, "is_arrears": true, "arrears_level": "normal", "overdue_days": 25, "services": [], "vas_total_fee": 0, "gender": null}' },
+    { tool_name: 'query_subscriber', match: '', response: '{"voice_usage_ratio": 0, "is_arrears": false, "balance": 0, "data_usage_ratio": 0, "data_total_gb": 0, "data_used_gb": 0, "overdue_days": 0, "plan_fee": 0, "services": [], "voice_total_min": 0, "name": null, "status": null, "gender": null, "vas_total_fee": 0, "phone": null, "arrears_level": null, "voice_used_min": 0}' },
     // query_bill（含 breakdown, payable）
-    { tool_name: 'query_bill', match: 'phone == "13800000001"', response: '{"found":true,"note":"以下为最近3个月账单","bills":[{"phone":"13800000001","month":"2026-03","month_label":"2026年3月","total":68,"plan_fee":50,"data_fee":8,"voice_fee":0,"value_added_fee":8,"tax":2,"status":"paid","breakdown":[{"item":"套餐月费","amount":50,"ratio":0.74},{"item":"流量费","amount":8,"ratio":0.12},{"item":"增值业务费","amount":8,"ratio":0.12},{"item":"税费","amount":2,"ratio":0.03}],"payable":false},{"phone":"13800000001","month":"2026-02","month_label":"2026年2月","total":72.5,"plan_fee":50,"data_fee":12.5,"voice_fee":0,"value_added_fee":8,"tax":2,"status":"paid","breakdown":[{"item":"套餐月费","amount":50,"ratio":0.69},{"item":"流量费","amount":12.5,"ratio":0.17},{"item":"增值业务费","amount":8,"ratio":0.11},{"item":"税费","amount":2,"ratio":0.03}],"payable":false},{"phone":"13800000001","month":"2026-01","month_label":"2026年1月","total":58,"plan_fee":50,"data_fee":0,"voice_fee":0,"value_added_fee":6,"tax":2,"status":"paid","breakdown":[{"item":"套餐月费","amount":50,"ratio":0.86},{"item":"增值业务费","amount":6,"ratio":0.1},{"item":"税费","amount":2,"ratio":0.03}],"payable":false}]}' },
-    { tool_name: 'query_bill', match: 'phone == "13800000003"', response: '{"found":true,"note":"以下为最近1个月账单","bills":[{"phone":"13800000003","month":"2026-03","month_label":"2026年3月","total":36,"plan_fee":30,"data_fee":0,"voice_fee":0,"value_added_fee":5,"tax":1,"status":"overdue","breakdown":[{"item":"套餐月费","amount":30,"ratio":0.83},{"item":"增值业务费","amount":5,"ratio":0.14},{"item":"税费","amount":1,"ratio":0.03}],"payable":true}]}' },
-    { tool_name: 'query_bill', match: '', response: '{"found":false,"message":"未找到该手机号的账单记录"}' },
+    { tool_name: 'query_bill', match: 'phone == "13800000001"', response: '{"bills": [{"phone": "13800000001", "month": "2026-03", "month_label": "2026年3月", "total": 68, "plan_fee": 50, "data_fee": 8, "voice_fee": 0, "value_added_fee": 8, "tax": 2, "status": "paid", "breakdown": [{"item": "套餐月费", "amount": 50, "ratio": 0.74}, {"item": "流量费", "amount": 8, "ratio": 0.12}, {"item": "增值业务费", "amount": 8, "ratio": 0.12}, {"item": "税费", "amount": 2, "ratio": 0.03}], "payable": false}, {"phone": "13800000001", "month": "2026-02", "month_label": "2026年2月", "total": 72.5, "plan_fee": 50, "data_fee": 12.5, "voice_fee": 0, "value_added_fee": 8, "tax": 2, "status": "paid", "breakdown": [{"item": "套餐月费", "amount": 50, "ratio": 0.69}, {"item": "流量费", "amount": 12.5, "ratio": 0.17}, {"item": "增值业务费", "amount": 8, "ratio": 0.11}, {"item": "税费", "amount": 2, "ratio": 0.03}], "payable": false}, {"phone": "13800000001", "month": "2026-01", "month_label": "2026年1月", "total": 58, "plan_fee": 50, "data_fee": 0, "voice_fee": 0, "value_added_fee": 6, "tax": 2, "status": "paid", "breakdown": [{"item": "套餐月费", "amount": 50, "ratio": 0.86}, {"item": "增值业务费", "amount": 6, "ratio": 0.1}, {"item": "税费", "amount": 2, "ratio": 0.03}], "payable": false}], "count": 3, "requested_month": null, "note": "以下为最近3个月账单"}' },
+    { tool_name: 'query_bill', match: 'phone == "13800000003"', response: '{"bills": [{"phone": "13800000003", "month": "2026-03", "month_label": "2026年3月", "total": 36, "plan_fee": 30, "data_fee": 0, "voice_fee": 0, "value_added_fee": 5, "tax": 1, "status": "overdue", "breakdown": [{"item": "套餐月费", "amount": 30, "ratio": 0.83}, {"item": "增值业务费", "amount": 5, "ratio": 0.14}, {"item": "税费", "amount": 1, "ratio": 0.03}], "payable": true}], "count": 1, "requested_month": null, "note": "以下为最近1个月账单"}' },
+    { tool_name: 'query_bill', match: '', response: '{"bills": [], "count": 0, "requested_month": null, "note": ""}' },
     // query_plans
-    { tool_name: 'query_plans', match: 'plan_id == "plan_unlimited"', response: '{"found":true,"plan":{"plan_id":"plan_unlimited","name":"无限流量套餐","monthly_fee":128,"data_gb":-1,"voice_min":-1,"sms":-1,"features":["免费来电显示","语音信箱","WiFi热点共享","国内漫游免费","视频会员权益"],"description":"旗舰无限套餐"}}' },
-    { tool_name: 'query_plans', match: '', response: '{"found":true,"plans":[{"plan_id":"plan_10g","name":"基础10G套餐","monthly_fee":30,"data_gb":10,"voice_min":200,"features":["免费来电显示"]},{"plan_id":"plan_50g","name":"畅享50G套餐","monthly_fee":50,"data_gb":50,"voice_min":500,"features":["免费来电显示","WiFi热点共享"]},{"plan_id":"plan_100g","name":"超值100G套餐","monthly_fee":88,"data_gb":100,"voice_min":1000,"features":["免费来电显示","WiFi热点共享","国内漫游免费"]},{"plan_id":"plan_unlimited","name":"无限流量套餐","monthly_fee":128,"data_gb":-1,"voice_min":-1,"features":["免费来电显示","WiFi热点共享","国内漫游免费","视频会员权益"]}]}' },
+    { tool_name: 'query_plans', match: 'plan_id == "plan_unlimited"', response: '{"plans": [{"plan_id": "plan_unlimited", "name": "无限流量套餐", "monthly_fee": 128, "data_gb": -1, "voice_min": -1, "sms": -1, "features": ["免费来电显示", "语音信箱", "WiFi热点共享", "国内漫游免费", "视频会员权益"], "description": "旗舰无限套餐"}], "count": 1, "requested_plan_id": "plan_unlimited"}' },
+    { tool_name: 'query_plans', match: '', response: '{"plans": [{"plan_id": "plan_10g", "name": "基础10G套餐", "monthly_fee": 30, "data_gb": 10, "voice_min": 200, "features": ["免费来电显示"]}, {"plan_id": "plan_50g", "name": "畅享50G套餐", "monthly_fee": 50, "data_gb": 50, "voice_min": 500, "features": ["免费来电显示", "WiFi热点共享"]}, {"plan_id": "plan_100g", "name": "超值100G套餐", "monthly_fee": 88, "data_gb": 100, "voice_min": 1000, "features": ["免费来电显示", "WiFi热点共享", "国内漫游免费"]}, {"plan_id": "plan_unlimited", "name": "无限流量套餐", "monthly_fee": 128, "data_gb": -1, "voice_min": -1, "features": ["免费来电显示", "WiFi热点共享", "国内漫游免费", "视频会员权益"]}], "count": 4, "requested_plan_id": null}' },
     // analyze_bill_anomaly
-    { tool_name: 'analyze_bill_anomaly', match: 'phone == "13800000001" && month == "2026-03"', response: '{"is_anomaly":false,"current_month":"2026-03","previous_month":"2026-02","current_total":68,"previous_total":72.5,"diff":-4.5,"change_ratio":-6,"primary_cause":"unknown","causes":[],"recommendation":"本月费用较上月有所降低，属于正常波动。"}' },
-    { tool_name: 'analyze_bill_anomaly', match: 'phone == "13800000003"', response: '{"is_anomaly":false,"current_month":"2026-03","previous_month":"2026-02","current_total":36,"previous_total":0,"diff":36,"change_ratio":0,"primary_cause":"unknown","causes":[],"recommendation":"无上月账单可供对比。"}' },
-    { tool_name: 'analyze_bill_anomaly', match: '', response: '{"is_anomaly":false,"current_month":"","previous_month":"","current_total":0,"previous_total":0,"diff":0,"change_ratio":0,"primary_cause":"unknown","causes":[],"recommendation":"当月账单未找到。"}' },
+    { tool_name: 'analyze_bill_anomaly', match: 'phone == "13800000001" && month == "2026-03"', response: '{"is_anomaly": false, "current_month": "2026-03", "previous_month": "2026-02", "current_total": 68, "previous_total": 72.5, "diff": -4.5, "change_ratio": -6, "primary_cause": "unknown", "causes": [], "recommendation": "本月费用较上月有所降低，属于正常波动。"}' },
+    { tool_name: 'analyze_bill_anomaly', match: 'phone == "13800000003"', response: '{"is_anomaly": false, "current_month": "2026-03", "previous_month": "2026-02", "current_total": 36, "previous_total": 0, "diff": 36, "change_ratio": 0, "primary_cause": "unknown", "causes": [], "recommendation": "无上月账单可供对比。"}' },
+    { tool_name: 'analyze_bill_anomaly', match: '', response: '{"is_anomaly": false, "current_month": "", "previous_month": "", "current_total": 0, "previous_total": 0, "diff": 0, "change_ratio": 0, "primary_cause": "unknown", "causes": [], "recommendation": "当月账单未找到。"}' },
   ]);
 
   const businessMockRules = JSON.stringify([
     // cancel_service
-    { tool_name: 'cancel_service', match: 'phone == "13800000001" && service_id == "video_pkg"', response: '{"success":true,"phone":"13800000001","service_id":"video_pkg","service_name":"视频会员流量包（20GB/月）","monthly_fee":20,"effective_end":"次月1日00:00","refund_eligible":false,"refund_note":"当月费用不退，次月起不再扣费。","message":"已成功退订「视频会员流量包」，将于次月1日生效"}' },
-    { tool_name: 'cancel_service', match: 'phone == "13800000001" && service_id == "sms_100"', response: '{"success":true,"phone":"13800000001","service_id":"sms_100","service_name":"短信百条包（100条/月）","monthly_fee":5,"effective_end":"次月1日00:00","refund_eligible":false,"refund_note":"当月费用不退，次月起不再扣费。","message":"已成功退订「短信百条包」"}' },
-    { tool_name: 'cancel_service', match: 'service_id == "nonexistent"', response: '{"success":false,"message":"用户未订阅该业务"}' },
-    { tool_name: 'cancel_service', match: '', response: '{"success":false,"message":"未找到该手机号"}' },
+    { tool_name: 'cancel_service', match: 'phone == "13800000001" && service_id == "video_pkg"', response: '{"phone": "13800000001", "service_id": "video_pkg", "service_name": "视频会员流量包（20GB/月）", "monthly_fee": 20, "effective_end": "次月1日00:00", "refund_eligible": false, "refund_note": "当月费用不退，次月起不再扣费。"}' },
+    { tool_name: 'cancel_service', match: 'phone == "13800000001" && service_id == "sms_100"', response: '{"phone": "13800000001", "service_id": "sms_100", "service_name": "短信百条包（100条/月）", "monthly_fee": 5, "effective_end": "次月1日00:00", "refund_eligible": false, "refund_note": "当月费用不退，次月起不再扣费。"}' },
+    { tool_name: 'cancel_service', match: 'service_id == "nonexistent"', response: '{"monthly_fee": 0, "service_id": null, "refund_eligible": false, "refund_note": null, "effective_end": null, "phone": null, "service_name": null}' },
+    { tool_name: 'cancel_service', match: '', response: '{"monthly_fee": 0, "service_id": null, "refund_eligible": false, "refund_note": null, "effective_end": null, "phone": null, "service_name": null}' },
     // issue_invoice
-    { tool_name: 'issue_invoice', match: 'phone == "13800000001"', response: '{"success":true,"invoice_no":"INV-202603-0001-MOCK","phone":"13800000001","total":68,"email":"te****@example.com","status":"已发送","message":"电子发票已发送"}' },
-    { tool_name: 'issue_invoice', match: '', response: '{"success":false,"message":"未找到账单记录，无法开具发票"}' },
+    { tool_name: 'issue_invoice', match: 'phone == "13800000001"', response: '{"invoice_no": "INV-202603-0001-MOCK", "phone": "13800000001", "total": 68, "email": "te****@example.com", "status": "已发送", "month": null}' },
+    { tool_name: 'issue_invoice', match: '', response: '{"month": null, "phone": null, "email": null, "invoice_no": null, "status": null, "total": 0}' },
   ]);
 
   const diagnosisMockRules = JSON.stringify([
     // diagnose_network（含 severity, should_escalate, next_action）
-    { tool_name: 'diagnose_network', match: 'issue_type == "slow_data" && phone == "13800000001"', response: '{"success":true,"phone":"13800000001","issue_type":"slow_data","diagnostic_steps":[{"step":"账号状态","status":"ok","detail":"正常","action":""},{"step":"流量余额","status":"ok","detail":"剩余17.5GB","action":""},{"step":"APN配置","status":"ok","detail":"正常","action":""},{"step":"基站信号","status":"warning","detail":"信号强度-85dBm，低于正常范围","action":"建议移至开阔区域"},{"step":"网络拥塞","status":"warning","detail":"当前基站负载82%","action":"建议错峰使用或连接WiFi"}],"conclusion":"网络拥塞导致网速下降","severity":"warning","should_escalate":false,"next_action":"建议关闭后台高流量应用，或切换至 WiFi 网络。"}' },
-    { tool_name: 'diagnose_network', match: 'issue_type == "no_signal"', response: '{"success":true,"issue_type":"no_signal","diagnostic_steps":[{"step":"账号状态","status":"error","detail":"账户已停机（欠费）","action":"请先缴清欠费"}],"conclusion":"账户欠费停机，需先缴费恢复","severity":"critical","should_escalate":false,"next_action":"请检查 SIM 卡是否松动，或尝试切换飞行模式后重新搜网。"}' },
-    { tool_name: 'diagnose_network', match: 'issue_type == "no_network" && phone == "13800000001"', response: '{"success":true,"issue_type":"no_network","diagnostic_steps":[{"step":"账号状态","status":"ok","detail":"正常","action":""},{"step":"APN配置","status":"warning","detail":"APN设置异常","action":"请重置APN为默认值"}],"conclusion":"APN配置异常导致无法上网","severity":"warning","should_escalate":false,"next_action":"请检查 APN 设置是否正确，或重置网络设置。"}' },
-    { tool_name: 'diagnose_network', match: 'issue_type == "slow_data" && phone == "13800000003"', response: '{"success":true,"issue_type":"slow_data","diagnostic_steps":[{"step":"账号状态","status":"ok","detail":"","action":""},{"step":"流量余额","status":"error","detail":"本月流量已用完（10GB/10GB）","action":"建议购买流量加油包或升级套餐"}],"conclusion":"流量已耗尽","severity":"critical","should_escalate":false,"next_action":"建议关闭后台高流量应用，或切换至 WiFi 网络。"}' },
-    { tool_name: 'diagnose_network', match: 'issue_type == "call_drop"', response: '{"success":true,"issue_type":"call_drop","diagnostic_steps":[{"step":"账号状态","status":"ok","detail":"正常","action":""},{"step":"基站信号","status":"ok","detail":"信号良好","action":""},{"step":"网络拥塞","status":"ok","detail":"负载正常","action":""}],"conclusion":"各项指标正常，建议观察","severity":"normal","should_escalate":false,"next_action":"各项检测正常。如问题持续，建议重启设备后观察。"}' },
-    { tool_name: 'diagnose_network', match: '', response: '{"success":false,"message":"诊断失败，请稍后重试"}' },
+    { tool_name: 'diagnose_network', match: 'issue_type == "slow_data" && phone == "13800000001"', response: '{"phone": "13800000001", "issue_type": "slow_data", "diagnostic_steps": [{"step": "账号状态", "status": "ok", "detail": "正常", "action": ""}, {"step": "流量余额", "status": "ok", "detail": "剩余17.5GB", "action": ""}, {"step": "APN配置", "status": "ok", "detail": "正常", "action": ""}, {"step": "基站信号", "status": "warning", "detail": "信号强度-85dBm，低于正常范围", "action": "建议移至开阔区域"}, {"step": "网络拥塞", "status": "warning", "detail": "当前基站负载82%", "action": "建议错峰使用或连接WiFi"}], "conclusion": "网络拥塞导致网速下降", "severity": "warning", "should_escalate": false, "next_action": "建议关闭后台高流量应用，或切换至 WiFi 网络。"}' },
+    { tool_name: 'diagnose_network', match: 'issue_type == "no_signal"', response: '{"issue_type": "no_signal", "diagnostic_steps": [{"step": "账号状态", "status": "error", "detail": "账户已停机（欠费）", "action": "请先缴清欠费"}], "conclusion": "账户欠费停机，需先缴费恢复", "severity": "critical", "should_escalate": false, "next_action": "请检查 SIM 卡是否松动，或尝试切换飞行模式后重新搜网。", "phone": null}' },
+    { tool_name: 'diagnose_network', match: 'issue_type == "no_network" && phone == "13800000001"', response: '{"issue_type": "no_network", "diagnostic_steps": [{"step": "账号状态", "status": "ok", "detail": "正常", "action": ""}, {"step": "APN配置", "status": "warning", "detail": "APN设置异常", "action": "请重置APN为默认值"}], "conclusion": "APN配置异常导致无法上网", "severity": "warning", "should_escalate": false, "next_action": "请检查 APN 设置是否正确，或重置网络设置。", "phone": null}' },
+    { tool_name: 'diagnose_network', match: 'issue_type == "slow_data" && phone == "13800000003"', response: '{"issue_type": "slow_data", "diagnostic_steps": [{"step": "账号状态", "status": "ok", "detail": "", "action": ""}, {"step": "流量余额", "status": "error", "detail": "本月流量已用完（10GB/10GB）", "action": "建议购买流量加油包或升级套餐"}], "conclusion": "流量已耗尽", "severity": "critical", "should_escalate": false, "next_action": "建议关闭后台高流量应用，或切换至 WiFi 网络。", "phone": null}' },
+    { tool_name: 'diagnose_network', match: 'issue_type == "call_drop"', response: '{"issue_type": "call_drop", "diagnostic_steps": [{"step": "账号状态", "status": "ok", "detail": "正常", "action": ""}, {"step": "基站信号", "status": "ok", "detail": "信号良好", "action": ""}, {"step": "网络拥塞", "status": "ok", "detail": "负载正常", "action": ""}], "conclusion": "各项指标正常，建议观察", "severity": "normal", "should_escalate": false, "next_action": "各项检测正常。如问题持续，建议重启设备后观察。", "phone": null}' },
+    { tool_name: 'diagnose_network', match: '', response: '{"next_action": null, "should_escalate": false, "diagnostic_steps": [], "severity": null, "issue_type": null, "phone": null, "conclusion": null}' },
     // diagnose_app（含 risk_level, next_step, action_count）
-    { tool_name: 'diagnose_app', match: 'issue_type == "app_locked"', response: '{"success":true,"issue_type":"app_locked","diagnostic_steps":[{"step":"账号状态","status":"error","detail":"账号已被锁定","action":"需联系安全团队解锁","escalate":true}],"conclusion":"账号被锁定","escalation_path":"security_team","customer_actions":["联系客服热线10000","携带身份证到营业厅"],"risk_level":"high","next_step":"检测到高风险问题，请立即转接安全团队处理，请勿让客户继续尝试登录。","action_count":2}' },
-    { tool_name: 'diagnose_app', match: 'issue_type == "login_failed"', response: '{"success":true,"issue_type":"login_failed","diagnostic_steps":[{"step":"登录历史","status":"warning","detail":"连续3次密码错误","action":"重置密码"}],"conclusion":"密码错误次数过多","escalation_path":"self_service","customer_actions":["通过App找回密码","使用短信验证码登录"],"risk_level":"none","next_step":"所有检查项通过，请引导客户重新尝试登录。","action_count":2}' },
-    { tool_name: 'diagnose_app', match: 'issue_type == "device_incompatible"', response: '{"success":true,"issue_type":"device_incompatible","diagnostic_steps":[{"step":"App版本","status":"error","detail":"当前版本3.0.0，最新3.5.0","action":"请更新至最新版本"}],"conclusion":"App版本过低","escalation_path":"self_service","customer_actions":["前往应用商店更新"],"risk_level":"low","next_step":"发现可修复问题，请引导客户按建议操作后重新尝试。","action_count":1}' },
-    { tool_name: 'diagnose_app', match: 'issue_type == "suspicious_activity"', response: '{"success":true,"issue_type":"suspicious_activity","diagnostic_steps":[{"step":"设备安全","status":"error","detail":"检测到异常登录地点","action":"建议修改密码并开启双重验证","escalate":true}],"conclusion":"存在异常活动","escalation_path":"security_team","customer_actions":["立即修改密码","检查账户是否有异常操作"],"risk_level":"high","next_step":"检测到高风险问题，请立即转接安全团队处理，请勿让客户继续尝试登录。","action_count":2}' },
-    { tool_name: 'diagnose_app', match: '', response: '{"success":true,"diagnostic_steps":[{"step":"全部检查","status":"ok","detail":"未发现异常","action":""}],"conclusion":"App运行正常","escalation_path":"self_service","customer_actions":[],"risk_level":"none","next_step":"所有检查项通过，请引导客户重新尝试登录。","action_count":0}' },
+    { tool_name: 'diagnose_app', match: 'issue_type == "app_locked"', response: '{"issue_type": "app_locked", "diagnostic_steps": [{"step": "账号状态", "status": "error", "detail": "账号已被锁定", "action": "需联系安全团队解锁", "escalate": true}], "conclusion": "账号被锁定", "escalation_path": "security_team", "customer_actions": ["联系客服热线10000", "携带身份证到营业厅"], "risk_level": "high", "next_step": "检测到高风险问题，请立即转接安全团队处理，请勿让客户继续尝试登录。", "action_count": 2, "phone": null, "lock_reason": null}' },
+    { tool_name: 'diagnose_app', match: 'issue_type == "login_failed"', response: '{"issue_type": "login_failed", "diagnostic_steps": [{"step": "登录历史", "status": "warning", "detail": "连续3次密码错误", "action": "重置密码"}], "conclusion": "密码错误次数过多", "escalation_path": "self_service", "customer_actions": ["通过App找回密码", "使用短信验证码登录"], "risk_level": "none", "next_step": "所有检查项通过，请引导客户重新尝试登录。", "action_count": 2, "phone": null, "lock_reason": null}' },
+    { tool_name: 'diagnose_app', match: 'issue_type == "device_incompatible"', response: '{"issue_type": "device_incompatible", "diagnostic_steps": [{"step": "App版本", "status": "error", "detail": "当前版本3.0.0，最新3.5.0", "action": "请更新至最新版本"}], "conclusion": "App版本过低", "escalation_path": "self_service", "customer_actions": ["前往应用商店更新"], "risk_level": "low", "next_step": "发现可修复问题，请引导客户按建议操作后重新尝试。", "action_count": 1, "phone": null, "lock_reason": null}' },
+    { tool_name: 'diagnose_app', match: 'issue_type == "suspicious_activity"', response: '{"issue_type": "suspicious_activity", "diagnostic_steps": [{"step": "设备安全", "status": "error", "detail": "检测到异常登录地点", "action": "建议修改密码并开启双重验证", "escalate": true}], "conclusion": "存在异常活动", "escalation_path": "security_team", "customer_actions": ["立即修改密码", "检查账户是否有异常操作"], "risk_level": "high", "next_step": "检测到高风险问题，请立即转接安全团队处理，请勿让客户继续尝试登录。", "action_count": 2, "phone": null, "lock_reason": null}' },
+    { tool_name: 'diagnose_app', match: '', response: '{"diagnostic_steps": [{"step": "全部检查", "status": "ok", "detail": "未发现异常", "action": ""}], "conclusion": "App运行正常", "escalation_path": "self_service", "customer_actions": [], "risk_level": "none", "next_step": "所有检查项通过，请引导客户重新尝试登录。", "action_count": 0, "phone": null, "lock_reason": null, "issue_type": null}' },
   ]);
 
   const outboundMockRules = JSON.stringify([
     // record_call_result（含 result_category）
-    { tool_name: 'record_call_result', match: 'result == "ptp"', response: '{"success":true,"message":"通话结果已记录：ptp","result_category":"positive","result_label":"ptp"}' },
-    { tool_name: 'record_call_result', match: 'result == "refusal"', response: '{"success":true,"message":"通话结果已记录：refusal","result_category":"negative","result_label":"refusal"}' },
-    { tool_name: 'record_call_result', match: '', response: '{"success":true,"message":"通话结果已记录","result_category":"neutral","result_label":"unknown"}' },
+    { tool_name: 'record_call_result', match: 'result == "ptp"', response: '{"result_category": "positive", "callback_time": null, "result": null, "remark": null, "ptp_date": null}' },
+    { tool_name: 'record_call_result', match: 'result == "refusal"', response: '{"result_category": "negative", "callback_time": null, "result": null, "remark": null, "ptp_date": null}' },
+    { tool_name: 'record_call_result', match: '', response: '{"result_category": "neutral", "callback_time": null, "result": null, "remark": null, "ptp_date": null}' },
     // send_followup_sms
-    { tool_name: 'send_followup_sms', match: 'phone == "13900000099"', response: '{"success":false,"message":"短信发送失败，号码不可达"}' },
-    { tool_name: 'send_followup_sms', match: 'sms_type == "payment_link"', response: '{"success":true,"message":"还款链接短信已发送"}' },
-    { tool_name: 'send_followup_sms', match: 'sms_type == "plan_detail"', response: '{"success":true,"message":"套餐详情短信已发送"}' },
-    { tool_name: 'send_followup_sms', match: '', response: '{"success":true,"message":"短信已发送"}' },
+    { tool_name: 'send_followup_sms', match: 'phone == "13900000099"', response: '{"phone": null, "status": null, "context": null, "sms_type": null}' },
+    { tool_name: 'send_followup_sms', match: 'sms_type == "payment_link"', response: '{"phone": null, "status": null, "context": null, "sms_type": null}' },
+    { tool_name: 'send_followup_sms', match: 'sms_type == "plan_detail"', response: '{"phone": null, "status": null, "context": null, "sms_type": null}' },
+    { tool_name: 'send_followup_sms', match: '', response: '{"phone": null, "status": null, "context": null, "sms_type": null}' },
     // create_callback_task
-    { tool_name: 'create_callback_task', match: '', response: '{"success":true,"callback_task_id":"CB-MOCK-001","message":"回访任务已创建"}' },
+    { tool_name: 'create_callback_task', match: '', response: '{"callback_task_id": "CB-MOCK-001", "callback_phone": null, "product_name": null, "customer_name": null, "status": null, "original_task_id": null, "preferred_time": null}' },
     // record_marketing_result（含 conversion_tag, is_dnd）
-    { tool_name: 'record_marketing_result', match: 'result == "converted"', response: '{"success":true,"message":"营销结果已记录：converted","conversion_tag":"converted","is_dnd":false,"dnd_note":null,"is_callback":false,"callback_time":null}' },
-    { tool_name: 'record_marketing_result', match: 'result == "dnd"', response: '{"success":true,"message":"营销结果已记录：dnd","conversion_tag":"dnd","is_dnd":true,"dnd_note":"客户已加入免打扰名单，本活动不再拨打。","is_callback":false,"callback_time":null}' },
-    { tool_name: 'record_marketing_result', match: '', response: '{"success":true,"message":"营销结果已记录","conversion_tag":"cold","is_dnd":false,"dnd_note":null,"is_callback":false,"callback_time":null}' },
+    { tool_name: 'record_marketing_result', match: 'result == "converted"', response: '{"conversion_tag": "converted", "is_dnd": false, "dnd_note": null, "is_callback": false, "callback_time": null, "result": null, "campaign_id": null, "phone": null}' },
+    { tool_name: 'record_marketing_result', match: 'result == "dnd"', response: '{"conversion_tag": "dnd", "is_dnd": true, "dnd_note": "客户已加入免打扰名单，本活动不再拨打。", "is_callback": false, "callback_time": null, "result": null, "campaign_id": null, "phone": null}' },
+    { tool_name: 'record_marketing_result', match: '', response: '{"conversion_tag": "cold", "is_dnd": false, "dnd_note": null, "is_callback": false, "callback_time": null, "result": null, "campaign_id": null, "phone": null}' },
   ]);
 
   const accountMockRules = JSON.stringify([
     // verify_identity
-    { tool_name: 'verify_identity', match: 'otp == "1234"', response: '{"success":true,"verified":true,"customer_name":"张三","message":"身份验证通过"}' },
-    { tool_name: 'verify_identity', match: 'otp == "0000"', response: '{"success":true,"verified":true,"customer_name":"用户","message":"身份验证通过"}' },
-    { tool_name: 'verify_identity', match: '', response: '{"success":false,"verified":false,"message":"验证码错误，请重新输入"}' },
+    { tool_name: 'verify_identity', match: 'otp == "1234"', response: '{"verified": true, "customer_name": "张三", "verification_method": null}' },
+    { tool_name: 'verify_identity', match: 'otp == "0000"', response: '{"verified": true, "customer_name": "用户", "verification_method": null}' },
+    { tool_name: 'verify_identity', match: '', response: '{"verified": false, "verification_method": null, "customer_name": null}' },
     // check_account_balance
-    { tool_name: 'check_account_balance', match: 'phone == "13800000003"', response: '{"success":true,"phone":"13800000003","balance":-23.5,"has_arrears":true,"arrears_amount":23.5,"status":"suspended","message":"账户存在欠费 ¥23.50，需先缴清欠费才能办理停机"}' },
-    { tool_name: 'check_account_balance', match: 'phone == "13800000001"', response: '{"success":true,"phone":"13800000001","balance":45.8,"has_arrears":false,"arrears_amount":0,"status":"active","message":"账户余额 ¥45.80，无欠费"}' },
-    { tool_name: 'check_account_balance', match: '', response: '{"success":true,"balance":0,"has_arrears":false,"arrears_amount":0,"status":"active","message":"账户余额 ¥0.00，无欠费"}' },
+    { tool_name: 'check_account_balance', match: 'phone == "13800000003"', response: '{"phone": "13800000003", "balance": -23.5, "has_arrears": true, "arrears_amount": 23.5, "status": "suspended"}' },
+    { tool_name: 'check_account_balance', match: 'phone == "13800000001"', response: '{"phone": "13800000001", "balance": 45.8, "has_arrears": false, "arrears_amount": 0, "status": "active"}' },
+    { tool_name: 'check_account_balance', match: '', response: '{"balance": 0, "has_arrears": false, "arrears_amount": 0, "status": "active", "phone": null}' },
     // check_contracts
-    { tool_name: 'check_contracts', match: 'phone == "13800000001"', response: '{"success":true,"phone":"13800000001","contracts":[{"contract_id":"CT001","name":"24个月合约套餐","end_date":"2027-06-30","penalty":200,"risk_level":"high"}],"has_active_contracts":true,"has_high_risk":true,"message":"存在高风险合约，停机需支付违约金 ¥200"}' },
-    { tool_name: 'check_contracts', match: 'phone == "13800000002"', response: '{"success":true,"phone":"13800000002","contracts":[],"has_active_contracts":false,"has_high_risk":false,"message":"无有效合约，可直接办理停机"}' },
-    { tool_name: 'check_contracts', match: '', response: '{"success":true,"contracts":[],"has_active_contracts":false,"has_high_risk":false,"message":"无有效合约"}' },
+    { tool_name: 'check_contracts', match: 'phone == "13800000001"', response: '{"phone": "13800000001", "contracts": [{"contract_id": "CT001", "name": "24个月合约套餐", "end_date": "2027-06-30", "penalty": 200, "risk_level": "high"}], "has_active_contracts": true, "has_high_risk": true}' },
+    { tool_name: 'check_contracts', match: 'phone == "13800000002"', response: '{"phone": "13800000002", "contracts": [], "has_active_contracts": false, "has_high_risk": false}' },
+    { tool_name: 'check_contracts', match: '', response: '{"contracts": [], "has_active_contracts": false, "has_high_risk": false, "phone": null}' },
   ]);
 
   db.insert(mcpServers).values([
@@ -678,37 +678,75 @@ async function seed() {
   db.delete(mcpResources).run();
   db.delete(mcpTools).run();
 
-  // 方案 B：一个资源 = 一个工具的完整数据端点
-  // 资源包含连接信息 + 执行配置（Remote MCP 工具名 / DB 表+条件 / API 路径）
+  // 一个资源 = 一个唯一连接对象（同一 endpoint 不重复）
+  // 工具通过 execution_config.resource_id 引用资源
 
-  const toolResourceDefs: Array<{
-    res_id: string; res_name: string; server_id: string;
-    mcp_url: string; mcp_tool_name: string;
-    tool_name: string; tool_desc: string;
+  // ── 连接资源定义（每个 Server 一个主 Remote MCP endpoint）──────────────────
+  const resourceDefs: Array<{
+    id: string; name: string; server_id: string;
+    type: 'remote_mcp' | 'db' | 'api';
+    mcp_url?: string; description?: string;
+    api_base_url?: string; api_method?: string; api_timeout?: number;
+  }> = [
+    { id: 'res-user-info-mcp',  name: 'user-info-mcp',  server_id: 'mcp-user-info',  type: 'remote_mcp', mcp_url: 'http://127.0.0.1:18003/mcp', description: '用户信息 MCP 服务端点' },
+    { id: 'res-business-mcp',   name: 'business-mcp',   server_id: 'mcp-business',   type: 'remote_mcp', mcp_url: 'http://127.0.0.1:18004/mcp', description: '业务办理 MCP 服务端点' },
+    { id: 'res-diagnosis-mcp',  name: 'diagnosis-mcp',  server_id: 'mcp-diagnosis',  type: 'remote_mcp', mcp_url: 'http://127.0.0.1:18005/mcp', description: '故障诊断 MCP 服务端点' },
+    { id: 'res-outbound-mcp',   name: 'outbound-mcp',   server_id: 'mcp-outbound',   type: 'remote_mcp', mcp_url: 'http://127.0.0.1:18006/mcp', description: '外呼服务 MCP 服务端点' },
+    { id: 'res-account-mcp',    name: 'account-mcp',    server_id: 'mcp-account',    type: 'remote_mcp', mcp_url: 'http://127.0.0.1:18007/mcp', description: '账户操作 MCP 服务端点' },
+    // DB 资源（每个使用 DB 的 Server 各一份）
+    { id: 'res-user-info-db',   name: 'local-db',       server_id: 'mcp-user-info',  type: 'db', description: '本地业务数据库（plans 表）' },
+    { id: 'res-account-db',     name: 'local-db',       server_id: 'mcp-account',    type: 'db', description: '本地业务数据库（subscribers/contracts 表）' },
+    // API 资源（每个使用 API 的 Server 各一份）
+    { id: 'res-account-api',    name: 'internal-api',   server_id: 'mcp-account',    type: 'api', api_base_url: 'http://127.0.0.1:18008', description: '内部 API 网关（身份验证）' },
+    { id: 'res-business-api',   name: 'internal-api',   server_id: 'mcp-business',   type: 'api', api_base_url: 'http://127.0.0.1:18008', description: '内部 API 网关（发票）' },
+    { id: 'res-outbound-api',   name: 'internal-api',   server_id: 'mcp-outbound',   type: 'api', api_base_url: 'http://127.0.0.1:18008', description: '内部 API 网关（回访任务）' },
+  ];
+
+  for (const r of resourceDefs) {
+    db.insert(mcpResources).values({
+      id: r.id,
+      server_id: r.server_id,
+      name: r.name,
+      type: r.type,
+      status: 'active',
+      mcp_transport: r.type === 'remote_mcp' ? 'http' : null,
+      mcp_url: r.mcp_url ?? null,
+      db_mode: r.type === 'db' ? 'local' : null,
+      api_base_url: r.api_base_url ?? null,
+      api_timeout: r.api_timeout ?? null,
+      description: r.description ?? null,
+      created_at: now,
+      updated_at: now,
+    }).onConflictDoNothing().run();
+  }
+
+  // ── 工具定义（引用收敛后的资源）──────────────────────────────────────────────
+  const toolDefs: Array<{
+    tool_name: string; tool_desc: string; server_id: string;
+    resource_id: string; handler_key: string;
     input_schema: Record<string, unknown>;
     mock_source: string;
-    handler_key: string;
   }> = [
-    // user-info-service (:18003)
-    { res_id: 'res-query-subscriber', res_name: 'subscriber_query', server_id: 'mcp-user-info', mcp_url: 'http://127.0.0.1:18003/mcp', mcp_tool_name: 'query_subscriber', handler_key: 'user_info.query_subscriber', tool_name: 'query_subscriber', tool_desc: '根据手机号查询电信用户信息（套餐、状态、余额、用量分析、增值业务详情、欠费分层）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-user-info' },
-    { res_id: 'res-query-bill', res_name: 'bill_query', server_id: 'mcp-user-info', mcp_url: 'http://127.0.0.1:18003/mcp', mcp_tool_name: 'query_bill', handler_key: 'user_info.query_bill', tool_name: 'query_bill', tool_desc: '查询用户指定月份的账单明细（含费用拆解 breakdown）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份，格式 YYYY-MM' } }, required: ['phone'] }, mock_source: 'mcp-user-info' },
-    { res_id: 'res-query-plans', res_name: 'plans_query', server_id: 'mcp-user-info', mcp_url: 'http://127.0.0.1:18003/mcp', mcp_tool_name: 'query_plans', handler_key: 'user_info.query_plans', tool_name: 'query_plans', tool_desc: '获取所有可用套餐列表，或查询指定套餐详情', input_schema: { type: 'object', properties: { plan_id: { type: 'string', description: '套餐 ID' } } }, mock_source: 'mcp-user-info' },
-    { res_id: 'res-analyze-bill', res_name: 'bill_anomaly', server_id: 'mcp-user-info', mcp_url: 'http://127.0.0.1:18003/mcp', mcp_tool_name: 'analyze_bill_anomaly', handler_key: 'user_info.analyze_bill_anomaly', tool_name: 'analyze_bill_anomaly', tool_desc: '分析用户账单异常：自动对比当月与上月账单，定位费用异常原因', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '当月账期，格式 YYYY-MM' } }, required: ['phone', 'month'] }, mock_source: 'mcp-user-info' },
-    // business-service (:18004)
-    { res_id: 'res-cancel-service', res_name: 'cancel_service_exec', server_id: 'mcp-business', mcp_url: 'http://127.0.0.1:18004/mcp', mcp_tool_name: 'cancel_service', handler_key: 'business.cancel_service', tool_name: 'cancel_service', tool_desc: '退订用户已订阅的增值业务', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, service_id: { type: 'string', description: '要退订的业务 ID' } }, required: ['phone', 'service_id'] }, mock_source: 'mcp-business' },
-    { res_id: 'res-issue-invoice', res_name: 'invoice_exec', server_id: 'mcp-business', mcp_url: 'http://127.0.0.1:18004/mcp', mcp_tool_name: 'issue_invoice', handler_key: 'business.issue_invoice', tool_name: 'issue_invoice', tool_desc: '为指定用户的指定月份账单开具电子发票', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份' }, email: { type: 'string', description: '邮箱' } }, required: ['phone', 'month', 'email'] }, mock_source: 'mcp-business' },
-    // diagnosis-service (:18005)
-    { res_id: 'res-diagnose-network', res_name: 'network_diag', server_id: 'mcp-diagnosis', mcp_url: 'http://127.0.0.1:18005/mcp', mcp_tool_name: 'diagnose_network', handler_key: 'diagnosis.diagnose_network', tool_name: 'diagnose_network', tool_desc: '对指定手机号进行网络故障诊断', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, issue_type: { type: 'string', enum: ['no_signal', 'slow_data', 'call_drop', 'no_network'], description: '故障类型' } }, required: ['phone', 'issue_type'] }, mock_source: 'mcp-diagnosis' },
-    { res_id: 'res-diagnose-app', res_name: 'app_diag', server_id: 'mcp-diagnosis', mcp_url: 'http://127.0.0.1:18005/mcp', mcp_tool_name: 'diagnose_app', handler_key: 'diagnosis.diagnose_app', tool_name: 'diagnose_app', tool_desc: '对指定手机号的营业厅 App 进行问题诊断', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, issue_type: { type: 'string', enum: ['app_locked', 'login_failed', 'device_incompatible', 'suspicious_activity'], description: '问题类型' } }, required: ['phone', 'issue_type'] }, mock_source: 'mcp-diagnosis' },
-    // outbound-service (:18006)
-    { res_id: 'res-record-call', res_name: 'call_result_record', server_id: 'mcp-outbound', mcp_url: 'http://127.0.0.1:18006/mcp', mcp_tool_name: 'record_call_result', handler_key: 'outbound.record_call_result', tool_name: 'record_call_result', tool_desc: '记录本次外呼催收通话结果（含 PTP 日期校验和结果分类）', input_schema: { type: 'object', properties: { result: { type: 'string', enum: ['ptp', 'refusal', 'dispute', 'no_answer', 'busy', 'power_off', 'converted', 'callback', 'not_interested', 'non_owner', 'verify_failed', 'dnd'], description: '通话结果' }, remark: { type: 'string', description: '备注' }, ptp_date: { type: 'string', description: '承诺还款日期' }, callback_time: { type: 'string', description: '回访时间' } }, required: ['result'] }, mock_source: 'mcp-outbound' },
-    { res_id: 'res-followup-sms', res_name: 'followup_sms', server_id: 'mcp-outbound', mcp_url: 'http://127.0.0.1:18006/mcp', mcp_tool_name: 'send_followup_sms', handler_key: 'outbound.send_followup_sms', tool_name: 'send_followup_sms', tool_desc: '向客户发送跟进短信（含静默时段校验）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '客户手机号' }, sms_type: { type: 'string', enum: ['payment_link', 'plan_detail', 'callback_reminder', 'product_detail'], description: '短信类型' }, context: { type: 'string', enum: ['collection', 'marketing'], description: '发送场景' } }, required: ['phone', 'sms_type'] }, mock_source: 'mcp-outbound' },
-    { res_id: 'res-callback-task', res_name: 'callback_task', server_id: 'mcp-outbound', mcp_url: 'http://127.0.0.1:18006/mcp', mcp_tool_name: 'create_callback_task', handler_key: 'outbound.create_callback_task', tool_name: 'create_callback_task', tool_desc: '创建回访任务', input_schema: { type: 'object', properties: { original_task_id: { type: 'string', description: '原始任务 ID' }, callback_phone: { type: 'string', description: '回访电话' }, preferred_time: { type: 'string', description: '回访时间' } }, required: ['original_task_id', 'callback_phone', 'preferred_time'] }, mock_source: 'mcp-outbound' },
-    { res_id: 'res-marketing-result', res_name: 'marketing_result', server_id: 'mcp-outbound', mcp_url: 'http://127.0.0.1:18006/mcp', mcp_tool_name: 'record_marketing_result', handler_key: 'outbound.record_marketing_result', tool_name: 'record_marketing_result', tool_desc: '记录营销外呼的通话结果（含转化标签、DND 标记）', input_schema: { type: 'object', properties: { campaign_id: { type: 'string', description: '营销活动 ID' }, phone: { type: 'string', description: '客户手机号' }, result: { type: 'string', enum: ['converted', 'callback', 'not_interested', 'no_answer', 'busy', 'wrong_number', 'dnd'], description: '营销结果' }, callback_time: { type: 'string', description: '回访时间' } }, required: ['campaign_id', 'phone', 'result'] }, mock_source: 'mcp-outbound' },
-    // account-service (:18007)
-    { res_id: 'res-verify-identity', res_name: 'identity_verify', server_id: 'mcp-account', mcp_url: 'http://127.0.0.1:18007/mcp', mcp_tool_name: 'verify_identity', handler_key: 'account.verify_identity', tool_name: 'verify_identity', tool_desc: '验证用户身份（通过短信验证码）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, otp: { type: 'string', description: '短信验证码' } }, required: ['phone', 'otp'] }, mock_source: 'mcp-account' },
-    { res_id: 'res-check-balance', res_name: 'balance_check', server_id: 'mcp-account', mcp_url: 'http://127.0.0.1:18007/mcp', mcp_tool_name: 'check_account_balance', handler_key: 'account.check_account_balance', tool_name: 'check_account_balance', tool_desc: '查询用户账户余额和欠费状态', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-account' },
-    { res_id: 'res-check-contracts', res_name: 'contracts_check', server_id: 'mcp-account', mcp_url: 'http://127.0.0.1:18007/mcp', mcp_tool_name: 'check_contracts', handler_key: 'account.check_contracts', tool_name: 'check_contracts', tool_desc: '查询用户当前有效合约列表', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-account' },
+    // user-info-service — 全部引用 res-user-info-mcp
+    { resource_id: 'res-user-info-mcp', server_id: 'mcp-user-info', handler_key: 'user_info.query_subscriber', tool_name: 'query_subscriber', tool_desc: '根据手机号查询电信用户信息（套餐、状态、余额、用量分析、增值业务详情、欠费分层）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-user-info' },
+    { resource_id: 'res-user-info-mcp', server_id: 'mcp-user-info', handler_key: 'user_info.query_bill', tool_name: 'query_bill', tool_desc: '查询用户指定月份的账单明细（含费用拆解 breakdown）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份，格式 YYYY-MM' } }, required: ['phone'] }, mock_source: 'mcp-user-info' },
+    { resource_id: 'res-user-info-mcp', server_id: 'mcp-user-info', handler_key: 'user_info.query_plans', tool_name: 'query_plans', tool_desc: '获取所有可用套餐列表，或查询指定套餐详情', input_schema: { type: 'object', properties: { plan_id: { type: 'string', description: '套餐 ID' } } }, mock_source: 'mcp-user-info' },
+    { resource_id: 'res-user-info-mcp', server_id: 'mcp-user-info', handler_key: 'user_info.analyze_bill_anomaly', tool_name: 'analyze_bill_anomaly', tool_desc: '分析用户账单异常：自动对比当月与上月账单，定位费用异常原因', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '当月账期，格式 YYYY-MM' } }, required: ['phone', 'month'] }, mock_source: 'mcp-user-info' },
+    // business-service — 全部引用 res-business-mcp
+    { resource_id: 'res-business-mcp', server_id: 'mcp-business', handler_key: 'business.cancel_service', tool_name: 'cancel_service', tool_desc: '退订用户已订阅的增值业务', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, service_id: { type: 'string', description: '要退订的业务 ID' } }, required: ['phone', 'service_id'] }, mock_source: 'mcp-business' },
+    { resource_id: 'res-business-mcp', server_id: 'mcp-business', handler_key: 'business.issue_invoice', tool_name: 'issue_invoice', tool_desc: '为指定用户的指定月份账单开具电子发票', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份' }, email: { type: 'string', description: '邮箱' } }, required: ['phone', 'month', 'email'] }, mock_source: 'mcp-business' },
+    // diagnosis-service — 全部引用 res-diagnosis-mcp
+    { resource_id: 'res-diagnosis-mcp', server_id: 'mcp-diagnosis', handler_key: 'diagnosis.diagnose_network', tool_name: 'diagnose_network', tool_desc: '对指定手机号进行网络故障诊断', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, issue_type: { type: 'string', enum: ['no_signal', 'slow_data', 'call_drop', 'no_network'], description: '故障类型' } }, required: ['phone', 'issue_type'] }, mock_source: 'mcp-diagnosis' },
+    { resource_id: 'res-diagnosis-mcp', server_id: 'mcp-diagnosis', handler_key: 'diagnosis.diagnose_app', tool_name: 'diagnose_app', tool_desc: '对指定手机号的营业厅 App 进行问题诊断', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, issue_type: { type: 'string', enum: ['app_locked', 'login_failed', 'device_incompatible', 'suspicious_activity'], description: '问题类型' } }, required: ['phone', 'issue_type'] }, mock_source: 'mcp-diagnosis' },
+    // outbound-service — 全部引用 res-outbound-mcp
+    { resource_id: 'res-outbound-mcp', server_id: 'mcp-outbound', handler_key: 'outbound.record_call_result', tool_name: 'record_call_result', tool_desc: '记录本次外呼催收通话结果（含 PTP 日期校验和结果分类）', input_schema: { type: 'object', properties: { result: { type: 'string', enum: ['ptp', 'refusal', 'dispute', 'no_answer', 'busy', 'power_off', 'converted', 'callback', 'not_interested', 'non_owner', 'verify_failed', 'dnd'], description: '通话结果' }, remark: { type: 'string', description: '备注' }, ptp_date: { type: 'string', description: '承诺还款日期' }, callback_time: { type: 'string', description: '回访时间' } }, required: ['result'] }, mock_source: 'mcp-outbound' },
+    { resource_id: 'res-outbound-mcp', server_id: 'mcp-outbound', handler_key: 'outbound.send_followup_sms', tool_name: 'send_followup_sms', tool_desc: '向客户发送跟进短信（含静默时段校验）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '客户手机号' }, sms_type: { type: 'string', enum: ['payment_link', 'plan_detail', 'callback_reminder', 'product_detail'], description: '短信类型' }, context: { type: 'string', enum: ['collection', 'marketing'], description: '发送场景' } }, required: ['phone', 'sms_type'] }, mock_source: 'mcp-outbound' },
+    { resource_id: 'res-outbound-mcp', server_id: 'mcp-outbound', handler_key: 'outbound.create_callback_task', tool_name: 'create_callback_task', tool_desc: '创建回访任务', input_schema: { type: 'object', properties: { original_task_id: { type: 'string', description: '原始任务 ID' }, callback_phone: { type: 'string', description: '回访电话' }, preferred_time: { type: 'string', description: '回访时间' } }, required: ['original_task_id', 'callback_phone', 'preferred_time'] }, mock_source: 'mcp-outbound' },
+    { resource_id: 'res-outbound-mcp', server_id: 'mcp-outbound', handler_key: 'outbound.record_marketing_result', tool_name: 'record_marketing_result', tool_desc: '记录营销外呼的通话结果（含转化标签、DND 标记）', input_schema: { type: 'object', properties: { campaign_id: { type: 'string', description: '营销活动 ID' }, phone: { type: 'string', description: '客户手机号' }, result: { type: 'string', enum: ['converted', 'callback', 'not_interested', 'no_answer', 'busy', 'wrong_number', 'dnd'], description: '营销结果' }, callback_time: { type: 'string', description: '回访时间' } }, required: ['campaign_id', 'phone', 'result'] }, mock_source: 'mcp-outbound' },
+    // account-service — 全部引用 res-account-mcp
+    { resource_id: 'res-account-mcp', server_id: 'mcp-account', handler_key: 'account.verify_identity', tool_name: 'verify_identity', tool_desc: '验证用户身份（通过短信验证码）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, otp: { type: 'string', description: '短信验证码' } }, required: ['phone', 'otp'] }, mock_source: 'mcp-account' },
+    { resource_id: 'res-account-mcp', server_id: 'mcp-account', handler_key: 'account.check_account_balance', tool_name: 'check_account_balance', tool_desc: '查询用户账户余额和欠费状态', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-account' },
+    { resource_id: 'res-account-mcp', server_id: 'mcp-account', handler_key: 'account.check_contracts', tool_name: 'check_contracts', tool_desc: '查询用户当前有效合约列表', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-account' },
   ];
 
   // 从 server 的 mock_rules 中提取每个 tool 的 rules
@@ -719,22 +757,7 @@ async function seed() {
     }
   }
 
-  for (const t of toolResourceDefs) {
-    // 创建资源（每个工具一个独立的 Remote MCP 资源）
-    db.insert(mcpResources).values({
-      id: t.res_id,
-      server_id: t.server_id,
-      name: t.res_name,
-      type: 'remote_mcp',
-      status: 'active',
-      mcp_transport: 'http',
-      mcp_url: t.mcp_url,
-      mcp_tool_name: t.mcp_tool_name,
-      created_at: now,
-      updated_at: now,
-    }).onConflictDoNothing().run();
-
-    // 创建工具（绑定到对应资源）
+  for (const t of toolDefs) {
     const serverRules = allServerRules.get(t.mock_source) ?? [];
     const toolRules = serverRules.filter(r => r.tool_name === t.tool_name);
 
@@ -746,7 +769,7 @@ async function seed() {
       impl_type: 'script',
       handler_key: t.handler_key,
       input_schema: JSON.stringify(t.input_schema),
-      execution_config: JSON.stringify({ resource_id: t.res_id }),
+      execution_config: JSON.stringify({ resource_id: t.resource_id }),
       mock_rules: toolRules.length > 0 ? JSON.stringify(toolRules) : null,
       mocked: false,
       disabled: false,
@@ -756,31 +779,31 @@ async function seed() {
   }
 
   // DB Binding 工具：覆盖 impl_type 和 execution_config
-  const dbBindingTools: Array<{ name: string; table: string; operation: string; where: Array<{ param: string; column: string; op: string }>; columns: string[] }> = [
-    { name: 'query_plans', table: 'plans', operation: 'select_many', where: [{ param: 'plan_id', column: 'plan_id', op: '=' }], columns: ['plan_id', 'name', 'monthly_fee', 'data_gb', 'voice_min', 'sms', 'features', 'description'] },
-    { name: 'check_account_balance', table: 'subscribers', operation: 'select_one', where: [{ param: 'phone', column: 'phone', op: '=' }], columns: ['phone', 'balance', 'status', 'overdue_days'] },
-    { name: 'check_contracts', table: 'contracts', operation: 'select_many', where: [{ param: 'phone', column: 'phone', op: '=' }], columns: ['contract_id', 'name', 'start_date', 'end_date', 'penalty', 'risk_level', 'status'] },
+  const dbBindingTools: Array<{ name: string; resource_id: string; table: string; operation: string; where: Array<{ param: string; column: string; op: string }>; columns: string[] }> = [
+    { name: 'query_plans', resource_id: 'res-user-info-db', table: 'plans', operation: 'select_many', where: [{ param: 'plan_id', column: 'plan_id', op: '=' }], columns: ['plan_id', 'name', 'monthly_fee', 'data_gb', 'voice_min', 'sms', 'features', 'description'] },
+    { name: 'check_account_balance', resource_id: 'res-account-db', table: 'subscribers', operation: 'select_one', where: [{ param: 'phone', column: 'phone', op: '=' }], columns: ['phone', 'balance', 'status', 'overdue_days'] },
+    { name: 'check_contracts', resource_id: 'res-account-db', table: 'contracts', operation: 'select_many', where: [{ param: 'phone', column: 'phone', op: '=' }], columns: ['contract_id', 'name', 'start_date', 'end_date', 'penalty', 'risk_level', 'status'] },
   ];
   for (const dbt of dbBindingTools) {
     db.update(mcpTools).set({
       impl_type: 'db',
       handler_key: null,
-      execution_config: JSON.stringify({ impl_type: 'db', db: { table: dbt.table, operation: dbt.operation, where: dbt.where, columns: dbt.columns } }),
+      execution_config: JSON.stringify({ resource_id: dbt.resource_id, impl_type: 'db', db: { table: dbt.table, operation: dbt.operation, where: dbt.where, columns: dbt.columns } }),
       updated_at: now,
     }).where(eq(mcpTools.name, dbt.name)).run();
   }
 
   // API Binding 工具：覆盖 impl_type 和 execution_config
-  const apiBindingTools: Array<{ name: string; url: string; method?: string }> = [
-    { name: 'verify_identity', url: 'http://127.0.0.1:18008/api/identity/verify' },
-    { name: 'issue_invoice', url: 'http://127.0.0.1:18008/api/invoice/issue' },
-    { name: 'create_callback_task', url: 'http://127.0.0.1:18008/api/callback/create' },
+  const apiBindingTools: Array<{ name: string; resource_id: string; url: string; method?: string }> = [
+    { name: 'verify_identity', resource_id: 'res-account-api', url: 'http://127.0.0.1:18008/api/identity/verify' },
+    { name: 'issue_invoice', resource_id: 'res-business-api', url: 'http://127.0.0.1:18008/api/invoice/issue' },
+    { name: 'create_callback_task', resource_id: 'res-outbound-api', url: 'http://127.0.0.1:18008/api/callback/create' },
   ];
   for (const api of apiBindingTools) {
     db.update(mcpTools).set({
       impl_type: 'api',
       handler_key: null,
-      execution_config: JSON.stringify({ impl_type: 'api', api: { url: api.url, method: api.method ?? 'POST', timeout: 10000 } }),
+      execution_config: JSON.stringify({ resource_id: api.resource_id, impl_type: 'api', api: { url: api.url, method: api.method ?? 'POST', timeout: 10000 } }),
       updated_at: now,
     }).where(eq(mcpTools.name, api.name)).run();
   }
@@ -799,7 +822,7 @@ async function seed() {
   }
   console.log(`[seed] Output Schema: ${toolNames.length} 个工具已关联契约文件`);
 
-  console.log(`[seed] MCP Resources: ${toolResourceDefs.length} 个, Tools: ${toolResourceDefs.length} 个 (含 ${dbBindingTools.length} 个 DB, ${apiBindingTools.length} 个 API)`);
+  console.log(`[seed] MCP Resources: ${resourceDefs.length} 个 (收敛后), Tools: ${toolDefs.length} 个 (含 ${dbBindingTools.length} 个 DB, ${apiBindingTools.length} 个 API)`);
 
   // ── 10. 技能注册 + v1 版本快照（upsert：已存在则跳过）─────────────────────
   console.log('[seed] 初始化技能注册表和版本快照...');
