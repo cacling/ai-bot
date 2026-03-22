@@ -38,9 +38,8 @@ const GLM_REALTIME_MODEL = process.env.GLM_REALTIME_MODEL ?? 'glm-realtime-flash
 const DEFAULT_PHONE      = '13800000001';
 
 // ── 语音 system prompt ────────────────────────────────────────────────────────
+// 语音客服只用 voice 专属 prompt（不加载 base prompt，因为 base 依赖 get_skill_instructions 工具，语音通道没有此工具）
 const VOICE_PROMPT_TEMPLATE =
-  readFileSync(resolve(import.meta.dir, '../engine/inbound-base-system-prompt.md'), 'utf-8') +
-  '\n\n' +
   readFileSync(resolve(import.meta.dir, '../engine/inbound-voice-system-prompt.md'), 'utf-8');
 
 const ENGLISH_LANG_INSTRUCTION = `**LANGUAGE REQUIREMENT (MANDATORY — HIGHEST PRIORITY)**
