@@ -1,0 +1,11 @@
+[
+  { "patterns": ["话费", "电话费"], "term": "billing_amount", "label": "账单费用", "category": "billing", "slot_field": "issue_type" },
+  { "patterns": ["月租", "月租费", "基本月费"], "term": "plan_monthly_fee", "label": "套餐月费", "category": "billing", "slot_field": "service_subtype" },
+  { "patterns": ["乱扣费", "误扣费", "多扣了", "乱扣了", "扣多了", "莫名其妙扣了"], "term": "unexpected_charge", "label": "异常扣费", "category": "billing", "slot_field": "issue_type", "intent_hint": "bill_dispute" },
+  { "patterns": ["欠费", "欠了", "欠钱"], "term": "arrears", "label": "欠费", "category": "billing", "slot_field": "account_state" },
+  { "patterns": ["余额", "还剩多少", "还有多少钱"], "term": "account_balance", "label": "账户余额", "category": "billing", "slot_field": "issue_type" },
+  { "patterns": ["充值", "交费", "缴费", "交话费", "充话费"], "term": "payment", "label": "缴费", "category": "billing", "slot_field": "action_type" },
+  { "patterns": ["开票", "发票", "电子发票", "开发票"], "term": "invoice_request", "label": "开具发票", "category": "billing", "slot_field": "action_type" },
+  { "patterns": ["调账"], "term": "adjustment", "label": "账务调整", "category": "billing", "slot_field": "action_type" },
+  { "patterns": ["销账"], "term": "payment_reconciliation", "label": "销账", "category": "billing", "slot_field": "action_type" }
+]

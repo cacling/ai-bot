@@ -1,0 +1,12 @@
+[
+  { "patterns": ["退订", "取消", "不要了", "关掉", "关了", "给我关了"], "term": "cancel_service", "label": "退订", "category": "actions", "slot_field": "action_type", "intent_hint": "service_cancel", "priority": 1 },
+  { "patterns": ["销户", "注销", "销号"], "term": "close_account", "label": "销户", "category": "actions", "slot_field": "action_type", "intent_hint": "account_close", "priority": 2 },
+  { "patterns": ["换套餐", "改套餐", "升级套餐", "降套餐"], "term": "change_plan", "label": "变更套餐", "category": "actions", "slot_field": "action_type" },
+  { "patterns": ["停机保号", "停机", "暂停"], "term": "suspend_service", "label": "停机保号", "category": "actions", "slot_field": "action_type" },
+  { "patterns": ["复机", "恢复", "重新开通"], "term": "resume_service", "label": "复机", "category": "actions", "slot_field": "action_type" },
+  { "patterns": ["开通", "办理", "开一个", "加一个"], "term": "activate_service", "label": "开通业务", "category": "actions", "slot_field": "action_type" },
+  { "patterns": ["补卡", "换卡", "重新办卡"], "term": "sim_replacement", "label": "补换卡", "category": "actions", "slot_field": "action_type" },
+  { "patterns": ["转人工", "转客服", "人工服务", "找人工"], "term": "handoff_to_human", "label": "转人工", "category": "actions", "slot_field": "action_type", "intent_hint": "handoff" },
+  { "patterns": ["投诉", "我要投诉"], "term": "complaint", "label": "投诉", "category": "actions", "slot_field": "action_type", "intent_hint": "complaint" },
+  { "patterns": ["不要再打了", "别再打了", "不要打了"], "term": "do_not_call", "label": "拒绝外呼", "category": "actions", "slot_field": "action_type", "intent_hint": "do_not_call" }
+]

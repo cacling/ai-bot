@@ -1,0 +1,10 @@
+[
+  { "patterns": ["没网", "断网", "没有网络", "上不了网", "连不上网"], "term": "data_service_issue", "label": "数据业务异常", "category": "network", "slot_field": "network_issue_type" },
+  { "patterns": ["信号差", "信号弱", "信号不好", "没信号", "没有信号"], "term": "coverage_issue", "label": "信号覆盖问题", "category": "network", "slot_field": "network_issue_type" },
+  { "patterns": ["网速慢", "网很慢", "网络慢", "速度慢", "太慢了"], "term": "low_throughput_issue", "label": "网速异常", "category": "network", "slot_field": "network_issue_type" },
+  { "patterns": ["打不了电话", "打不出去", "电话打不了", "不能打电话", "接不了电话"], "term": "voice_service_issue", "label": "语音业务异常", "category": "network", "slot_field": "network_issue_type" },
+  { "patterns": ["掉线", "老断线", "老掉线", "不稳定"], "term": "unstable_connection", "label": "连接不稳定", "category": "network", "slot_field": "network_issue_type" },
+  { "patterns": ["收不到短信", "短信收不到"], "term": "sms_delivery_issue", "label": "短信接收异常", "category": "network", "slot_field": "network_issue_type" },
+  { "patterns": ["漫游没网", "出国没网", "国外没信号"], "term": "roaming_data_issue", "label": "漫游数据异常", "category": "network", "slot_field": "network_issue_type" },
+  { "patterns": ["5G变4G", "5G降4G", "降到4G了"], "term": "network_fallback", "label": "网络制式回落", "category": "network", "slot_field": "network_issue_type" }
+]

@@ -1,0 +1,7 @@
+[
+  { "patterns": ["验证码", "短信码", "短信验证码"], "term": "otp", "label": "短信验证码", "category": "identity", "slot_field": "service_subtype" },
+  { "patterns": ["收不到验证码", "验证码收不到", "没收到验证码"], "term": "otp_delivery_issue", "label": "验证码接收异常", "category": "identity", "slot_field": "issue_type" },
+  { "patterns": ["登录不上", "登不上", "登不进去", "登录失败", "进不去"], "term": "login_failure", "label": "登录失败", "category": "identity", "slot_field": "issue_type" },
+  { "patterns": ["账号锁了", "被锁了", "账号被锁"], "term": "account_locked", "label": "账号锁定", "category": "identity", "slot_field": "account_state" },
+  { "patterns": ["闪退", "app闪退", "应用闪退"], "term": "app_crash", "label": "应用闪退", "category": "identity", "slot_field": "issue_type" }
+]

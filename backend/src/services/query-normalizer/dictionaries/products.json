@@ -1,0 +1,10 @@
+[
+  { "patterns": ["套餐", "资费", "月租套餐", "我的套餐"], "term": "plan", "label": "套餐", "category": "products", "slot_field": "service_category" },
+  { "patterns": ["流量包", "加油包", "叠加包", "流量加油包"], "term": "data_add_on", "label": "流量叠加包", "category": "products", "slot_field": "service_subtype" },
+  { "patterns": ["视频包", "视频会员", "会员包", "视频VIP"], "term": "value_added_service.video", "label": "视频类增值业务", "category": "products", "slot_field": "service_subtype" },
+  { "patterns": ["增值业务", "增值服务"], "term": "value_added_service", "label": "增值业务", "category": "products", "slot_field": "service_category" },
+  { "patterns": ["宽带", "家宽", "光纤", "家庭宽带"], "term": "broadband_service", "label": "宽带业务", "category": "products", "slot_field": "service_category" },
+  { "patterns": ["副卡", "副号", "附属卡"], "term": "secondary_sim", "label": "副卡", "category": "products", "slot_field": "service_subtype" },
+  { "patterns": ["家庭套餐", "融合套餐", "家庭共享"], "term": "family_plan", "label": "家庭融合套餐", "category": "products", "slot_field": "service_subtype" },
+  { "patterns": ["漫游包", "国际漫游", "漫游流量"], "term": "roaming_package", "label": "漫游套餐包", "category": "products", "slot_field": "service_subtype" }
+]
