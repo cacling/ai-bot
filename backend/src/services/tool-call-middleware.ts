@@ -10,7 +10,6 @@ import { generateText } from 'ai';
 import { siliconflow } from '../engine/llm';
 import { getSkillContent, getToolSkillMap, getToolToSkillsMap } from '../engine/skills';
 import { normalizeMonthParam } from './query-normalizer/month';
-import { resolveTime } from './query-normalizer/time-resolver';
 import { logger } from './logger';
 
 // ── 配置 ─────────────────────────────────────────────────────────────────────
@@ -94,36 +93,10 @@ export function preprocessToolCall(input: ToolCallInput): ToolCallPreResult {
     }
   }
 
-  // 语音通道：用 resolveTime 从用户最后一句话中解析时间意图，辅助修正 month
-  // 场景：用户说"这个月为什么比上个月贵"，GLM 可能传错 month
-  if (input.channel !== 'online' && input.lastUserMessage && typeof args.month === 'string') {
-    const timeResult = resolveTime(input.lastUserMessage);
-    if (timeResult.matches.length > 0) {
-      // 取用户话语中第一个时间表达
-      const firstTime = timeResult.matches[0].slot;
-      if (firstTime.kind === 'natural_month') {
-        const userIntendedMonth = firstTime.value; // e.g. "2026-03"
-        // 对 analyze_bill_anomaly：month 应是"要分析的当月"（较大的月份）
-        // 如果用户说"这个月为什么贵"，month 应是当前月，不是上个月
-        if (input.toolName === 'analyze_bill_anomaly' && args.month !== userIntendedMonth) {
-          // 用户话语中有两个时间（"这个月比上个月"），取较大的
-          const allMonths = timeResult.matches
-            .filter(m => m.slot.kind === 'natural_month')
-            .map(m => m.slot.value)
-            .sort();
-          const bestMonth = allMonths[allMonths.length - 1]; // 最大月份
-          if (bestMonth && bestMonth !== args.month) {
-            logger.info('tool-middleware', 'month_corrected_by_user_intent', {
-              channel: input.channel, tool: input.toolName,
-              glmMonth: args.month, userIntended: bestMonth,
-              userMessage: input.lastUserMessage.slice(0, 60),
-            });
-            args.month = bestMonth;
-          }
-        }
-      }
-    }
-  }
+  // 注意：语音通道不做基于 lastUserMessage 的 month 修正。
+  // 原因：语音通道的转写和工具调用是异步并行的，当 function_call_arguments.done
+  // 触发时，当前轮的转写可能还没完成，lastUserMessage 是上一轮的内容，
+  // 用过时的上下文修正会适得其反。月份格式标准化（normalizeMonthParam）已足够。
 
   // Skill 推断 + 加载
   const skillName = inferSkillName(input.toolName, input.activeSkillName);
