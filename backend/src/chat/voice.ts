@@ -468,7 +468,7 @@ voice.get(
               let toolOutput: string;
               if (processed.spokenText) {
                 // 成功：包装朗读指令
-                toolOutput = `请直接朗读以下内容，不要添加、修改或省略任何内容：\n\n${processed.spokenText}`;
+                toolOutput = processed.spokenText;
                 logger.info('voice', 'processor_success', { session: sessionId, tool: toolName, skill: processed.skillName, chars: processed.spokenText.length });
               } else {
                 // Fallback：文字 LLM 失败，降级到原始行为

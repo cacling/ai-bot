@@ -444,7 +444,7 @@ outbound.get(
 
               let toolOutput: string;
               if (processed.spokenText) {
-                toolOutput = `请直接朗读以下内容，不要添加、修改或省略任何内容：\n\n${processed.spokenText}`;
+                toolOutput = processed.spokenText;
                 logger.info('outbound', 'processor_success', { session: sessionId, tool: toolName, skill: processed.skillName, chars: processed.spokenText.length });
               } else {
                 toolOutput = toolResult;
