@@ -1,7 +1,9 @@
 /**
- * McpToolEditor.tsx — Tool Studio 工具编辑器
+ * McpToolEditor.tsx — Tool Contract Studio
  *
- * 6 步骤流程：概览 / 输入契约 / 输出契约 / 实现方式 / Mock 场景 / 测试与发布
+ * 6 步骤流程（严格 MCP 对齐）：
+ * Contract 组: Contract / Input Schema / Output Schema
+ * Implementation 组: Implementation / Mock Scenarios / Validation
  * 三栏布局：左导航 + 中编辑区 + 右摘要栏
  */
 import React, { useState, useEffect } from 'react';
@@ -43,13 +45,15 @@ interface Props {
 
 type Step = 'overview' | 'input' | 'output' | 'impl' | 'mock' | 'test';
 
-const STEPS: Array<{ id: Step; label: string }> = [
-  { id: 'overview', label: '概览' },
-  { id: 'input', label: '输入契约' },
-  { id: 'output', label: '输出契约' },
-  { id: 'impl', label: '实现方式' },
-  { id: 'mock', label: 'Mock 场景' },
-  { id: 'test', label: '测试与发布' },
+type StepGroup = 'contract' | 'implementation';
+
+const STEPS: Array<{ id: Step; label: string; group: StepGroup }> = [
+  { id: 'overview', label: 'Contract', group: 'contract' },
+  { id: 'input', label: 'Input Schema', group: 'contract' },
+  { id: 'output', label: 'Output Schema', group: 'contract' },
+  { id: 'impl', label: 'Implementation', group: 'implementation' },
+  { id: 'mock', label: 'Mock Scenarios', group: 'implementation' },
+  { id: 'test', label: 'Validation', group: 'implementation' },
 ];
 
 export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServer }: Props) {
@@ -121,7 +125,7 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
             {tool.mocked ? 'Mock' : 'Real'}
           </Badge>
           <Badge variant={tool.impl_type ? 'outline' : 'destructive'} className="text-[10px] px-2">
-            {tool.impl_type === 'script' ? '脚本' : tool.impl_type === 'db' ? 'DB' : tool.impl_type === 'api' ? 'API' : '未配置'}
+            {tool.impl_type === 'script' ? 'Script' : tool.impl_type === 'api' ? 'API' : tool.impl_type ?? '未配置'}
           </Badge>
           <Badge variant={tool.output_schema ? 'outline' : 'destructive'} className="text-[10px] px-2">
             {tool.output_schema ? '契约已定义' : '契约未定义'}
@@ -135,7 +139,9 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
         <ResizablePanel id="tool-left" defaultSize="15%" minSize="10%" maxSize="25%">
         <div className="h-full border-r bg-background flex flex-col">
           <div className="p-4 space-y-1 flex-1">
-            {STEPS.map((s, i) => {
+            {/* Contract 组 */}
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 pt-1 pb-1">Tool Contract</div>
+            {STEPS.filter(s => s.group === 'contract').map((s, i) => {
               const status = stepStatus(s.id);
               const isCurrent = status === 'current';
               return (
@@ -148,7 +154,6 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
                       : 'hover:bg-accent text-foreground'
                   }`}
                 >
-                  {/* Status icon with ring for current */}
                   <span className={`flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold ${
                     status === 'done' ? 'bg-emerald-100 text-emerald-600' :
                     status === 'warning' ? 'bg-amber-100 text-amber-600' :
@@ -158,6 +163,37 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
                     {status === 'done' ? <Check size={12} /> :
                      status === 'warning' ? <AlertTriangle size={10} /> :
                      <span>{i + 1}</span>}
+                  </span>
+                  <span className="text-xs">{s.label}</span>
+                </button>
+              );
+            })}
+            {/* Implementation 组 */}
+            <div className="border-t my-2" />
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 pt-1 pb-1">Implementation</div>
+            {STEPS.filter(s => s.group === 'implementation').map((s, i) => {
+              const globalIdx = STEPS.findIndex(st => st.id === s.id);
+              const status = stepStatus(s.id);
+              const isCurrent = status === 'current';
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setStep(s.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg text-left transition-all ${
+                    isCurrent
+                      ? 'bg-primary/10 text-primary font-semibold shadow-sm'
+                      : 'hover:bg-accent text-foreground'
+                  }`}
+                >
+                  <span className={`flex-shrink-0 flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold ${
+                    status === 'done' ? 'bg-emerald-100 text-emerald-600' :
+                    status === 'warning' ? 'bg-amber-100 text-amber-600' :
+                    isCurrent ? 'bg-primary text-primary-foreground ring-2 ring-primary/20' :
+                    'bg-muted text-muted-foreground'
+                  }`}>
+                    {status === 'done' ? <Check size={12} /> :
+                     status === 'warning' ? <AlertTriangle size={10} /> :
+                     <span>{globalIdx + 1}</span>}
                   </span>
                   <span className="text-xs">{s.label}</span>
                 </button>
@@ -269,15 +305,15 @@ function OverviewStep({ tool, servers, onUpdated }: { tool: McpToolRecord; serve
 
   type StatusLevel = 'done' | 'warn' | 'empty';
   const statusItems: Array<{ label: string; level: StatusLevel; detail?: string }> = [
-    { label: '输入契约', level: tool.input_schema ? 'done' : 'empty' },
-    { label: '输出契约', level: tool.output_schema ? 'done' : 'empty' },
+    { label: 'Input Schema', level: tool.input_schema ? 'done' : 'empty' },
+    { label: 'Output Schema', level: tool.output_schema ? 'done' : 'empty' },
     {
-      label: 'Real 实现',
+      label: 'Implementation',
       level: tool.impl_type ? 'done' : 'empty',
       detail: tool.impl_type ? undefined : '未配置',
     },
     {
-      label: 'Mock 对齐',
+      label: 'Mock Alignment',
       level: mockRules.length === 0 ? 'empty' : allMocksAligned ? 'done' : 'warn',
       detail: mockRules.length === 0 ? '无场景' : someMocksDrifted ? '有漂移' : undefined,
     },
@@ -346,7 +382,7 @@ function OverviewStep({ tool, servers, onUpdated }: { tool: McpToolRecord; serve
           </div>
           <div className="text-[11px]">
             <span className="text-muted-foreground block mb-0.5">实现方式</span>
-            <span className="font-medium">{tool.impl_type === 'script' ? '脚本' : tool.impl_type === 'db' ? 'DB' : tool.impl_type === 'api' ? 'API' : '未配置'}</span>
+            <span className="font-medium">{tool.impl_type === 'script' ? 'Script' : tool.impl_type === 'api' ? 'API' : tool.impl_type ?? '未配置'}</span>
           </div>
           <div className="text-[11px]">
             <span className="text-muted-foreground block mb-0.5">Mock 场景</span>
@@ -571,18 +607,11 @@ const IMPL_OPTIONS = [
     detail: 'TypeScript handler，完全自定义实现',
   },
   {
-    value: 'db',
-    label: 'DB Binding',
-    icon: <Database size={18} />,
-    desc: '适合简单查询、单表 CRUD',
-    detail: '声明式配置，自动生成 SQL',
-  },
-  {
     value: 'api',
-    label: 'API',
+    label: 'API Proxy',
     icon: <Settings2 size={18} />,
-    desc: '适合调用外部系统能力',
-    detail: 'REST API 代理，支持超时和 Header',
+    desc: '调用 mock_apis 或真实后端系统',
+    detail: 'REST API 代理，demo 阶段指向 mock_apis，生产替换为真实 URL',
   },
 ];
 
@@ -742,8 +771,7 @@ function ImplStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
         </div>
       )}
 
-      {/* DB Binding */}
-      {implType === 'db' && <DbBindingPanel toolId={tool.id} config={tool.execution_config} outputSchema={(tool.output_schema_content ?? null) as Record<string, unknown> | null} onUpdated={onUpdated} />}
+      {/* DB Binding 已移除（重构2：MCP Server 内部直查 SQLite 作为 demo backend） */}
 
       {/* API */}
       {implType === 'api' && <ApiPanel toolId={tool.id} config={tool.execution_config} outputSchema={(tool.output_schema_content ?? null) as Record<string, unknown> | null} onUpdated={onUpdated} />}
@@ -1080,10 +1108,10 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
   };
 
   const checks = [
-    { label: '输入契约已定义', ok: !!tool.input_schema },
-    { label: '输出契约已定义', ok: !!tool.output_schema },
-    { label: 'Real 实现已配置', ok: !!tool.impl_type },
-    { label: '至少一条 Mock 场景', ok: !!tool.mock_rules },
+    { label: 'Input Schema 已定义', ok: !!tool.input_schema },
+    { label: 'Output Schema 已定义', ok: !!tool.output_schema },
+    { label: 'Implementation 已配置', ok: !!tool.impl_type },
+    { label: '至少一条 Mock Scenario', ok: !!tool.mock_rules },
     { label: '最近测试通过', ok: result?.success === true && result?.contractValid !== false },
   ];
   const allGreen = checks.every(c => c.ok);
@@ -1221,25 +1249,25 @@ function SummarySidebar({ tool, servers }: { tool: McpToolRecord; servers: McpSe
   // Risk checks
   const risks: string[] = [];
   if (!tool.output_schema) risks.push('输出契约未定义');
-  if (!tool.impl_type) risks.push('Real 实现未配置');
+  if (!tool.impl_type) risks.push('Implementation 未配置');
   if (tool.impl_type && mockRules.length === 0) risks.push('无 Mock 场景');
 
   return (
     <div className="space-y-5 text-xs">
       <div>
-        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">工具摘要</h3>
+        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">Tool Summary</h3>
         <div className="space-y-1.5">
           <div className="flex justify-between"><span className="text-muted-foreground">Server</span><span className="font-medium">{servers.find(s => s.id === tool.server_id)?.name ?? '—'}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">模式</span><Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[9px]">{tool.mocked ? 'Mock' : 'Real'}</Badge></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">实现</span><span className="font-medium">{tool.impl_type === 'script' ? '脚本' : tool.impl_type === 'db' ? 'DB' : tool.impl_type === 'api' ? 'API' : '—'}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Mode</span><Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[9px]">{tool.mocked ? 'Mock' : 'Real'}</Badge></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Adapter</span><span className="font-medium">{tool.impl_type === 'script' ? 'Script' : tool.impl_type === 'api' ? 'API Proxy' : '—'}</span></div>
         </div>
       </div>
 
       <div className="border-t pt-4">
-        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">契约状态</h3>
+        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">Contract Status</h3>
         <div className="space-y-1.5">
-          <div className="flex justify-between"><span className="text-muted-foreground">输入契约</span><Badge variant={tool.input_schema ? 'default' : 'outline'} className="text-[9px]">{tool.input_schema ? `${inputFieldCount} 个参数` : '未定义'}</Badge></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">输出契约</span><Badge variant={tool.output_schema ? 'default' : 'destructive'} className="text-[9px]">{tool.output_schema ? `${outputFieldCount} 个字段` : '未定义'}</Badge></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Input Schema</span><Badge variant={tool.input_schema ? 'default' : 'outline'} className="text-[9px]">{tool.input_schema ? `${inputFieldCount} params` : '未定义'}</Badge></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Output Schema</span><Badge variant={tool.output_schema ? 'default' : 'destructive'} className="text-[9px]">{tool.output_schema ? `${outputFieldCount} fields` : '未定义'}</Badge></div>
         </div>
       </div>
 
@@ -1290,168 +1318,6 @@ function SummarySidebar({ tool, servers }: { tool: McpToolRecord; servers: McpSe
   );
 }
 
-// ── DB Binding Panel ─────────────────────────────────────────────────────────
-
-function DbBindingPanel({ toolId, config, outputSchema, onUpdated }: { toolId: string; config: string | null; outputSchema: Record<string, unknown> | null; onUpdated: () => void }) {
-  const existing = config ? JSON.parse(config) as Record<string, any> : {};
-  const dbCfg = existing.db ?? {};
-
-  const [table, setTable] = useState<string>(dbCfg.table ?? '');
-  const [operation, setOperation] = useState<string>(dbCfg.operation ?? 'select_one');
-  const [conditions, setConditions] = useState<Array<{ param: string; column: string; op: string }>>(dbCfg.where ?? []);
-  const [selectedColumns, setSelectedColumns] = useState<string[]>(dbCfg.columns ?? []);
-  const [tables, setTables] = useState<string[]>([]);
-  const [columns, setColumns] = useState<Array<{ name: string; type: string }>>([]);
-  const [sqlPreview, setSqlPreview] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [notFoundStrategy, setNotFoundStrategy] = useState<string>(dbCfg.not_found_strategy ?? 'error');
-
-  useEffect(() => { fetch('/api/mcp/resources/db-schema/tables').then(r => r.json()).then(d => setTables(d.tables ?? [])).catch(() => {}); }, []);
-  useEffect(() => { if (!table) { setColumns([]); return; } fetch(`/api/mcp/resources/db-schema/columns?table=${table}`).then(r => r.json()).then(d => setColumns(d.columns ?? [])).catch(() => {}); }, [table]);
-  useEffect(() => { if (!table) { setSqlPreview(''); return; } mcpApi.sqlPreview(toolId, { table, operation, where: conditions, columns: selectedColumns }).then(r => setSqlPreview(r.sql)).catch(() => setSqlPreview('')); }, [table, operation, conditions, selectedColumns, toolId]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try { await mcpApi.updateExecutionConfig(toolId, { impl_type: 'db', db: { table, operation, where: conditions, columns: selectedColumns, not_found_strategy: notFoundStrategy } }); onUpdated(); }
-    catch (e) { alert(`保存失败: ${e}`); } finally { setSaving(false); }
-  };
-
-  // Contract alignment: compare selected DB columns vs output_schema fields
-  const schemaFields = extractSchemaFields(outputSchema);
-  const dbColumnNames = selectedColumns.length > 0 ? selectedColumns : [];
-  const alignment = schemaFields.length > 0 && dbColumnNames.length > 0
-    ? compareAlignment(schemaFields, dbColumnNames)
-    : null;
-
-  return (
-    <div className="space-y-4">
-      {/* 1. 资源 */}
-      <div className="bg-background rounded-xl border p-5 space-y-3">
-        <h3 className="text-sm font-semibold">数据库资源</h3>
-        <div className="text-[11px] bg-muted p-3 rounded-lg space-y-1">
-          <div className="flex justify-between"><span className="text-muted-foreground">类型</span><span className="font-medium">本地 SQLite (business_db)</span></div>
-          {existing.resource_id && <div className="flex justify-between"><span className="text-muted-foreground">资源 ID</span><span className="font-mono">{existing.resource_id}</span></div>}
-        </div>
-      </div>
-
-      {/* 2. 查询定义 */}
-      <div className="bg-background rounded-xl border p-5 space-y-4">
-        <h3 className="text-sm font-semibold">查询定义</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">表</label>
-            <Select value={table} onValueChange={v => { if (v) { setTable(v); setSelectedColumns([]); } }}>
-              <SelectTrigger className="text-xs h-8 font-mono"><SelectValue placeholder="选择表" /></SelectTrigger>
-              <SelectContent>{tables.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">操作</label>
-            <Select value={operation} onValueChange={v => { if (v) setOperation(v); }}>
-              <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="select_one">查询单条</SelectItem>
-                <SelectItem value="select_many">查询多条</SelectItem>
-                <SelectItem value="update_one">更新单条</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* 条件 */}
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1 block">条件映射</label>
-          {conditions.map((w, i) => (
-            <div key={i} className="flex gap-1.5 items-center mb-1">
-              <Input value={w.param} onChange={e => { const n = [...conditions]; n[i] = { ...n[i], param: e.target.value }; setConditions(n); }} placeholder="工具参数" className="w-28 text-[11px] font-mono" />
-              <span className="text-xs">=</span>
-              <Select value={w.column || ''} onValueChange={v => { if (!v) return; const n = [...conditions]; n[i] = { ...n[i], column: v }; setConditions(n); }}>
-                <SelectTrigger className="w-36 text-[11px] font-mono h-7"><SelectValue placeholder="表字段" /></SelectTrigger>
-                <SelectContent>{columns.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
-              <Button variant="ghost" size="icon-xs" className="text-destructive" onClick={() => setConditions(conditions.filter((_, j) => j !== i))}><Trash2 size={11} /></Button>
-            </div>
-          ))}
-          <Button variant="ghost" size="xs" onClick={() => setConditions([...conditions, { param: '', column: '', op: '=' }])}><Plus size={11} /> 添加</Button>
-        </div>
-
-        {/* 返回字段 */}
-        {columns.length > 0 && (
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">返回字段</label>
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
-              {columns.map(c => {
-                const isSchemaField = schemaFields.includes(c.name);
-                return (
-                  <label key={c.name} className={`flex items-center gap-1 text-[11px] font-mono cursor-pointer ${isSchemaField ? 'font-medium' : ''}`}>
-                    <input type="checkbox" checked={selectedColumns.includes(c.name)} onChange={e => setSelectedColumns(e.target.checked ? [...selectedColumns, c.name] : selectedColumns.filter(n => n !== c.name))} className="size-3 rounded" />
-                    {c.name}
-                    {isSchemaField && <span className="text-[9px] text-emerald-500 ml-0.5">契约</span>}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {sqlPreview && <div><label className="text-xs font-medium text-muted-foreground mb-1 block">SQL 预览</label><pre className="text-[11px] font-mono bg-muted p-3 rounded-lg">{sqlPreview}</pre></div>}
-      </div>
-
-      {/* 3. 输出映射 */}
-      {schemaFields.length > 0 && selectedColumns.length > 0 && (
-        <div className="bg-background rounded-xl border p-5 space-y-3">
-          <h3 className="text-sm font-semibold">输出映射</h3>
-          <p className="text-[11px] text-muted-foreground">DB 返回字段与输出契约的对应关系</p>
-          <div className="space-y-1">
-            {schemaFields.map(field => {
-              const isDirectMatch = selectedColumns.includes(field);
-              return (
-                <div key={field} className="flex items-center gap-2 text-[11px] py-1 border-b last:border-0">
-                  <span className="font-mono w-32 text-right text-muted-foreground">{isDirectMatch ? field : '—'}</span>
-                  <span className="text-muted-foreground/40">→</span>
-                  <span className={`font-mono font-medium ${isDirectMatch ? '' : 'text-amber-600'}`}>{field}</span>
-                  {isDirectMatch
-                    ? <Badge variant="default" className="text-[8px] ml-auto">直接</Badge>
-                    : <Badge variant="secondary" className="text-[8px] ml-auto">派生</Badge>
-                  }
-                </div>
-              );
-            })}
-          </div>
-          {alignment && <ContractAlignmentCard alignment={alignment} title="DB 字段覆盖" />}
-        </div>
-      )}
-
-      {/* 4. 失败策略 */}
-      <div className="bg-background rounded-xl border p-5 space-y-3">
-        <h3 className="text-sm font-semibold">失败策略</h3>
-        <p className="text-[11px] text-muted-foreground">查不到记录时如何返回</p>
-        <div className="space-y-1.5">
-          {([
-            { value: 'error', label: 'success: false + 错误消息' },
-            { value: 'empty', label: 'success: true, data: null' },
-            { value: 'default', label: 'success: true, data: {} 空对象' },
-          ] as const).map(opt => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setNotFoundStrategy(opt.value)}
-              className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition-colors ${
-                notFoundStrategy === opt.value
-                  ? 'border-primary bg-primary/5 font-medium'
-                  : 'border-border hover:bg-accent'
-              }`}
-            >
-              <code className="bg-muted px-1 rounded">{opt.label}</code>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex justify-end"><Button size="sm" onClick={handleSave} disabled={saving}><Save size={12} /> 保存</Button></div>
-    </div>
-  );
-}
 
 // ── API Panel ────────────────────────────────────────────────────────────────
 

@@ -20,7 +20,7 @@ interface Props {
 }
 
 export function OverviewModule({ server, resources, tools, onNavigate, onOpenTool }: Props) {
-  // ── 连接资源依赖 ──────────────────────────────────────────────────────────
+  // ── 连接器依赖 ──────────────────────────────────────────────────────────
   const resourceDist = {
     remote_mcp: resources.filter(r => r.type === 'remote_mcp').length,
     db: resources.filter(r => r.type === 'db').length,
@@ -30,9 +30,8 @@ export function OverviewModule({ server, resources, tools, onNavigate, onOpenToo
   // ── 工具实现分布 ──────────────────────────────────────────────────────────
   const toolImpl = {
     script: tools.filter(t => t.impl_type === 'script').length,
-    db: tools.filter(t => t.impl_type === 'db').length,
     api: tools.filter(t => t.impl_type === 'api').length,
-    unconfigured: tools.filter(t => !t.impl_type).length,
+    unconfigured: tools.filter(t => !t.impl_type || t.impl_type === 'db').length,
   };
 
   // ── 工具就绪状态 ──────────────────────────────────────────────────────────
@@ -61,14 +60,14 @@ export function OverviewModule({ server, resources, tools, onNavigate, onOpenToo
         <p className="text-xs text-muted-foreground">{server.description}</p>
       )}
 
-      {/* ── 连接资源 vs 工具实现 并排 ──────────────────────────────────────── */}
+      {/* ── 连接器 vs 工具实现 并排 ──────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3">
-        {/* 连接资源依赖 */}
+        {/* 连接器依赖 */}
         <Card className="cursor-pointer hover:border-primary/30 transition-colors" onClick={() => onNavigate('resources')}>
           <CardContent className="pt-3 pb-3 px-4">
             <div className="flex items-center gap-2 mb-2">
               <Globe size={14} className="text-muted-foreground" />
-              <span className="text-xs font-medium">连接资源</span>
+              <span className="text-xs font-medium">连接器</span>
               <span className="ml-auto text-lg font-semibold">{resources.length}</span>
             </div>
             <div className="space-y-1">
@@ -90,7 +89,7 @@ export function OverviewModule({ server, resources, tools, onNavigate, onOpenToo
                   <span className="text-muted-foreground">{resourceDist.api} 个 API 端点</span>
                 </div>
               )}
-              {resources.length === 0 && <span className="text-[11px] text-muted-foreground">暂无资源</span>}
+              {resources.length === 0 && <span className="text-[11px] text-muted-foreground">暂无连接器</span>}
             </div>
           </CardContent>
         </Card>
@@ -108,12 +107,6 @@ export function OverviewModule({ server, resources, tools, onNavigate, onOpenToo
                 <div className="flex items-center gap-2 text-[11px]">
                   <Badge variant="outline" className="text-[9px] px-1.5">脚本</Badge>
                   <span className="text-muted-foreground">{toolImpl.script} 个通过 Remote MCP 执行</span>
-                </div>
-              )}
-              {toolImpl.db > 0 && (
-                <div className="flex items-center gap-2 text-[11px]">
-                  <Badge variant="outline" className="text-[9px] px-1.5">DB</Badge>
-                  <span className="text-muted-foreground">{toolImpl.db} 个直接查库</span>
                 </div>
               )}
               {toolImpl.api > 0 && (
@@ -151,10 +144,10 @@ export function OverviewModule({ server, resources, tools, onNavigate, onOpenToo
         </CardContent>
       </Card>
 
-      {/* ── 资源影响面（blast radius）─────────────────────────────────────── */}
+      {/* ── 连接器影响面（blast radius）───────────────────────────────────── */}
       {resources.length > 0 && (
         <div>
-          <h4 className="text-xs font-medium text-muted-foreground mb-2">资源影响面</h4>
+          <h4 className="text-xs font-medium text-muted-foreground mb-2">连接器影响面</h4>
           <div className="space-y-1.5">
             {resources.map(r => {
               const toolCount = getToolsUsingResource(r.id);
@@ -183,7 +176,7 @@ export function OverviewModule({ server, resources, tools, onNavigate, onOpenToo
             <Tag size={12} /> 编辑基本信息
           </Button>
           <Button variant="outline" size="sm" onClick={() => onNavigate('resources')}>
-            <Database size={12} /> 管理资源
+            <Database size={12} /> 管理连接器
           </Button>
           <Button variant="outline" size="sm" onClick={() => onNavigate('health')}>
             <Activity size={12} /> 健康与同步

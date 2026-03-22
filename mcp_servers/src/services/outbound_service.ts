@@ -4,7 +4,7 @@
  *
  * 领域规则内置：PTP 日期校验、静默时段、结果分类标签、转化标签、DND 标记、SMS 类型校验
  */
-import { db, callbackTasks, mcpLog, startMcpHttpServer, z, McpServer } from "../shared/server.js";
+import { backendPost, mcpLog, startMcpHttpServer, z, McpServer } from "../shared/server.js";
 
 // ── 领域规则 ─────────────────────────────────────────────────────────────────
 const MAX_PTP_DAYS = 7;
@@ -97,10 +97,20 @@ function createServer(): McpServer {
     customer_name: z.string().optional().describe("客户姓名"),
     product_name: z.string().optional().describe("关联产品名称"),
   }, async ({ original_task_id, callback_phone, preferred_time, customer_name, product_name }) => {
-    const taskId = `CB-${Date.now().toString(36)}`;
-    mcpLog("outbound", "create_callback_task", { taskId, original_task_id, callback_phone, preferred_time });
-    await db.insert(callbackTasks).values({ task_id: taskId, original_task_id, customer_name: customer_name ?? "", callback_phone, preferred_time, product_name: product_name ?? "", created_at: new Date().toISOString(), status: "pending" });
-    return { content: [{ type: "text", text: JSON.stringify({ callback_task_id: taskId, original_task_id, callback_phone, preferred_time, customer_name: customer_name ?? null, product_name: product_name ?? null, status: "pending" }) }] };
+    mcpLog("outbound", "create_callback_task", { original_task_id, callback_phone, preferred_time });
+    try {
+      const res = await backendPost<{ success: boolean; callback_task_id?: string; [key: string]: any }>(
+        '/api/callback/create',
+        { original_task_id, callback_phone, preferred_time, customer_name, product_name }
+      );
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        callback_task_id: res.callback_task_id ?? `CB-${Date.now().toString(36)}`,
+        original_task_id, callback_phone, preferred_time,
+        customer_name: customer_name ?? null, product_name: product_name ?? null, status: "pending",
+      }) }] };
+    } catch (err) {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, message: String(err) }) }] };
+    }
   });
 
   // schema: campaign_id, phone, result, conversion_tag, is_dnd, dnd_note, is_callback, callback_time

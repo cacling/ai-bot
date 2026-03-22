@@ -1,30 +1,33 @@
 /**
- * McpServerConsole.tsx — MCP Server 控制台（替代 McpServerForm）
+ * McpServerConsole.tsx — MCP Server 控制台（严格 MCP 对齐）
  *
- * 5 模块：概览 / 基本信息 / 资源 / 工具摘要 / 健康与同步
+ * 7 模块：概览 / 基本信息 / 连接器 / 工具摘要 / MCP Resources / MCP Prompts / 健康与同步
  * 三栏布局：顶部页头 + 左侧导航 + 中间主内容
  */
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Save, LayoutDashboard, Tag, Database, Wrench, Activity, Zap, Plug, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Save, LayoutDashboard, Tag, Database, Wrench, Activity, Zap, Plug, RefreshCw, FileText, MessageSquare } from 'lucide-react';
 import { mcpApi, type McpServer, type McpResource, type McpToolRecord } from './api';
 import { OverviewModule } from './server-console/OverviewModule';
 import { IdentityModule } from './server-console/IdentityModule';
-import { ResourceModule } from './server-console/ResourceModule';
 import { ToolSummaryModule } from './server-console/ToolSummaryModule';
 import { HealthModule } from './server-console/HealthModule';
+import { McpResourcesModule } from './server-console/McpResourcesModule';
+import { McpPromptsModule } from './server-console/McpPromptsModule';
 import { Button } from '@/components/ui/button';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 
-type Module = 'overview' | 'identity' | 'resources' | 'tools' | 'health';
+type Module = 'overview' | 'identity' | 'resources' | 'tools' | 'mcp_resources' | 'mcp_prompts' | 'health';
 
-const MODULES: Array<{ id: Module; label: string; icon: React.ReactNode }> = [
+const MODULES: Array<{ id: Module; label: string; icon: React.ReactNode; group?: string }> = [
   { id: 'overview', label: '概览', icon: <LayoutDashboard size={14} /> },
   { id: 'identity', label: '基本信息', icon: <Tag size={14} /> },
-  { id: 'resources', label: '资源', icon: <Database size={14} /> },
-  { id: 'tools', label: '工具摘要', icon: <Wrench size={14} /> },
-  { id: 'health', label: '健康与同步', icon: <Activity size={14} /> },
+  { id: 'resources', label: '连接器', icon: <Plug size={14} />, group: 'impl' },
+  { id: 'tools', label: 'Discovered Tools', icon: <Wrench size={14} />, group: 'mcp' },
+  { id: 'mcp_resources', label: 'MCP Resources', icon: <FileText size={14} />, group: 'mcp' },
+  { id: 'mcp_prompts', label: 'MCP Prompts', icon: <MessageSquare size={14} />, group: 'mcp' },
+  { id: 'health', label: 'Health & Discovery', icon: <Activity size={14} /> },
 ];
 
 interface Props {
@@ -33,9 +36,10 @@ interface Props {
   onSaved: () => void;
   onCreated?: (newId: string) => void;
   onOpenTool?: (toolId: string, step?: string, fromServer?: string) => void;
+  onOpenConnectors?: () => void;
 }
 
-export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenTool }: Props) {
+export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenTool, onOpenConnectors }: Props) {
   const isEdit = !!serverId;
   const [module, setModule] = useState<Module>('overview');
 
@@ -105,7 +109,7 @@ export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenT
             <label className="text-xs font-medium text-muted-foreground mb-1 block">描述</label>
             <Input value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="服务描述" className="text-xs" />
           </div>
-          <p className="text-[11px] text-muted-foreground">创建后可在控制台中添加资源和管理工具。</p>
+          <p className="text-[11px] text-muted-foreground">创建后可在控制台中添加连接器和管理工具。</p>
         </div>
       </div>
     );
@@ -155,7 +159,7 @@ export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenT
           <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft size={14} /> 返回</Button>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleTestAll} disabled={testingAll || resources.length === 0}>
-              <Zap size={12} /> {testingAll ? '测试中...' : '测试全部资源'}
+              <Zap size={12} /> {testingAll ? '测试中...' : '测试全部连接器'}
             </Button>
             <Button variant="outline" size="sm" onClick={handleDiscoverAll} disabled={discoveringAll || resources.filter(r => r.type === 'remote_mcp').length === 0}>
               <Plug size={12} /> {discoveringAll ? '发现中...' : '重新发现工具'}
@@ -171,7 +175,7 @@ export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenT
         </div>
         <div className="flex items-center gap-3 mt-1.5">
           <Badge variant={statusInfo.variant} className="text-[10px]">{statusInfo.label}</Badge>
-          <span className="text-[11px] text-muted-foreground">资源 {resources.length}</span>
+          <span className="text-[11px] text-muted-foreground">连接器 {resources.length}</span>
           <span className="text-[11px] text-muted-foreground">工具 {tools.length}</span>
           {lastSync && <span className="text-[11px] text-muted-foreground">最近同步 {lastSync}</span>}
         </div>
@@ -226,12 +230,21 @@ export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenT
             />
           )}
           {module === 'resources' && (
-            <ResourceModule
-              serverId={server.id}
-              resources={resources}
-              tools={tools}
-              onUpdated={load}
-            />
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold">连接器</h3>
+              <p className="text-[11px] text-muted-foreground">
+                连接器（Connectors）是 Tool 实现层的后端连接依赖，已迁移到独立管理页面。
+              </p>
+              <Button variant="outline" size="sm" onClick={onOpenConnectors}>
+                <Plug size={12} /> 前往 Connectors 页面管理
+              </Button>
+              {resources.length > 0 && (
+                <div className="text-[11px] text-muted-foreground border rounded-lg p-3 bg-muted/30">
+                  当前 Server 关联 {resources.length} 个旧版连接器记录（mcp_resources 表）。
+                  请在 Connectors 页面中创建新的连接器并关联到对应的 Tool Implementation。
+                </div>
+              )}
+            </div>
           )}
           {module === 'tools' && (
             <ToolSummaryModule
@@ -239,6 +252,12 @@ export function McpServerConsole({ serverId, onBack, onSaved, onCreated, onOpenT
               serverName={server.name}
               onOpenTool={onOpenTool}
             />
+          )}
+          {module === 'mcp_resources' && (
+            <McpResourcesModule server={server} />
+          )}
+          {module === 'mcp_prompts' && (
+            <McpPromptsModule server={server} />
           )}
           {module === 'health' && (
             <HealthModule

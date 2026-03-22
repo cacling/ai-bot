@@ -327,12 +327,17 @@ export const mcpServers = sqliteTable('mcp_servers', {
   mocked_tools: text('mocked_tools'),
   mock_rules: text('mock_rules'),
   last_connected_at: text('last_connected_at'),
+  /** Server capabilities JSON（严格 MCP 对齐：记录 server 支持的 capabilities） */
+  capabilities: text('capabilities'),
+  /** 最近一次 discover 时间 */
+  last_discovered_at: text('last_discovered_at'),
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
   updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
 });
 
-// ── MCP 资源（Server 下的连接资源）──────────────────────────────────────────
+// ── @deprecated 迁移到 connectors 表。保留期间仍可读写，待 Phase 9 清理完成后删除 ──
 
+/** @deprecated Use `connectors` table instead. See docs/glossary.md */
 export const mcpResources = sqliteTable('mcp_resources', {
   id: text('id').primaryKey(),
   server_id: text('server_id').notNull(),
@@ -369,20 +374,126 @@ export const mcpResources = sqliteTable('mcp_resources', {
 export const mcpTools = sqliteTable('mcp_tools', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
+  /** 可读标题（严格 MCP 对齐） */
+  title: text('title'),
   description: text('description').notNull().default(''),
   server_id: text('server_id'),
-  /** Real 实现类型：'script' | 'db' | 'api' | null（未配置） */
+  /** @deprecated 迁移到 tool_implementations.adapter_type，过渡期保留 */
   impl_type: text('impl_type'),
   input_schema: text('input_schema'),
-  /** 输出 Schema（JSON Schema），用于 Mock/Real 契约校验 */
   output_schema: text('output_schema'),
+  /** @deprecated 迁移到 tool_implementations.config，过渡期保留 */
   execution_config: text('execution_config'),
-  /** 脚本模式：handler key（如 'user_info.query_subscriber'） */
+  /** @deprecated 迁移到 tool_implementations.handler_key，过渡期保留 */
   handler_key: text('handler_key'),
   mock_rules: text('mock_rules'),
   mocked: integer('mocked', { mode: 'boolean' }).notNull().default(false),
   disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
   response_example: text('response_example'),
+  /** Tool 语义标注 JSON（readOnlyHint, idempotentHint, openWorldHint） */
+  annotations: text('annotations'),
+  /** 来源：'discovered' = 从 MCP Server 发现 | 'local_managed' = 本地管理 */
+  origin: text('origin'),
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
   updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 严格 MCP 对齐：新增三层架构表
+// 参考：docs/glossary.md
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── 实现层：连接器（原 mcp_resources 中的 DB/API/Remote MCP 连接）──────────
+
+export const connectors = sqliteTable('connectors', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  /** 'db' | 'api' | 'remote_mcp' */
+  type: text('type').notNull(),
+  /** 统一配置 JSON（取代 mcp_resources 中的 db/api/mcp 字段） */
+  config: text('config'),
+  status: text('status').notNull().default('active'),
+  description: text('description'),
+  env_json: text('env_json'),
+  env_prod_json: text('env_prod_json'),
+  env_test_json: text('env_test_json'),
+  /** 可选：归属哪个本地 runtime 域 */
+  server_id: text('server_id'),
+  /** 迁移追踪：原 mcp_resources.id */
+  migrated_from: text('migrated_from'),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// ── 实现层：工具实现（从 mcp_tools.execution_config 拆出）─────────────────
+
+export const toolImplementations = sqliteTable('tool_implementations', {
+  id: text('id').primaryKey(),
+  /** 对应 mcp_tools.id */
+  tool_id: text('tool_id').notNull(),
+  /** 托管此工具的本地 MCP Server */
+  host_server_id: text('host_server_id'),
+  /** 'script' | 'db_binding' | 'api_proxy' */
+  adapter_type: text('adapter_type').notNull(),
+  /** 依赖的 connector */
+  connector_id: text('connector_id'),
+  /** 实现配置 JSON */
+  config: text('config'),
+  /** 脚本模式：handler key */
+  handler_key: text('handler_key'),
+  status: text('status').notNull().default('active'),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// ── Skill 编排层：技能-工具绑定（显式化 Skill→Tool 关系）──────────────────
+
+export const skillToolBindings = sqliteTable('skill_tool_bindings', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  skill_id: text('skill_id').notNull(),
+  tool_name: text('tool_name').notNull(),
+  /** 在 Tool Call Plan 中的顺序 */
+  call_order: integer('call_order'),
+  /** 'query' | 'action' | 'check' */
+  purpose: text('purpose'),
+  /** 触发条件描述 */
+  trigger_condition: text('trigger_condition'),
+  /** 参数映射规则 JSON：{ skill_param → tool_param } */
+  arg_mapping: text('arg_mapping'),
+  /** 结果后处理规则 JSON */
+  result_mapping: text('result_mapping'),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// ── MCP 协议层：Prompt 目录（来自 prompts/list 发现）─────────────────────
+
+export const mcpPrompts = sqliteTable('mcp_prompts', {
+  id: text('id').primaryKey(),
+  server_id: text('server_id').notNull(),
+  name: text('name').notNull(),
+  title: text('title'),
+  description: text('description'),
+  /** Prompt 参数定义 JSON Schema */
+  arguments_schema: text('arguments_schema'),
+  /** 可选元数据 JSON */
+  annotations: text('annotations'),
+  discovered_at: text('discovered_at'),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+  updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
+});
+
+// ── MCP 协议层：Server 同步记录 ──────────────────────────────────────────
+
+export const mcpServerSyncRuns = sqliteTable('mcp_server_sync_runs', {
+  id: text('id').primaryKey(),
+  server_id: text('server_id').notNull(),
+  /** 'discover' | 'health' */
+  kind: text('kind').notNull(),
+  /** 'success' | 'error' | 'running' */
+  status: text('status').notNull(),
+  /** 摘要 JSON（tools_count, resources_count, prompts_count 等） */
+  summary: text('summary'),
+  error_message: text('error_message'),
+  started_at: text('started_at'),
+  finished_at: text('finished_at'),
 });

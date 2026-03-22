@@ -13,7 +13,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../../../db';
-import { mcpTools, mcpResources, mcpServers } from '../../../db/schema';
+import { mcpTools, mcpResources, mcpServers, toolImplementations, connectors } from '../../../db/schema';
 import { nanoid } from '../../../db/nanoid';
 import { logger } from '../../../services/logger';
 import { REPO_ROOT } from '../../../services/paths';
@@ -401,6 +401,84 @@ app.post('/infer-schema', async (c) => {
 
   const schema = inferSchema(body.example as Record<string, unknown>);
   return c.json({ schema });
+});
+
+// ── Tool Implementation CRUD（严格 MCP 对齐：契约与实现分离）──────────────
+
+app.get('/:id/implementation', async (c) => {
+  const toolId = c.req.param('id');
+  const impl = db.select().from(toolImplementations).where(eq(toolImplementations.tool_id, toolId)).get();
+  if (!impl) {
+    // 向后兼容：从 mcp_tools.execution_config 回退读取
+    const tool = db.select().from(mcpTools).where(eq(mcpTools.id, toolId)).get();
+    if (!tool) return c.json({ error: 'Tool not found' }, 404);
+    if (tool.impl_type || tool.execution_config || tool.handler_key) {
+      return c.json({
+        id: null,
+        tool_id: toolId,
+        adapter_type: tool.impl_type,
+        config: tool.execution_config,
+        handler_key: tool.handler_key,
+        connector_id: null,
+        host_server_id: tool.server_id,
+        status: 'active',
+        _source: 'legacy',
+      });
+    }
+    return c.json({ id: null, tool_id: toolId, _source: 'none' });
+  }
+  // 附带 connector 信息
+  let connector = null;
+  if (impl.connector_id) {
+    connector = db.select().from(connectors).where(eq(connectors.id, impl.connector_id)).get() ?? null;
+  }
+  return c.json({ ...impl, connector, _source: 'tool_implementations' });
+});
+
+app.put('/:id/implementation', async (c) => {
+  const toolId = c.req.param('id');
+  const body = await c.req.json();
+  const tool = db.select().from(mcpTools).where(eq(mcpTools.id, toolId)).get();
+  if (!tool) return c.json({ error: 'Tool not found' }, 404);
+
+  const existing = db.select().from(toolImplementations).where(eq(toolImplementations.tool_id, toolId)).get();
+  if (existing) {
+    db.update(toolImplementations).set({
+      adapter_type: body.adapter_type ?? existing.adapter_type,
+      host_server_id: body.host_server_id ?? existing.host_server_id,
+      connector_id: body.connector_id ?? existing.connector_id,
+      config: body.config !== undefined ? (typeof body.config === 'string' ? body.config : JSON.stringify(body.config)) : existing.config,
+      handler_key: body.handler_key ?? existing.handler_key,
+      status: body.status ?? existing.status,
+      updated_at: now(),
+    }).where(eq(toolImplementations.id, existing.id)).run();
+    logger.info('mcp', 'tool_impl_updated', { tool_id: toolId, impl_id: existing.id });
+  } else {
+    const id = nanoid();
+    db.insert(toolImplementations).values({
+      id,
+      tool_id: toolId,
+      adapter_type: body.adapter_type ?? 'script',
+      host_server_id: body.host_server_id ?? tool.server_id,
+      connector_id: body.connector_id ?? null,
+      config: body.config ? (typeof body.config === 'string' ? body.config : JSON.stringify(body.config)) : null,
+      handler_key: body.handler_key ?? null,
+      status: body.status ?? 'active',
+      created_at: now(),
+      updated_at: now(),
+    }).run();
+    logger.info('mcp', 'tool_impl_created', { tool_id: toolId, impl_id: id });
+  }
+
+  // 同步更新 mcp_tools 旧字段（向后兼容，过渡期）
+  db.update(mcpTools).set({
+    impl_type: body.adapter_type ?? tool.impl_type,
+    execution_config: body.config !== undefined ? (typeof body.config === 'string' ? body.config : JSON.stringify(body.config)) : tool.execution_config,
+    handler_key: body.handler_key ?? tool.handler_key,
+    updated_at: now(),
+  }).where(eq(mcpTools.id, toolId)).run();
+
+  return c.json({ ok: true });
 });
 
 export default app;

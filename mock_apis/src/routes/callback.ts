@@ -10,9 +10,9 @@ const app = new Hono();
 
 app.post("/create", async (c) => {
   const body = await c.req.json<{
-    original_task_id: string;
-    callback_phone: string;
-    preferred_time: string;
+    original_task_id?: string;
+    callback_phone?: string;
+    preferred_time?: string;
     customer_name?: string;
     product_name?: string;
   }>();
@@ -22,7 +22,7 @@ app.post("/create", async (c) => {
   }
 
   const taskId = `CB-${Date.now().toString(36)}`;
-  db.insert(callbackTasks).values({
+  await db.insert(callbackTasks).values({
     task_id: taskId,
     original_task_id: body.original_task_id,
     customer_name: body.customer_name ?? "",

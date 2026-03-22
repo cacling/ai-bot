@@ -268,4 +268,61 @@ app.post('/:id/mock-invoke', async (c) => {
   });
 });
 
+// ── MCP Resources discovery（严格 MCP 对齐：真正的 resources/list）────────
+app.get('/:id/mcp-resources', async (c) => {
+  const server = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
+  if (!server) return c.json({ error: 'Server not found' }, 404);
+  if (!server.url) return c.json({ items: [], note: 'No endpoint configured' });
+
+  try {
+    const mcpClient = new Client({ name: 'resource-discover', version: '1.0' });
+    await mcpClient.connect(new StreamableHTTPClientTransport(new URL(server.url)));
+    let items: Array<{ uri: string; name: string; description?: string; mimeType?: string }> = [];
+    try {
+      const result = await mcpClient.listResources();
+      items = (result.resources ?? []).map(r => ({
+        uri: r.uri,
+        name: r.name ?? r.uri,
+        description: r.description,
+        mimeType: r.mimeType,
+      }));
+    } catch {
+      // Server may not support resources/list — that's fine
+    }
+    await mcpClient.close();
+    return c.json({ items });
+  } catch (err) {
+    logger.error('mcp', 'mcp_resources_discover_error', { server_id: server.id, error: String(err) });
+    return c.json({ error: `Connection failed: ${String(err)}` }, 502);
+  }
+});
+
+// ── MCP Prompts discovery（严格 MCP 对齐：真正的 prompts/list）──────────
+app.get('/:id/mcp-prompts', async (c) => {
+  const server = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
+  if (!server) return c.json({ error: 'Server not found' }, 404);
+  if (!server.url) return c.json({ items: [], note: 'No endpoint configured' });
+
+  try {
+    const mcpClient = new Client({ name: 'prompt-discover', version: '1.0' });
+    await mcpClient.connect(new StreamableHTTPClientTransport(new URL(server.url)));
+    let items: Array<{ name: string; description?: string; arguments?: unknown[] }> = [];
+    try {
+      const result = await mcpClient.listPrompts();
+      items = (result.prompts ?? []).map(p => ({
+        name: p.name,
+        description: p.description,
+        arguments: p.arguments,
+      }));
+    } catch {
+      // Server may not support prompts/list — that's fine
+    }
+    await mcpClient.close();
+    return c.json({ items });
+  } catch (err) {
+    logger.error('mcp', 'mcp_prompts_discover_error', { server_id: server.id, error: String(err) });
+    return c.json({ error: `Connection failed: ${String(err)}` }, 502);
+  }
+});
+
 export default app;

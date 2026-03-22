@@ -7,13 +7,29 @@
  * 幂等设计：先清空再插入，可重复执行。
  */
 
-import { db } from './index';
+import { db, sqlite } from './index';
 import { eq } from 'drizzle-orm';
 import {
   bills,
+  billingBillItems,
+  billingDisputeCases,
+  offersCampaigns,
   callbackTasks,
   contracts,
+  customerHouseholds,
+  customerPreferences,
   deviceContexts,
+  outreachHandoffCases,
+  identityLoginEvents,
+  invoiceRecords,
+  outreachMarketingResults,
+  networkIncidents,
+  identityOtpRequests,
+  paymentsTransactions,
+  ordersServiceOrders,
+  ordersRefundRequests,
+  outreachSmsEvents,
+  outreachCallResults,
   testPersonas,
   outboundTasks,
   plans,
@@ -53,8 +69,199 @@ function recentMonths(n: number): string[] {
   return result;
 }
 
+function ensureMockBackendTables() {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS customer_households (
+      household_id TEXT PRIMARY KEY,
+      household_name TEXT NOT NULL,
+      household_type TEXT NOT NULL DEFAULT 'individual',
+      primary_phone TEXT,
+      billing_group TEXT NOT NULL DEFAULT 'independent',
+      notes TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS customer_preferences (
+      phone TEXT PRIMARY KEY REFERENCES subscribers(phone) ON DELETE CASCADE,
+      marketing_opt_in INTEGER NOT NULL DEFAULT 1,
+      sms_opt_in INTEGER NOT NULL DEFAULT 1,
+      dnd INTEGER NOT NULL DEFAULT 0,
+      preferred_channel TEXT NOT NULL DEFAULT 'voice',
+      contact_window_start TEXT NOT NULL DEFAULT '09:00',
+      contact_window_end TEXT NOT NULL DEFAULT '20:30',
+      notes TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS identity_otp_requests (
+      request_id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL REFERENCES subscribers(phone) ON DELETE CASCADE,
+      otp TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'sms',
+      delivery_status TEXT NOT NULL DEFAULT 'sent',
+      status TEXT NOT NULL DEFAULT 'pending',
+      requested_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      trace_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS payments_transactions (
+      payment_id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL REFERENCES subscribers(phone) ON DELETE CASCADE,
+      month TEXT NOT NULL,
+      amount REAL NOT NULL,
+      channel TEXT NOT NULL,
+      status TEXT NOT NULL,
+      posted INTEGER NOT NULL DEFAULT 0,
+      paid_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS network_incidents (
+      incident_id TEXT PRIMARY KEY,
+      region TEXT NOT NULL,
+      incident_type TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      status TEXT NOT NULL,
+      affected_services TEXT NOT NULL DEFAULT '[]',
+      start_time TEXT NOT NULL,
+      end_time TEXT,
+      description TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS offers_campaigns (
+      campaign_id TEXT PRIMARY KEY,
+      campaign_name TEXT NOT NULL,
+      offer_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      headline TEXT NOT NULL,
+      benefit_summary TEXT NOT NULL,
+      target_segment TEXT NOT NULL,
+      recommended_plan_id TEXT REFERENCES plans(plan_id),
+      price_delta REAL,
+      valid_from TEXT NOT NULL,
+      valid_until TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS invoice_records (
+      invoice_no TEXT PRIMARY KEY,
+      phone TEXT NOT NULL REFERENCES subscribers(phone) ON DELETE CASCADE,
+      month TEXT NOT NULL,
+      total REAL NOT NULL,
+      email TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'issued',
+      requested_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS billing_bill_items (
+      line_id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL REFERENCES subscribers(phone) ON DELETE CASCADE,
+      month TEXT NOT NULL,
+      bill_id INTEGER REFERENCES bills(id) ON DELETE CASCADE,
+      item_type TEXT NOT NULL,
+      item_name TEXT NOT NULL,
+      amount REAL NOT NULL,
+      service_id TEXT,
+      occurred_at TEXT NOT NULL,
+      source_system TEXT NOT NULL DEFAULT 'mock_billing',
+      disputable INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS billing_dispute_cases (
+      case_id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL REFERENCES subscribers(phone) ON DELETE CASCADE,
+      month TEXT NOT NULL,
+      bill_id INTEGER REFERENCES bills(id) ON DELETE SET NULL,
+      issue_category TEXT NOT NULL,
+      description TEXT NOT NULL,
+      claimed_amount REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'open',
+      resolution_summary TEXT,
+      created_at TEXT NOT NULL,
+      resolved_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS orders_service_orders (
+      order_id TEXT PRIMARY KEY,
+      order_type TEXT NOT NULL,
+      phone TEXT NOT NULL REFERENCES subscribers(phone) ON DELETE CASCADE,
+      service_id TEXT,
+      service_name TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL,
+      effective_at TEXT,
+      requires_manual_review INTEGER NOT NULL DEFAULT 0,
+      message TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS orders_refund_requests (
+      refund_id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL REFERENCES subscribers(phone) ON DELETE CASCADE,
+      service_id TEXT,
+      month TEXT,
+      reason TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'pending_review',
+      requested_at TEXT NOT NULL,
+      resolved_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS identity_login_events (
+      event_id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL REFERENCES subscribers(phone) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      result TEXT NOT NULL,
+      failure_reason TEXT,
+      device_label TEXT,
+      ip_region TEXT,
+      occurred_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_call_results (
+      result_id TEXT PRIMARY KEY,
+      task_id TEXT,
+      phone TEXT NOT NULL,
+      result TEXT NOT NULL,
+      remark TEXT,
+      callback_time TEXT,
+      ptp_date TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_sms_events (
+      event_id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL,
+      sms_type TEXT NOT NULL,
+      context TEXT,
+      status TEXT NOT NULL,
+      reason TEXT,
+      sent_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_handoff_cases (
+      case_id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL,
+      source_skill TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      queue_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS outreach_marketing_results (
+      record_id TEXT PRIMARY KEY,
+      campaign_id TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      result TEXT NOT NULL,
+      callback_time TEXT,
+      is_dnd INTEGER NOT NULL DEFAULT 0,
+      recorded_at TEXT NOT NULL
+    );
+  `);
+}
+
 async function seed() {
   console.log('[seed] 开始初始化数据...');
+  ensureMockBackendTables();
 
   // ── 1. 套餐 ─────────────────────────────────────────────────────────────────
   console.log('[seed] 写入套餐数据...');
@@ -63,6 +270,10 @@ async function seed() {
     {
       plan_id: 'plan_10g',
       name: '基础 10G 套餐',
+      plan_type: 'mobile',
+      speed_tier: '4G',
+      is_shareable: false,
+      is_marketable: true,
       monthly_fee: 30,
       data_gb: 10,
       voice_min: 200,
@@ -73,32 +284,185 @@ async function seed() {
     {
       plan_id: 'plan_50g',
       name: '畅享 50G 套餐',
+      plan_type: 'mobile',
+      speed_tier: '5G',
+      is_shareable: false,
+      is_marketable: true,
       monthly_fee: 50,
       data_gb: 50,
       voice_min: 500,
       sms: 100,
       features: JSON.stringify(['免费来电显示', '语音信箱', 'WiFi 热点共享']),
-      description: '主流套餐，适合中度用户，流量充足，通话自由',
+      description: '主流 5G 套餐，适合中度用户，兼顾流量和通话。',
     },
     {
       plan_id: 'plan_100g',
       name: '超值 100G 套餐',
+      plan_type: 'mobile',
+      speed_tier: '5G',
+      is_shareable: false,
+      is_marketable: true,
       monthly_fee: 88,
       data_gb: 100,
       voice_min: 1000,
       sms: 200,
       features: JSON.stringify(['免费来电显示', '语音信箱', 'WiFi 热点共享', '国内漫游免费']),
-      description: '大流量套餐，适合重度用户或经常出差人员',
+      description: '大流量套餐，适合经常刷视频或出差用户。',
     },
     {
       plan_id: 'plan_unlimited',
       name: '无限流量套餐',
+      plan_type: 'mobile',
+      speed_tier: '5G',
+      is_shareable: true,
+      is_marketable: true,
       monthly_fee: 128,
       data_gb: -1,
       voice_min: -1,
       sms: -1,
       features: JSON.stringify(['免费来电显示', '语音信箱', 'WiFi 热点共享', '国内漫游免费', '视频会员权益']),
-      description: '旗舰无限套餐，流量/通话/短信不限量，畅享无忧',
+      description: '旗舰无限套餐，面向高价值个人用户。',
+    },
+    {
+      plan_id: 'plan_4g_99',
+      name: '4G 畅享套餐 99 元',
+      plan_type: 'mobile',
+      speed_tier: '4G',
+      is_shareable: false,
+      is_marketable: true,
+      monthly_fee: 99,
+      data_gb: 100,
+      voice_min: 300,
+      sms: 100,
+      features: JSON.stringify(['4G 全国流量', '100GB 定向包']),
+      description: '典型存量 4G 套餐，适合 5G 升级营销。',
+    },
+    {
+      plan_id: 'plan_personal_79',
+      name: '个人套餐 79 元',
+      plan_type: 'mobile',
+      speed_tier: '4G',
+      is_shareable: false,
+      is_marketable: true,
+      monthly_fee: 79,
+      data_gb: 60,
+      voice_min: 300,
+      sms: 100,
+      features: JSON.stringify(['个人 4G 套餐', '可叠加家庭融合权益']),
+      description: '适合作为家庭融合升级的个人套餐基线。',
+    },
+    {
+      plan_id: 'plan_business_159',
+      name: '5G 商务套餐 159 元',
+      plan_type: 'business',
+      speed_tier: '5G',
+      is_shareable: true,
+      is_marketable: true,
+      monthly_fee: 159,
+      data_gb: 150,
+      voice_min: 1200,
+      sms: 300,
+      features: JSON.stringify(['商务优先网络', '国际漫游折扣', '企业发票支持']),
+      description: '面向商旅和企业客户的 5G 商务套餐。',
+    },
+    {
+      plan_id: 'plan_family_299',
+      name: '家庭融合套餐 299 元',
+      plan_type: 'family',
+      speed_tier: '5G',
+      is_shareable: true,
+      is_marketable: true,
+      monthly_fee: 299,
+      data_gb: 200,
+      voice_min: -1,
+      sms: 300,
+      features: JSON.stringify(['最多 3 张副卡共享', '500M 宽带', '家庭亲情号']),
+      description: '手机+宽带融合套餐，适合多成员家庭。',
+    },
+    {
+      plan_id: 'plan_broadband_annual',
+      name: '宽带包年套餐',
+      plan_type: 'broadband',
+      speed_tier: '500M',
+      is_shareable: false,
+      is_marketable: false,
+      monthly_fee: 299,
+      data_gb: 0,
+      voice_min: 0,
+      sms: 0,
+      features: JSON.stringify(['500M 宽带', '年度一次性计费', '含上门维护']),
+      description: '包年宽带类产品，用于催收和故障类场景。',
+    },
+    {
+      plan_id: 'plan_data_59',
+      name: '流量月包 59 元',
+      plan_type: 'mobile',
+      speed_tier: '5G',
+      is_shareable: false,
+      is_marketable: true,
+      monthly_fee: 59,
+      data_gb: 30,
+      voice_min: 100,
+      sms: 50,
+      features: JSON.stringify(['30GB 通用流量', '适合外卖/打车骑手等轻语音用户']),
+      description: '低月租高流量月包，适合数据型客户。',
+    },
+  ]).run();
+
+  console.log('[seed] 写入营销活动数据...');
+  db.delete(offersCampaigns).run();
+  db.insert(offersCampaigns).values([
+    {
+      campaign_id: 'CMP-UP-100G',
+      campaign_name: '畅享 50G 升级 100G',
+      offer_type: 'plan_upgrade',
+      status: 'active',
+      headline: '本月升级 100G 套餐，首月减免 20 元',
+      benefit_summary: '适合流量接近 50G 上限的用户，减少超额流量费用。',
+      target_segment: '50G 套餐高流量用户',
+      recommended_plan_id: 'plan_100g',
+      price_delta: 38,
+      valid_from: '2026-03-01',
+      valid_until: '2026-03-31',
+    },
+    {
+      campaign_id: 'CMP-ROAM-001',
+      campaign_name: '春季境外漫游加油包',
+      offer_type: 'roaming_pack',
+      status: 'active',
+      headline: '出境用户专享 5GB 漫游流量包',
+      benefit_summary: '适合近期有漫游需求的用户，按包计费更划算。',
+      target_segment: '近期有差旅/漫游需求用户',
+      recommended_plan_id: null,
+      price_delta: 10,
+      valid_from: '2026-03-15',
+      valid_until: '2026-04-15',
+    },
+    {
+      campaign_id: 'CMP-FAMILY-001',
+      campaign_name: '家庭融合副卡权益包',
+      offer_type: 'family_bundle',
+      status: 'active',
+      headline: '主卡加副卡，共享家庭融合权益',
+      benefit_summary: '适合多号码家庭，统一账单、共享流量。',
+      target_segment: '多成员家庭 / 多号码客户',
+      recommended_plan_id: 'plan_family_299',
+      price_delta: 120,
+      valid_from: '2026-03-10',
+      valid_until: '2026-04-30',
+    },
+    {
+      campaign_id: 'CMP-RET-001',
+      campaign_name: '欠费用户复机挽留包',
+      offer_type: 'retention',
+      status: 'paused',
+      headline: '补缴后赠送 3 天不限量流量',
+      benefit_summary: '用于欠费停机后客户挽留。',
+      target_segment: '欠费/停机用户',
+      recommended_plan_id: null,
+      price_delta: null,
+      valid_from: '2026-03-01',
+      valid_until: '2026-03-31',
     },
   ]).run();
 
@@ -108,22 +472,55 @@ async function seed() {
   db.insert(valueAddedServices).values([
     { service_id: 'video_pkg', name: '视频会员流量包（20GB/月）', monthly_fee: 20, effective_end: '次月1日00:00' },
     { service_id: 'sms_100', name: '短信百条包（100条/月）', monthly_fee: 5, effective_end: '次月1日00:00' },
-    { service_id: 'roaming_pkg', name: '国内漫游免费包', monthly_fee: 10, effective_end: '次月1日00:00' },
+    { service_id: 'roaming_pkg', name: '国际漫游安心包', monthly_fee: 30, effective_end: '次月1日00:00' },
     { service_id: 'game_pkg', name: '游戏加速包（10GB/月）', monthly_fee: 15, effective_end: '次月1日00:00' },
+    { service_id: 'family_share', name: '家庭共享副卡权益包', monthly_fee: 30, effective_end: '次月1日00:00' },
   ]).run();
 
-  // ── 3. 用户（依赖套餐）──────────────────────────────────────────────────────
-  console.log('[seed] 写入用户数据...');
+  // ── 3. 家庭 / 客户主档 ───────────────────────────────────────────────────────
+  console.log('[seed] 写入客户家庭主数据...');
   db.delete(subscriberSubscriptions).run();
   db.delete(subscribers).run();
+  db.delete(customerHouseholds).run();
+  db.insert(customerHouseholds).values([
+    {
+      household_id: 'HH-001',
+      household_name: '李四家庭',
+      household_type: 'premium_family',
+      primary_phone: '13800000002',
+      billing_group: 'shared',
+      notes: '高价值家庭主卡，适合家庭融合与副卡营销。',
+    },
+    {
+      household_id: 'HH-002',
+      household_name: '李华家庭',
+      household_type: 'family_bundle',
+      primary_phone: '13900000002',
+      billing_group: 'consolidated',
+      notes: '家庭融合客户，当前存在较高欠费与人工复核需求。',
+    },
+    {
+      household_id: 'HH-003',
+      household_name: '赵强商务账户',
+      household_type: 'business_group',
+      primary_phone: '13900000006',
+      billing_group: 'corporate',
+      notes: '商务客户，关注国际漫游和发票服务。',
+    },
+  ]).run();
+
+  console.log('[seed] 写入用户主数据...');
   db.insert(subscribers).values([
     {
       phone: '13800000001',
       name: '张三',
       gender: 'male',
+      customer_tier: 'standard',
+      preferred_language: 'zh-CN',
       id_type: '居民身份证',
       id_last4: '1234',
       plan_id: 'plan_50g',
+      household_id: null,
       status: 'active',
       balance: 45.8,
       data_used_gb: 32.5,
@@ -131,6 +528,7 @@ async function seed() {
       sms_used: 45,
       activated_at: '2023-06-15',
       contract_end_date: '2026-06-15',
+      overdue_days: 0,
       email: 'zhangsan@example.com',
       region: '广州',
     },
@@ -138,15 +536,20 @@ async function seed() {
       phone: '13800000002',
       name: '李四',
       gender: 'female',
+      customer_tier: 'vip',
+      preferred_language: 'zh-CN',
       id_type: '居民身份证',
       id_last4: '5678',
       plan_id: 'plan_unlimited',
+      household_id: 'HH-001',
       status: 'active',
       balance: 128.0,
       data_used_gb: 89.2,
-      voice_used_min: 0,
-      sms_used: 0,
+      voice_used_min: 130,
+      sms_used: 12,
       activated_at: '2022-11-01',
+      contract_end_date: '2026-11-01',
+      overdue_days: 0,
       email: 'lisi@example.com',
       region: '深圳',
     },
@@ -154,9 +557,12 @@ async function seed() {
       phone: '13800000003',
       name: '王五',
       gender: 'male',
+      customer_tier: 'delinquent',
+      preferred_language: 'zh-CN',
       id_type: '居民身份证',
       id_last4: '9012',
       plan_id: 'plan_10g',
+      household_id: null,
       status: 'suspended',
       balance: -23.5,
       data_used_gb: 10,
@@ -165,76 +571,645 @@ async function seed() {
       activated_at: '2024-01-20',
       contract_end_date: '2025-12-31',
       overdue_days: 25,
+      email: 'wangwu@example.com',
       region: '北京',
+    },
+    {
+      phone: '13900000001',
+      name: '张明',
+      gender: 'male',
+      customer_tier: 'delinquent',
+      preferred_language: 'zh-CN',
+      id_type: '居民身份证',
+      id_last4: '2301',
+      plan_id: 'plan_broadband_annual',
+      household_id: null,
+      status: 'suspended',
+      balance: -386.0,
+      data_used_gb: 0,
+      voice_used_min: 0,
+      sms_used: 0,
+      activated_at: '2025-04-01',
+      contract_end_date: '2026-03-31',
+      overdue_days: 30,
+      email: 'zhangming@example.com',
+      region: '广州',
+    },
+    {
+      phone: '13900000002',
+      name: '李华',
+      gender: 'male',
+      customer_tier: 'delinquent',
+      preferred_language: 'zh-CN',
+      id_type: '居民身份证',
+      id_last4: '4502',
+      plan_id: 'plan_family_299',
+      household_id: 'HH-002',
+      status: 'suspended',
+      balance: -1280.0,
+      data_used_gb: 186.0,
+      voice_used_min: 820,
+      sms_used: 30,
+      activated_at: '2024-09-01',
+      contract_end_date: '2026-09-01',
+      overdue_days: 45,
+      email: 'lihua@example.com',
+      region: '成都',
+    },
+    {
+      phone: '13900000003',
+      name: '王芳',
+      gender: 'female',
+      customer_tier: 'delinquent',
+      preferred_language: 'zh-CN',
+      id_type: '居民身份证',
+      id_last4: '7813',
+      plan_id: 'plan_data_59',
+      household_id: null,
+      status: 'suspended',
+      balance: -520.0,
+      data_used_gb: 55.0,
+      voice_used_min: 30,
+      sms_used: 5,
+      activated_at: '2025-05-01',
+      contract_end_date: null,
+      overdue_days: 15,
+      email: 'wangfang@example.com',
+      region: '南京',
+    },
+    {
+      phone: '13900000004',
+      name: '陈伟',
+      gender: 'male',
+      customer_tier: 'premium',
+      preferred_language: 'zh-CN',
+      id_type: '居民身份证',
+      id_last4: '9924',
+      plan_id: 'plan_4g_99',
+      household_id: null,
+      status: 'active',
+      balance: 68.0,
+      data_used_gb: 96.0,
+      voice_used_min: 210,
+      sms_used: 10,
+      activated_at: '2024-03-01',
+      contract_end_date: '2026-05-31',
+      overdue_days: 0,
+      email: 'chenwei@example.com',
+      region: '广州',
+    },
+    {
+      phone: '13900000005',
+      name: '刘丽',
+      gender: 'female',
+      customer_tier: 'premium',
+      preferred_language: 'zh-CN',
+      id_type: '居民身份证',
+      id_last4: '1185',
+      plan_id: 'plan_personal_79',
+      household_id: null,
+      status: 'active',
+      balance: 102.0,
+      data_used_gb: 38.0,
+      voice_used_min: 260,
+      sms_used: 30,
+      activated_at: '2024-07-12',
+      contract_end_date: null,
+      overdue_days: 0,
+      email: 'liuli@example.com',
+      region: '杭州',
+    },
+    {
+      phone: '13900000006',
+      name: '赵强',
+      gender: 'male',
+      customer_tier: 'premium',
+      preferred_language: 'zh-CN',
+      id_type: '居民身份证',
+      id_last4: '6636',
+      plan_id: 'plan_business_159',
+      household_id: 'HH-003',
+      status: 'active',
+      balance: 260.0,
+      data_used_gb: 72.0,
+      voice_used_min: 480,
+      sms_used: 8,
+      activated_at: '2023-09-01',
+      contract_end_date: '2026-09-01',
+      overdue_days: 0,
+      email: 'zhaoqiang@corp.example.com',
+      region: '深圳',
     },
   ]).run();
 
-  // ── 4. 用户已订增值业务 ──────────────────────────────────────────────────────
+  // ── 4. 用户已订增值业务 / 当前权益 ───────────────────────────────────────────
   console.log('[seed] 写入用户订阅关系...');
   db.insert(subscriberSubscriptions).values([
-    { phone: '13800000001', service_id: 'video_pkg' },
-    { phone: '13800000001', service_id: 'sms_100' },
-    { phone: '13800000002', service_id: 'video_pkg' },
+    {
+      phone: '13800000001',
+      service_id: 'video_pkg',
+      status: 'active',
+      channel: 'app',
+      subscribed_at: `${m2}-05T10:00:00+08:00`,
+      effective_start: `${m2}-05T10:00:00+08:00`,
+      effective_end: null,
+      auto_renew: true,
+      order_id: 'ORD-SUB-001',
+    },
+    {
+      phone: '13800000001',
+      service_id: 'sms_100',
+      status: 'active',
+      channel: 'app',
+      subscribed_at: `${m1}-03T09:00:00+08:00`,
+      effective_start: `${m1}-03T09:00:00+08:00`,
+      effective_end: null,
+      auto_renew: true,
+      order_id: 'ORD-SUB-002',
+    },
+    {
+      phone: '13800000002',
+      service_id: 'video_pkg',
+      status: 'active',
+      channel: 'store',
+      subscribed_at: `${m2}-01T08:00:00+08:00`,
+      effective_start: `${m2}-01T08:00:00+08:00`,
+      effective_end: null,
+      auto_renew: true,
+      order_id: 'ORD-SUB-003',
+    },
+    {
+      phone: '13800000002',
+      service_id: 'roaming_pkg',
+      status: 'active',
+      channel: 'app',
+      subscribed_at: `${m1}-12T12:00:00+08:00`,
+      effective_start: `${m1}-12T12:00:00+08:00`,
+      effective_end: null,
+      auto_renew: true,
+      order_id: 'ORD-SUB-004',
+    },
+    {
+      phone: '13800000003',
+      service_id: 'game_pkg',
+      status: 'active',
+      channel: 'app',
+      subscribed_at: `${m2}-18T18:30:00+08:00`,
+      effective_start: `${m2}-18T18:30:00+08:00`,
+      effective_end: null,
+      auto_renew: true,
+      order_id: 'ORD-SUB-005',
+    },
+    {
+      phone: '13900000002',
+      service_id: 'family_share',
+      status: 'active',
+      channel: 'store',
+      subscribed_at: `${m2}-20T11:20:00+08:00`,
+      effective_start: `${m2}-20T11:20:00+08:00`,
+      effective_end: null,
+      auto_renew: true,
+      order_id: 'ORD-SUB-006',
+    },
+    {
+      phone: '13900000005',
+      service_id: 'video_pkg',
+      status: 'active',
+      channel: 'app',
+      subscribed_at: `${m1}-16T16:00:00+08:00`,
+      effective_start: `${m1}-16T16:00:00+08:00`,
+      effective_end: null,
+      auto_renew: true,
+      order_id: 'ORD-SUB-007',
+    },
+    {
+      phone: '13900000006',
+      service_id: 'roaming_pkg',
+      status: 'active',
+      channel: 'sales',
+      subscribed_at: `${m0}-02T09:45:00+08:00`,
+      effective_start: `${m0}-02T09:45:00+08:00`,
+      effective_end: null,
+      auto_renew: false,
+      order_id: 'ORD-SUB-008',
+    },
+  ]).run();
+
+  console.log('[seed] 写入客户偏好数据...');
+  db.delete(customerPreferences).run();
+  db.insert(customerPreferences).values([
+    {
+      phone: '13800000001',
+      marketing_opt_in: true,
+      sms_opt_in: true,
+      dnd: false,
+      preferred_channel: 'sms',
+      contact_window_start: '09:00',
+      contact_window_end: '20:30',
+      notes: '愿意接收套餐升级和账单解释短信。',
+    },
+    {
+      phone: '13800000002',
+      marketing_opt_in: false,
+      sms_opt_in: false,
+      dnd: true,
+      preferred_channel: 'app',
+      contact_window_start: '10:00',
+      contact_window_end: '18:00',
+      notes: 'VIP 客户，除服务通知外不接受营销联系。',
+    },
+    {
+      phone: '13800000003',
+      marketing_opt_in: true,
+      sms_opt_in: true,
+      dnd: false,
+      preferred_channel: 'voice',
+      contact_window_start: '09:30',
+      contact_window_end: '19:00',
+      notes: '催缴和账单解释优先电话联系。',
+    },
+    {
+      phone: '13900000001',
+      marketing_opt_in: false,
+      sms_opt_in: true,
+      dnd: false,
+      preferred_channel: 'voice',
+      contact_window_start: '10:00',
+      contact_window_end: '20:00',
+      notes: '宽带包年客户，逾期催缴允许短信+电话。',
+    },
+    {
+      phone: '13900000002',
+      marketing_opt_in: false,
+      sms_opt_in: true,
+      dnd: false,
+      preferred_channel: 'voice',
+      contact_window_start: '09:00',
+      contact_window_end: '18:30',
+      notes: '家庭融合欠费客户，优先协商回款。',
+    },
+    {
+      phone: '13900000003',
+      marketing_opt_in: false,
+      sms_opt_in: true,
+      dnd: false,
+      preferred_channel: 'voice',
+      contact_window_start: '09:00',
+      contact_window_end: '19:00',
+      notes: '流量月包欠费客户，对价格敏感。',
+    },
+    {
+      phone: '13900000004',
+      marketing_opt_in: true,
+      sms_opt_in: true,
+      dnd: false,
+      preferred_channel: 'voice',
+      contact_window_start: '10:00',
+      contact_window_end: '21:00',
+      notes: '高流量 4G 客户，适合 5G 升级。',
+    },
+    {
+      phone: '13900000005',
+      marketing_opt_in: true,
+      sms_opt_in: true,
+      dnd: false,
+      preferred_channel: 'voice',
+      contact_window_start: '09:00',
+      contact_window_end: '20:30',
+      notes: '家庭融合潜客，接受语音沟通。',
+    },
+    {
+      phone: '13900000006',
+      marketing_opt_in: true,
+      sms_opt_in: true,
+      dnd: false,
+      preferred_channel: 'sms',
+      contact_window_start: '09:00',
+      contact_window_end: '21:00',
+      notes: '商务客户，可接受国际漫游和发票服务提醒。',
+    },
   ]).run();
 
   // ── 4b. 合约（依赖用户）──────────────────────────────────────────────────────
   console.log('[seed] 写入合约数据...');
   db.delete(contracts).run();
   db.insert(contracts).values([
-    { contract_id: 'CT001', phone: '13800000001', name: '24个月合约套餐', start_date: '2025-07-01', end_date: '2027-06-30', penalty: 200, risk_level: 'high', status: 'active' },
-    { contract_id: 'CT002', phone: '13800000003', name: '12个月宽带合约', start_date: '2025-01-20', end_date: '2026-01-19', penalty: 100, risk_level: 'medium', status: 'expired' },
+    { contract_id: 'CT001', phone: '13800000001', name: '24个月 50G 套餐合约', start_date: '2024-07-01', end_date: '2026-06-30', penalty: 200, risk_level: 'medium', status: 'active' },
+    { contract_id: 'CT002', phone: '13800000002', name: 'VIP 无限流量承诺合约', start_date: '2024-11-01', end_date: '2026-11-01', penalty: 300, risk_level: 'high', status: 'active' },
+    { contract_id: 'CT003', phone: '13800000003', name: '12个月宽带合约', start_date: '2025-01-20', end_date: '2026-01-19', penalty: 100, risk_level: 'medium', status: 'expired' },
+    { contract_id: 'CT004', phone: '13900000001', name: '宽带包年承诺', start_date: '2025-04-01', end_date: '2026-03-31', penalty: 386, risk_level: 'high', status: 'active' },
+    { contract_id: 'CT005', phone: '13900000002', name: '家庭融合 24 个月合约', start_date: '2024-09-01', end_date: '2026-09-01', penalty: 600, risk_level: 'high', status: 'active' },
+    { contract_id: 'CT006', phone: '13900000004', name: '4G 套餐合约', start_date: '2024-06-01', end_date: '2026-05-31', penalty: 120, risk_level: 'medium', status: 'active' },
+    { contract_id: 'CT007', phone: '13900000006', name: '5G 商务套餐企业协议', start_date: '2024-09-01', end_date: '2026-09-01', penalty: 300, risk_level: 'medium', status: 'active' },
   ]).run();
 
   // ── 5. 账单（依赖用户）──────────────────────────────────────────────────────
   console.log('[seed] 写入账单数据...');
   const [m0, m1, m2] = recentMonths(3); // m0=本月, m1=上月, m2=上上月
   console.log(`[seed] 账单月份: ${m2}, ${m1}, ${m0}`);
+  const mkBill = (phone: string, month: string, total: number, plan_fee: number, data_fee: number, voice_fee: number, sms_fee: number, value_added_fee: number, tax: number, status: 'paid' | 'unpaid' | 'overdue') => ({
+    phone,
+    month,
+    total,
+    plan_fee,
+    data_fee,
+    voice_fee,
+    sms_fee,
+    value_added_fee,
+    tax,
+    status,
+  });
   db.delete(bills).run();
   db.insert(bills).values([
-    // 13800000001
-    { phone: '13800000001', month: m0, total: 68.0,  plan_fee: 50.0, data_fee: 8.0,  voice_fee: 0, sms_fee: 0, value_added_fee: 8.0, tax: 2.0,  status: 'paid' },
-    { phone: '13800000001', month: m1, total: 72.5,  plan_fee: 50.0, data_fee: 12.5, voice_fee: 0, sms_fee: 0, value_added_fee: 8.0, tax: 2.0,  status: 'paid' },
-    { phone: '13800000001', month: m2, total: 58.0,  plan_fee: 50.0, data_fee: 0,    voice_fee: 0, sms_fee: 0, value_added_fee: 6.0, tax: 2.0,  status: 'paid' },
-    // 13800000002
-    { phone: '13800000002', month: m0, total: 158.0, plan_fee: 128.0, data_fee: 0, voice_fee: 0, sms_fee: 0, value_added_fee: 20.0, tax: 10.0, status: 'paid' },
-    { phone: '13800000002', month: m1, total: 158.0, plan_fee: 128.0, data_fee: 0, voice_fee: 0, sms_fee: 0, value_added_fee: 20.0, tax: 10.0, status: 'paid' },
-    { phone: '13800000002', month: m2, total: 158.0, plan_fee: 128.0, data_fee: 0, voice_fee: 0, sms_fee: 0, value_added_fee: 20.0, tax: 10.0, status: 'paid' },
-    // 13800000003
-    { phone: '13800000003', month: m0, total: 36.0,  plan_fee: 30.0, data_fee: 0, voice_fee: 0, sms_fee: 0, value_added_fee: 5.0, tax: 1.0, status: 'overdue' },
-    { phone: '13800000003', month: m1, total: 36.0,  plan_fee: 30.0, data_fee: 0, voice_fee: 0, sms_fee: 0, value_added_fee: 5.0, tax: 1.0, status: 'paid' },
-    { phone: '13800000003', month: m2, total: 36.0,  plan_fee: 30.0, data_fee: 0, voice_fee: 0, sms_fee: 0, value_added_fee: 5.0, tax: 1.0, status: 'paid' },
+    mkBill('13800000001', m0, 88.0, 50.0, 10.0, 0, 0, 25.0, 3.0, 'paid'),
+    mkBill('13800000001', m1, 79.5, 50.0, 12.5, 0, 0, 15.0, 2.0, 'paid'),
+    mkBill('13800000001', m2, 58.0, 50.0, 0.0, 0, 0, 6.0, 2.0, 'paid'),
+    mkBill('13800000002', m0, 158.0, 128.0, 0.0, 0, 0, 20.0, 10.0, 'paid'),
+    mkBill('13800000002', m1, 168.0, 128.0, 0.0, 0, 0, 30.0, 10.0, 'paid'),
+    mkBill('13800000002', m2, 158.0, 128.0, 0.0, 0, 0, 20.0, 10.0, 'paid'),
+    mkBill('13800000003', m0, 36.0, 30.0, 0.0, 0, 0, 5.0, 1.0, 'overdue'),
+    mkBill('13800000003', m1, 36.0, 30.0, 0.0, 0, 0, 5.0, 1.0, 'paid'),
+    mkBill('13800000003', m2, 34.0, 30.0, 0.0, 1.0, 1.0, 1.0, 1.0, 'paid'),
+    mkBill('13900000001', m0, 386.0, 299.0, 0.0, 0.0, 0.0, 80.0, 7.0, 'overdue'),
+    mkBill('13900000001', m1, 299.0, 299.0, 0.0, 0.0, 0.0, 0.0, 0.0, 'paid'),
+    mkBill('13900000001', m2, 299.0, 299.0, 0.0, 0.0, 0.0, 0.0, 0.0, 'paid'),
+    mkBill('13900000002', m0, 640.0, 299.0, 120.0, 80.0, 0.0, 120.0, 21.0, 'overdue'),
+    mkBill('13900000002', m1, 640.0, 299.0, 120.0, 80.0, 0.0, 120.0, 21.0, 'overdue'),
+    mkBill('13900000002', m2, 299.0, 299.0, 0.0, 0.0, 0.0, 0.0, 0.0, 'paid'),
+    mkBill('13900000003', m0, 260.0, 59.0, 120.0, 0.0, 0.0, 70.0, 11.0, 'overdue'),
+    mkBill('13900000003', m1, 260.0, 59.0, 120.0, 0.0, 0.0, 70.0, 11.0, 'unpaid'),
+    mkBill('13900000003', m2, 59.0, 59.0, 0.0, 0.0, 0.0, 0.0, 0.0, 'paid'),
+    mkBill('13900000004', m0, 129.0, 99.0, 20.0, 0.0, 0.0, 0.0, 10.0, 'paid'),
+    mkBill('13900000004', m1, 119.0, 99.0, 10.0, 0.0, 0.0, 0.0, 10.0, 'paid'),
+    mkBill('13900000004', m2, 99.0, 99.0, 0.0, 0.0, 0.0, 0.0, 0.0, 'paid'),
+    mkBill('13900000005', m0, 179.0, 79.0, 0.0, 0.0, 0.0, 90.0, 10.0, 'paid'),
+    mkBill('13900000005', m1, 169.0, 79.0, 0.0, 0.0, 0.0, 80.0, 10.0, 'paid'),
+    mkBill('13900000005', m2, 159.0, 79.0, 0.0, 0.0, 0.0, 70.0, 10.0, 'paid'),
+    mkBill('13900000006', m0, 257.0, 159.0, 50.0, 20.0, 0.0, 20.0, 8.0, 'paid'),
+    mkBill('13900000006', m1, 239.0, 159.0, 40.0, 0.0, 0.0, 30.0, 10.0, 'paid'),
+    mkBill('13900000006', m2, 159.0, 159.0, 0.0, 0.0, 0.0, 0.0, 0.0, 'paid'),
+  ]).run();
+
+  const billRows = db.select().from(bills).all();
+  const billIdByPhoneMonth = new Map(billRows.map((bill) => [`${bill.phone}:${bill.month}`, bill.id]));
+  const findBillId = (phone: string, month: string) => billIdByPhoneMonth.get(`${phone}:${month}`) ?? null;
+
+  console.log('[seed] 写入账单明细与争议数据...');
+  db.delete(billingBillItems).run();
+  db.delete(billingDisputeCases).run();
+  db.insert(billingBillItems).values([
+    { line_id: `BLI-${m0}-001`, phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), item_type: 'plan_fee', item_name: '畅享 50G 套餐月费', amount: 50, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-002`, phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), item_type: 'data_fee', item_name: '流量超额费', amount: 10, service_id: null, occurred_at: `${m0}-15T12:00:00+08:00`, source_system: 'billing_core', disputable: true },
+    { line_id: `BLI-${m0}-003`, phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), item_type: 'value_added_fee', item_name: '视频会员流量包（20GB/月）', amount: 20, service_id: 'video_pkg', occurred_at: `${m0}-03T09:00:00+08:00`, source_system: 'vas_center', disputable: true },
+    { line_id: `BLI-${m0}-004`, phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), item_type: 'value_added_fee', item_name: '短信百条包（100条/月）', amount: 5, service_id: 'sms_100', occurred_at: `${m0}-03T09:00:00+08:00`, source_system: 'vas_center', disputable: false },
+    { line_id: `BLI-${m0}-005`, phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), item_type: 'tax', item_name: '税费', amount: 3, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+
+    { line_id: `BLI-${m0}-006`, phone: '13800000002', month: m0, bill_id: findBillId('13800000002', m0), item_type: 'plan_fee', item_name: '无限流量套餐月费', amount: 128, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-007`, phone: '13800000002', month: m0, bill_id: findBillId('13800000002', m0), item_type: 'value_added_fee', item_name: '视频会员流量包（20GB/月）', amount: 20, service_id: 'video_pkg', occurred_at: `${m0}-02T10:00:00+08:00`, source_system: 'vas_center', disputable: false },
+    { line_id: `BLI-${m0}-008`, phone: '13800000002', month: m0, bill_id: findBillId('13800000002', m0), item_type: 'tax', item_name: '税费', amount: 10, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+
+    { line_id: `BLI-${m0}-009`, phone: '13800000003', month: m0, bill_id: findBillId('13800000003', m0), item_type: 'plan_fee', item_name: '基础 10G 套餐月费', amount: 30, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-010`, phone: '13800000003', month: m0, bill_id: findBillId('13800000003', m0), item_type: 'value_added_fee', item_name: '游戏加速包（10GB/月）', amount: 5, service_id: 'game_pkg', occurred_at: `${m0}-10T09:30:00+08:00`, source_system: 'vas_center', disputable: true },
+    { line_id: `BLI-${m0}-011`, phone: '13800000003', month: m0, bill_id: findBillId('13800000003', m0), item_type: 'tax', item_name: '税费', amount: 1, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+
+    { line_id: `BLI-${m0}-012`, phone: '13900000001', month: m0, bill_id: findBillId('13900000001', m0), item_type: 'plan_fee', item_name: '宽带包年套餐', amount: 299, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'broadband_core', disputable: false },
+    { line_id: `BLI-${m0}-013`, phone: '13900000001', month: m0, bill_id: findBillId('13900000001', m0), item_type: 'value_added_fee', item_name: '逾期违约与恢复服务费', amount: 80, service_id: null, occurred_at: `${m0}-18T08:00:00+08:00`, source_system: 'collections', disputable: true },
+    { line_id: `BLI-${m0}-014`, phone: '13900000001', month: m0, bill_id: findBillId('13900000001', m0), item_type: 'tax', item_name: '税费', amount: 7, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+
+    { line_id: `BLI-${m0}-015`, phone: '13900000002', month: m0, bill_id: findBillId('13900000002', m0), item_type: 'plan_fee', item_name: '家庭融合套餐月费', amount: 299, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-016`, phone: '13900000002', month: m0, bill_id: findBillId('13900000002', m0), item_type: 'data_fee', item_name: '家庭共享超额流量费', amount: 120, service_id: null, occurred_at: `${m0}-20T20:00:00+08:00`, source_system: 'billing_core', disputable: true },
+    { line_id: `BLI-${m0}-017`, phone: '13900000002', month: m0, bill_id: findBillId('13900000002', m0), item_type: 'voice_fee', item_name: '国际长途语音费', amount: 80, service_id: null, occurred_at: `${m0}-21T18:00:00+08:00`, source_system: 'billing_core', disputable: true },
+    { line_id: `BLI-${m0}-018`, phone: '13900000002', month: m0, bill_id: findBillId('13900000002', m0), item_type: 'value_added_fee', item_name: '家庭共享副卡权益包', amount: 120, service_id: 'family_share', occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'vas_center', disputable: false },
+    { line_id: `BLI-${m0}-019`, phone: '13900000002', month: m0, bill_id: findBillId('13900000002', m0), item_type: 'tax', item_name: '税费', amount: 21, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+
+    { line_id: `BLI-${m0}-020`, phone: '13900000003', month: m0, bill_id: findBillId('13900000003', m0), item_type: 'plan_fee', item_name: '流量月包月费', amount: 59, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-021`, phone: '13900000003', month: m0, bill_id: findBillId('13900000003', m0), item_type: 'data_fee', item_name: '超额流量费', amount: 120, service_id: null, occurred_at: `${m0}-19T18:00:00+08:00`, source_system: 'billing_core', disputable: true },
+    { line_id: `BLI-${m0}-022`, phone: '13900000003', month: m0, bill_id: findBillId('13900000003', m0), item_type: 'value_added_fee', item_name: '催缴处理费', amount: 70, service_id: null, occurred_at: `${m0}-20T09:00:00+08:00`, source_system: 'collections', disputable: true },
+    { line_id: `BLI-${m0}-023`, phone: '13900000003', month: m0, bill_id: findBillId('13900000003', m0), item_type: 'tax', item_name: '税费', amount: 11, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+
+    { line_id: `BLI-${m0}-024`, phone: '13900000004', month: m0, bill_id: findBillId('13900000004', m0), item_type: 'plan_fee', item_name: '4G 畅享套餐月费', amount: 99, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-025`, phone: '13900000004', month: m0, bill_id: findBillId('13900000004', m0), item_type: 'data_fee', item_name: '超额流量费', amount: 20, service_id: null, occurred_at: `${m0}-23T21:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-026`, phone: '13900000004', month: m0, bill_id: findBillId('13900000004', m0), item_type: 'tax', item_name: '税费', amount: 10, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+
+    { line_id: `BLI-${m0}-027`, phone: '13900000005', month: m0, bill_id: findBillId('13900000005', m0), item_type: 'plan_fee', item_name: '个人套餐月费', amount: 79, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-028`, phone: '13900000005', month: m0, bill_id: findBillId('13900000005', m0), item_type: 'value_added_fee', item_name: '家庭宽带服务费', amount: 90, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'broadband_core', disputable: false },
+    { line_id: `BLI-${m0}-029`, phone: '13900000005', month: m0, bill_id: findBillId('13900000005', m0), item_type: 'tax', item_name: '税费', amount: 10, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+
+    { line_id: `BLI-${m0}-030`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'plan_fee', item_name: '5G 商务套餐月费', amount: 159, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-031`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'data_fee', item_name: '国际漫游流量费', amount: 50, service_id: null, occurred_at: `${m0}-14T11:00:00+08:00`, source_system: 'roaming_core', disputable: true },
+    { line_id: `BLI-${m0}-032`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'voice_fee', item_name: '国际漫游语音费', amount: 20, service_id: null, occurred_at: `${m0}-14T11:30:00+08:00`, source_system: 'roaming_core', disputable: true },
+    { line_id: `BLI-${m0}-033`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'value_added_fee', item_name: '国际漫游安心包', amount: 20, service_id: 'roaming_pkg', occurred_at: `${m0}-02T09:45:00+08:00`, source_system: 'vas_center', disputable: false },
+    { line_id: `BLI-${m0}-034`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'tax', item_name: '税费', amount: 8, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+  ]).run();
+  db.insert(billingDisputeCases).values([
+    {
+      case_id: 'DSP-001',
+      phone: '13800000001',
+      month: m0,
+      bill_id: findBillId('13800000001', m0),
+      issue_category: 'value_added_charge',
+      description: '客户质疑视频会员未主动续订仍继续扣费。',
+      claimed_amount: 20,
+      status: 'open',
+      resolution_summary: null,
+      created_at: `${m0}-22T09:30:00+08:00`,
+      resolved_at: null,
+    },
+    {
+      case_id: 'DSP-002',
+      phone: '13900000006',
+      month: m1,
+      bill_id: findBillId('13900000006', m1),
+      issue_category: 'roaming_charge',
+      description: '客户反馈上月漫游流量费可能重复计费。',
+      claimed_amount: 30,
+      status: 'resolved',
+      resolution_summary: '核查后确认计费正常，已补偿 10 元关怀券。',
+      created_at: `${m1}-14T10:00:00+08:00`,
+      resolved_at: `${m1}-16T16:30:00+08:00`,
+    },
+  ]).run();
+
+  console.log('[seed] 写入支付交易数据...');
+  db.delete(paymentsTransactions).run();
+  db.insert(paymentsTransactions).values([
+    { payment_id: 'PAY-1001', phone: '13800000001', month: m0, amount: 88, channel: 'app', status: 'success', posted: true, paid_at: `${m0}-09T09:12:00+08:00` },
+    { payment_id: 'PAY-1002', phone: '13800000001', month: m1, amount: 79.5, channel: 'autopay', status: 'success', posted: true, paid_at: `${m1}-11T08:40:00+08:00` },
+    { payment_id: 'PAY-2001', phone: '13800000002', month: m0, amount: 158, channel: 'bank', status: 'success', posted: true, paid_at: `${m0}-21T21:05:00+08:00` },
+    { payment_id: 'PAY-2002', phone: '13800000002', month: m1, amount: 168, channel: 'bank', status: 'success', posted: true, paid_at: `${m1}-22T20:05:00+08:00` },
+    { payment_id: 'PAY-3001', phone: '13800000003', month: m1, amount: 20, channel: 'store', status: 'failed', posted: false, paid_at: `${m1}-01T12:10:00+08:00` },
+    { payment_id: 'PAY-4001', phone: '13900000001', month: m0, amount: 386, channel: 'payment_link', status: 'failed', posted: false, paid_at: `${m0}-18T18:00:00+08:00` },
+    { payment_id: 'PAY-5001', phone: '13900000002', month: m1, amount: 640, channel: 'bank', status: 'failed', posted: false, paid_at: `${m1}-15T09:00:00+08:00` },
+    { payment_id: 'PAY-5002', phone: '13900000002', month: m0, amount: 640, channel: 'payment_link', status: 'processing', posted: false, paid_at: `${m0}-20T11:00:00+08:00` },
+    { payment_id: 'PAY-6001', phone: '13900000003', month: m0, amount: 100, channel: 'wallet', status: 'partial', posted: false, paid_at: `${m0}-12T13:30:00+08:00` },
+    { payment_id: 'PAY-7001', phone: '13900000004', month: m0, amount: 129, channel: 'autopay', status: 'success', posted: true, paid_at: `${m0}-08T07:50:00+08:00` },
+    { payment_id: 'PAY-8001', phone: '13900000005', month: m0, amount: 179, channel: 'app', status: 'success', posted: true, paid_at: `${m0}-06T19:20:00+08:00` },
+    { payment_id: 'PAY-9001', phone: '13900000006', month: m0, amount: 257, channel: 'corp', status: 'success', posted: true, paid_at: `${m0}-10T10:10:00+08:00` },
+  ]).run();
+
+  console.log('[seed] 清空 OTP / 登录事件 / 发票 / 退款数据...');
+  db.delete(identityOtpRequests).run();
+  db.delete(identityLoginEvents).run();
+  db.delete(invoiceRecords).run();
+  db.delete(ordersRefundRequests).run();
+  db.insert(identityOtpRequests).values([
+    {
+      request_id: 'OTP-DEMO-001',
+      phone: '13800000001',
+      otp: '000001',
+      channel: 'sms',
+      delivery_status: 'sent',
+      status: 'verified',
+      requested_at: `${m0}-22T09:30:00+08:00`,
+      expires_at: `${m0}-22T09:35:00+08:00`,
+      trace_id: 'trace_demo_otp_001',
+    },
+    {
+      request_id: 'OTP-DEMO-002',
+      phone: '13800000003',
+      otp: '000003',
+      channel: 'sms',
+      delivery_status: 'delayed',
+      status: 'pending',
+      requested_at: `${m0}-22T10:00:00+08:00`,
+      expires_at: `${m0}-22T10:05:00+08:00`,
+      trace_id: 'trace_demo_otp_002',
+    },
+    {
+      request_id: 'OTP-DEMO-003',
+      phone: '13900000006',
+      otp: '000006',
+      channel: 'sms',
+      delivery_status: 'sent',
+      status: 'pending',
+      requested_at: `${m0}-22T11:00:00+08:00`,
+      expires_at: `${m0}-22T11:05:00+08:00`,
+      trace_id: 'trace_demo_otp_003',
+    },
+  ]).run();
+  db.insert(identityLoginEvents).values([
+    { event_id: 'LOGIN-001', phone: '13800000001', event_type: 'login_success', result: 'success', failure_reason: null, device_label: 'Pixel 8', ip_region: '广州', occurred_at: `${m0}-21T08:10:00+08:00` },
+    { event_id: 'LOGIN-002', phone: '13800000002', event_type: 'login_success', result: 'success', failure_reason: null, device_label: 'iPhone 15', ip_region: '深圳', occurred_at: `${m0}-21T09:00:00+08:00` },
+    { event_id: 'LOGIN-003', phone: '13800000003', event_type: 'login_failed', result: 'failed', failure_reason: 'password_attempts_exceeded', device_label: 'Redmi Note 12', ip_region: '北京', occurred_at: `${m0}-22T09:50:00+08:00` },
+    { event_id: 'LOGIN-004', phone: '13800000003', event_type: 'otp_challenge', result: 'failed', failure_reason: 'otp_delayed', device_label: 'Redmi Note 12', ip_region: '北京', occurred_at: `${m0}-22T10:01:00+08:00` },
+    { event_id: 'LOGIN-005', phone: '13800000003', event_type: 'account_locked', result: 'blocked', failure_reason: 'risk_review_required', device_label: 'Redmi Note 12', ip_region: '北京', occurred_at: `${m0}-22T10:02:30+08:00` },
+    { event_id: 'LOGIN-006', phone: '13900000004', event_type: 'login_success', result: 'success', failure_reason: null, device_label: 'Honor 100', ip_region: '广州', occurred_at: `${m0}-20T20:10:00+08:00` },
+    { event_id: 'LOGIN-007', phone: '13900000006', event_type: 'login_failed', result: 'failed', failure_reason: 'unusual_ip_region', device_label: 'iPhone 14 Pro', ip_region: '香港', occurred_at: `${m0}-19T07:40:00+08:00` },
+  ]).run();
+  db.insert(invoiceRecords).values([
+    {
+      invoice_no: `INV-${m1.replace('-', '')}-0001`,
+      phone: '13800000001',
+      month: m1,
+      total: 79.5,
+      email: 'zhangsan@example.com',
+      status: 'issued',
+      requested_at: `${m0}-18T14:20:00+08:00`,
+    },
+    {
+      invoice_no: `INV-${m0.replace('-', '')}-0002`,
+      phone: '13800000002',
+      month: m0,
+      total: 158,
+      email: 'lisi@example.com',
+      status: 'issued',
+      requested_at: `${m0}-20T09:20:00+08:00`,
+    },
+    {
+      invoice_no: `INV-${m1.replace('-', '')}-0003`,
+      phone: '13900000006',
+      month: m1,
+      total: 239,
+      email: 'finance@corp.example.com',
+      status: 'issued',
+      requested_at: `${m0}-15T16:20:00+08:00`,
+    },
+  ]).run();
+  db.insert(ordersRefundRequests).values([
+    {
+      refund_id: 'REF-001',
+      phone: '13800000001',
+      service_id: 'video_pkg',
+      month: m0,
+      reason: 'customer_claims_unwanted_renewal',
+      amount: 20,
+      status: 'pending_review',
+      requested_at: `${m0}-22T10:10:00+08:00`,
+      resolved_at: null,
+    },
+    {
+      refund_id: 'REF-002',
+      phone: '13900000006',
+      service_id: 'roaming_pkg',
+      month: m1,
+      reason: 'duplicate_roaming_charge_claim',
+      amount: 30,
+      status: 'approved',
+      requested_at: `${m1}-14T11:20:00+08:00`,
+      resolved_at: `${m1}-16T17:00:00+08:00`,
+    },
+    {
+      refund_id: 'REF-003',
+      phone: '13800000003',
+      service_id: 'game_pkg',
+      month: m0,
+      reason: 'service_not_used',
+      amount: 15,
+      status: 'rejected',
+      requested_at: `${m0}-21T18:10:00+08:00`,
+      resolved_at: `${m0}-22T09:10:00+08:00`,
+    },
   ]).run();
 
   // ── 6. test_personas ─────────────────────────────────────────────────────────
   console.log('[seed] 写入 test_personas 数据...');
   db.delete(testPersonas).run();
   db.insert(testPersonas).values([
-    // 入呼用户
-    { id: 'U001', label_zh: '张三 · 畅享50G套餐 · 50元/月', label_en: 'Zhang San · 50G Data Plan · ¥50/mo', category: 'inbound', tag_zh: '正常用户', tag_en: 'Active', tag_color: 'bg-green-100 text-green-600', sort_order: 0,
-      context: JSON.stringify({ phone: '13800000001', name: '张三', gender: 'male', plan: '畅享50G套餐', status: 'active', region: '广州', contract_end_date: '2026-06-15', email: 'zhangsan@example.com' }) },
-    { id: 'U002', label_zh: '李四 · 无限流量套餐 · 128元/月', label_en: 'Li Si · Unlimited Plan · ¥128/mo', category: 'inbound', tag_zh: 'VIP用户', tag_en: 'VIP', tag_color: 'bg-blue-100 text-blue-600', sort_order: 1,
-      context: JSON.stringify({ phone: '13800000002', name: '李四', gender: 'female', plan: '无限流量套餐', status: 'active', region: '深圳', email: 'lisi@example.com' }) },
-    { id: 'U003', label_zh: '王五 · 基础10G套餐 · 30元/月', label_en: 'Wang Wu · 10G Basic Plan · ¥30/mo', category: 'inbound', tag_zh: '欠费停机', tag_en: 'Suspended', tag_color: 'bg-red-100 text-red-600', sort_order: 2,
-      context: JSON.stringify({ phone: '13800000003', name: '王五', gender: 'male', plan: '基础10G套餐', status: 'suspended', region: '北京', contract_end_date: '2025-12-31' }) },
-    // 外呼催收
+    { id: 'U001', label_zh: '张三 · 畅享50G套餐 · 套餐升级/账单争议', label_en: 'Zhang San · 50G Plan · Upgrade/Bill Dispute', category: 'inbound', tag_zh: '正常用户', tag_en: 'Active', tag_color: 'bg-green-100 text-green-600', sort_order: 0,
+      context: JSON.stringify({ phone: '13800000001', name: '张三', gender: 'male', plan: '畅享50G套餐', status: 'active', region: '广州', contract_end_date: '2026-06-15', email: 'zhangsan@example.com', customer_tier: 'standard', highlight: '视频会员扣费争议' }) },
+    { id: 'U002', label_zh: '李四 · 无限流量套餐 · VIP/DND', label_en: 'Li Si · Unlimited Plan · VIP/DND', category: 'inbound', tag_zh: 'VIP用户', tag_en: 'VIP', tag_color: 'bg-blue-100 text-blue-600', sort_order: 1,
+      context: JSON.stringify({ phone: '13800000002', name: '李四', gender: 'female', plan: '无限流量套餐', status: 'active', region: '深圳', email: 'lisi@example.com', customer_tier: 'vip', household_id: 'HH-001', dnd: true }) },
+    { id: 'U003', label_zh: '王五 · 基础10G套餐 · 欠费停机 / App风控', label_en: 'Wang Wu · 10G Basic Plan · Suspended/App Risk', category: 'inbound', tag_zh: '欠费停机', tag_en: 'Suspended', tag_color: 'bg-red-100 text-red-600', sort_order: 2,
+      context: JSON.stringify({ phone: '13800000003', name: '王五', gender: 'male', plan: '基础10G套餐', status: 'suspended', region: '北京', contract_end_date: '2025-12-31', overdue_days: 25, highlight: '登录失败+OTP延迟' }) },
     { id: 'C001', label_zh: 'C001 · 张明 · 宽带包年 · 逾期30天 · ¥386', label_en: 'C001 · Zhang Ming · Annual Broadband · 30d overdue · ¥386', category: 'outbound_collection', tag_zh: '逾期30天', tag_en: '30d Overdue', tag_color: 'bg-red-100 text-red-600', sort_order: 0,
-      context: JSON.stringify({ phone: '13900000001', name: '张明', gender: 'male', plan: '宽带包年套餐', status: 'suspended', task_type: 'collection', outbound_task_id: 'C001' }) },
+      context: JSON.stringify({ phone: '13900000001', name: '张明', gender: 'male', plan: '宽带包年套餐', status: 'suspended', task_type: 'collection', overdue_amount: 386, overdue_days: 30, outbound_task_id: 'C001' }) },
     { id: 'C002', label_zh: 'C002 · 李华 · 家庭融合 · 逾期45天 · ¥1,280', label_en: 'C002 · Li Hua · Family Bundle · 45d overdue · ¥1,280', category: 'outbound_collection', tag_zh: '逾期45天', tag_en: '45d Overdue', tag_color: 'bg-red-100 text-red-600', sort_order: 1,
-      context: JSON.stringify({ phone: '13900000002', name: '李华', gender: 'male', plan: '家庭融合套餐', status: 'suspended', task_type: 'collection', outbound_task_id: 'C002' }) },
+      context: JSON.stringify({ phone: '13900000002', name: '李华', gender: 'male', plan: '家庭融合套餐', status: 'suspended', task_type: 'collection', overdue_amount: 1280, overdue_days: 45, household_id: 'HH-002', outbound_task_id: 'C002' }) },
     { id: 'C003', label_zh: 'C003 · 王芳 · 流量月包 · 逾期15天 · ¥520', label_en: 'C003 · Wang Fang · Monthly Data Pack · 15d overdue · ¥520', category: 'outbound_collection', tag_zh: '逾期15天', tag_en: '15d Overdue', tag_color: 'bg-orange-100 text-orange-600', sort_order: 2,
-      context: JSON.stringify({ phone: '13900000003', name: '王芳', gender: 'female', plan: '流量月包', status: 'suspended', task_type: 'collection', outbound_task_id: 'C003' }) },
-    // 外呼营销
-    { id: 'M001', label_zh: 'M001 · 陈伟 · 5G升级专项活动 · ¥199/月', label_en: 'M001 · Chen Wei · 5G Upgrade Campaign · ¥199/mo', category: 'outbound_marketing', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600', sort_order: 0,
-      context: JSON.stringify({ phone: '13900000004', name: '陈伟', gender: 'male', plan: '4G套餐 99元', status: 'active', task_type: 'marketing', outbound_task_id: 'M001' }) },
-    { id: 'M002', label_zh: 'M002 · 刘丽 · 家庭融合推广活动 · ¥299/月', label_en: 'M002 · Liu Li · Family Bundle Campaign · ¥299/mo', category: 'outbound_marketing', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600', sort_order: 1,
+      context: JSON.stringify({ phone: '13900000003', name: '王芳', gender: 'female', plan: '流量月包', status: 'suspended', task_type: 'collection', overdue_amount: 520, overdue_days: 15, outbound_task_id: 'C003' }) },
+    { id: 'M001', label_zh: 'M001 · 陈伟 · 5G升级专项活动 · ¥199/月', label_en: 'M001 · Chen Wei · 5G Upgrade Campaign · ¥199/mo', category: 'outbound_marketing', tag_zh: '高流量4G', tag_en: 'High Usage 4G', tag_color: 'bg-violet-100 text-violet-600', sort_order: 0,
+      context: JSON.stringify({ phone: '13900000004', name: '陈伟', gender: 'male', plan: '4G套餐 99元', status: 'active', task_type: 'marketing', customer_tier: 'premium', outbound_task_id: 'M001' }) },
+    { id: 'M002', label_zh: 'M002 · 刘丽 · 家庭融合推广活动 · ¥299/月', label_en: 'M002 · Liu Li · Family Bundle Campaign · ¥299/mo', category: 'outbound_marketing', tag_zh: '家庭融合潜客', tag_en: 'Family Bundle Lead', tag_color: 'bg-violet-100 text-violet-600', sort_order: 1,
       context: JSON.stringify({ phone: '13900000005', name: '刘丽', gender: 'female', plan: '个人套餐 79元', status: 'active', task_type: 'marketing', outbound_task_id: 'M002' }) },
-    { id: 'M003', label_zh: 'M003 · 赵强 · 国际漫游出行季活动 · ¥98/月', label_en: 'M003 · Zhao Qiang · Roaming Season Campaign · ¥98/mo', category: 'outbound_marketing', tag_zh: '外呼营销', tag_en: 'Outbound', tag_color: 'bg-violet-100 text-violet-600', sort_order: 2,
-      context: JSON.stringify({ phone: '13900000006', name: '赵强', gender: 'male', plan: '5G商务套餐 159元', status: 'active', task_type: 'marketing', outbound_task_id: 'M003' }) },
+    { id: 'M003', label_zh: 'M003 · 赵强 · 国际漫游出行季活动 · ¥98/月', label_en: 'M003 · Zhao Qiang · Roaming Season Campaign · ¥98/mo', category: 'outbound_marketing', tag_zh: '商务漫游', tag_en: 'Business Roaming', tag_color: 'bg-violet-100 text-violet-600', sort_order: 2,
+      context: JSON.stringify({ phone: '13900000006', name: '赵强', gender: 'male', plan: '5G商务套餐 159元', status: 'active', task_type: 'marketing', household_id: 'HH-003', outbound_task_id: 'M003' }) },
   ]).run();
 
-  // ── 7a. callback_tasks（清空即可，运行时产生数据）────────────────────────────
-  console.log('[seed] 清空 callback_tasks...');
+  // ── 7a. callback_tasks ─────────────────────────────────────────────────────
+  console.log('[seed] 写入 callback_tasks 历史数据...');
   db.delete(callbackTasks).run();
+  db.insert(callbackTasks).values([
+    {
+      task_id: 'CB-HIST-001',
+      original_task_id: 'C001',
+      customer_name: '张明',
+      callback_phone: '13900000001',
+      preferred_time: `${m0}-23T15:00:00+08:00`,
+      product_name: '宽带包年套餐',
+      created_at: `${m0}-22T14:10:00+08:00`,
+      status: 'completed',
+    },
+    {
+      task_id: 'CB-HIST-002',
+      original_task_id: 'M001',
+      customer_name: '陈伟',
+      callback_phone: '13900000004',
+      preferred_time: `${m0}-24T10:30:00+08:00`,
+      product_name: '5G 畅享套餐',
+      created_at: `${m0}-22T16:10:00+08:00`,
+      status: 'pending',
+    },
+  ]).run();
 
   // ── 7b. device_contexts ────────────────────────────────────────────────────
   console.log('[seed] 写入 device_contexts 数据...');
@@ -242,39 +1217,250 @@ async function seed() {
   db.insert(deviceContexts).values([
     { phone: '13800000001', installed_app_version: '3.2.1', latest_app_version: '3.5.0', device_os: 'android', os_version: 'Android 13', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: false, new_device: false, otp_delivery_issue: false },
     { phone: '13800000002', installed_app_version: '3.5.0', latest_app_version: '3.5.0', device_os: 'ios', os_version: 'iOS 17.4', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: true, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: false, new_device: false, otp_delivery_issue: false },
-    { phone: '13800000003', installed_app_version: '3.0.0', latest_app_version: '3.5.0', device_os: 'android', os_version: 'Android 12', device_rooted: false, developer_mode_on: true, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: true, new_device: true, otp_delivery_issue: false },
+    { phone: '13800000003', installed_app_version: '3.0.0', latest_app_version: '3.5.0', device_os: 'android', os_version: 'Android 12', device_rooted: false, developer_mode_on: true, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: true, new_device: true, otp_delivery_issue: true },
+    { phone: '13900000001', installed_app_version: '3.4.0', latest_app_version: '3.5.0', device_os: 'android', os_version: 'Android 13', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: false, new_device: false, otp_delivery_issue: false },
+    { phone: '13900000002', installed_app_version: '3.5.0', latest_app_version: '3.5.0', device_os: 'android', os_version: 'Android 14', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: false, new_device: false, otp_delivery_issue: false },
+    { phone: '13900000003', installed_app_version: '3.1.2', latest_app_version: '3.5.0', device_os: 'android', os_version: 'Android 13', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: false, new_device: false, otp_delivery_issue: false },
+    { phone: '13900000004', installed_app_version: '3.5.0', latest_app_version: '3.5.0', device_os: 'android', os_version: 'HarmonyOS 4', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: false, new_device: true, otp_delivery_issue: false },
+    { phone: '13900000005', installed_app_version: '3.4.8', latest_app_version: '3.5.0', device_os: 'ios', os_version: 'iOS 17.2', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: false, new_device: false, otp_delivery_issue: false },
+    { phone: '13900000006', installed_app_version: '3.5.0', latest_app_version: '3.5.0', device_os: 'ios', os_version: 'iOS 17.5', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: true, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: true, new_device: false, otp_delivery_issue: false },
+  ]).run();
+
+  console.log('[seed] 写入网络事件数据...');
+  db.delete(networkIncidents).run();
+  db.insert(networkIncidents).values([
+    {
+      incident_id: 'NET-001',
+      region: '广州',
+      incident_type: 'congestion',
+      severity: 'medium',
+      status: 'open',
+      affected_services: JSON.stringify(['4G', '5G']),
+      start_time: '2026-03-22T08:30:00+08:00',
+      end_time: null,
+      description: '广州天河晚高峰基站负载偏高，可能导致数据速率下降。',
+    },
+    {
+      incident_id: 'NET-002',
+      region: '深圳',
+      incident_type: 'maintenance',
+      severity: 'low',
+      status: 'observing',
+      affected_services: JSON.stringify(['5G']),
+      start_time: '2026-03-22T01:00:00+08:00',
+      end_time: '2026-03-22T05:00:00+08:00',
+      description: '深圳南山区 5G 维护窗口，部分用户可能出现瞬时波动。',
+    },
+    {
+      incident_id: 'NET-003',
+      region: '北京',
+      incident_type: 'outage',
+      severity: 'high',
+      status: 'open',
+      affected_services: JSON.stringify(['4G', '语音']),
+      start_time: '2026-03-22T10:00:00+08:00',
+      end_time: null,
+      description: '北京朝阳部分片区基站中断，影响语音与数据业务。',
+    },
+    {
+      incident_id: 'NET-004',
+      region: '全国',
+      incident_type: 'sms_delay',
+      severity: 'medium',
+      status: 'observing',
+      affected_services: JSON.stringify(['短信验证码']),
+      start_time: '2026-03-22T09:15:00+08:00',
+      end_time: null,
+      description: '短信中心短时延迟，验证码送达可能晚于平时。',
+    },
+    {
+      incident_id: 'NET-005',
+      region: '深圳',
+      incident_type: 'roaming_alert',
+      severity: 'low',
+      status: 'observing',
+      affected_services: JSON.stringify(['国际漫游']),
+      start_time: '2026-03-22T06:00:00+08:00',
+      end_time: null,
+      description: '部分国际漫游合作网关切换，可能导致短时计费或短信延迟。',
+    },
   ]).run();
 
   // ── 7c. outbound_tasks ─────────────────────────────────────────────────────
   console.log('[seed] 写入 outbound_tasks 数据...');
   db.delete(outboundTasks).run();
   db.insert(outboundTasks).values([
-    // 催收
     { id: 'C001', phone: '13900000001', task_type: 'collection', label_zh: 'C001 · 张明 · 宽带包年 · 逾期30天 · ¥386', label_en: 'C001 · Zhang Ming · Annual Broadband · 30 days overdue · ¥386', data: JSON.stringify({
-      zh: { case_id: 'C001', customer_name: '张明', gender: 'male', overdue_amount: 386, overdue_days: 30, due_date: '2026-03-15', product_name: '宽带包年套餐', strategy: '轻催' },
-      en: { case_id: 'C001', customer_name: 'Zhang Ming', gender: 'male', overdue_amount: 386, overdue_days: 30, due_date: '2026-03-15', product_name: 'Annual Broadband Plan', strategy: 'soft' },
+      zh: { case_id: 'C001', customer_name: '张明', gender: 'male', overdue_amount: 386, overdue_days: 30, due_date: `${m0}-15`, product_name: '宽带包年套餐', strategy: '轻催' },
+      en: { case_id: 'C001', customer_name: 'Zhang Ming', gender: 'male', overdue_amount: 386, overdue_days: 30, due_date: `${m0}-15`, product_name: 'Annual Broadband Plan', strategy: 'soft' },
     }) },
     { id: 'C002', phone: '13900000002', task_type: 'collection', label_zh: 'C002 · 李华 · 家庭融合 · 逾期45天 · ¥1,280', label_en: 'C002 · Li Hua · Family Bundle · 45 days overdue · ¥1,280', data: JSON.stringify({
-      zh: { case_id: 'C002', customer_name: '李华', gender: 'male', overdue_amount: 1280, overdue_days: 45, due_date: '2026-03-10', product_name: '家庭融合套餐', strategy: '中催' },
-      en: { case_id: 'C002', customer_name: 'Li Hua', gender: 'male', overdue_amount: 1280, overdue_days: 45, due_date: '2026-03-10', product_name: 'Family Bundle Plan', strategy: 'medium' },
+      zh: { case_id: 'C002', customer_name: '李华', gender: 'male', overdue_amount: 1280, overdue_days: 45, due_date: `${m0}-10`, product_name: '家庭融合套餐', strategy: '中催' },
+      en: { case_id: 'C002', customer_name: 'Li Hua', gender: 'male', overdue_amount: 1280, overdue_days: 45, due_date: `${m0}-10`, product_name: 'Family Bundle Plan', strategy: 'medium' },
     }) },
     { id: 'C003', phone: '13900000003', task_type: 'collection', label_zh: 'C003 · 王芳 · 流量月包 · 逾期15天 · ¥520', label_en: 'C003 · Wang Fang · Monthly Data Pack · 15 days overdue · ¥520', data: JSON.stringify({
-      zh: { case_id: 'C003', customer_name: '王芳', gender: 'female', overdue_amount: 520, overdue_days: 15, due_date: '2026-03-20', product_name: '流量月包', strategy: '轻催' },
-      en: { case_id: 'C003', customer_name: 'Wang Fang', gender: 'female', overdue_amount: 520, overdue_days: 15, due_date: '2026-03-20', product_name: 'Monthly Data Plan', strategy: 'soft' },
+      zh: { case_id: 'C003', customer_name: '王芳', gender: 'female', overdue_amount: 520, overdue_days: 15, due_date: `${m0}-20`, product_name: '流量月包', strategy: '轻催' },
+      en: { case_id: 'C003', customer_name: 'Wang Fang', gender: 'female', overdue_amount: 520, overdue_days: 15, due_date: `${m0}-20`, product_name: 'Monthly Data Plan', strategy: 'soft' },
     }) },
-    // 营销
     { id: 'M001', phone: '13900000004', task_type: 'marketing', label_zh: 'M001 · 陈伟 · 5G升级专项活动 · ¥199/月', label_en: 'M001 · Chen Wei · 5G Upgrade Campaign · ¥199/mo', data: JSON.stringify({
       zh: { campaign_id: 'M001', campaign_name: '5G升级专项活动', customer_name: '陈伟', gender: 'male', current_plan: '4G畅享套餐 99元/月（100GB流量）', target_plan_name: '5G畅享套餐', target_plan_fee: 199, target_plan_data: '300GB（5G速率）', target_plan_voice: '600分钟', target_plan_features: ['解锁5G网速', '流量翻三倍', '首月免月租'], promo_note: '首月免月租，本月底前办理有效', talk_template: '5G_upgrade_v2' },
       en: { campaign_id: 'M001', campaign_name: '5G Upgrade Campaign', customer_name: 'Chen Wei', gender: 'male', current_plan: '4G Unlimited Plan ¥99/mo (100GB data)', target_plan_name: '5G Unlimited Plan', target_plan_fee: 199, target_plan_data: '300GB (5G speed)', target_plan_voice: '600 minutes', target_plan_features: ['Unlock 5G speed', '3x more data', 'First month free'], promo_note: 'First month free — offer valid through end of this month', talk_template: '5G_upgrade_v2' },
     }) },
     { id: 'M002', phone: '13900000005', task_type: 'marketing', label_zh: 'M002 · 刘丽 · 家庭融合推广活动 · ¥299/月', label_en: 'M002 · Liu Li · Family Bundle Campaign · ¥299/mo', data: JSON.stringify({
-      zh: { campaign_id: 'M002', campaign_name: '家庭融合推广活动', customer_name: '刘丽', gender: 'female', current_plan: '个人4G套餐 79元/月（50GB流量）+ 宽带 100元/月', target_plan_name: '家庭融合套餐', target_plan_fee: 299, target_plan_data: '主卡200GB + 3张副卡各50GB', target_plan_voice: '主卡不限分钟', target_plan_features: ['手机+宽带500M合一', '3张副卡共享流量', '每月节省约100元'], promo_note: '宽带免费升速至500M，24个月合约', talk_template: 'family_bundle_v1' },
-      en: { campaign_id: 'M002', campaign_name: 'Family Bundle Promotion', customer_name: 'Liu Li', gender: 'female', current_plan: 'Personal 4G Plan ¥79/mo (50GB data) + Broadband ¥100/mo', target_plan_name: 'Family Bundle Plan', target_plan_fee: 299, target_plan_data: 'Primary line 200GB + 3 sub-lines 50GB each', target_plan_voice: 'Primary line unlimited minutes', target_plan_features: ['Mobile + 500M broadband combined', '3 shared sub-lines', 'Save ~¥100/month'], promo_note: 'Free broadband speed upgrade to 500M, 24-month contract', talk_template: 'family_bundle_v1' },
+      zh: { campaign_id: 'M002', campaign_name: '家庭融合推广活动', customer_name: '刘丽', gender: 'female', current_plan: '个人4G套餐 79元/月（60GB流量）+ 宽带 90元/月', target_plan_name: '家庭融合套餐', target_plan_fee: 299, target_plan_data: '主卡200GB + 3张副卡各50GB', target_plan_voice: '主卡不限分钟', target_plan_features: ['手机+宽带500M合一', '3张副卡共享流量', '每月节省约100元'], promo_note: '宽带免费升速至500M，24个月合约', talk_template: 'family_bundle_v1' },
+      en: { campaign_id: 'M002', campaign_name: 'Family Bundle Promotion', customer_name: 'Liu Li', gender: 'female', current_plan: 'Personal 4G Plan ¥79/mo (60GB data) + Broadband ¥90/mo', target_plan_name: 'Family Bundle Plan', target_plan_fee: 299, target_plan_data: 'Primary line 200GB + 3 sub-lines 50GB each', target_plan_voice: 'Primary line unlimited minutes', target_plan_features: ['Mobile + 500M broadband combined', '3 shared sub-lines', 'Save ~¥100/month'], promo_note: 'Free broadband speed upgrade to 500M, 24-month contract', talk_template: 'family_bundle_v1' },
     }) },
     { id: 'M003', phone: '13900000006', task_type: 'marketing', label_zh: 'M003 · 赵强 · 国际漫游出行季活动 · ¥98/月', label_en: 'M003 · Zhao Qiang · Roaming Season Campaign · ¥98/mo', data: JSON.stringify({
       zh: { campaign_id: 'M003', campaign_name: '国际漫游出行季活动', customer_name: '赵强', gender: 'male', current_plan: '5G商务套餐 159元/月', target_plan_name: '国际漫游月包', target_plan_fee: 98, target_plan_data: '日韩港澳台及东南亚10国每日1GB高速', target_plan_voice: '接听免费，拨出0.5元/分钟', target_plan_features: ['落地即用', '超量不断网', '比直接漫游省60%'], promo_note: '出境前1天激活即可，30天内有效', talk_template: 'roaming_v1' },
       en: { campaign_id: 'M003', campaign_name: 'International Roaming Travel Season', customer_name: 'Zhao Qiang', gender: 'male', current_plan: '5G Business Plan ¥159/mo', target_plan_name: 'International Roaming Monthly Pack', target_plan_fee: 98, target_plan_data: '1GB/day high-speed in Japan, Korea, HK, Macau, Taiwan & 10 SE Asian countries', target_plan_voice: 'Free incoming calls, outgoing ¥0.5/min', target_plan_features: ['Ready on arrival', 'No cutoff after cap', 'Save 60% vs. standard roaming'], promo_note: 'Activate 1 day before departure — valid for 30 days', talk_template: 'roaming_v1' },
     }) },
+  ]).run();
+
+  console.log('[seed] 清空服务订单、退款、外呼结果、短信事件、转人工与营销结果...');
+  db.delete(ordersServiceOrders).run();
+  db.delete(outreachCallResults).run();
+  db.delete(outreachSmsEvents).run();
+  db.delete(outreachHandoffCases).run();
+  db.delete(outreachMarketingResults).run();
+  db.insert(ordersServiceOrders).values([
+    {
+      order_id: 'ORD-DEMO-001',
+      order_type: 'service_cancel',
+      phone: '13800000001',
+      service_id: 'sms_100',
+      service_name: '短信百条包（100条/月）',
+      reason: 'customer_requested_cancel',
+      status: 'pending_effective',
+      effective_at: '次月1日00:00',
+      requires_manual_review: false,
+      message: '退订申请已受理，预计次月生效。',
+      created_at: `${m0}-20T11:00:00+08:00`,
+    },
+    {
+      order_id: 'ORD-DEMO-002',
+      order_type: 'service_cancel',
+      phone: '13900000002',
+      service_id: 'family_share',
+      service_name: '家庭共享副卡权益包',
+      reason: 'arrears_review_required',
+      status: 'manual_review',
+      effective_at: null,
+      requires_manual_review: true,
+      message: '客户存在高额欠费，已提交人工复核后再决定是否退订。',
+      created_at: `${m0}-21T10:00:00+08:00`,
+    },
+  ]).run();
+  db.insert(outreachCallResults).values([
+    {
+      result_id: 'CALL-DEMO-001',
+      task_id: 'C001',
+      phone: '13900000001',
+      result: 'ptp',
+      remark: '客户承诺本周五前缴费',
+      callback_time: null,
+      ptp_date: `${m0}-28`,
+      created_at: `${m0}-22T14:00:00+08:00`,
+    },
+    {
+      result_id: 'CALL-DEMO-002',
+      task_id: 'C002',
+      phone: '13900000002',
+      result: 'human_transfer',
+      remark: '客户要求人工协商分期',
+      callback_time: null,
+      ptp_date: null,
+      created_at: `${m0}-22T14:20:00+08:00`,
+    },
+    {
+      result_id: 'CALL-DEMO-003',
+      task_id: 'M001',
+      phone: '13900000004',
+      result: 'callback',
+      remark: '客户对 5G 升级有兴趣，需要下周回访',
+      callback_time: `${m0}-24T10:30:00+08:00`,
+      ptp_date: null,
+      created_at: `${m0}-22T15:10:00+08:00`,
+    },
+  ]).run();
+  db.insert(outreachSmsEvents).values([
+    {
+      event_id: 'SMS-DEMO-001',
+      phone: '13900000001',
+      sms_type: 'payment_link',
+      context: 'collection',
+      status: 'sent',
+      reason: null,
+      sent_at: `${m0}-22T14:02:00+08:00`,
+    },
+    {
+      event_id: 'SMS-DEMO-002',
+      phone: '13900000004',
+      sms_type: 'plan_detail',
+      context: 'marketing',
+      status: 'sent',
+      reason: null,
+      sent_at: `${m0}-22T15:20:00+08:00`,
+    },
+    {
+      event_id: 'SMS-DEMO-003',
+      phone: '13800000002',
+      sms_type: 'plan_detail',
+      context: 'marketing',
+      status: 'blocked',
+      reason: 'dnd_preference',
+      sent_at: `${m0}-22T16:05:00+08:00`,
+    },
+  ]).run();
+  db.insert(outreachHandoffCases).values([
+    {
+      case_id: 'HOF-DEMO-001',
+      phone: '13800000002',
+      source_skill: 'outbound-marketing',
+      reason: 'customer_requested_human',
+      priority: 'medium',
+      queue_name: 'general_support',
+      status: 'open',
+      created_at: `${m0}-22T15:10:00+08:00`,
+    },
+    {
+      case_id: 'HOF-DEMO-002',
+      phone: '13900000002',
+      source_skill: 'outbound-collection',
+      reason: 'installment_negotiation',
+      priority: 'high',
+      queue_name: 'collections_specialist',
+      status: 'open',
+      created_at: `${m0}-22T14:25:00+08:00`,
+    },
+  ]).run();
+  db.insert(outreachMarketingResults).values([
+    {
+      record_id: 'MKT-DEMO-001',
+      campaign_id: 'CMP-UP-100G',
+      phone: '13900000004',
+      result: 'callback',
+      callback_time: `${m0}-24T10:30:00+08:00`,
+      is_dnd: false,
+      recorded_at: `${m0}-22T15:30:00+08:00`,
+    },
+    {
+      record_id: 'MKT-DEMO-002',
+      campaign_id: 'CMP-FAMILY-001',
+      phone: '13900000005',
+      result: 'interested',
+      callback_time: null,
+      is_dnd: false,
+      recorded_at: `${m0}-22T16:00:00+08:00`,
+    },
+    {
+      record_id: 'MKT-DEMO-003',
+      campaign_id: 'CMP-FAMILY-001',
+      phone: '13800000002',
+      result: 'dnd',
+      callback_time: null,
+      is_dnd: true,
+      recorded_at: `${m0}-22T16:10:00+08:00`,
+    },
   ]).run();
 
   // ── 默认用户 ─────────────────────────────────────────────────────

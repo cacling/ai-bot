@@ -71,7 +71,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
   const implLabel = (tool: McpToolRecord) => {
     if (!tool.impl_type) return null;
     if (tool.impl_type === 'script') return '脚本';
-    if (tool.impl_type === 'db') return 'DB';
+    if (tool.impl_type === 'db') return 'DB (legacy)';
     if (tool.impl_type === 'api') return 'API';
     return tool.impl_type;
   };
@@ -234,12 +234,11 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
             />
           </div>
           <Select value={filterImpl} onValueChange={v => setFilterImpl(v)}>
-            <SelectTrigger className="w-28 text-xs h-8"><SelectValue placeholder="实现方式" /></SelectTrigger>
+            <SelectTrigger className="w-32 text-xs h-8"><SelectValue placeholder="Adapter 类型" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部实现</SelectItem>
-              <SelectItem value="script">脚本</SelectItem>
-              <SelectItem value="db">DB</SelectItem>
-              <SelectItem value="api">API</SelectItem>
+              <SelectItem value="all">全部 Adapter</SelectItem>
+              <SelectItem value="script">Script</SelectItem>
+              <SelectItem value="api">API Proxy</SelectItem>
               <SelectItem value="none">未配置</SelectItem>
             </SelectContent>
           </Select>
@@ -270,7 +269,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
               <TableRow>
                 <TableHead className="w-40">工具名</TableHead>
                 <TableHead className="w-24">Server</TableHead>
-                <TableHead className="w-16 text-center">实现</TableHead>
+                <TableHead className="w-16 text-center">Adapter</TableHead>
                 <TableHead className="w-24 text-center">Skill</TableHead>
                 <TableHead className="w-20 text-center">契约</TableHead>
                 <TableHead className="w-28 text-center">模式</TableHead>

@@ -16,9 +16,10 @@ type QuickFilter = 'all' | 'running' | 'planned' | 'disabled' | 'no_resource';
 
 interface Props {
   onOpenTool?: (toolId: string, step?: string, fromServer?: string) => void;
+  onOpenConnectors?: () => void;
 }
 
-export function McpServerList({ onOpenTool }: Props = {}) {
+export function McpServerList({ onOpenTool, onOpenConnectors }: Props = {}) {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [tools, setTools] = useState<McpToolRecord[]>([]);
   const [resources, setResources] = useState<McpResource[]>([]);
@@ -126,8 +127,8 @@ export function McpServerList({ onOpenTool }: Props = {}) {
 
   // ── Early returns (after all hooks) ─────────────────────────────────────────
 
-  if (view === 'create') return <McpServerConsole onBack={() => setView('list')} onSaved={handleSaved} onCreated={handleCreated} onOpenTool={onOpenTool} />;
-  if (view === 'edit' && editId) return <McpServerConsole serverId={editId} onBack={() => { setView('list'); setEditId(null); }} onSaved={handleSaved} onOpenTool={onOpenTool} />;
+  if (view === 'create') return <McpServerConsole onBack={() => setView('list')} onSaved={handleSaved} onCreated={handleCreated} onOpenTool={onOpenTool} onOpenConnectors={onOpenConnectors} />;
+  if (view === 'edit' && editId) return <McpServerConsole serverId={editId} onBack={() => { setView('list'); setEditId(null); }} onSaved={handleSaved} onOpenTool={onOpenTool} onOpenConnectors={onOpenConnectors} />;
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ export function McpServerList({ onOpenTool }: Props = {}) {
             { key: 'running' as QuickFilter, label: '运行中', value: stats.running, color: 'text-emerald-600' },
             { key: 'planned' as QuickFilter, label: '规划中', value: stats.planned, color: 'text-amber-600' },
             { key: 'disabled' as QuickFilter, label: '已禁用', value: stats.disabled, color: 'text-muted-foreground' },
-            { key: 'no_resource' as QuickFilter, label: '无资源', value: stats.noResource, color: 'text-destructive' },
+            { key: 'no_resource' as QuickFilter, label: '无连接器', value: stats.noResource, color: 'text-destructive' },
           ]).map(card => (
             <button
               key={card.key}
@@ -204,7 +205,7 @@ export function McpServerList({ onOpenTool }: Props = {}) {
               <TableRow>
                 <TableHead className="w-40">名称</TableHead>
                 <TableHead>描述</TableHead>
-                <TableHead className="w-24 text-center">资源</TableHead>
+                <TableHead className="w-24 text-center">连接器</TableHead>
                 <TableHead className="w-28 text-center">工具</TableHead>
                 <TableHead className="w-20 text-center">最近同步</TableHead>
                 <TableHead className="w-20 text-center">状态</TableHead>

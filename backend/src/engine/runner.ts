@@ -13,10 +13,18 @@ import { isNoDataResult } from '../services/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
 import { matchMockRule, getMockedToolNames, getMockedToolDefinitions } from '../services/mock-engine';
-import { executeDbTool, type DbExecutionConfig } from '../services/db-executor';
-import { mcpTools as mcpToolsTable, mcpResources as mcpResourcesTable } from '../db/schema';
+import { mcpTools as mcpToolsTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { SOPGuard } from './sop-guard';
+import { randomUUID } from 'crypto';
+
+/**
+ * 重构2 工具路由模式
+ * MCP Server = 业务域稳定边界（防腐层），SQLite/mock_apis/scripts = 二级实现路径
+ * - 'mcp_only': 所有工具通过 MCP 协议获取（目标态）
+ * - 'hybrid': 优先 MCP，API 工具回退到直接注入（过渡态）
+ */
+const TOOL_ROUTING_MODE = (process.env.TOOL_ROUTING_MODE ?? 'hybrid') as 'mcp_only' | 'hybrid';
 
 // Re-export for test file
 export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };
@@ -297,67 +305,37 @@ export async function runAgent(
     logger.info('agent', 'mock_tool_injected', { tool: def.name });
   }
 
-  // 注入 DB 类型工具：resource.type === 'db' 且工具非 mocked
-  try {
-    const allToolRows = db.select().from(mcpToolsTable).all()
-      .filter(t => !t.mocked && !t.disabled && t.execution_config);
-    for (const row of allToolRows) {
-      if (row.name in mockWrappedTools) continue;
-      try {
-        const cfg = JSON.parse(row.execution_config!) as { resource_id?: string };
-        if (!cfg.resource_id) continue;
-        const resource = db.select().from(mcpResourcesTable).where(dbEq(mcpResourcesTable.id, cfg.resource_id)).get();
-        if (!resource || resource.type !== 'db') continue;
-        // 从资源读取 DB 配置
-        const dbConfig: DbExecutionConfig = {
-          table: resource.db_table ?? '',
-          operation: (resource.db_operation as any) ?? 'select_one',
-          where: resource.db_where ? JSON.parse(resource.db_where) : [],
-          columns: resource.db_columns ? JSON.parse(resource.db_columns) : undefined,
-          set_columns: resource.db_set_columns ? JSON.parse(resource.db_set_columns) : undefined,
-          set_fixed: resource.db_set_fixed ? JSON.parse(resource.db_set_fixed) : undefined,
-        };
-        if (!dbConfig.table) continue;
-        const schema = row.input_schema ? JSON.parse(row.input_schema) : { type: 'object', properties: {} };
-        mockWrappedTools[row.name] = {
-          description: row.description,
-          parameters: jsonSchema(schema as any),
-          execute: async (args: Record<string, unknown>) => {
-            logger.info('agent', 'db_tool_execute', { tool: row.name, table: dbConfig.table });
-            const result = executeDbTool(dbConfig, args);
-            return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-          },
-        };
-        logger.info('agent', 'db_tool_injected', { tool: row.name, table: dbConfig.table });
-      } catch { /* 解析失败跳过 */ }
-    }
-  } catch { /* mcp_tools 表不存在时跳过 */ }
-
-  // 注入 API 类型工具：impl_type === 'api' 且工具非 mocked
-  try {
-    const apiToolRows = db.select().from(mcpToolsTable).all()
-      .filter(t => !t.mocked && !t.disabled && t.impl_type === 'api' && t.execution_config);
-    for (const row of apiToolRows) {
-      if (row.name in mockWrappedTools) continue;
-      try {
-        const cfg = JSON.parse(row.execution_config!) as { api?: { url: string; method?: string; timeout?: number; headers?: Record<string, string> } };
-        if (!cfg.api?.url) continue;
-        const schema = row.input_schema ? JSON.parse(row.input_schema) : { type: 'object', properties: {} };
-        const apiConfig = cfg.api;
-        mockWrappedTools[row.name] = {
-          description: row.description,
-          parameters: jsonSchema(schema as any),
-          execute: async (args: Record<string, unknown>) => {
-            logger.info('agent', 'api_tool_execute', { tool: row.name, url: apiConfig.url });
-            const { executeApiTool } = await import('../services/api-executor');
-            const result = await executeApiTool(apiConfig, args);
-            return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-          },
-        };
-        logger.info('agent', 'api_tool_injected', { tool: row.name, url: apiConfig.url });
-      } catch { /* 解析失败跳过 */ }
-    }
-  } catch { /* mcp_tools 表不存在时跳过 */ }
+  // ── 重构2：API 工具注入（过渡期，MCP Server 内部调用 mock_apis）─────────
+  // mcp_only: 不注入，所有工具已在 MCP Server 内部实现
+  // hybrid: API 类型工具从 mcp_tools 表回退注入
+  if (TOOL_ROUTING_MODE === 'hybrid') {
+    try {
+      const apiToolRows = db.select().from(mcpToolsTable).all()
+        .filter(t => !t.mocked && !t.disabled && t.impl_type === 'api' && t.execution_config);
+      for (const row of apiToolRows) {
+        if (row.name in mockWrappedTools) continue;
+        try {
+          const cfg = JSON.parse(row.execution_config!) as { api?: { url: string; method?: string; timeout?: number; headers?: Record<string, string> } };
+          if (!cfg.api?.url) continue;
+          const schema = row.input_schema ? JSON.parse(row.input_schema) : { type: 'object', properties: {} };
+          const apiConfig = cfg.api;
+          mockWrappedTools[row.name] = {
+            description: row.description,
+            parameters: jsonSchema(schema as any),
+            execute: async (args: Record<string, unknown>) => {
+              logger.info('agent', 'api_tool_execute', { tool: row.name, url: apiConfig.url });
+              const { executeApiTool } = await import('../services/api-executor');
+              const result = await executeApiTool(apiConfig, args);
+              return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+            },
+          };
+          logger.info('agent', 'api_tool_injected', { tool: row.name, url: apiConfig.url });
+        } catch { /* 解析失败跳过 */ }
+      }
+    } catch { /* mcp_tools 表不存在时跳过 */ }
+  } else {
+    logger.info('agent', 'tool_routing_mcp_only', { note: 'All tools served by MCP Servers (business domain boundaries)' });
+  }
 
   // Wrap MCP tools to translate results when lang !== 'zh'
   const effectiveMcpTools = mockWrappedTools;
@@ -405,6 +383,15 @@ export async function runAgent(
               return { content: [{ type: 'text', text: JSON.stringify({ error: rejection + '\n连续违规，建议转接人工处理。请调用 transfer_to_human。' }) }] };
             }
             return { content: [{ type: 'text', text: JSON.stringify({ error: rejection }) }] };
+          }
+          // 严格 MCP 对齐：注入治理字段（四层参数设计第 3-4 层）
+          if (args[0] && typeof args[0] === 'object') {
+            const enriched = args[0] as Record<string, unknown>;
+            // 第三层：运行上下文（平台自动注入）
+            if (!enriched.traceId) enriched.traceId = randomUUID();
+            if (!enriched.sessionId) enriched.sessionId = `sess_${Date.now()}`;
+            // 第四层：治理审计（平台自动注入）
+            if (!enriched.operator) enriched.operator = JSON.stringify({ type: 'ai_skill', id: lastActiveSkill ?? 'unknown' });
           }
           // Execute the tool
           const result = await tool.execute(...args);

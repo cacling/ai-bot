@@ -8,12 +8,28 @@
 export {
   plans,
   valueAddedServices,
+  customerHouseholds,
   subscribers,
   subscriberSubscriptions,
   bills,
+  billingBillItems,
+  billingDisputeCases,
   callbackTasks,
   contracts,
   deviceContexts,
+  customerPreferences,
+  identityOtpRequests,
+  identityLoginEvents,
+  paymentsTransactions,
+  networkIncidents,
+  offersCampaigns,
+  invoiceRecords,
+  ordersServiceOrders,
+  ordersRefundRequests,
+  outreachCallResults,
+  outreachSmsEvents,
+  outreachHandoffCases,
+  outreachMarketingResults,
 } from '../../../../packages/shared-db/src/schema/business';
 
 // 以下表从 business 迁移到 platform（运营/测试辅助数据）

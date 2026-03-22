@@ -16,6 +16,7 @@ import canaryRoutes from './agent/km/skills/canary';
 import changeRequestRoutes from './agent/km/skills/change-requests';
 import testCaseRoutes from './agent/km/skills/test-cases';
 import skillCreatorRoutes from './agent/km/skills/skill-creator';
+import toolBindingsRoutes from './agent/km/skills/tool-bindings';
 import kmRoutes from './agent/km/kms';
 import mcpRoutes from './agent/km/mcp';
 import { logger } from './services/logger';
@@ -44,6 +45,9 @@ app.route('/api/files', filesRoutes);
 
 // Mount skills routes: GET /api/skills
 app.route('/api/skills', skillsRoutes);
+
+// Mount tool bindings routes: GET/PUT/POST /api/skills/:id/tool-bindings
+app.route('/api/skills', toolBindingsRoutes);
 
 // Mount compliance routes: GET/POST/DELETE /api/compliance/keywords, POST /api/compliance/check
 app.route('/api/compliance', complianceRoutes);

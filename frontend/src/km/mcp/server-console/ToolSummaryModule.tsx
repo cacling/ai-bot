@@ -15,9 +15,9 @@ interface Props {
 
 function getImplLabel(t: McpToolRecord): string {
   if (!t.impl_type) return '未配置';
-  if (t.impl_type === 'script') return '脚本';
-  if (t.impl_type === 'db') return 'DB';
-  if (t.impl_type === 'api') return 'API';
+  if (t.impl_type === 'script') return 'Script';
+  if (t.impl_type === 'db') return 'DB (legacy)';
+  if (t.impl_type === 'api') return 'API Proxy';
   return t.impl_type;
 }
 

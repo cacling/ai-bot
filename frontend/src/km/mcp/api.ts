@@ -231,4 +231,54 @@ export const mcpApi = {
   // Infer schema from example
   inferSchema: (example: unknown) =>
     request<{ schema: Record<string, unknown> }>('/tool-management/infer-schema', { method: 'POST', body: JSON.stringify({ example }) }),
+
+  // ── Tool Implementation（严格 MCP 对齐：契约与实现分离）──────────────────
+  getToolImplementation: (toolId: string) =>
+    request<ToolImplementation>(`/tool-management/${toolId}/implementation`),
+  updateToolImplementation: (toolId: string, body: Partial<ToolImplementation>) =>
+    request<{ ok: boolean }>(`/tool-management/${toolId}/implementation`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  // ── Connectors（严格 MCP 对齐：本地实现层连接依赖）─────────────────────
+  listConnectors: (serverId?: string) =>
+    request<{ items: Connector[] }>(serverId ? `/connectors?server_id=${serverId}` : '/connectors'),
+  getConnector: (id: string) => request<Connector & { tool_implementations: unknown[] }>(`/connectors/${id}`),
+  createConnector: (body: Partial<Connector>) =>
+    request<{ id: string }>('/connectors', { method: 'POST', body: JSON.stringify(body) }),
+  updateConnector: (id: string, body: Partial<Connector>) =>
+    request<{ ok: boolean }>(`/connectors/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteConnector: (id: string) =>
+    request<{ ok: boolean }>(`/connectors/${id}`, { method: 'DELETE' }),
+  testConnector: (id: string) =>
+    request<{ ok: boolean; error?: string; elapsed_ms?: number }>(`/connectors/${id}/test`, { method: 'POST' }),
 };
+
+// ── Connector 接口 ──────────────────────────────────────────────────────────
+
+export interface ToolImplementation {
+  id: string | null;
+  tool_id: string;
+  adapter_type: string | null;
+  host_server_id: string | null;
+  connector_id: string | null;
+  config: string | null;
+  handler_key: string | null;
+  status: string;
+  connector?: Connector | null;
+  _source: 'tool_implementations' | 'legacy' | 'none';
+}
+
+export interface Connector {
+  id: string;
+  name: string;
+  type: 'db' | 'api' | 'remote_mcp';
+  config: string | null;
+  status: string;
+  description: string | null;
+  env_json: string | null;
+  env_prod_json: string | null;
+  env_test_json: string | null;
+  server_id: string | null;
+  migrated_from: string | null;
+  created_at: string;
+  updated_at: string;
+}

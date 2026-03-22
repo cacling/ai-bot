@@ -33,6 +33,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { MermaidRenderer } from '../shared/MermaidRenderer';
+import { ToolCallPlanPanel } from './components/ToolCallPlanPanel';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
 import {
@@ -1138,6 +1139,13 @@ export function SkillManagerPage() {
                     <MermaidRenderer mermaid={testDiagram.mermaid} height="25vh" zoom={true} autoFocus={true} emptyText="暂无流程图" />
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Tool Call Plan（严格 MCP 对齐） */}
+            {activeSkill && (
+              <div className="border-t border-border shrink-0 p-3">
+                <ToolCallPlanPanel skillId={activeSkill.id} />
               </div>
             )}
 
