@@ -335,24 +335,24 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
         )}
       </div>
 
-      {/* 控制区 */}
-      <div className="bg-background border-t border-border px-6 pt-3 pb-4 flex flex-col items-center space-y-2">
+      {/* 控制区（固定高度，防止动画导致布局跳动） */}
+      <div className="bg-background border-t border-border px-6 flex flex-col items-center justify-center shrink-0 h-[160px] overflow-hidden">
         <p className={`text-sm font-medium transition-colors ${statusColor}`}>
           {t.outbound_state[connState]}
         </p>
 
-        <div className="relative flex items-center justify-center">
+        <div className="relative flex items-center justify-center w-28 h-28 my-1">
           {connState === 'ringing' && (
             <>
-              <span className="absolute w-28 h-28 rounded-full bg-primary opacity-15 animate-ping" />
-              <span className="absolute w-20 h-20 rounded-full bg-primary opacity-20 animate-ping" style={{ animationDelay: '0.2s' }} />
+              <span className="absolute inset-0 m-auto w-28 h-28 rounded-full bg-primary opacity-15 animate-ping" />
+              <span className="absolute inset-0 m-auto w-20 h-20 rounded-full bg-primary opacity-20 animate-ping" style={{ animationDelay: '0.2s' }} />
             </>
           )}
           {connState === 'responding' && (
-            <span className="absolute w-24 h-24 rounded-full bg-primary opacity-15 animate-ping" />
+            <span className="absolute inset-0 m-auto w-24 h-24 rounded-full bg-primary opacity-15 animate-ping" />
           )}
           {connState === 'listening' && (
-            <span className="absolute w-20 h-20 rounded-full bg-destructive opacity-15 animate-pulse" />
+            <span className="absolute inset-0 m-auto w-20 h-20 rounded-full bg-destructive opacity-15 animate-pulse" />
           )}
 
           {connState === 'idle' ? (
