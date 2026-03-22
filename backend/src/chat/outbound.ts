@@ -414,12 +414,12 @@ outbound.get(
             if (msg.type === 'response.function_call_arguments.done') {
               const toolName = msg.name as string;
               const toolArgs = JSON.parse(msg.arguments ?? '{}') as Record<string, unknown>;
+              const currentSkillName = taskParam === 'collection' ? 'outbound-collection' : 'outbound-marketing';
               logger.info('outbound', 'tool_called', { session: sessionId, tool: toolName, args: toolArgs });
 
               // 转人工
               if (toolName === 'transfer_to_human') {
                 const reason = (toolArgs.reason ?? 'user_request') as string;
-                const currentSkillName = taskParam === 'collection' ? 'outbound-collection' : 'outbound-marketing';
                 await sendSkillDiagram(ws, userPhone, currentSkillName, null, lang, sessionId, 'outbound');
                 try {
                   glmWs!.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'conversation.item.create', item: { type: 'function_call_output', call_id: msg.call_id, output: '{"ok":true}' } }));
@@ -463,7 +463,6 @@ outbound.get(
               }
 
               // 推送无高亮版流程图（progressHL 由后续 progress tracker 异步添加）
-              const currentSkillName = taskParam === 'collection' ? 'outbound-collection' : 'outbound-marketing';
               await sendSkillDiagram(ws, userPhone, currentSkillName, null, lang, sessionId, 'outbound');
 
               // ── 文字 LLM 加工：生成口语化回复（通过统一中间件）────────────
