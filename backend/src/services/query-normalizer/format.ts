@@ -31,6 +31,9 @@ export function formatNormalizedContext(nc: NormalizedQuery): string {
       : slots.time.value;
     const sourceDesc = slots.time.source === 'explicit' ? '用户明确指定' : '根据相对时间推算';
     lines.push(`- 时间：${timeDesc}（${sourceDesc}）`);
+    if (slots.time.kind === 'natural_month') {
+      lines.push(`  - **调用工具时 month 参数必须使用：\`${slots.time.value}\`**（YYYY-MM 格式）`);
+    }
   }
 
   for (const [key, label] of Object.entries(SLOT_LABELS)) {
