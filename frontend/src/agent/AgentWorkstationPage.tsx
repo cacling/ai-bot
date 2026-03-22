@@ -407,8 +407,10 @@ export function AgentWorkstationPage() {
               MCP管理
             </Button>
           </div>
-          <div className="flex-1 overflow-hidden">
-            {knowledgeSubTab === 'knowledge' ? <KnowledgeManagementPage /> : knowledgeSubTab === 'skill' ? <SkillManagerPage onOpenToolContract={(toolName) => { setPendingToolNav({ toolName }); setKnowledgeSubTab('mcp'); }} /> : <McpManagementPage externalNavigateToTool={pendingToolNav} onExternalNavigateHandled={() => setPendingToolNav(null)} />}
+          <div className="flex-1 overflow-hidden relative">
+            <div className={`absolute inset-0 ${knowledgeSubTab !== 'knowledge' ? 'hidden' : ''}`}><KnowledgeManagementPage /></div>
+            <div className={`absolute inset-0 ${knowledgeSubTab !== 'skill' ? 'hidden' : ''}`}><SkillManagerPage onOpenToolContract={(toolName) => { setPendingToolNav({ toolName }); setKnowledgeSubTab('mcp'); }} /></div>
+            <div className={`absolute inset-0 ${knowledgeSubTab !== 'mcp' ? 'hidden' : ''}`}><McpManagementPage externalNavigateToTool={pendingToolNav} onExternalNavigateHandled={() => setPendingToolNav(null)} /></div>
           </div>
         </div>
       )}
