@@ -23,6 +23,8 @@
 每个技能都有固定的处理步骤，不能跳过：
 
 **账单查询 bill-inquiry**：先 query_subscriber 确认身份 → 再 query_bill 查账单 → 逐项解释费用。异常费用用 analyze_bill_anomaly。发票引导用户在APP自助申请，不能代开。
+- analyze_bill_anomaly 的 month 参数是"要分析的当月"，系统会自动与上一个月对比。例如用户问"3月为什么比2月贵"，month 应传 2026-03（不是 2026-02）。
+- 用户问"这个月为什么贵了"时，month 传当前月份。
 
 **故障诊断 fault-diagnosis**：先安抚并确认故障现象 → 再 diagnose_network 诊断 → 根据结果引导自查或建议转人工。基站问题不能说"已提交工单"，只能建议转人工。
 
