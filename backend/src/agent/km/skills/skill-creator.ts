@@ -152,6 +152,38 @@ function readCached(path: string): string {
 
 const SPEC_SKILL_DIR = join(TECH_SKILLS_DIR, 'skill-creator-spec');
 
+/**
+ * 检测并截断 LLM 输出中的重复循环。
+ * 当连续行与前面的行高度重复时，截断并附加提示。
+ */
+function truncateRepetition(text: string, maxRepeat = 5): string {
+  const lines = text.split('\n');
+  const seen = new Map<string, number>(); // normalized line → count
+  let cutIndex = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    // 只检测表格行（以 | 开头）
+    const line = lines[i].trim();
+    if (!line.startsWith('|') || line.startsWith('|---') || line.startsWith('| 升级路径') || line.startsWith('| 触发条件')) continue;
+
+    // 标准化：去掉具体文字差异，只保留结构
+    const normalized = line.replace(/[^|]/g, '').length > 2 ? line.slice(0, 30) : line;
+    const count = (seen.get(normalized) ?? 0) + 1;
+    seen.set(normalized, count);
+
+    if (count > maxRepeat) {
+      cutIndex = i;
+      break;
+    }
+  }
+
+  if (cutIndex > 0) {
+    logger.warn('skill-creator', 'repetition_truncated', { at_line: cutIndex, total_lines: lines.length });
+    return lines.slice(0, cutIndex).join('\n') + '\n| frontline | 其他非标需求 | 转人工客服评估 |\n';
+  }
+  return text;
+}
+
 /** 读取 SKILL.md 并去掉 YAML frontmatter，返回纯 prompt 正文 */
 function loadSkillPrompt(): string {
   const raw = readCached(join(SPEC_SKILL_DIR, 'SKILL.md'));
@@ -499,8 +531,12 @@ skillCreator.post('/chat', async (c) => {
             }
 
             // 流结束后，获取完整文本并解析
-            const text = await result.text;
+            let text = await result.text;
             const reasoning = await result.reasoning;
+
+            // 检测并截断重复循环（LLM 生成表格时可能无限重复）
+            text = truncateRepetition(text);
+
             const parsed = parseSkillCreatorResponse(text, session);
 
             logger.info('skill-creator', 'chat_stream_parsed', {
@@ -561,7 +597,8 @@ skillCreator.post('/chat', async (c) => {
       temperature: 0.3,
     });
 
-    const parsed = parseSkillCreatorResponse(text, session);
+    const cleanedText = truncateRepetition(text);
+    const parsed = parseSkillCreatorResponse(cleanedText, session);
 
     session.phase = parsed.phase ?? session.phase;
     if (parsed.draft) session.draft = parsed.draft;

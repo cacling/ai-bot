@@ -13,7 +13,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../../../db';
-import { mcpTools, mcpResources, mcpServers, toolImplementations, connectors } from '../../../db/schema';
+import { mcpTools, mcpServers, toolImplementations, connectors } from '../../../db/schema';
 import { nanoid } from '../../../db/nanoid';
 import { logger } from '../../../services/logger';
 import { REPO_ROOT } from '../../../services/paths';
@@ -29,10 +29,10 @@ app.get('/', async (c) => {
     ? db.select().from(mcpTools).where(eq(mcpTools.server_id, serverId)).all()
     : db.select().from(mcpTools).all();
 
-  // 附加 skill 引用 + 资源信息
+  // 附加 skill 引用 + 连接器信息
   const toolSkillsMap = getToolToSkillsMap();
-  const allResources = db.select().from(mcpResources).all();
-  const resourceMap = new Map(allResources.map(r => [r.id, { id: r.id, name: r.name, type: r.type }]));
+  const allConnectors = db.select().from(connectors).all();
+  const connectorMap = new Map(allConnectors.map(r => [r.id, { id: r.id, name: r.name, type: r.type }]));
 
   // 预加载所有 schema 文件内容用于对齐检查
   const schemaCache = new Map<string, Record<string, unknown>>();
@@ -60,7 +60,7 @@ app.get('/', async (c) => {
 
   const items = await Promise.all(rows.map(async (t) => {
     const cfg = t.execution_config ? JSON.parse(t.execution_config) as { resource_id?: string } : null;
-    const resource = cfg?.resource_id ? resourceMap.get(cfg.resource_id) ?? null : null;
+    const resource = cfg?.resource_id ? connectorMap.get(cfg.resource_id) ?? null : null;
 
     // 轻量对齐检查：第一条 mock vs output_schema
     const risks: string[] = [];
@@ -114,12 +114,18 @@ app.get('/', async (c) => {
 // ── Create ───────────────────────────────────────────────────────────────────
 app.post('/', async (c) => {
   const body = await c.req.json();
-  if (!body.name?.trim()) return c.json({ error: 'name 不能为空' }, 400);
+  const name = body.name?.trim();
+  if (!name) return c.json({ error: 'name 不能为空' }, 400);
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) return c.json({ error: '名称必须是 snake_case（小写字母开头，仅含小写字母、数字、下划线）' }, 400);
+
+  // 重名检查
+  const existing = db.select({ id: mcpTools.id }).from(mcpTools).where(eq(mcpTools.name, name)).get();
+  if (existing) return c.json({ error: `工具名「${name}」已存在` }, 409);
 
   const id = nanoid();
   db.insert(mcpTools).values({
     id,
-    name: body.name.trim(),
+    name,
     description: body.description ?? '',
     server_id: body.server_id ?? null,
     impl_type: body.impl_type ?? null,
@@ -134,7 +140,7 @@ app.post('/', async (c) => {
     created_at: now(),
     updated_at: now(),
   }).run();
-  logger.info('mcp', 'tool_created', { id, name: body.name });
+  logger.info('mcp', 'tool_created', { id, name });
   return c.json({ id });
 });
 
@@ -173,11 +179,11 @@ app.get('/:id', async (c) => {
   const row = db.select().from(mcpTools).where(eq(mcpTools.id, c.req.param('id'))).get();
   if (!row) return c.json({ error: 'Not found' }, 404);
 
-  // 附加 skill 引用和资源信息
+  // 附加 skill 引用和连接器信息
   const toolSkillsMap = getToolToSkillsMap();
   const cfg = row.execution_config ? JSON.parse(row.execution_config) as { resource_id?: string } : null;
   const resource = cfg?.resource_id
-    ? db.select().from(mcpResources).where(eq(mcpResources.id, cfg.resource_id)).get()
+    ? db.select().from(connectors).where(eq(connectors.id, cfg.resource_id)).get()
     : null;
 
   // 如果 output_schema 是文件路径，读取实际内容

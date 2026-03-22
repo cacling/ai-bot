@@ -179,16 +179,31 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       // Notify agent that user sent a message
       sessionBus.publish(phone, { source: 'user', type: 'user_message', text: message, msg_id: crypto.randomUUID() });
 
-      // Load history
+      // Load history（支持 tool role 的结构化消息）
       const rows = await db
         .select()
         .from(messages)
         .where(eq(messages.sessionId, sessionId))
         .orderBy(asc(messages.createdAt));
-      const history: CoreMessage[] = rows.map(r => ({
-        role: r.role as 'user' | 'assistant',
-        content: r.content,
-      }));
+      const history: CoreMessage[] = rows.map(r => {
+        // tool/assistant 消息的 content 可能是 JSON（结构化 tool calls/results）
+        if (r.role === 'tool' || (r.role === 'assistant' && r.content.startsWith('['))) {
+          try {
+            let parsed = JSON.parse(r.content);
+            // 截断 get_skill_instructions 的大段结果，减少 token 占用
+            if (r.role === 'tool' && Array.isArray(parsed)) {
+              parsed = parsed.map((part: any) => {
+                if (part.type === 'tool-result' && part.toolName === 'get_skill_instructions' && typeof part.result === 'string' && part.result.length > 200) {
+                  return { ...part, result: '[技能操作指南已加载，详见系统上下文]' };
+                }
+                return part;
+              });
+            }
+            return { role: r.role as CoreMessage['role'], content: parsed };
+          } catch { /* fallback to string */ }
+        }
+        return { role: r.role as CoreMessage['role'], content: r.content };
+      });
 
       // Run agent (AI responds in agentLang so agent sees their own language)
       const { agent: agentLang, customer: customerLang } = getLangs(phone);
@@ -213,7 +228,12 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
               sessionBus.publish(phone, ev);
             });
           },
-          undefined,
+          (delta: string) => {
+            // 推送中间步骤文本（如"身份验证通过，正在查询欠费..."）
+            const ev = { source: 'user' as const, type: 'step_text' as const, text: delta, msg_id: crypto.randomUUID() };
+            try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
+            sessionBus.publish(phone, { ...ev, source: 'user' });
+          },
           cachedSubscriberName,
           cachedPlanName,
           cachedGender,
@@ -293,11 +313,21 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           .catch(() => {});
       }
 
-      // Persist messages
-      await db.insert(messages).values([
-        { sessionId, role: 'user',      content: message },
-        { sessionId, role: 'assistant', content: result.text },
-      ]);
+      // Persist messages（含 tool calls/results，保证多轮上下文完整）
+      const msgRows: Array<{ sessionId: string; role: string; content: string }> = [
+        { sessionId, role: 'user', content: message },
+      ];
+      if (result.responseMessages) {
+        for (const msg of result.responseMessages) {
+          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+          msgRows.push({ sessionId, role: msg.role, content });
+        }
+      } else {
+        // fallback: 没有 responseMessages 时保持旧行为
+        msgRows.push({ sessionId, role: 'assistant', content: result.text });
+      }
+      logger.info('chat-ws', 'persist_messages', { session: sessionId, count: msgRows.length, roles: msgRows.map(r => r.role) });
+      await db.insert(messages).values(msgRows);
 
       // Stream text
       const CHUNK_SIZE = 3;

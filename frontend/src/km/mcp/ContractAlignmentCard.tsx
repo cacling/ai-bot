@@ -2,9 +2,11 @@
  * ContractAlignmentCard — 契约对齐卡片
  *
  * 对比 output_schema 与实际数据（Mock / Real 返回 / DB 列）的字段覆盖情况。
- * 三种实现方式（脚本/DB/API）和 Mock 场景共用。
+ * 区分必填字段（required）和选填字段：
+ * - 缺失必填字段 → 红色警告
+ * - 缺失选填字段 → 灰色提示，不影响对齐状态
  */
-import { Check, AlertTriangle, Minus, Plus } from 'lucide-react';
+import { Check, AlertTriangle, Minus, Plus, Circle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -16,11 +18,13 @@ export interface AlignmentResult {
   actual: string[];
   /** 覆盖的字段 */
   covered: string[];
-  /** 缺失的字段（在 schema 中但不在实际数据中） */
+  /** 缺失的必填字段（在 schema.required 中但不在实际数据中） */
   missing: string[];
+  /** 缺失的选填字段（在 schema 中、不在 required 中、也不在实际数据中） */
+  missingOptional: string[];
   /** 多余的字段（在实际数据中但不在 schema 中） */
   extra: string[];
-  /** 覆盖率 0~1 */
+  /** 覆盖率 0~1（基于全部字段） */
   ratio: number;
 }
 
@@ -37,6 +41,16 @@ export function extractSchemaFields(schema: Record<string, unknown> | null): str
 }
 
 /**
+ * 从 JSON Schema 中提取 required 字段列表
+ */
+export function extractRequiredFields(schema: Record<string, unknown> | null): string[] {
+  if (!schema) return [];
+  const req = schema.required;
+  if (!Array.isArray(req)) return [];
+  return req as string[];
+}
+
+/**
  * 从实际数据对象中提取字段名列表
  */
 export function extractDataFields(data: unknown): string[] {
@@ -45,17 +59,21 @@ export function extractDataFields(data: unknown): string[] {
 }
 
 /**
- * 对比 schema 与实际数据，返回对齐结果
+ * 对比 schema 与实际数据，返回对齐结果（区分必填/选填）
  */
 export function compareAlignment(
   schemaFields: string[],
   dataFields: string[],
+  requiredFields: string[] = [],
 ): AlignmentResult {
   const expectedSet = new Set(schemaFields);
   const actualSet = new Set(dataFields);
+  const requiredSet = new Set(requiredFields);
 
   const covered = schemaFields.filter(f => actualSet.has(f));
-  const missing = schemaFields.filter(f => !actualSet.has(f));
+  const allMissing = schemaFields.filter(f => !actualSet.has(f));
+  const missing = allMissing.filter(f => requiredSet.has(f));
+  const missingOptional = allMissing.filter(f => !requiredSet.has(f));
   const extra = dataFields.filter(f => !expectedSet.has(f));
 
   return {
@@ -63,6 +81,7 @@ export function compareAlignment(
     actual: dataFields,
     covered,
     missing,
+    missingOptional,
     extra,
     ratio: schemaFields.length > 0 ? covered.length / schemaFields.length : 1,
   };
@@ -75,7 +94,11 @@ export function alignSchemaWithData(
   schema: Record<string, unknown> | null,
   data: unknown,
 ): AlignmentResult {
-  return compareAlignment(extractSchemaFields(schema), extractDataFields(data));
+  return compareAlignment(
+    extractSchemaFields(schema),
+    extractDataFields(data),
+    extractRequiredFields(schema),
+  );
 }
 
 /**
@@ -89,7 +112,7 @@ export function alignSchemaWithMockResponse(
     const data = JSON.parse(mockResponse);
     return alignSchemaWithData(schema, data);
   } catch {
-    return compareAlignment(extractSchemaFields(schema), []);
+    return compareAlignment(extractSchemaFields(schema), [], extractRequiredFields(schema));
   }
 }
 
@@ -104,8 +127,8 @@ interface CardProps {
   compact?: boolean;
 }
 
-export function ContractAlignmentCard({ alignment, title = '契约覆盖', compact = false }: CardProps) {
-  const { covered, missing, extra, expected, ratio } = alignment;
+export function ContractAlignmentCard({ alignment, title = '字段对齐', compact = false }: CardProps) {
+  const { covered, missing, missingOptional, extra, expected, ratio } = alignment;
   const isFullMatch = missing.length === 0 && extra.length === 0;
   const hasMissing = missing.length > 0;
 
@@ -161,13 +184,21 @@ export function ContractAlignmentCard({ alignment, title = '契约覆盖', compa
       </div>
 
       {/* Details */}
-      {(missing.length > 0 || extra.length > 0) && (
+      {(missing.length > 0 || missingOptional.length > 0 || extra.length > 0) && (
         <div className="space-y-1 text-[11px]">
           {missing.length > 0 && (
             <div className="flex items-start gap-1.5">
               <Minus size={10} className="text-destructive mt-0.5 flex-shrink-0" />
               <span className="text-destructive">
-                缺失：<span className="font-mono">{missing.join(', ')}</span>
+                缺失（必填）：<span className="font-mono">{missing.join(', ')}</span>
+              </span>
+            </div>
+          )}
+          {missingOptional.length > 0 && (
+            <div className="flex items-start gap-1.5">
+              <Circle size={10} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+              <span className="text-muted-foreground">
+                未返回（选填）：<span className="font-mono">{missingOptional.join(', ')}</span>
               </span>
             </div>
           )}
@@ -197,7 +228,7 @@ export function AlignmentBadge({ alignment }: { alignment: AlignmentResult }) {
       variant={isFullMatch ? 'default' : hasMissing ? 'destructive' : 'secondary'}
       className="text-[9px]"
       title={[
-        missing.length > 0 ? `缺失: ${missing.join(', ')}` : '',
+        missing.length > 0 ? `缺失（必填）: ${missing.join(', ')}` : '',
         extra.length > 0 ? `多余: ${extra.join(', ')}` : '',
       ].filter(Boolean).join('\n') || '完全对齐'}
     >

@@ -159,6 +159,8 @@ export interface AgentResult {
   skill_diagram?: SkillDiagram;
   transferData?: TransferData;
   toolRecords?: ToolRecord[];
+  /** 完整的 response messages（含 tool calls/results），用于持久化多轮上下文 */
+  responseMessages?: CoreMessage[];
 }
 
 
@@ -375,6 +377,16 @@ export async function runAgent(
   );
   // SOP Guard: wrap operation tools with precondition checks
   const sopGuard = new SOPGuard();
+  // 从 history 中恢复已调用的工具（多轮对话时保持 SOP 状态连续）
+  for (const msg of history) {
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === 'tool-call' && part.toolName) {
+          sopGuard.recordToolCall(part.toolName);
+        }
+      }
+    }
+  }
   const sopWrappedTools = Object.fromEntries(
     Object.entries(mcpTools as Record<string, any>).map(([name, tool]) => [
       name,
@@ -444,6 +456,11 @@ export async function runAgent(
   let stepCount = 0;
   let prevStepEnd = t_mcp_ready; // 用于计算每步增量耗时
 
+  // 调试日志：history 概况
+  const historyRoles = history.map(m => m.role);
+  const historyChars = history.reduce((sum, m) => sum + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content).length), 0);
+  logger.info('agent', 'history_summary', { messages: history.length, roles: historyRoles, total_chars: historyChars });
+
   try {
     const result = await generateText({
       model: chatModel,
@@ -455,10 +472,31 @@ export async function runAgent(
       },
       maxSteps: 10,
       abortSignal: controller.signal,
-      onStepFinish: ({ toolCalls, toolResults, finishReason }) => {
+      // 修复 SiliconFlow 模型偶尔输出格式错误的工具参数 JSON
+      experimental_repairToolCall: async ({ toolCall, tools, parameterSchema, error }) => {
+        const raw = typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args);
+        // 尝试清理常见的 JSON 格式问题（混合转义引号等）
+        try {
+          const cleaned = raw
+            .replace(/^"/, '').replace(/"$/, '')  // 去掉外层引号包裹
+            .replace(/\\"/g, '"');                 // 统一转义
+          const parsed = JSON.parse(cleaned);
+          return { toolCallType: 'function' as const, toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, args: JSON.stringify(parsed) };
+        } catch {
+          // 清理失败，返回 null 让 SDK 报错
+          logger.warn('agent', 'tool_call_repair_failed', { tool: toolCall.toolName, raw: raw.slice(0, 200) });
+          return null;
+        }
+      },
+      onStepFinish: ({ toolCalls, toolResults, finishReason, text }) => {
         stepCount += 1;
         const now = Date.now();
         const tools = (toolCalls ?? []).map((tc) => tc.toolName);
+
+        // 推送中间文本（让用户知道进度）
+        if (onTextDelta && text && finishReason === 'tool-calls') {
+          onTextDelta(text);
+        }
         logger.info('agent', 'step_done', {
           n: stepCount,
           tools,
@@ -708,7 +746,7 @@ export async function runAgent(
       }
     }
 
-    return { text, card, skill_diagram: skillDiagram, transferData, toolRecords: collectedToolRecords };
+    return { text, card, skill_diagram: skillDiagram, transferData, toolRecords: collectedToolRecords, responseMessages: result.response.messages };
   } finally {
     clearTimeout(timeoutId);
     // Persistent MCP client is intentionally kept open across requests.

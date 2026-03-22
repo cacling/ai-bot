@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, Search, AlertTriangle, Check, Circle } from 'lucide-react';
 import { mcpApi, type McpToolRecord, type McpServer } from './api';
 import { McpToolEditor } from './McpToolEditor';
+import { CreateToolDialog } from './CreateToolDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -17,7 +18,7 @@ type View = 'list' | 'edit';
 type QuickFilter = 'all' | 'no_contract' | 'mock_on' | 'has_risk' | 'ready';
 
 interface Props {
-  navigateToTool?: { toolId: string; step?: string; fromServer?: string } | null;
+  navigateToTool?: { toolId: string; step?: string; fromServer?: string; toolName?: string } | null;
   onNavigateHandled?: () => void;
   onBackToServers?: () => void;
 }
@@ -30,6 +31,9 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
   const [editId, setEditId] = useState<string | null>(null);
   const [editInitialStep, setEditInitialStep] = useState<string | undefined>(undefined);
   const [editFromServer, setEditFromServer] = useState<string | undefined>(undefined);
+
+  // Create dialog
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -50,16 +54,32 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
 
   useEffect(load, [load]);
 
-  // Handle external navigation (from Server Console)
+  // Handle external navigation (from Server Console or Skill Manager)
   useEffect(() => {
-    if (navigateToTool && navigateToTool.toolId) {
+    if (!navigateToTool) return;
+
+    // 通过 toolId 直接跳转（来自 Server Console）
+    if (navigateToTool.toolId) {
       setEditId(navigateToTool.toolId);
       setEditInitialStep(navigateToTool.step);
       setEditFromServer(navigateToTool.fromServer);
       setView('edit');
       onNavigateHandled?.();
+      return;
     }
-  }, [navigateToTool]);
+
+    // 通过 toolName 查找（来自技能管理）
+    if (navigateToTool.toolName && tools.length > 0) {
+      const target = tools.find(t => t.name === navigateToTool.toolName);
+      if (target) {
+        setEditId(target.id);
+        setEditInitialStep(navigateToTool.step);
+        setEditFromServer(navigateToTool.fromServer);
+        setView('edit');
+      }
+      onNavigateHandled?.();
+    }
+  }, [navigateToTool, tools]);
 
   // ── Derived data ────────────────────────────────────────────────────────────
 
@@ -194,7 +214,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
       {/* Header */}
       <div className="flex items-center justify-between">
         <div /> {/* Tab 标题已在上层显示 */}
-        <Button size="sm" onClick={() => {/* TODO: 新建工具 */}}><Plus size={13} /> 新建</Button>
+        <Button size="sm" onClick={() => setShowCreateDialog(true)}><Plus size={13} /> 新建</Button>
       </div>
 
       {/* Stats cards */}
@@ -345,6 +365,17 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
           </Table>
         </div>
       )}
+      <CreateToolDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onCreated={(id, step) => {
+          setEditId(id);
+          setEditInitialStep(step);
+          setEditFromServer(undefined);
+          setView('edit');
+          load();
+        }}
+      />
     </div>
   );
 }

@@ -36,6 +36,7 @@ type KnowledgeSubTab = 'knowledge' | 'skill' | 'mcp';
 export function AgentWorkstationPage() {
   const [agentTab, setAgentTab] = useState<AgentTab>('chat');
   const [knowledgeSubTab, setKnowledgeSubTab] = useState<KnowledgeSubTab>('knowledge');
+  const [pendingToolNav, setPendingToolNav] = useState<{ toolName: string; step?: string; from?: string } | null>(null);
   const [lang, setLang] = useState<Lang>('zh');
   const [userPhone, setUserPhone] = useState(DEFAULT_USER_PHONE);
   const [allPersonas, setAllPersonas] = useState<TestPersona[]>([]);
@@ -407,7 +408,7 @@ export function AgentWorkstationPage() {
             </Button>
           </div>
           <div className="flex-1 overflow-hidden">
-            {knowledgeSubTab === 'knowledge' ? <KnowledgeManagementPage /> : knowledgeSubTab === 'skill' ? <SkillManagerPage /> : <McpManagementPage />}
+            {knowledgeSubTab === 'knowledge' ? <KnowledgeManagementPage /> : knowledgeSubTab === 'skill' ? <SkillManagerPage onOpenToolContract={(toolName) => { setPendingToolNav({ toolName }); setKnowledgeSubTab('mcp'); }} /> : <McpManagementPage externalNavigateToTool={pendingToolNav} onExternalNavigateHandled={() => setPendingToolNav(null)} />}
           </div>
         </div>
       )}

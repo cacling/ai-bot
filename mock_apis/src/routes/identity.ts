@@ -2,7 +2,7 @@
  * identity.ts — 模拟身份中心 / OTP 服务
  */
 import { Hono } from "hono";
-import { db, subscribers, identityOtpRequests, eq } from "../db.js";
+import { db, subscribers, identityOtpRequests, identityLoginEvents, eq } from "../db.js";
 
 const app = new Hono();
 
@@ -56,7 +56,7 @@ app.post("/verify", async (c) => {
   const latest = records
     .sort((a, b) => b.requested_at.localeCompare(a.requested_at))[0] ?? null;
   const matchesLatest = latest?.status === "pending" && latest.otp === otp;
-  const matchesLegacyMock = otp === "1234" || otp === "0000" || (otp.length === 6 && /^\d+$/.test(otp));
+  const matchesLegacyMock = otp === "1234";
   const valid = Boolean(matchesLatest || matchesLegacyMock);
 
   if (valid && latest) {
@@ -72,6 +72,31 @@ app.post("/verify", async (c) => {
     customer_name: valid ? sub.name : null,
     verification_method: "otp",
     message: valid ? `身份验证通过，用户：${sub.name}` : "验证码错误，请重新输入",
+  });
+});
+
+app.get("/accounts/:msisdn/login-events", async (c) => {
+  const msisdn = c.req.param("msisdn");
+  const sub = await db.select().from(subscribers).where(eq(subscribers.phone, msisdn)).get();
+  if (!sub) return c.json({ success: false, message: `未找到手机号 ${msisdn}` }, 404);
+
+  const events = await db.select().from(identityLoginEvents).where(eq(identityLoginEvents.phone, msisdn)).all();
+  const sorted = events.sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+  const latest = sorted[0] ?? null;
+
+  return c.json({
+    success: true,
+    msisdn,
+    count: sorted.length,
+    latest_state: latest
+      ? {
+          result: latest.result,
+          event_type: latest.event_type,
+          failure_reason: latest.failure_reason,
+          occurred_at: latest.occurred_at,
+        }
+      : null,
+    events: sorted,
   });
 });
 

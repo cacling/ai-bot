@@ -182,8 +182,12 @@ app.post('/test', async (c) => {
         history,
         phone,
         body.lang ?? 'zh',
-        undefined, undefined, subscriberName, planName,
-        tempParent,
+        undefined,        // onDiagramUpdate
+        undefined,        // onTextDelta
+        subscriberName,   // subscriberName
+        planName,         // planName
+        undefined,        // subscriberGender
+        tempParent,       // overrideSkillsDir
         { useMock: body.useMock !== false, skillContent, skillName: body.skill },
       );
       return c.json({ text: result.text, card: result.card ?? null, skill_diagram: result.skill_diagram ?? null, mock: body.useMock !== false });

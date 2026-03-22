@@ -1,28 +1,29 @@
 /**
- * McpManagementPage.tsx — MCP 管理主容器（严格 MCP 对齐：5 Tab）
+ * McpManagementPage.tsx — MCP 管理主容器
  *
- * Tool Contracts / MCP Servers / Connectors / MCP Resources / MCP Prompts
+ * Tool Contracts / MCP Servers / Connectors
  */
-import { useState } from 'react';
-import { Wrench, Server, Plug, FileText, MessageSquare } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Wrench, Server, Plug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { McpServerList } from './McpServerList';
 import { McpToolListPage } from './McpToolListPage';
 import { ConnectorListPage } from './ConnectorListPage';
-import { McpResourceCatalog } from './McpResourceCatalog';
-import { McpPromptCatalog } from './McpPromptCatalog';
 
-type McpTab = 'tools' | 'servers' | 'connectors' | 'mcp_resources' | 'mcp_prompts';
+type McpTab = 'tools' | 'servers' | 'connectors';
 
 const TABS: Array<{ id: McpTab; label: string; icon: React.ReactNode }> = [
   { id: 'tools', label: 'Tool Contracts', icon: <Wrench size={13} /> },
   { id: 'servers', label: 'MCP Servers', icon: <Server size={13} /> },
   { id: 'connectors', label: 'Connectors', icon: <Plug size={13} /> },
-  { id: 'mcp_resources', label: 'MCP Resources', icon: <FileText size={13} /> },
-  { id: 'mcp_prompts', label: 'MCP Prompts', icon: <MessageSquare size={13} /> },
 ];
 
-export function McpManagementPage() {
+interface McpManagementProps {
+  externalNavigateToTool?: { toolName: string; step?: string; from?: string } | null;
+  onExternalNavigateHandled?: () => void;
+}
+
+export function McpManagementPage({ externalNavigateToTool, onExternalNavigateHandled }: McpManagementProps = {}) {
   const [tab, setTab] = useState<McpTab>('tools');
 
   // Cross-tab navigation: Server Console → Tool Studio
@@ -30,6 +31,7 @@ export function McpManagementPage() {
     toolId: string;
     step?: string;
     fromServer?: string;
+    toolName?: string;
   } | null>(null);
 
   const handleOpenTool = (toolId: string, step?: string, fromServer?: string) => {
@@ -44,6 +46,20 @@ export function McpManagementPage() {
   const handleBackToServers = () => {
     setTab('servers');
   };
+
+  // 接收外部导航（从技能管理跳转过来）
+  useEffect(() => {
+    if (externalNavigateToTool) {
+      setNavigateToTool({
+        toolId: '', // McpToolListPage 会通过 toolName 查找
+        step: externalNavigateToTool.step,
+        fromServer: externalNavigateToTool.from,
+        toolName: externalNavigateToTool.toolName,
+      });
+      setTab('tools');
+      onExternalNavigateHandled?.();
+    }
+  }, [externalNavigateToTool]);
 
   return (
     <div className="flex flex-col h-full bg-background overflow-auto">
@@ -72,8 +88,6 @@ export function McpManagementPage() {
         {tab === 'tools' && <McpToolListPage navigateToTool={navigateToTool} onNavigateHandled={() => setNavigateToTool(null)} onBackToServers={handleBackToServers} />}
         {tab === 'servers' && <McpServerList onOpenTool={handleOpenTool} onOpenConnectors={() => setTab('connectors')} />}
         {tab === 'connectors' && <ConnectorListPage />}
-        {tab === 'mcp_resources' && <McpResourceCatalog />}
-        {tab === 'mcp_prompts' && <McpPromptCatalog />}
       </div>
     </div>
   );

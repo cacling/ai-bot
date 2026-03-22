@@ -151,9 +151,32 @@ function buildGlobalDependencies(): Map<string, ToolDependency> {
     logger.warn('sop-guard', 'build_deps_error', { error: String(e) });
   }
 
-  // 操作类工具 = 有非空前置依赖的工具（自动从状态图推断）
+  // 操作类工具 = 有非空前置依赖 + annotations.readOnlyHint !== true
+  // 从 mcp_tools 表的 annotations 列读取，readOnlyHint=true 的工具是查询类，不拦截
+  const readOnlyTools = new Set<string>();
+  try {
+    const allTools = getToolsOverview();
+    for (const t of allTools) {
+      if (t.annotations) {
+        try {
+          const ann = typeof t.annotations === 'string' ? JSON.parse(t.annotations) : t.annotations;
+          if (ann.readOnlyHint === true) readOnlyTools.add(t.name);
+        } catch { /* ignore */ }
+      }
+    }
+  } catch { /* ignore */ }
+
+  // Fallback: 如果 DB 没有 annotations 数据，用前缀规约兜底
+  const QUERY_PREFIXES = ['query_', 'check_', 'verify_', 'get_', 'diagnose_', 'analyze_', 'search_'];
   _operationTools = new Set(
-    [...map.entries()].filter(([, dep]) => dep.requiredTools.length > 0).map(([name]) => name),
+    [...map.entries()]
+      .filter(([name, dep]) => {
+        if (dep.requiredTools.length === 0) return false;
+        if (readOnlyTools.has(name)) return false;
+        if (readOnlyTools.size === 0 && QUERY_PREFIXES.some(p => name.startsWith(p))) return false;
+        return true;
+      })
+      .map(([name]) => name),
   );
 
   return map;

@@ -68,6 +68,33 @@ function createServer(): McpServer {
     }
   });
 
+  server.tool("apply_service_suspension", "执行停机保号操作，暂停语音/短信/流量服务，保留号码", {
+    phone: z.string().describe("用户手机号"),
+  }, async ({ phone }) => {
+    mcpLog("account", "apply_service_suspension", { phone });
+    // 检查用户是否存在
+    try {
+      const sub = await backendGet<{ success: boolean; name?: string }>(`/api/customer/subscribers/${phone}`);
+      if (!sub.success) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, message: `未找到手机号 ${phone}` }) }] };
+      }
+      // 模拟停机保号操作
+      const resumeDeadline = new Date();
+      resumeDeadline.setMonth(resumeDeadline.getMonth() + 3);
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        success: true,
+        phone,
+        suspension_type: "temporary",
+        effective_date: new Date().toISOString().split('T')[0],
+        resume_deadline: resumeDeadline.toISOString().split('T')[0],
+        monthly_fee: 5.00,
+        message: `停机保号已生效，号码 ${phone} 的语音/短信/流量服务已暂停，每月保号费 ¥5.00，请在 ${resumeDeadline.toISOString().split('T')[0]} 前办理复机`,
+      }) }] };
+    } catch {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ success: false, message: "停机保号操作失败，请稍后重试" }) }] };
+    }
+  });
+
   return server;
 }
 

@@ -19,8 +19,8 @@ import { json } from '@codemirror/lang-json';
 import { oneDark } from '@codemirror/theme-one-dark';
 import {
   Send, Bot, User, FileText, Folder, FileCode,
-  ChevronRight, ChevronDown, Sparkles, CheckCircle2, Plus,
-  ArrowLeft, AlertCircle, GitBranch, Search,
+  ChevronRight, ChevronDown, ChevronUp, Sparkles, CheckCircle2, Plus,
+  ArrowLeft, AlertCircle, GitBranch, Search, Wrench,
   Mic, MicOff, Loader2, FlaskConical, ImagePlus, X, ScanEye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -258,7 +258,11 @@ function useVoiceInput(onTranscript: (text: string) => void) {
 
 // ── 主页面 ────────────────────────────────────────────────────────────────────
 
-export function SkillManagerPage() {
+interface SkillManagerProps {
+  onOpenToolContract?: (toolName: string) => void;
+}
+
+export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {}) {
   const {
     view,
     skills,
@@ -309,6 +313,22 @@ export function SkillManagerPage() {
   } = useSkillManager();
 
   const { isRecording, toggle: toggleVoice } = useVoiceInput((text) => setInputValue(text));
+
+  const isNewSkill = !!activeSkill?.id?.startsWith('new-');
+
+  // Tool Call Plan 折叠状态
+  const [toolPlanCollapsed, setToolPlanCollapsed] = useState(false);
+
+  // 点击工具跳转 MCP 管理前，先过未保存保护
+  const handleOpenToolGuarded = useCallback((toolName: string) => {
+    if (!onOpenToolContract) return;
+    if (isDirty) {
+      if (!confirm('有未保存的修改，是否保存后跳转？')) return;
+      handleSave().then(() => onOpenToolContract(toolName));
+      return;
+    }
+    onOpenToolContract(toolName);
+  }, [onOpenToolContract, isDirty, handleSave]);
 
   // ── 图片上传 ────────────────────────────────────────────────────────────────
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -499,28 +519,37 @@ export function SkillManagerPage() {
     setDiagramCollapsed(false);
     setRightTab('test');
 
-    // Load mermaid diagram from SKILL.md immediately
+    // Extract mermaid diagram from current editor content (if viewing SKILL.md)
+    // or fetch from the version's SKILL.md file
     if (activeSkill) {
-      try {
-        const versionDetail = versions.find(v => v.version_no === versionNo);
-        const skillMdPath = versionDetail?.snapshot_path
-          ? `skills/${versionDetail.snapshot_path}/SKILL.md`
-          : `skills/biz-skills/${activeSkill.id}/SKILL.md`;
-        console.log('[TestDiagram] loading from:', skillMdPath);
-        const res = await fetch(`/api/files/content?path=${encodeURIComponent(skillMdPath)}`);
-        console.log('[TestDiagram] fetch status:', res.status);
-        if (res.ok) {
-          const data = await res.json();
-          const content = data.content ?? '';
-          const mermaidMatch = content.match(/```mermaid\r?\n([\s\S]*?)```/);
-          console.log('[TestDiagram] mermaid found:', !!mermaidMatch, 'content length:', content.length);
-          if (mermaidMatch) {
-            setTestDiagram({ skill_name: activeSkill.id, mermaid: mermaidMatch[1].trim() });
-          }
+      // Try current editor content first (user may be viewing SKILL.md)
+      const tryExtractFromContent = (content: string) => {
+        const match = content.match(/```mermaid\r?\n([\s\S]*?)```/);
+        if (match) {
+          setTestDiagram({ skill_name: activeSkill.id, mermaid: match[1].trim() });
+          return true;
         }
-      } catch (e) { console.error('[TestDiagram] error:', e); }
+        return false;
+      };
+
+      if (selectedFile?.name === 'SKILL.md' && editorContent) {
+        tryExtractFromContent(editorContent);
+      } else {
+        // Fetch SKILL.md from version snapshot
+        try {
+          const versionDetail = versions.find(v => v.version_no === versionNo);
+          const skillMdPath = versionDetail?.snapshot_path
+            ? `backend/skills/${versionDetail.snapshot_path}/SKILL.md`
+            : `backend/skills/biz-skills/${activeSkill.id}/SKILL.md`;
+          const res = await fetch(`/api/files/content?path=${encodeURIComponent(skillMdPath)}`);
+          if (res.ok) {
+            const data = await res.json();
+            tryExtractFromContent(data.content ?? '');
+          }
+        } catch { /* ignore */ }
+      }
     }
-  }, [activeSkill, versions]);
+  }, [activeSkill, versions, selectedFile, editorContent]);
 
   const handleSendTest = useCallback(async () => {
     if (!activeSkill || testingVersion === null || !testInput.trim()) return;
@@ -632,7 +661,7 @@ export function SkillManagerPage() {
   }, [view]);
 
   // 中间区模式（编辑器视图用，但 hook 必须在 early return 前声明）
-  type CenterMode = 'edit' | 'preview' | 'test' | 'error';
+  type CenterMode = 'edit' | 'preview' | 'error';
   const [centerMode, setCenterMode] = useState<CenterMode>('edit');
   const [fileLoadError, setFileLoadError] = useState<string | null>(null);
 
@@ -875,30 +904,11 @@ export function SkillManagerPage() {
               </Button>
             )}
             {!isPublishedVersion && selectedVersion && (
-              <Button variant="outline" size="sm" onClick={() => { handleStartTest(selectedVersion.version_no); setCenterMode('test'); }}>
-                <FlaskConical size={12} /> 运行测试
-              </Button>
-            )}
-            {!isPublishedVersion && selectedVersion && (
               <Button size="sm" onClick={() => handlePublishVersion(selectedVersion.version_no)}>
                 发布版本
               </Button>
             )}
           </div>
-        </div>
-        {/* 第二行：版本状态 */}
-        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-          {selectedVersion && (
-            <>
-              <span>当前版本：<span className="font-mono font-medium text-foreground">v{selectedVersion.version_no}</span>（{selectedVersion.status === 'published' ? '已发布' : '草稿'}）</span>
-              {publishedVersion && selectedVersion.version_no !== publishedVersion.version_no && (
-                <span>基于：v{publishedVersion.version_no}（已发布）</span>
-              )}
-            </>
-          )}
-          {saveStatus === 'saved' && <span>已保存</span>}
-          {saveStatus === 'saving' && <span>保存中…</span>}
-          <SaveIndicator status={saveStatus} />
         </div>
       </div>
 
@@ -912,17 +922,18 @@ export function SkillManagerPage() {
 
         {/* 版本区 */}
         <div className="border-b border-border shrink-0">
-          <div className="px-3 py-1.5 flex items-center justify-between">
+          <div className="px-3 py-1 flex items-center justify-between">
             <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">版本</span>
             <Button
               variant="ghost"
-              size="xs"
+              size="icon-xs"
+              title="新版本"
               onClick={() => {
                 const base = viewingVersion ?? publishedVersion?.version_no ?? versions[0]?.version_no;
                 if (base) handleCreateFrom(base);
               }}
             >
-              + 新版本
+              <Plus size={12} />
             </Button>
           </div>
           <div className="pb-1 max-h-32 overflow-y-auto">
@@ -933,8 +944,12 @@ export function SkillManagerPage() {
               return (
                 <div
                   key={v.id}
-                  onClick={() => { setViewingVersion(v.version_no); setCenterMode('edit'); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs cursor-pointer transition ${
+                  onClick={() => {
+                    setViewingVersion(v.version_no);
+                    setCenterMode('edit');
+                    if (rightTab === 'test') handleStartTest(v.version_no);
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1 text-[11px] cursor-pointer transition ${
                     isActive ? 'bg-accent border-l-2 border-primary' : 'hover:bg-muted'
                   }`}
                 >
@@ -949,48 +964,98 @@ export function SkillManagerPage() {
               );
             })}
           </div>
-        </div>
-
-        {/* 文件区 */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-3 py-1.5">
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              文件{selectedVersion ? `（v${selectedVersion.version_no}）` : ''}
-            </span>
-          </div>
-          {fileTreeLoading ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground gap-1.5">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-xs">加载中…</span>
+          {/* 当前版本摘要 */}
+          {selectedVersion && (
+            <div className="px-3 py-1 border-t border-border text-[9px] text-muted-foreground truncate">
+              <span className="font-mono font-medium text-foreground">v{selectedVersion.version_no}</span>
+              <span className="ml-1">{selectedVersion.status === 'published' ? '已发布' : '草稿'}</span>
+              {publishedVersion && selectedVersion.version_no !== publishedVersion.version_no && (
+                <span className="ml-1">· 基于 v{publishedVersion.version_no}</span>
+              )}
             </div>
-          ) : viewingVersion !== null ? (
-            versionFileTree.length === 0 ? (
-              <div className="flex items-center justify-center py-8 text-muted-foreground gap-1.5">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs">加载中…</span>
-              </div>
-            ) : (
-              <FileTree
-                nodes={versionFileTree}
-                selectedPath={selectedFile?.path ?? null}
-                dirtyMap={fileDirtyMap}
-                onSelect={(n) => { handleSelectFile(n); setCenterMode('edit'); }}
-                onCreateFile={!isPublishedVersion ? handleCreateFile : undefined}
-                onCreateFolder={!isPublishedVersion ? handleCreateFolder : undefined}
-                readOnly={isPublishedVersion}
-                rootPath={!isPublishedVersion && selectedVersion?.snapshot_path ? `skills/${selectedVersion.snapshot_path}` : undefined}
-              />
-            )
-          ) : (
-            <FileTree
-              nodes={fileTree}
-              selectedPath={selectedFile?.path ?? null}
-              dirtyMap={fileDirtyMap}
-              onSelect={(n) => { handleSelectFile(n); setCenterMode('edit'); }}
-              readOnly
-            />
           )}
         </div>
+
+        {/* 文件区 + Tool Call Plan（上下可拖拽分隔） */}
+        <ResizablePanelGroup orientation="vertical" className="flex-1" id="left-split">
+          {/* 上半区：文件树 */}
+          <ResizablePanel id="file-tree" defaultSize="70%" minSize="30%">
+            <div className="h-full overflow-y-auto">
+              <div className="px-3 py-1">
+                <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  文件{selectedVersion ? ` (v${selectedVersion.version_no})` : ''}
+                </span>
+              </div>
+              {fileTreeLoading ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground gap-1.5">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-xs">加载中…</span>
+                </div>
+              ) : viewingVersion !== null ? (
+                versionFileTree.length === 0 ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground gap-1.5">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-xs">加载中…</span>
+                  </div>
+                ) : (
+                  <FileTree
+                    nodes={versionFileTree}
+                    selectedPath={selectedFile?.path ?? null}
+                    dirtyMap={fileDirtyMap}
+                    onSelect={(n) => { handleSelectFile(n); setCenterMode('edit'); }}
+                    onCreateFile={!isPublishedVersion ? handleCreateFile : undefined}
+                    onCreateFolder={!isPublishedVersion ? handleCreateFolder : undefined}
+                    readOnly={isPublishedVersion}
+                    rootPath={!isPublishedVersion && selectedVersion?.snapshot_path ? `skills/${selectedVersion.snapshot_path}` : undefined}
+                  />
+                )
+              ) : (
+                <FileTree
+                  nodes={fileTree}
+                  selectedPath={selectedFile?.path ?? null}
+                  dirtyMap={fileDirtyMap}
+                  onSelect={(n) => { handleSelectFile(n); setCenterMode('edit'); }}
+                  readOnly
+                />
+              )}
+            </div>
+          </ResizablePanel>
+
+          {/* 下半区：发布准备度 + Tool Call Plan */}
+          {activeSkill && !isNewSkill && (
+            <>
+              <ResizableHandle />
+              <ResizablePanel id="tool-plan" defaultSize="30%" minSize="10%" maxSize="60%">
+                <div className="h-full flex flex-col border-t border-border bg-background overflow-hidden">
+                  {/* 发布准备度（圆点式） */}
+                  <div className="px-3 py-1 border-b border-border shrink-0 flex items-center gap-2 text-[9px] text-muted-foreground">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${readiness.saved ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span className="truncate" title={readiness.saved ? '已保存' : '未保存'}>保存</span>
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${readiness.hasChanges ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+                    <span className="truncate" title={readiness.hasChanges ? '有变更' : '无变更'}>变更</span>
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${readiness.tested ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+                    <span className="truncate" title={readiness.tested ? '已测试' : '未测试'}>测试</span>
+                  </div>
+                  {/* Tool Call Plan 折叠头 */}
+                  <button
+                    onClick={() => setToolPlanCollapsed(prev => !prev)}
+                    className="flex items-center gap-1 px-3 py-1 text-[9px] font-semibold text-muted-foreground uppercase tracking-wider hover:bg-muted transition-colors shrink-0 w-full text-left"
+                  >
+                    {toolPlanCollapsed ? <ChevronRight size={9} /> : <ChevronDown size={9} />}
+                    <Wrench size={9} />
+                    Tool Call Plan
+                  </button>
+                  {/* Tool Call Plan 内容区 */}
+                  {!toolPlanCollapsed && (
+                    <div className="flex-1 overflow-y-auto px-1.5 pb-1">
+                      <ToolCallPlanPanel skillId={activeSkill.id} onOpenTool={handleOpenToolGuarded} />
+                    </div>
+                  )}
+                </div>
+              </ResizablePanel>
+            </>
+          )}
+        </ResizablePanelGroup>
 
       </div>
       </ResizablePanel>
@@ -1005,7 +1070,7 @@ export function SkillManagerPage() {
         <div className="h-9 border-b border-border flex items-center justify-between px-3 shrink-0">
           <div className="flex items-center gap-1">
             <span className="text-xs text-muted-foreground truncate mr-2">
-              {centerMode === 'test' ? `测试 v${testingVersion ?? selectedVersion?.version_no ?? ''}` : selectedFile ? selectedFile.name : ''}
+              {selectedFile ? selectedFile.name : ''}
             </span>
             {centerMode === 'edit' && selectedIsMd && (
               <>
@@ -1087,11 +1152,176 @@ export function SkillManagerPage() {
           </div>
         )}
 
-        {/* ── 测试模式 ── */}
-        {centerMode === 'test' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
+        {/* ── 底部流程图卡片（测试进行中时展开） ── */}
+        {testDiagram && (
+          <div className="border-t border-border shrink-0">
+            <Button variant="ghost" size="sm" onClick={() => setDiagramCollapsed(prev => !prev)} className="w-full justify-start rounded-none text-xs">
+              {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+              <GitBranch size={12} /> 流程图 — {testDiagram.skill_name}
+            </Button>
+            {!diagramCollapsed && (
+              <div className="px-3 pb-3 max-h-[35vh] overflow-auto">
+                <MermaidRenderer mermaid={testDiagram.mermaid} height="30vh" zoom={true} autoFocus={true} emptyText="暂无流程图" />
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+      </ResizablePanel>
+
+      <ResizableHandle />
+
+      {/* ── 右侧：双 Tab（AI 助手 + 测试） ── */}
+      <ResizablePanel id="right" defaultSize="25%" minSize="15%" maxSize="40%">
+      <div className="h-full flex flex-col border-l border-border bg-background overflow-hidden">
+
+        {/* Tab 切换 */}
+        <div className="h-9 border-b border-border flex items-center px-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRightTab('chat')}
+            className={`flex items-center gap-1 px-3 h-full rounded-none text-xs font-medium border-b-2 transition-colors ${
+              rightTab === 'chat' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Sparkles className="w-3 h-3" />
+            AI 助手
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (selectedVersion && (testingVersion !== selectedVersion.version_no)) {
+                handleStartTest(selectedVersion.version_no);
+              } else {
+                setRightTab('test');
+              }
+            }}
+            className={`flex items-center gap-1 px-3 h-full rounded-none text-xs font-medium border-b-2 transition-colors ${
+              rightTab === 'test' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <FlaskConical className="w-3 h-3" />
+            测试{testingVersion !== null ? ` v${testingVersion}` : selectedVersion ? ` v${selectedVersion.version_no}` : ''}
+          </Button>
+          {rightTab === 'chat' && (
+            <Label className="ml-auto flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer select-none font-normal pr-2">
+              <Checkbox checked={showThinking} onCheckedChange={(v: boolean) => setShowThinking(v)} className="size-3" />
+              思考
+            </Label>
+          )}
+        </div>
+
+        {/* ── AI 助手 Tab ── */}
+        {rightTab === 'chat' && (
+          <>
+            {/* AI 对话区 */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
+              {messages.map((msg) => (
+                msg.role === 'system' ? (
+                  <div key={msg.id} className="flex gap-2">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+                      <ScanEye className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="max-w-[90%] rounded-2xl rounded-tl-none px-3 py-2 text-xs leading-relaxed shadow-sm bg-amber-50 border border-amber-200 text-foreground dark:bg-amber-950/20 dark:border-amber-800">
+                      <div className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-1">流程图解析结果</div>
+                      <InlineMarkdown text={msg.text} />
+                    </div>
+                  </div>
+                ) : (
+                  <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
+                      {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                    </div>
+                    <div className="max-w-[85%] flex flex-col gap-1">
+                      {msg.role === 'assistant' && msg.thinking && (
+                        <div className="text-[10px] italic text-muted-foreground bg-muted border border-border/50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
+                          {msg.thinking}
+                        </div>
+                      )}
+                      {msg.image && (
+                        <div className={`rounded-2xl overflow-hidden shadow-sm ${msg.role === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'}`}>
+                          <img src={msg.image} alt="上传的流程图" className="max-w-full max-h-48 object-contain rounded-2xl border border-border" />
+                        </div>
+                      )}
+                      {msg.text && (
+                        <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
+                          <InlineMarkdown text={msg.text} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              ))}
+              {isTyping && (
+                <div className="flex gap-2">
+                  <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
+                  <div className="bg-background border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+            {canPublish && (
+              <div className="px-3 pt-2 pb-1 bg-accent/50 border-t border-border flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">技能草稿已就绪</span>
+                <Button size="sm" onClick={publishSkill} className="text-xs h-7">保存技能</Button>
+              </div>
+            )}
+
+            {/* AI 输入区 */}
+            <div className="p-3 bg-background border-t border-border shrink-0">
+              <form onSubmit={handleSubmit}>
+                <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
+                  {pendingImage && (
+                    <div className="px-3 pt-2 flex items-start gap-2">
+                      <div className="relative group">
+                        <img src={pendingImage} alt="待发送的流程图" className="max-h-24 rounded-lg border border-border object-contain" />
+                        <button type="button" onClick={() => setPendingImage(null)} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <Textarea
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if ((inputValue.trim() || pendingImage) && !isTyping) handleSubmit(e as any); } }}
+                    placeholder="描述需求或让 AI 帮你修改…"
+                    rows={2}
+                    className="w-full min-h-0 resize-none bg-transparent px-3 pt-2.5 pb-1 border-none shadow-none focus-visible:ring-0 focus-visible:border-transparent text-xs text-foreground placeholder:text-muted-foreground leading-relaxed rounded-none"
+                    spellCheck={false}
+                  />
+                  <div className="flex items-center justify-between px-2 pb-2">
+                    <div className="flex items-center gap-1">
+                      <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+                      <Button type="button" variant="ghost" size="xs" onClick={() => imageInputRef.current?.click()} title="上传流程图">
+                        <ImagePlus className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button type="button" variant="ghost" size="xs" onClick={toggleVoice} className={isRecording ? 'text-destructive animate-pulse' : ''}>
+                        {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                      </Button>
+                    </div>
+                    <Button type="submit" size="icon-sm" disabled={(!inputValue.trim() && !pendingImage) || isTyping}>
+                      <Send className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </>
+        )}
+
+        {/* ── 测试 Tab ── */}
+        {rightTab === 'test' && (
+          <>
             {/* 测试对话区 */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-background">
+            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
               {testingVersion === null ? (
                 <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                   点击顶部「运行测试」开始
@@ -1107,7 +1337,7 @@ export function SkillManagerPage() {
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
                         {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                       </div>
-                      <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-muted border border-border text-foreground rounded-tl-none'}`}>
+                      <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-muted border border-border text-foreground rounded-tl-none'}`}>
                         <InlineMarkdown text={msg.text} />
                       </div>
                     </div>
@@ -1126,28 +1356,6 @@ export function SkillManagerPage() {
               )}
               <div ref={testEndRef} />
             </div>
-
-            {/* 流程图 */}
-            {testDiagram && (
-              <div className="border-t border-border shrink-0">
-                <Button variant="ghost" size="sm" onClick={() => setDiagramCollapsed(prev => !prev)} className="w-full justify-start rounded-none">
-                  {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-                  <GitBranch size={12} /> 流程图 — {testDiagram.skill_name}
-                </Button>
-                {!diagramCollapsed && (
-                  <div className="px-3 pb-3">
-                    <MermaidRenderer mermaid={testDiagram.mermaid} height="25vh" zoom={true} autoFocus={true} emptyText="暂无流程图" />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Tool Call Plan（严格 MCP 对齐） */}
-            {activeSkill && (
-              <div className="border-t border-border shrink-0 p-3">
-                <ToolCallPlanPanel skillId={activeSkill.id} />
-              </div>
-            )}
 
             {/* 测试输入区 */}
             {testingVersion !== null && (
@@ -1179,149 +1387,11 @@ export function SkillManagerPage() {
                     <Send className="w-3.5 h-3.5" />
                   </Button>
                 </div>
-                <Button variant="ghost" size="xs" onClick={() => setCenterMode('edit')} className="text-muted-foreground">
-                  ← 返回编辑
-                </Button>
               </div>
             )}
-          </div>
+          </>
         )}
 
-      </div>
-      </ResizablePanel>
-
-      <ResizableHandle />
-
-      {/* ── 右侧：发布准备度 + AI 助手 ── */}
-      <ResizablePanel id="right" defaultSize="25%" minSize="15%" maxSize="40%">
-      <div className="h-full flex flex-col border-l border-border bg-background overflow-hidden">
-
-        {/* 发布准备度 */}
-        <div className="px-3 py-2 border-b border-border shrink-0">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">发布准备度</div>
-          <div className="space-y-1 text-[11px]">
-            <div className="flex items-center gap-1.5">
-              {readiness.saved ? <CheckCircle2 size={12} className="text-emerald-500" /> : <AlertCircle size={12} className="text-amber-500" />}
-              <span>{readiness.saved ? '文件已保存' : '有未保存修改'}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {readiness.hasChanges ? <CheckCircle2 size={12} className="text-emerald-500" /> : <AlertCircle size={12} className="text-muted-foreground" />}
-              <span>{readiness.hasChanges ? '相对已发布版本有变更' : '无变更'}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {readiness.tested ? <CheckCircle2 size={12} className="text-emerald-500" /> : <AlertCircle size={12} className="text-muted-foreground" />}
-              <span>{readiness.tested ? '测试通过' : '未测试'}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* AI 助手标题 */}
-        <div className="h-9 border-b border-border flex items-center px-3 shrink-0">
-          <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-xs font-medium ml-1.5">AI 助手</span>
-          <Label className="ml-auto flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer select-none font-normal">
-            <Checkbox checked={showThinking} onCheckedChange={(v: boolean) => setShowThinking(v)} className="size-3" />
-            思考
-          </Label>
-        </div>
-
-        {/* AI 对话区 */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
-          {messages.map((msg) => (
-            msg.role === 'system' ? (
-              <div key={msg.id} className="flex gap-2">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-                  <ScanEye className="w-3.5 h-3.5" />
-                </div>
-                <div className="max-w-[90%] rounded-2xl rounded-tl-none px-3 py-2 text-xs leading-relaxed shadow-sm bg-amber-50 border border-amber-200 text-foreground dark:bg-amber-950/20 dark:border-amber-800">
-                  <div className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-1">流程图解析结果</div>
-                  <InlineMarkdown text={msg.text} />
-                </div>
-              </div>
-            ) : (
-              <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
-                  {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-                </div>
-                <div className="max-w-[85%] flex flex-col gap-1">
-                  {msg.role === 'assistant' && msg.thinking && (
-                    <div className="text-[10px] italic text-muted-foreground bg-muted border border-border/50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
-                      {msg.thinking}
-                    </div>
-                  )}
-                  {msg.image && (
-                    <div className={`rounded-2xl overflow-hidden shadow-sm ${msg.role === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'}`}>
-                      <img src={msg.image} alt="上传的流程图" className="max-w-full max-h-48 object-contain rounded-2xl border border-border" />
-                    </div>
-                  )}
-                  {msg.text && (
-                    <div className={`rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-background border border-border text-foreground rounded-tl-none'}`}>
-                      <InlineMarkdown text={msg.text} />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          ))}
-          {isTyping && (
-            <div className="flex gap-2">
-              <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
-              <div className="bg-background border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
-                <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
-                <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
-                <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-        {canPublish && (
-          <div className="px-3 pt-2 pb-1 bg-accent/50 border-t border-border flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">技能草稿已就绪</span>
-            <Button size="sm" onClick={publishSkill} className="text-xs h-7">保存技能</Button>
-          </div>
-        )}
-
-        {/* AI 输入区 */}
-        <div className="p-3 bg-background border-t border-border shrink-0">
-          <form onSubmit={handleSubmit}>
-            <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
-              {pendingImage && (
-                <div className="px-3 pt-2 flex items-start gap-2">
-                  <div className="relative group">
-                    <img src={pendingImage} alt="待发送的流程图" className="max-h-24 rounded-lg border border-border object-contain" />
-                    <button type="button" onClick={() => setPendingImage(null)} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <X className="w-2.5 h-2.5" />
-                    </button>
-                  </div>
-                </div>
-              )}
-              <Textarea
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if ((inputValue.trim() || pendingImage) && !isTyping) handleSubmit(e as any); } }}
-                placeholder="描述需求或让 AI 帮你修改…"
-                rows={2}
-                className="w-full min-h-0 resize-none bg-transparent px-3 pt-2.5 pb-1 border-none shadow-none focus-visible:ring-0 focus-visible:border-transparent text-xs text-foreground placeholder:text-muted-foreground leading-relaxed rounded-none"
-                spellCheck={false}
-              />
-              <div className="flex items-center justify-between px-2 pb-2">
-                <div className="flex items-center gap-1">
-                  <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
-                  <Button type="button" variant="ghost" size="xs" onClick={() => imageInputRef.current?.click()} title="上传流程图">
-                    <ImagePlus className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button type="button" variant="ghost" size="xs" onClick={toggleVoice} className={isRecording ? 'text-destructive animate-pulse' : ''}>
-                    {isRecording ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-                  </Button>
-                </div>
-                <Button type="submit" size="icon-sm" disabled={(!inputValue.trim() && !pendingImage) || isTyping}>
-                  <Send className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </div>
-          </form>
-        </div>
       </div>
       </ResizablePanel>
 

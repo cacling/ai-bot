@@ -38,6 +38,9 @@ export function sendChatMessageWS(
         onDiagramUpdate?.(msg.skill_name as string, msg.mermaid as string);
       } else if (msg.type === 'text_delta') {
         onTextDelta?.(msg.delta as string);
+      } else if (msg.type === 'step_text') {
+        // 中间步骤文本（如"身份验证通过，正在查询..."），追加换行后展示
+        onTextDelta?.((msg.text as string) + '\n');
       } else if (msg.type === 'response') {
         console.log('[ws] response received, text length:', (msg.text as string)?.length);
         ws.close();

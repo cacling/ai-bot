@@ -9,7 +9,7 @@
  */
 import { Hono } from 'hono';
 import { db } from '../../../db';
-import { mcpServers, mcpTools, mcpResources } from '../../../db/schema';
+import { mcpServers, mcpTools } from '../../../db/schema';
 import { eq } from 'drizzle-orm';
 import { getToolToSkillsMap } from '../../../engine/skills';
 
@@ -23,6 +23,7 @@ export interface ToolOverviewItem {
   status: 'available' | 'disabled' | 'planned';
   mocked: boolean;      // true = 调用时走 mock_rules 而非真实 MCP
   skills: string[];     // skill names that reference this tool
+  annotations?: string | null; // MCP annotations JSON (readOnlyHint 等)
 }
 
 export interface ToolDetailItem extends ToolOverviewItem {
@@ -90,6 +91,7 @@ export function getToolsOverview(): ToolOverviewItem[] {
           status: tool.disabled ? 'disabled' : 'available',
           mocked: tool.mocked ?? false,
           skills: skillRefs.get(tool.name) ?? [],
+          annotations: tool.annotations ?? null,
         });
       }
 
