@@ -89,9 +89,9 @@ function buildRules(): Rule[] {
         };
       },
     },
-    // 5a. Current month: 本月/这个月/当月/这月
+    // 5a. Current month: 本月/这个月/这一个月/当月/这月
     {
-      regex: /(本|这个?|当)月/g,
+      regex: /(本|这一?个?|当)月/g,
       parse: (_m, now) => {
         const y = now.getFullYear();
         const mo = now.getMonth() + 1;
@@ -119,6 +119,19 @@ function buildRules(): Rule[] {
         const [y, mo] = shiftMonth(now.getFullYear(), now.getMonth() + 1, 1);
         return {
           slot: { kind: 'natural_month', value: monthStr(y, mo), source: 'relative' },
+          replacement: `${y}年${mo}月`,
+        };
+      },
+    },
+    // 5d. Chinese number month: 二月/二月份/十二月 (no year → current year)
+    {
+      regex: /(十一|十二|十|一|二|三|四|五|六|七|八|九)月份?(?![日号\-.\d])/g,
+      parse: (m, now) => {
+        const mo = parseCnNumber(m[1]);
+        if (mo < 1 || mo > 12) return null;
+        const y = now.getFullYear();
+        return {
+          slot: { kind: 'natural_month', value: monthStr(y, mo), source: 'explicit' },
           replacement: `${y}年${mo}月`,
         };
       },
