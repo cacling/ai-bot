@@ -96,12 +96,12 @@ log "backend: bun install"
 cd "$BASE_DIR/backend" && "$BUN" install --frozen-lockfile 2>&1 | tail -3
 ok "backend 依赖就绪"
 
-log "mcp_servers: npm install"
-cd "$BASE_DIR/mcp_servers" && "$NPM" install --prefer-offline 2>&1 | tail -3
+log "mcp_servers: bun install"
+cd "$BASE_DIR/mcp_servers" && "$BUN" install 2>&1 | tail -3
 ok "mcp_servers 依赖就绪"
 
-log "frontend: npm install"
-cd "$BASE_DIR/frontend" && "$NPM" install --prefer-offline 2>&1 | tail -3
+log "frontend: bun install"
+cd "$BASE_DIR/frontend" && "$BUN" install 2>&1 | tail -3
 ok "frontend 依赖就绪"
 
 # ════════════════════════════════════════════════════════════════════════════
