@@ -81,6 +81,14 @@ const OUTBOUND_VOICE_CONFIG: Record<'zh' | 'en', Record<'collection' | 'marketin
 function buildOutboundPrompt(phone: string, taskType: 'collection' | 'marketing', taskInfo: CollectionCase | MarketingTask, lang: 'zh' | 'en' = 'zh'): string {
   const locale = lang === 'en' ? 'en-US' : 'zh-CN';
   const today = new Date().toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
+
+  // 催收场景：根据 due_date 动态计算 overdue_days（seed 中的值是静态的）
+  if (taskType === 'collection' && 'due_date' in taskInfo && taskInfo.due_date) {
+    const dueMs = new Date(taskInfo.due_date + 'T00:00:00+08:00').getTime();
+    const nowMs = Date.now();
+    (taskInfo as CollectionCase).overdue_days = Math.max(0, Math.floor((nowMs - dueMs) / (1000 * 60 * 60 * 24)));
+  }
+
   const taskInfoStr = JSON.stringify(taskInfo, null, 2);
   const taskTypeLabel = t(taskType === 'collection' ? 'outbound_task_type_collection' : 'outbound_task_type_marketing', lang);
   const voiceCfg = OUTBOUND_VOICE_CONFIG[lang][taskType];
