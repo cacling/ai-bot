@@ -89,6 +89,23 @@ function buildRules(): Rule[] {
         };
       },
     },
+    // 4b. Month-end compound: 本月底/这个月底/下个月底/上个月末
+    {
+      regex: /(本|这一?个?|当|上|前|下|后)(一?个?)月\s*[底末]/g,
+      parse: (m, now) => {
+        let delta = 0;
+        const prefix = m[1];
+        if (prefix === '上' || prefix === '前') delta = -1;
+        else if (prefix === '下' || prefix === '后') delta = 1;
+        const [y, mo] = shiftMonth(now.getFullYear(), now.getMonth() + 1, delta);
+        const lastDay = new Date(y, mo, 0); // day 0 of next month = last day of target month
+        const val = `${lastDay.getFullYear()}-${pad2(lastDay.getMonth() + 1)}-${pad2(lastDay.getDate())}`;
+        return {
+          slot: { kind: 'specific_date', value: val, source: 'relative' },
+          replacement: `${lastDay.getMonth() + 1}月${lastDay.getDate()}日`,
+        };
+      },
+    },
     // 5a. Current month: 本月/这个月/这一个月/当月/这月
     {
       regex: /(本|这一?个?|当)月/g,
