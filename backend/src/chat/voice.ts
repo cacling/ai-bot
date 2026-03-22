@@ -313,6 +313,21 @@ voice.get(
               }));
             }
 
+            // ── VAD 语音活动日志（排查截断问题）──────────────────────────
+            if (msg.type === 'input_audio_buffer.speech_started') {
+              logger.info('voice', 'vad_speech_started', { session: sessionId, ts: msg.client_timestamp });
+            }
+            if (msg.type === 'input_audio_buffer.speech_stopped') {
+              logger.info('voice', 'vad_speech_stopped', { session: sessionId, ts: msg.client_timestamp });
+            }
+            if (msg.type === 'input_audio_buffer.committed') {
+              logger.info('voice', 'vad_committed', { session: sessionId, ts: msg.client_timestamp });
+            }
+            if (msg.type === 'conversation.item.input_audio_transcription.completed') {
+              const t = (msg.transcript ?? '') as string;
+              logger.info('voice', 'vad_transcription', { session: sessionId, transcript: t.slice(0, 100), len: t.length, ts: msg.client_timestamp });
+            }
+
             // ── 转写失败（噪音/空语音）→ 标记静默，拦截 GLM 对噪音的回应 ──
             if (msg.type === 'conversation.item.input_audio_transcription.failed') {
               state.muteNextResponse = true;
