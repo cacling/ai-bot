@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# win-stop.sh — 停止电信客服 Agent 全栈服务（Windows 版）
+# win-stop.sh — 停止电信客服 Agent 全栈服务（Windows Git Bash 版）
 
 GRN='\033[0;32m'; RED='\033[0;31m'; BLU='\033[0;34m'; NC='\033[0m'
 log()  { echo -e "${BLU}[$(date '+%H:%M:%S')]${NC} $*"; }
@@ -12,7 +12,7 @@ PID_FILE="${BASE_DIR}/.win-pids"
 kill_port() {
   local port=$1
   local killed
-  killed=$(powershell -NoProfile -Command "
+  killed=$(powershell.exe -NoProfile -Command "
     \$conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
     if (\$conn) {
       \$conn.OwningProcess | Select-Object -Unique |
@@ -20,7 +20,7 @@ kill_port() {
       Write-Output 'killed'
     }
   " 2>/dev/null)
-  if [[ "$killed" == "killed" ]]; then
+  if [[ "$killed" == *"killed"* ]]; then
     ok "端口 $port 已释放"
   else
     echo "  - 端口 $port 无进程"
@@ -40,20 +40,17 @@ fi
 
 # ── 按端口强杀实际进程 ───────────────────────────────────────────────────────
 kill_port 18472  # backend
-kill_port 8003   # telecom-mcp
-kill_port 5173   # frontend (vite 默认)
+kill_port 18003  # 用户信息 MCP
+kill_port 18004  # 业务办理 MCP
+kill_port 18005  # 故障诊断 MCP
+kill_port 18006  # 外呼服务 MCP
+kill_port 18007  # 账户操作 MCP
+kill_port 18008  # mock_apis
+kill_port 5173   # frontend
 
 # 杀掉可能漂移的 Vite 端口
 for port in 5174 5175 5176 5177 5178; do
-  powershell -NoProfile -Command "
-    \$conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
-    if (\$conn) {
-      \$conn.OwningProcess | Select-Object -Unique |
-        ForEach-Object { Stop-Process -Id \$_ -Force -ErrorAction SilentlyContinue }
-      Write-Output \"端口 $port 已释放\"
-    }
-  " 2>/dev/null | while IFS= read -r line; do ok "$line"; done
-
+  kill_port "$port" 2>/dev/null
 done
 
 # ── 兜底：杀掉残留的 win-start.sh bash wrapper ──────────────────────────────
