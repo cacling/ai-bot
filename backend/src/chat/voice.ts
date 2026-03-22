@@ -25,12 +25,12 @@ import { mcpTools as mcpToolsTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { getSkillsDescriptionByChannel } from '../engine/skills';
+import { processToolResultForVoice, inferSkillName } from '../services/voice-tool-processor';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
-import { getToolSkillMap, getToolToSkillsMap } from '../engine/skills';
 
 const ZHIPU_API_KEY      = process.env.ZHIPU_API_KEY ?? '';
 const GLM_REALTIME_URL   = process.env.GLM_REALTIME_URL ?? 'wss://open.bigmodel.cn/api/paas/v4/realtime';
@@ -439,39 +439,39 @@ voice.get(
                 success = mcpResult.success;
               }
               state.recordTool(toolName, toolArgs, result, success);
-              logger.info('voice', 'lang_chain_mcp_result', { session: sessionId, tool: toolName, lang, resultPreview: result.slice(0, 150) });
+              logger.info('voice', 'mcp_result_raw', { session: sessionId, tool: toolName, success, resultPreview: result.slice(0, 200) });
 
-              // 若该工具对应某个 skill，推送流程图
-              // 优先用唯一映射；共享工具（query_bill 等）用完整映射推断
+              // ── Skill 推断（提前到文字 LLM 加工之前）──────────────────────
               if (!activeSkillName) {
-                const toolSkillMap = getToolSkillMap();
-                if (toolSkillMap[toolName]) {
-                  activeSkillName = toolSkillMap[toolName];
-                } else {
-                  const allMap = getToolToSkillsMap();
-                  const candidates = allMap.get(toolName);
-                  if (candidates && candidates.length > 0) {
-                    // 对共享工具，取第一个入站 skill（排除外呼 skill）
-                    const inbound = candidates.filter(s => !s.startsWith('outbound-'));
-                    if (inbound.length > 0) activeSkillName = inbound[0];
-                  }
-                }
+                activeSkillName = inferSkillName(toolName, null);
               }
               if (activeSkillName) {
                 await sendSkillDiagram(ws, userPhone, activeSkillName, null, lang, sessionId, 'voice');
               }
 
-              // Translate tool result to English before feeding back to GLM
-              let toolOutput = result;
-              if (lang === 'en') {
-                try {
-                  toolOutput = await translateText(result, 'en');
-                  logger.info('voice', 'lang_chain_translated', { session: sessionId, tool: toolName, ok: true, translatedPreview: toolOutput.slice(0, 150) });
-                } catch (e) {
-                  logger.warn('voice', 'lang_chain_translated', { session: sessionId, tool: toolName, ok: false, error: String(e) });
+              // ── 文字 LLM 加工：生成口语化回复 ─────────────────────────────
+              const conversationHistory = state.turns.map(t => ({ role: t.role, content: t.text }));
+              const processed = await processToolResultForVoice({
+                toolName, toolArgs, toolResult: result, toolSuccess: success,
+                userPhone, lang,
+                activeSkillName,
+                conversationHistory,
+              });
+
+              let toolOutput: string;
+              if (processed.spokenText) {
+                // 成功：包装朗读指令
+                toolOutput = `请直接朗读以下内容，不要添加、修改或省略任何内容：\n\n${processed.spokenText}`;
+                logger.info('voice', 'processor_success', { session: sessionId, tool: toolName, skill: processed.skillLoaded, chars: processed.spokenText.length });
+              } else {
+                // Fallback：文字 LLM 失败，降级到原始行为
+                toolOutput = result;
+                if (lang === 'en') {
+                  try { toolOutput = await translateText(result, 'en'); } catch { /* keep original */ }
                 }
+                logger.warn('voice', 'processor_fallback', { session: sessionId, tool: toolName });
               }
-              logger.info('voice', 'lang_chain_to_glm', { session: sessionId, tool: toolName, lang, outputPreview: toolOutput.slice(0, 150) });
+
               glmWs!.send(JSON.stringify({
                 event_id: crypto.randomUUID(),
                 client_timestamp: Date.now(),
