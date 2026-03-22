@@ -25,8 +25,7 @@ import { mcpTools as mcpToolsTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { getSkillsDescriptionByChannel } from '../engine/skills';
-import { processToolResultForVoice, inferSkillName } from '../services/voice-tool-processor';
-import { normalizeMonthParam } from '../services/query-normalizer/month';
+import { preprocessToolCall, postprocessToolResult, inferSkillName } from '../services/tool-call-middleware';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -418,14 +417,11 @@ voice.get(
                 return;
               }
 
-              // ── 参数标准化：月份格式统一为 YYYY-MM ──────────────────────────
-              if (typeof toolArgs.month === 'string') {
-                const raw = toolArgs.month;
-                toolArgs.month = normalizeMonthParam(raw);
-                if (toolArgs.month !== raw) {
-                  logger.info('voice', 'month_normalized', { session: sessionId, tool: toolName, raw, normalized: toolArgs.month });
-                }
-              }
+              // ── 参数标准化（通过统一中间件）──────────────────────────────
+              preprocessToolCall({
+                channel: 'voice', toolName, toolArgs,
+                userPhone, lang, activeSkillName,
+              });
 
               // ── MCP 工具调用（支持工具级 mock）─────────────────────────────
               logger.info('voice', 'tool_call_start', { session: sessionId, tool: toolName, args: toolArgs });
@@ -459,9 +455,10 @@ voice.get(
                 await sendSkillDiagram(ws, userPhone, activeSkillName, null, lang, sessionId, 'voice');
               }
 
-              // ── 文字 LLM 加工：生成口语化回复 ─────────────────────────────
+              // ── 文字 LLM 加工：生成口语化回复（通过统一中间件）────────────
               const conversationHistory = state.turns.map(t => ({ role: t.role, content: t.text }));
-              const processed = await processToolResultForVoice({
+              const processed = await postprocessToolResult({
+                channel: 'voice',
                 toolName, toolArgs, toolResult: result, toolSuccess: success,
                 userPhone, lang,
                 activeSkillName,

@@ -27,8 +27,7 @@ import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHando
 import { textToSpeech } from '../services/tts';
 import { translateText } from '../services/translate-lang';
 import { getSkillContentByChannel } from '../engine/skills';
-import { processToolResultForVoice } from '../services/voice-tool-processor';
-import { normalizeMonthParam } from '../services/query-normalizer/month';
+import { preprocessToolCall, postprocessToolResult } from '../services/tool-call-middleware';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -413,14 +412,11 @@ outbound.get(
                 if (!toolArgs.phone) toolArgs.phone = userPhone;
               }
 
-              // ── 参数标准化：月份格式统一为 YYYY-MM ──────────────────
-              if (typeof toolArgs.month === 'string') {
-                const raw = toolArgs.month;
-                toolArgs.month = normalizeMonthParam(raw);
-                if (toolArgs.month !== raw) {
-                  logger.info('outbound', 'month_normalized', { session: sessionId, tool: toolName, raw, normalized: toolArgs.month });
-                }
-              }
+              // ── 参数标准化（通过统一中间件）──────────────────────────
+              preprocessToolCall({
+                channel: 'outbound', toolName, toolArgs,
+                userPhone, lang, activeSkillName: currentSkillName,
+              });
 
               const mcpResult = await callMcpTool(sessionId, toolName, toolArgs);
               const success = mcpResult.success;
@@ -436,9 +432,10 @@ outbound.get(
               const currentSkillName = taskParam === 'collection' ? 'outbound-collection' : 'outbound-marketing';
               await sendSkillDiagram(ws, userPhone, currentSkillName, null, lang, sessionId, 'outbound');
 
-              // ── 文字 LLM 加工：生成口语化回复 ─────────────────────────
+              // ── 文字 LLM 加工：生成口语化回复（通过统一中间件）────────────
               const conversationHistory = state.turns.map(t => ({ role: t.role, content: t.text }));
-              const processed = await processToolResultForVoice({
+              const processed = await postprocessToolResult({
+                channel: 'outbound',
                 toolName, toolArgs, toolResult, toolSuccess: success,
                 userPhone, lang,
                 activeSkillName: currentSkillName,

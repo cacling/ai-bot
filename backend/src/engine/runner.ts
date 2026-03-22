@@ -94,7 +94,7 @@ function getAllDisabledTools(): Set<string> {
   return disabled;
 }
 
-import { normalizeMonthParam } from '../services/query-normalizer/month';
+import { preprocessToolCall } from '../services/tool-call-middleware';
 
 async function getMCPTools() {
   // Connect to all enabled active servers (once per server)
@@ -390,12 +390,13 @@ export async function runAgent(
             }
             return { content: [{ type: 'text', text: JSON.stringify({ error: rejection }) }] };
           }
-          // 参数标准化：月份格式统一为 YYYY-MM（防止 LLM 传 "2026-2"、"2月" 等非标格式）
+          // 参数标准化（通过统一中间件）
           if (args[0] && typeof args[0] === 'object') {
-            const params = args[0] as Record<string, unknown>;
-            if (typeof params.month === 'string') {
-              params.month = normalizeMonthParam(params.month);
-            }
+            preprocessToolCall({
+              channel: 'online', toolName: name,
+              toolArgs: args[0] as Record<string, unknown>,
+              userPhone, lang, activeSkillName: lastActiveSkill ?? null,
+            });
           }
           // 严格 MCP 对齐：注入治理字段（四层参数设计第 3-4 层）
           if (args[0] && typeof args[0] === 'object') {
