@@ -222,8 +222,10 @@ voice.get(
         glmWs.on('open', () => {
           logger.info('voice', 'glm_connected', { session: sessionId, model: GLM_REALTIME_MODEL });
           const instructions = buildVoicePrompt(userPhone, lang, subInfo?.name, subInfo?.planName, subInfo?.gender);
+          const voiceTools = buildVoiceTools();
           const hasEnInstruction = instructions.includes('LANGUAGE REQUIREMENT');
           logger.info('voice', 'lang_chain_prompt', { session: sessionId, lang, hasEnInstruction, promptLen: instructions.length, promptHead: instructions.slice(0, 120) });
+          logger.info('voice', 'session_tools', { session: sessionId, toolCount: voiceTools.length, toolNames: voiceTools.map((t: any) => t.name) });
           glmWs!.send(JSON.stringify({
             event_id: crypto.randomUUID(),
             client_timestamp: Date.now(),
@@ -347,6 +349,7 @@ voice.get(
             if (msg.type === 'response.audio_transcript.done') {
               if (state.transferTriggered && state.farewellDone) return;
               const transcript = (msg.transcript ?? '') as string;
+              logger.info('voice', 'bot_reply', { session: sessionId, transcript: transcript.slice(0, 200), muteState: state.muteNextResponse, turnCount: state.turns.length });
               if (transcript) {
                 // 非中文模式：发送剩余未切分的尾句
                 if (ttsOverride) {
@@ -501,6 +504,13 @@ voice.get(
                 type: 'response.create',
               }));
               return;
+            }
+
+            // ── response.done → 记录 GLM 本轮输出类型 ──────────────────
+            if (msg.type === 'response.done') {
+              const output = msg.response?.output ?? [];
+              const outputTypes = (output as any[]).map((o: any) => o.type).join(',');
+              logger.info('voice', 'response_done', { session: sessionId, outputTypes, outputCount: (output as any[]).length, status: msg.response?.status });
             }
 
             // 转人工后：告别语的 response.done 到达后标记完成
