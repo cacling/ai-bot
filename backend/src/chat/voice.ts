@@ -26,6 +26,7 @@ import { eq as dbEq } from 'drizzle-orm';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { getSkillsDescriptionByChannel } from '../engine/skills';
 import { processToolResultForVoice, inferSkillName } from '../services/voice-tool-processor';
+import { normalizeMonthParam } from '../services/query-normalizer/month';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -415,6 +416,15 @@ voice.get(
 
                 doTriggerHandoff(ws, reason, toolArgs);
                 return;
+              }
+
+              // ── 参数标准化：月份格式统一为 YYYY-MM ──────────────────────────
+              if (typeof toolArgs.month === 'string') {
+                const raw = toolArgs.month;
+                toolArgs.month = normalizeMonthParam(raw);
+                if (toolArgs.month !== raw) {
+                  logger.info('voice', 'month_normalized', { session: sessionId, tool: toolName, raw, normalized: toolArgs.month });
+                }
               }
 
               // ── MCP 工具调用（支持工具级 mock）─────────────────────────────
