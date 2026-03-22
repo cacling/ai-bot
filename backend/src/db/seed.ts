@@ -1307,7 +1307,7 @@ async function seed() {
   }
   console.log(`[seed] Output Schema: ${toolNames.length} 个工具已关联契约文件`);
 
-  console.log(`[seed] MCP Tools: ${toolDefs.length} 个 (含 ${dbBindingTools.length} 个 DB, ${apiBindingTools.length} 个 API)`);
+  console.log(`[seed] MCP Tools: ${toolDefs.length} 个 (含 ${apiBindingTools.length} 个 API)`);
 
   // ── 9c. Connectors（三层架构：MCP Server 的下游后端依赖）─────────────────
   // Connectors = MCP Server 往下游访问的依赖边界，不是 MCP Server 自身
