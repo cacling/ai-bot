@@ -23,8 +23,9 @@ BACKEND_PORT=18472
 MCP_PORTS=(18003 18004 18005 18006 18007)
 MCP_SERVICES=("user_info_service" "business_service" "diagnosis_service" "outbound_service" "account_service")
 MCP_LABELS=("用户信息" "业务办理" "故障诊断" "外呼服务" "账户操作")
+MOCK_APIS_PORT=18008
 FRONTEND_PORT=5173
-ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$FRONTEND_PORT")
+ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$FRONTEND_PORT")
 
 # ── 颜色 ────────────────────────────────────────────────────────────────────
 GRN='\033[0;32m'; RED='\033[0;31m'; YEL='\033[1;33m'; BLU='\033[0;34m'; NC='\033[0m'

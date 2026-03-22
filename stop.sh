@@ -24,6 +24,7 @@ kill_port 18004  # 业务办理 MCP
 kill_port 18005  # 故障诊断 MCP
 kill_port 18006  # 外呼服务 MCP
 kill_port 18007  # 账户操作 MCP
+kill_port 18008  # mock_apis
 kill_port 5173   # frontend
 
 # 杀掉可能漂移的 Vite 端口
