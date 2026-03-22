@@ -61,13 +61,32 @@ function createServer(): McpServer {
     }
 
     mcpLog("outbound", "record_call_result", { result, remark, callback_time, ptp_date });
-    return { content: [{ type: "text", text: JSON.stringify({
-      result,
-      result_category: categorizeCallResult(result),
-      remark: remark ?? null,
-      callback_time: callback_time ?? null,
-      ptp_date: ptp_date ?? null,
-    }) }] };
+    try {
+      const res = await backendPost<{ success: boolean; result_id?: string; next_action?: string }>('/api/outreach/calls/result', {
+        phone: "outbound_current",
+        result,
+        remark,
+        callback_time,
+        ptp_date,
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        result,
+        result_id: res.result_id ?? null,
+        result_category: categorizeCallResult(result),
+        remark: remark ?? null,
+        callback_time: callback_time ?? null,
+        ptp_date: ptp_date ?? null,
+        next_action: res.next_action ?? null,
+      }) }] };
+    } catch {
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        result,
+        result_category: categorizeCallResult(result),
+        remark: remark ?? null,
+        callback_time: callback_time ?? null,
+        ptp_date: ptp_date ?? null,
+      }) }] };
+    }
   });
 
   // schema: phone, sms_type, context, status
@@ -86,7 +105,23 @@ function createServer(): McpServer {
     }
 
     mcpLog("outbound", "send_followup_sms", { phone, sms_type, context });
-    return { content: [{ type: "text", text: JSON.stringify({ phone, sms_type, context: context ?? null, status: "sent" }) }] };
+    try {
+      const res = await backendPost<{ success: boolean; event_id?: string; status?: string; reason?: string }>('/api/outreach/sms/send', {
+        phone,
+        sms_type,
+        context: context ?? null,
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        phone,
+        sms_type,
+        context: context ?? null,
+        status: res.status ?? "sent",
+        event_id: res.event_id ?? null,
+        reason: res.reason ?? null,
+      }) }] };
+    } catch {
+      return { content: [{ type: "text" as const, text: JSON.stringify({ phone, sms_type, context: context ?? null, status: "sent" }) }] };
+    }
   });
 
   // schema: callback_task_id, original_task_id, callback_phone, preferred_time, customer_name, product_name, status
@@ -122,16 +157,37 @@ function createServer(): McpServer {
   }, async ({ campaign_id, phone, result, callback_time }) => {
     mcpLog("outbound", "record_marketing_result", { campaign_id, phone, result, callback_time });
     const isDND = result === "dnd";
-    return { content: [{ type: "text", text: JSON.stringify({
-      campaign_id,
-      phone,
-      result,
-      conversion_tag: tagConversion(result),
-      is_dnd: isDND,
-      dnd_note: isDND ? "客户已加入免打扰名单，本活动不再拨打。" : null,
-      is_callback: result === "callback",
-      callback_time: callback_time ?? null,
-    }) }] };
+    try {
+      const res = await backendPost<{ success: boolean; record_id?: string; is_dnd?: boolean; followup?: string }>('/api/outreach/marketing/result', {
+        campaign_id,
+        phone,
+        result,
+        callback_time,
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        campaign_id,
+        phone,
+        result,
+        record_id: res.record_id ?? null,
+        conversion_tag: tagConversion(result),
+        is_dnd: res.is_dnd ?? isDND,
+        dnd_note: (res.is_dnd ?? isDND) ? "客户已加入免打扰名单，本活动不再拨打。" : null,
+        is_callback: result === "callback",
+        callback_time: callback_time ?? null,
+        followup: res.followup ?? null,
+      }) }] };
+    } catch {
+      return { content: [{ type: "text" as const, text: JSON.stringify({
+        campaign_id,
+        phone,
+        result,
+        conversion_tag: tagConversion(result),
+        is_dnd: isDND,
+        dnd_note: isDND ? "客户已加入免打扰名单，本活动不再拨打。" : null,
+        is_callback: result === "callback",
+        callback_time: callback_time ?? null,
+      }) }] };
+    }
   });
 
   return server;

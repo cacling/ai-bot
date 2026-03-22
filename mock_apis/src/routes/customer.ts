@@ -188,7 +188,7 @@ app.get("/subscribers/:msisdn/subscription-history", async (c) => {
     success: true,
     msisdn,
     count: rows.length,
-    subscriptions: rows,
+    subscription_history: rows,
   });
 });
 

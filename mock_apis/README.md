@@ -34,15 +34,19 @@
 
 当前的表分两类：
 
-- **共享主数据表**：`subscribers`、`plans`、`bills`、`contracts`、`device_contexts`、`subscriber_subscriptions`、`value_added_services`、`callback_tasks`
+- **共享主数据表**：`subscribers`、`plans`、`bills`、`contracts`、`device_contexts`、`subscriber_subscriptions`、`value_added_services`、`callback_tasks`、`customer_households`
 - **系统自有表（前缀与 API path 对齐）**
   - `customer_preferences`
+  - `billing_bill_items`
+  - `billing_dispute_cases`
   - `identity_otp_requests`
+  - `identity_login_events`
   - `payments_transactions`
   - `network_incidents`
   - `offers_campaigns`
   - `invoice_records`
   - `orders_service_orders`
+  - `orders_refund_requests`
   - `outreach_call_results`
   - `outreach_sms_events`
   - `outreach_handoff_cases`
@@ -67,13 +71,17 @@
 ### identity / risk
 - `POST /api/identity/otp/send`
 - `POST /api/identity/verify`
+- `GET /api/identity/accounts/:msisdn/login-events`
 - `GET /api/risk/accounts/:msisdn`
 
 ### customer
 - `GET /api/customer/subscribers/:msisdn`
+- `GET /api/customer/subscribers/:msisdn/account-summary`
 - `GET /api/customer/subscribers/:msisdn/preferences`
 - `GET /api/customer/subscribers/:msisdn/contracts`
 - `GET /api/customer/subscribers/:msisdn/services`
+- `GET /api/customer/subscribers/:msisdn/household`
+- `GET /api/customer/subscribers/:msisdn/subscription-history`
 
 ### catalog / offers
 - `GET /api/catalog/plans`
@@ -84,6 +92,8 @@
 
 ### orders / payments
 - `POST /api/orders/service-cancel`
+- `GET /api/orders/refund-requests?msisdn=...`
+- `GET /api/orders/refund-requests/:refundId`
 - `GET /api/orders/:orderId`
 - `GET /api/payments/transactions?msisdn=...`
 - `GET /api/payments/transactions/:paymentId`
@@ -91,7 +101,9 @@
 
 ### billing
 - `GET /api/billing/accounts/:msisdn/bills`
+- `GET /api/billing/accounts/:msisdn/bills/:month`
 - `GET /api/billing/accounts/:msisdn/bills/:month/items`
+- `GET /api/billing/accounts/:msisdn/disputes`
 - `GET /api/billing/accounts/:msisdn/payments`
 - `POST /api/billing/anomaly/analyze`
 
@@ -114,6 +126,7 @@
 为了让 MCP Server 和 Skill 测试有稳定样例，当前保留了几条显式的 demo 规则：
 
 - `13800000003`：风险账户，`GET /api/risk/accounts/:msisdn` 会返回高风险
+- `13800000003`：`GET /api/identity/accounts/:msisdn/login-events` 会返回失败、OTP 挑战和锁定链路
 - 最近一次 `POST /api/identity/otp/send` 返回的 `mock_otp` 可直接用于 `POST /api/identity/verify`
 - `13800000002`：营销短信受 DND 规则限制
 - 夜间发送营销短信会被 `POST /api/outreach/sms/send` 拦截
@@ -121,6 +134,7 @@
 - `13800000001`：可命中 `CMP-UP-100G` 套餐升级活动
 - `13800000002`：客户偏好为 DND，不应返回营销活动
 - `13800000003`：可生成催缴支付链接，并保留失败支付交易样例
+- `13900000001` ~ `13900000006`：已补齐为完整客户主数据，可支撑催收/营销端到端链路
 
 这些规则是为了让 `/Users/chenjun/Documents/obsidian/workspace/ai-bot/mcp_servers` 的 Tool 行为有可重复、可验证的 demo 基础。
 

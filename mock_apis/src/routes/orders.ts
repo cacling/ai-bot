@@ -2,7 +2,15 @@
  * orders.ts — 模拟订单 / 办理系统
  */
 import { Hono } from "hono";
-import { db, subscribers, subscriberSubscriptions, valueAddedServices, ordersServiceOrders, eq } from "../db.js";
+import {
+  db,
+  subscribers,
+  subscriberSubscriptions,
+  valueAddedServices,
+  ordersServiceOrders,
+  ordersRefundRequests,
+  eq,
+} from "../db.js";
 
 const app = new Hono();
 
@@ -61,6 +69,35 @@ app.post("/service-cancel", async (c) => {
     refund_note: "当月费用不退，次月起不再扣费。",
     requires_manual_review: order.requires_manual_review,
     message: order.message,
+  });
+});
+
+app.get("/refund-requests", async (c) => {
+  const msisdn = c.req.query("msisdn");
+  if (!msisdn) return c.json({ success: false, message: "msisdn 不能为空" }, 400);
+
+  const sub = await db.select().from(subscribers).where(eq(subscribers.phone, msisdn)).get();
+  if (!sub) return c.json({ success: false, message: `未找到手机号 ${msisdn}` }, 404);
+
+  const requests = await db.select().from(ordersRefundRequests).where(eq(ordersRefundRequests.phone, msisdn)).all();
+  const sorted = requests.sort((a, b) => b.requested_at.localeCompare(a.requested_at));
+
+  return c.json({
+    success: true,
+    msisdn,
+    count: sorted.length,
+    refund_requests: sorted,
+  });
+});
+
+app.get("/refund-requests/:refundId", async (c) => {
+  const refundId = c.req.param("refundId");
+  const request = await db.select().from(ordersRefundRequests).where(eq(ordersRefundRequests.refund_id, refundId)).get();
+  if (!request) return c.json({ success: false, message: `未找到退款申请 ${refundId}` }, 404);
+
+  return c.json({
+    success: true,
+    refund_request: request,
   });
 });
 

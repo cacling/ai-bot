@@ -6,6 +6,11 @@ import { createApp } from '../src/server.js';
 
 const app = createApp();
 
+function currentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 async function get(path: string) {
   const res = await app.request(`http://mock.local${path}`);
   return { status: res.status, data: await res.json() as Record<string, unknown> };
@@ -47,6 +52,14 @@ describe('identity and risk APIs', () => {
     expect(verify.data.verified).toBe(true);
   });
 
+  test('login events endpoint returns latest account state', async () => {
+    const { status, data } = await get('/api/identity/accounts/13800000003/login-events');
+    expect(status).toBe(200);
+    expect(data.success).toBe(true);
+    expect((data.events as unknown[]).length).toBeGreaterThan(0);
+    expect((data.latest_state as Record<string, unknown>).result).toBeDefined();
+  });
+
   test('risk lookup returns high risk for suspicious account', async () => {
     const { status, data } = await get('/api/risk/accounts/13800000003');
     expect(status).toBe(200);
@@ -77,6 +90,22 @@ describe('customer APIs', () => {
     expect(data.success).toBe(true);
     expect((data.contracts as unknown[]).length).toBeGreaterThan(0);
   });
+
+  test('household endpoint returns family members for shared account', async () => {
+    const { status, data } = await get('/api/customer/subscribers/13800000002/household');
+    expect(status).toBe(200);
+    expect(data.success).toBe(true);
+    expect((data.members as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  test('subscription history includes lifecycle fields', async () => {
+    const { status, data } = await get('/api/customer/subscribers/13900000006/subscription-history');
+    expect(status).toBe(200);
+    expect(data.success).toBe(true);
+    const [first] = data.subscription_history as Array<Record<string, unknown>>;
+    expect(first?.subscribed_at).toBeDefined();
+    expect(first?.channel).toBeDefined();
+  });
 });
 
 describe('billing APIs', () => {
@@ -88,7 +117,7 @@ describe('billing APIs', () => {
   });
 
   test('bill items endpoint returns structured items', async () => {
-    const { status, data } = await get('/api/billing/accounts/13800000001/bills/2026-03/items');
+    const { status, data } = await get(`/api/billing/accounts/13800000001/bills/${currentMonth()}/items`);
     expect(status).toBe(200);
     expect(data.success).toBe(true);
     expect((data.items as unknown[]).length).toBeGreaterThan(0);
@@ -102,10 +131,17 @@ describe('billing APIs', () => {
   });
 
   test('anomaly analysis returns computed diff', async () => {
-    const { status, data } = await post('/api/billing/anomaly/analyze', { msisdn: '13800000001', month: '2026-03' });
+    const { status, data } = await post('/api/billing/anomaly/analyze', { msisdn: '13800000001', month: currentMonth() });
     expect(status).toBe(200);
     expect(data.success).toBe(true);
     expect(typeof data.diff).toBe('number');
+  });
+
+  test('billing disputes endpoint returns seeded disputes', async () => {
+    const { status, data } = await get('/api/billing/accounts/13800000001/disputes');
+    expect(status).toBe(200);
+    expect(data.success).toBe(true);
+    expect((data.disputes as unknown[]).length).toBeGreaterThan(0);
   });
 });
 
@@ -148,6 +184,19 @@ describe('catalog, offers, orders, and payments APIs', () => {
     expect((query.data.order as Record<string, unknown>).service_id).toBe('video_pkg');
   });
 
+  test('refund request endpoints return seeded refund workflow', async () => {
+    const list = await get('/api/orders/refund-requests?msisdn=13800000001');
+    expect(list.status).toBe(200);
+    expect(list.data.success).toBe(true);
+    const [first] = list.data.refund_requests as Array<{ refund_id: string }>;
+    expect(first?.refund_id).toBeDefined();
+
+    const detail = await get(`/api/orders/refund-requests/${first.refund_id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.data.success).toBe(true);
+    expect((detail.data.refund_request as Record<string, unknown>).phone).toBe('13800000001');
+  });
+
   test('payment transactions and payment link return arrears context', async () => {
     const transactions = await get('/api/payments/transactions?msisdn=13800000003');
     expect(transactions.status).toBe(200);
@@ -168,7 +217,7 @@ describe('catalog, offers, orders, and payments APIs', () => {
 
 describe('invoice and callback APIs', () => {
   test('issue invoice returns invoice number', async () => {
-    const { status, data } = await post('/api/invoice/issue', { phone: '13800000001', month: '2026-03', email: 'test@example.com' });
+    const { status, data } = await post('/api/invoice/issue', { phone: '13800000001', month: currentMonth(), email: 'test@example.com' });
     expect(status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.invoice_no).toBeDefined();

@@ -27,12 +27,10 @@ export {
   kmRegressionWindows,
   kmAuditLogs,
   mcpServers,
-  mcpResources,
   mcpTools,
   // 严格 MCP 对齐：新增三层架构表
   connectors,
   toolImplementations,
   skillToolBindings,
-  mcpPrompts,
   mcpServerSyncRuns,
 } from '../../../../packages/shared-db/src/schema/platform';

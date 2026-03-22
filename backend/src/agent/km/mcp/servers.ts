@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../../../db';
-import { mcpServers, mcpResources, mcpTools } from '../../../db/schema';
+import { mcpServers, mcpTools, connectors } from '../../../db/schema';
 import { nanoid } from '../../../db/nanoid';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -189,11 +189,11 @@ app.get('/:id/health', async (c) => {
   const row = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
   if (!row) return c.json({ error: 'Not found' }, 404);
 
-  // Aggregate resource health
-  const resources = db.select().from(mcpResources).where(eq(mcpResources.server_id, row.id)).all();
+  // Aggregate connector + tool health
+  const conns = db.select().from(connectors).where(eq(connectors.server_id, row.id)).all();
   const tools = db.select().from(mcpTools).where(eq(mcpTools.server_id, row.id)).all();
 
-  const resourceSummary = resources.map(r => ({
+  const resourceSummary = conns.map(r => ({
     id: r.id,
     name: r.name,
     type: r.type,
@@ -214,8 +214,8 @@ app.get('/:id/health', async (c) => {
     status: row.status,
     enabled: row.enabled,
     last_connected_at: row.last_connected_at,
-    resources: resourceSummary,
-    resource_count: resources.length,
+    connectors: resourceSummary,
+    connector_count: conns.length,
     tools: toolsSummary,
   });
 });
@@ -266,63 +266,6 @@ app.post('/:id/mock-invoke', async (c) => {
     mock: true,
     matched_rule: '(matched)',
   });
-});
-
-// ── MCP Resources discovery（严格 MCP 对齐：真正的 resources/list）────────
-app.get('/:id/mcp-resources', async (c) => {
-  const server = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
-  if (!server) return c.json({ error: 'Server not found' }, 404);
-  if (!server.url) return c.json({ items: [], note: 'No endpoint configured' });
-
-  try {
-    const mcpClient = new Client({ name: 'resource-discover', version: '1.0' });
-    await mcpClient.connect(new StreamableHTTPClientTransport(new URL(server.url)));
-    let items: Array<{ uri: string; name: string; description?: string; mimeType?: string }> = [];
-    try {
-      const result = await mcpClient.listResources();
-      items = (result.resources ?? []).map(r => ({
-        uri: r.uri,
-        name: r.name ?? r.uri,
-        description: r.description,
-        mimeType: r.mimeType,
-      }));
-    } catch {
-      // Server may not support resources/list — that's fine
-    }
-    await mcpClient.close();
-    return c.json({ items });
-  } catch (err) {
-    logger.error('mcp', 'mcp_resources_discover_error', { server_id: server.id, error: String(err) });
-    return c.json({ error: `Connection failed: ${String(err)}` }, 502);
-  }
-});
-
-// ── MCP Prompts discovery（严格 MCP 对齐：真正的 prompts/list）──────────
-app.get('/:id/mcp-prompts', async (c) => {
-  const server = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
-  if (!server) return c.json({ error: 'Server not found' }, 404);
-  if (!server.url) return c.json({ items: [], note: 'No endpoint configured' });
-
-  try {
-    const mcpClient = new Client({ name: 'prompt-discover', version: '1.0' });
-    await mcpClient.connect(new StreamableHTTPClientTransport(new URL(server.url)));
-    let items: Array<{ name: string; description?: string; arguments?: unknown[] }> = [];
-    try {
-      const result = await mcpClient.listPrompts();
-      items = (result.prompts ?? []).map(p => ({
-        name: p.name,
-        description: p.description,
-        arguments: p.arguments,
-      }));
-    } catch {
-      // Server may not support prompts/list — that's fine
-    }
-    await mcpClient.close();
-    return c.json({ items });
-  } catch (err) {
-    logger.error('mcp', 'mcp_prompts_discover_error', { server_id: server.id, error: String(err) });
-    return c.json({ error: `Connection failed: ${String(err)}` }, 502);
-  }
 });
 
 export default app;

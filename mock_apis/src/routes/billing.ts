@@ -34,11 +34,12 @@ app.get("/accounts/:msisdn/bills", async (c) => {
 
   const rows = await db.select().from(bills).where(eq(bills.phone, msisdn)).all();
   const sorted = rows.sort((a, b) => b.month.localeCompare(a.month)).slice(0, limit);
+  const billsWithItems = sorted.map((bill) => ({ ...bill, items: billItemsFor(bill) }));
   return c.json({
     success: true,
     msisdn,
     count: sorted.length,
-    bills: sorted,
+    bills: billsWithItems,
   });
 });
 
@@ -102,11 +103,72 @@ app.post("/anomaly/analyze", async (c) => {
 
   const diff = current.total - (previous?.total ?? 0);
   const changeRatio = previous?.total ? Number((diff / previous.total).toFixed(2)) : 0;
-  const primary_cause = current.data_fee > (previous?.data_fee ?? 0)
-    ? "data_fee"
-    : current.value_added_fee > (previous?.value_added_fee ?? 0)
-      ? "value_added_fee"
-      : "unknown";
+
+  // 逐项对比，生成 causes 数组
+  const feeFields = [
+    { field: "plan_fee" as const, label: "套餐月费", cause: "plan_fee" },
+    { field: "data_fee" as const, label: "流量费", cause: "data_fee" },
+    { field: "voice_fee" as const, label: "通话费", cause: "voice_fee" },
+    { field: "sms_fee" as const, label: "短信费", cause: "sms_fee" },
+    { field: "value_added_fee" as const, label: "增值业务费", cause: "value_added_fee" },
+    { field: "tax" as const, label: "税费", cause: "tax" },
+  ];
+
+  const causes = feeFields
+    .map(({ field, label, cause }) => {
+      const cur = current[field] ?? 0;
+      const prev = previous?.[field] ?? 0;
+      const itemDiff = cur - prev;
+      if (itemDiff === 0) return null;
+      return { cause, label, current_amount: cur, previous_amount: prev, diff: itemDiff };
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null)
+    .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+
+  // 用 bill_items 补充细项来源
+  const currentItems = billItemsFor(current);
+  const previousItems = previous ? billItemsFor(previous) : [];
+  const itemDetails = currentItems
+    .filter((item) => {
+      const prevItem = previousItems.find((p) => p.item_type === item.item_type && p.item_name === item.item_name);
+      return !prevItem || item.amount !== prevItem.amount;
+    })
+    .map((item) => {
+      const prevItem = previousItems.find((p) => p.item_type === item.item_type && p.item_name === item.item_name);
+      return { item_name: item.item_name, item_type: item.item_type, current_amount: item.amount, previous_amount: prevItem?.amount ?? 0, diff: item.amount - (prevItem?.amount ?? 0), source: item.source };
+    });
+
+  // 判断 primary_cause：取 diff 最大的
+  const primary_cause = causes.length > 0 ? causes[0].cause : "unknown";
+  // 检查是否有漫游费用
+  const hasRoaming = currentItems.some((item) => item.source === "roaming_core");
+  const effectiveCause = hasRoaming && (primary_cause === "data_fee" || primary_cause === "voice_fee") ? "roaming" : primary_cause;
+
+  console.log(`[billing/anomaly] msisdn=${msisdn} month=${month} prev=${prevMonth} diff=${diff} causes_count=${causes.length} causes=${JSON.stringify(causes)}`);
+
+  // ── 生成人类可读的结构化摘要（LLM 直接复述，避免自行拼数字）──────────
+  const prevTotal = previous?.total ?? 0;
+  const diffSign = diff > 0 ? "增加" : diff < 0 ? "减少" : "持平";
+  const ratioPercent = previous?.total ? `${Math.abs(changeRatio * 100).toFixed(1)}%` : "无上月数据";
+
+  // 逐项变化文本（按变化绝对值排序，取前 3 项）
+  const topCauses = causes.slice(0, 3);
+  const changedItemsText = topCauses.map(
+    (c) => `${c.label}：¥${c.previous_amount} → ¥${c.current_amount}（${c.diff > 0 ? "+" : ""}¥${c.diff}）`
+  );
+
+  // 总结文本
+  let summary: string;
+  if (!previous) {
+    summary = `${month} 总费用 ¥${current.total}，无上月账单可对比。`;
+  } else if (diff === 0) {
+    summary = `${month} 总费用 ¥${current.total}，与上月持平。`;
+  } else {
+    summary = `${month} 总费用 ¥${current.total}，较上月（${prevMonth}）¥${prevTotal} ${diffSign} ¥${Math.abs(diff)}（${ratioPercent}）。`;
+    if (changedItemsText.length > 0) {
+      summary += `主要变化：${changedItemsText.join("；")}。`;
+    }
+  }
 
   return c.json({
     success: true,
@@ -114,10 +176,14 @@ app.post("/anomaly/analyze", async (c) => {
     month,
     previous_month: prevMonth,
     current_total: current.total,
-    previous_total: previous?.total ?? 0,
+    previous_total: prevTotal,
     diff,
     change_ratio: changeRatio,
-    primary_cause,
+    primary_cause: effectiveCause,
+    causes,
+    item_details: itemDetails,
+    summary,
+    changed_items_text: changedItemsText,
   });
 });
 

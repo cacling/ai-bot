@@ -76,14 +76,14 @@ export const CardPanel = memo(function CardPanel({ cards, lang, onUpdate }: Prop
   return (
     <div className="flex flex-col gap-2 w-full">
       {/* 2-column grid for open cards; dense flow fills gaps when col-span-2 items interrupt col-span-1 pairs */}
-      <div className="grid grid-cols-2 gap-3 grid-flow-dense">
+      <div className="columns-2 gap-3">
         {visible.map(state => {
           const def = getCardDef(state.id);
           if (!def) return null;
           return (
             <div
               key={state.id}
-              className={def.colSpan === 2 ? 'col-span-2' : 'col-span-1'}
+              className={`break-inside-avoid mb-3${def.colSpan === 2 ? ' [column-span:all]' : ''}`}
             >
               <CardShell
                 def={def}

@@ -44,6 +44,34 @@ function prevMonth(month: string): string {
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
 }
 
+/**
+ * 标准化月份参数：无论 LLM 传什么格式，统一输出 "YYYY-MM"。
+ * 支持格式：2026-02, 2026-2, 2026年2月, 2月, 02 等。
+ * 缺年份时自动补当前年。
+ */
+function normalizeMonth(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const s = raw.trim();
+
+  // "2026-02" or "2026-2"
+  const dashMatch = s.match(/^(\d{4})-(\d{1,2})$/);
+  if (dashMatch) return `${dashMatch[1]}-${dashMatch[2].padStart(2, '0')}`;
+
+  // "2026年2月" or "2026年02月"
+  const cnFullMatch = s.match(/(\d{4})\s*年\s*(\d{1,2})\s*月?/);
+  if (cnFullMatch) return `${cnFullMatch[1]}-${cnFullMatch[2].padStart(2, '0')}`;
+
+  // "2月" or "02月" or just "2" (month only, assume current year)
+  const cnMonthOnly = s.match(/^(\d{1,2})\s*月?$/);
+  if (cnMonthOnly) {
+    const m = parseInt(cnMonthOnly[1]);
+    if (m >= 1 && m <= 12) return `${new Date().getFullYear()}-${String(m).padStart(2, '0')}`;
+  }
+
+  // Already valid or unrecognized — return as-is
+  return s;
+}
+
 // ── Server ───────────────────────────────────────────────────────────────────
 
 function createServer(): McpServer {
@@ -66,7 +94,16 @@ function createServer(): McpServer {
 
       const sub = subRes.subscriber;
       const plan = sub.plan;
-      const services = (svcRes.services ?? []).map((s: any) => ({ service_id: s.service_id, name: s.name ?? s.service_id, monthly_fee: s.monthly_fee ?? 0 }));
+      const services = (svcRes.services ?? []).map((s: any) => ({
+        service_id: s.service_id,
+        name: s.name ?? s.service_id,
+        monthly_fee: s.monthly_fee ?? 0,
+        subscribed_at: s.subscribed_at ?? null,
+        effective_start: s.effective_start ?? null,
+        effective_end: s.effective_end ?? null,
+        auto_renew: s.auto_renew ?? false,
+        order_id: s.order_id ?? null,
+      }));
       const vasTotalFee = services.reduce((sum: number, s: any) => sum + s.monthly_fee, 0);
       const dataTotal = plan?.data_gb ?? -1;
       const voiceTotal = plan?.voice_min ?? -1;
@@ -79,6 +116,8 @@ function createServer(): McpServer {
         gender: sub.gender ?? null,
         status: sub.status,
         balance: sub.balance,
+        plan_name: plan?.name ?? null,
+        plan_type: plan?.plan_type ?? null,
         plan_fee: plan?.monthly_fee ?? 0,
         data_used_gb: sub.data_used_gb ?? 0,
         data_total_gb: dataTotal,
@@ -101,7 +140,8 @@ function createServer(): McpServer {
   server.tool("query_bill", "查询用户指定月份的账单明细（含费用拆解 breakdown）", {
     phone: z.string().describe("用户手机号"),
     month: z.string().optional().describe('账单月份，格式 "YYYY-MM"，不填则返回最近3个月'),
-  }, async ({ phone, month }) => {
+  }, async ({ phone, month: rawMonth }) => {
+    const month = normalizeMonth(rawMonth);
     const t0 = performance.now();
     try {
       if (month) {
@@ -112,7 +152,7 @@ function createServer(): McpServer {
         }
         const bill = res.bill;
         const label = monthLabel(bill.month);
-        const enriched = { ...bill, month_label: label, breakdown: buildBreakdown(bill), payable: bill.status === "unpaid" };
+        const enriched = { ...bill, month_label: label, breakdown: buildBreakdown(bill), items: bill.items ?? [], payable: bill.status === "unpaid" };
         mcpLog("user-info", "query_bill", { phone, month, found: true, ms: Math.round(performance.now() - t0) });
         return { content: [{ type: "text" as const, text: JSON.stringify({ bills: [enriched], count: 1, requested_month: month, note: `本结果为${label}账单` }) }] };
       }
@@ -122,7 +162,7 @@ function createServer(): McpServer {
         mcpLog("user-info", "query_bill", { phone, found: false, ms: Math.round(performance.now() - t0) });
         return { content: [{ type: "text" as const, text: JSON.stringify({ bills: [], count: 0, requested_month: null, note: `未找到手机号 ${phone} 的账单记录` }) }] };
       }
-      const labeled = (res.bills ?? []).map((b: any) => ({ ...b, month_label: monthLabel(b.month), breakdown: buildBreakdown(b), payable: b.status === "unpaid" }));
+      const labeled = (res.bills ?? []).map((b: any) => ({ ...b, month_label: monthLabel(b.month), breakdown: buildBreakdown(b), items: b.items ?? [], payable: b.status === "unpaid" }));
       mcpLog("user-info", "query_bill", { phone, found: true, count: labeled.length, ms: Math.round(performance.now() - t0) });
       return { content: [{ type: "text" as const, text: JSON.stringify({ bills: labeled, count: labeled.length, requested_month: null, note: `以下为最近${labeled.length}个月账单` }) }] };
     } catch (err) {
@@ -155,7 +195,8 @@ function createServer(): McpServer {
   server.tool("analyze_bill_anomaly", "分析用户账单异常：自动对比当月与上月账单，计算差额和涨幅，定位费用异常原因，给出处理建议", {
     phone: z.string().describe("用户手机号"),
     month: z.string().describe('当月账期，格式 YYYY-MM'),
-  }, async ({ phone, month }) => {
+  }, async ({ phone, month: rawMonth }) => {
+    const month = normalizeMonth(rawMonth) ?? rawMonth;
     const t0 = performance.now();
     try {
       const res = await backendPost<{ success: boolean; [key: string]: any }>('/api/billing/anomaly/analyze', { msisdn: phone, month });
@@ -170,10 +211,12 @@ function createServer(): McpServer {
         data_fee: "流量超出套餐额度，建议购买流量加油包或升级套餐。",
         voice_fee: "通话时长超出套餐额度，建议购买通话加油包或升级套餐。",
         value_added_fee: "增值业务费用增加，建议在 APP 中查看已订业务并退订不需要的服务。",
+        roaming: "存在国际漫游费用，建议确认漫游包是否覆盖当地网络，或考虑升级漫游套餐。",
         unknown: "无法定位具体原因，建议拨打 10086 由人工客服核查。",
       };
 
-      mcpLog("user-info", "analyze_bill_anomaly", { phone, month, is_anomaly: isAnomaly, primary_cause: primaryCause, ms: Math.round(performance.now() - t0) });
+      console.log(`[user-info/analyze_bill_anomaly] raw response from mock_apis:`, JSON.stringify({ causes: res.causes, item_details: res.item_details, summary: res.summary, changed_items_text: res.changed_items_text }));
+      mcpLog("user-info", "analyze_bill_anomaly", { phone, month, is_anomaly: isAnomaly, primary_cause: primaryCause, causes_count: (res.causes ?? []).length, ms: Math.round(performance.now() - t0) });
       return { content: [{ type: "text" as const, text: JSON.stringify({
         is_anomaly: isAnomaly,
         current_month: month,
@@ -183,7 +226,10 @@ function createServer(): McpServer {
         diff: res.diff ?? 0,
         change_ratio: Math.round((res.change_ratio ?? 0) * 100),
         primary_cause: primaryCause,
-        causes: [],
+        causes: res.causes ?? [],
+        item_details: res.item_details ?? [],
+        summary: res.summary ?? null,
+        changed_items_text: res.changed_items_text ?? [],
         recommendation: recs[primaryCause] ?? recs.unknown,
       }) }] };
     } catch (err) {

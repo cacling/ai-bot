@@ -228,7 +228,8 @@ sandbox.post('/:id/publish', requireRole('flow_manager'), async (c) => {
 // ── 断言类型与执行 ──────────────────────────────────────────────────────────
 
 interface Assertion {
-  type: 'contains' | 'not_contains' | 'tool_called' | 'tool_not_called' | 'skill_loaded' | 'regex';
+  type: 'contains' | 'not_contains' | 'tool_called' | 'tool_not_called' | 'skill_loaded' | 'regex'
+    | 'tool_called_any_of' | 'response_mentions_all' | 'response_mentions_any' | 'response_has_next_step';
   value: string;
 }
 
@@ -294,11 +295,61 @@ function runAssertions(
           return { ...a, passed: false, detail: `正则表达式无效: ${a.value}` };
         }
       }
+      case 'tool_called_any_of': {
+        const candidates = a.value.split(',').map(s => s.trim());
+        const matched = candidates.filter(t => toolsCalled.includes(t));
+        const ok = matched.length > 0;
+        return { ...a, passed: ok, detail: ok ? `调用了工具 ${matched.join(', ')}` : `未调用任一工具 [${candidates.join(', ')}]（已调用: ${toolsCalled.join(', ') || '无'}）` };
+      }
+      case 'response_mentions_all': {
+        const keywords = a.value.split(',').map(s => s.trim());
+        const missing = keywords.filter(kw => !responseText.includes(kw));
+        const ok = missing.length === 0;
+        return { ...a, passed: ok, detail: ok ? `回复包含所有关键词: ${keywords.join(', ')}` : `回复缺少关键词: ${missing.join(', ')}` };
+      }
+      case 'response_mentions_any': {
+        const keywords = a.value.split(',').map(s => s.trim());
+        const matched = keywords.filter(kw => responseText.includes(kw));
+        const ok = matched.length > 0;
+        return { ...a, passed: ok, detail: ok ? `回复包含关键词: ${matched.join(', ')}` : `回复未包含任一关键词: ${keywords.join(', ')}` };
+      }
+      case 'response_has_next_step': {
+        const patterns = ['您可以', '建议您', '如需', '下一步', '请您', '可以通过', '前往', '拨打',
+          '是否需要', '需要我', '您看', '如果您', '如有', '请问', '告诉我', '联系我', '帮您', '为您'];
+        const matched = patterns.filter(p => responseText.includes(p));
+        const ok = matched.length > 0;
+        return { ...a, passed: ok, detail: ok ? `回复包含下一步引导: "${matched[0]}"` : `回复缺少下一步引导（未匹配常见引导句式）` };
+      }
       default:
         return { ...a, passed: false, detail: `未知断言类型: ${a.type}` };
     }
   });
 }
+
+// ── 基础设施错误识别 ──────────────────────────────────────────────────────────
+
+const INFRA_ERROR_PATTERNS = [
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+  'Too Many Requests',
+  '429',
+  'socket connection was closed',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'fetch failed',
+  'network error',
+];
+
+function isInfraError(err: unknown): boolean {
+  const msg = String(err);
+  return INFRA_ERROR_PATTERNS.some(p => msg.includes(p));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+type TestStatus = 'passed' | 'failed' | 'infra_error';
 
 // POST /api/sandbox/:id/regression — 沙箱回归测试（支持丰富断言）
 sandbox.post('/:id/regression', async (c) => {
@@ -309,102 +360,160 @@ sandbox.post('/:id/regression', async (c) => {
   const skillDirName = dirname(info.skillPath).split('/').pop()!;
   const skillsDir = resolve(info.sandboxDir, 'biz-skills');
 
+  // 可配置参数
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const delayMs = Number(body.delay_ms ?? 2000);       // 用例间退避间隔（默认 2 秒）
+  const retryOnInfra = body.retry_on_infra !== false;   // 基础设施错误自动重试（默认开启）
+  const retryDelayMs = Number(body.retry_delay_ms ?? 5000); // 重试前等待时间（默认 5 秒）
+
   const cases = await db
     .select()
     .from(testCases)
     .where(eq(testCases.skill_name, skillDirName));
 
   if (cases.length === 0) {
-    return c.json({ total: 0, passed: 0, failed: 0, results: [], message: '没有找到测试用例' });
+    return c.json({ total: 0, passed: 0, failed: 0, infra_error: 0, results: [], message: '没有找到测试用例' });
   }
 
   const results: Array<{
     test_id: number;
     input: string;
     actual: string;
+    status: TestStatus;
     passed: boolean;
     assertions: AssertionResult[];
     tools_called: string[];
     skills_loaded: string[];
   }> = [];
 
-  for (const tc of cases) {
-    const assertions = parseAssertions(tc);
-    try {
-      // 收集工具调用和技能加载信息
-      const toolsCalled: string[] = [];
-      const skillsLoaded: string[] = [];
+  // 单条用例执行逻辑（提取为函数以支持重试）
+  async function runSingleCase(tc: typeof cases[number], assertions: Assertion[]): Promise<typeof results[number]> {
+    const toolsCalled: string[] = [];
+    const skillsLoaded: string[] = [];
 
-      // 从 persona 获取 phone
-      let phone = '13800000001';
-      if (tc.persona_id) {
-        const persona = db.select().from(testPersonas).where(eq(testPersonas.id, tc.persona_id)).get();
-        if (persona) {
-          const ctx = JSON.parse(persona.context) as Record<string, unknown>;
-          phone = (ctx.phone as string) ?? phone;
-        }
+    let phone = '13800000001';
+    if (tc.persona_id) {
+      const persona = db.select().from(testPersonas).where(eq(testPersonas.id, tc.persona_id)).get();
+      if (persona) {
+        const ctx = JSON.parse(persona.context) as Record<string, unknown>;
+        phone = (ctx.phone as string) ?? phone;
       }
-
-      const agentResult = await runAgent(
-        tc.input_message,
-        [],
-        phone,
-        'zh',
-        undefined, // onDiagramUpdate
-        undefined, // onTextDelta
-        undefined, // subscriberName
-        undefined, // planName
-        skillsDir, // 沙箱 Skills 目录
-        { useMock: true }, // 沙箱回归测试默认使用 mock
-      );
-
-      // 从 agent result 的 steps 中提取工具调用信息
-      // runAgent 内部通过 onStepFinish 记录了工具调用，但这些信息不直接暴露在 AgentResult 中
-      // 我们通过解析回复文本和 card 信息来推断
-      const responseText = agentResult.text ?? '';
-
-      // 从 card 推断工具调用
-      if (agentResult.card) {
-        switch (agentResult.card.type) {
-          case 'bill_card': toolsCalled.push('query_bill'); break;
-          case 'cancel_card': toolsCalled.push('cancel_service'); break;
-          case 'plan_card': toolsCalled.push('query_plans'); break;
-          case 'diagnostic_card': toolsCalled.push('diagnose_network'); break;
-        }
-      }
-      if (agentResult.transferData) toolsCalled.push('transfer_to_human');
-      if (agentResult.skill_diagram?.skill_name) skillsLoaded.push(agentResult.skill_diagram.skill_name);
-
-      const assertionResults = runAssertions(assertions, responseText, toolsCalled, skillsLoaded);
-      const allPassed = assertionResults.every(r => r.passed);
-
-      results.push({
-        test_id: tc.id,
-        input: tc.input_message,
-        actual: responseText.slice(0, 500),
-        passed: allPassed,
-        assertions: assertionResults,
-        tools_called: toolsCalled,
-        skills_loaded: skillsLoaded,
-      });
-    } catch (err) {
-      results.push({
-        test_id: tc.id,
-        input: tc.input_message,
-        actual: `Error: ${String(err)}`,
-        passed: false,
-        assertions: assertions.map(a => ({ ...a, passed: false, detail: `执行异常: ${String(err)}` })),
-        tools_called: [],
-        skills_loaded: [],
-      });
     }
+
+    const agentResult = await runAgent(
+      tc.input_message,
+      [],
+      phone,
+      'zh',
+      undefined, // onDiagramUpdate
+      undefined, // onTextDelta
+      undefined, // subscriberName
+      undefined, // planName
+      skillsDir, // 沙箱 Skills 目录
+      { useMock: true }, // 沙箱回归测试默认使用 mock
+    );
+
+    const responseText = agentResult.text ?? '';
+    toolsCalled.push(...(agentResult.toolRecords ?? []).map(r => r.tool));
+    if (toolsCalled.length === 0 && agentResult.card) {
+      switch (agentResult.card.type) {
+        case 'bill_card': toolsCalled.push('query_bill'); break;
+        case 'cancel_card': toolsCalled.push('cancel_service'); break;
+        case 'plan_card': toolsCalled.push('query_plans'); break;
+        case 'diagnostic_card': toolsCalled.push('diagnose_network'); break;
+      }
+    }
+    if (agentResult.transferData) toolsCalled.push('transfer_to_human');
+    if (agentResult.skill_diagram?.skill_name) skillsLoaded.push(agentResult.skill_diagram.skill_name);
+    for (const rec of agentResult.toolRecords ?? []) {
+      if (rec.tool === 'get_skill_instructions' && rec.args?.skill_name && !skillsLoaded.includes(rec.args.skill_name)) {
+        skillsLoaded.push(rec.args.skill_name);
+      }
+    }
+
+    const assertionResults = runAssertions(assertions, responseText, toolsCalled, skillsLoaded);
+    const allPassed = assertionResults.every(r => r.passed);
+
+    return {
+      test_id: tc.id,
+      input: tc.input_message,
+      actual: responseText.slice(0, 500),
+      status: allPassed ? 'passed' : 'failed',
+      passed: allPassed,
+      assertions: assertionResults,
+      tools_called: toolsCalled,
+      skills_loaded: skillsLoaded,
+    };
   }
 
-  const passed = results.filter(r => r.passed).length;
-  const failed = results.filter(r => !r.passed).length;
+  for (let i = 0; i < cases.length; i++) {
+    const tc = cases[i];
+    const assertions = parseAssertions(tc);
 
-  logger.info('sandbox', 'regression', { id, total: results.length, passed, failed });
-  return c.json({ total: results.length, passed, failed, results });
+    try {
+      const result = await runSingleCase(tc, assertions);
+      results.push(result);
+    } catch (err) {
+      if (isInfraError(err) && retryOnInfra) {
+        // 基础设施错误：等待后重试一次
+        logger.warn('sandbox', 'infra_error_retry', { id, test_id: tc.id, error: String(err) });
+        await sleep(retryDelayMs);
+        try {
+          const retryResult = await runSingleCase(tc, assertions);
+          results.push(retryResult);
+          // 退避后继续
+          if (i < cases.length - 1) await sleep(delayMs);
+          continue;
+        } catch (retryErr) {
+          // 重试也失败，标记为 infra_error
+          results.push({
+            test_id: tc.id,
+            input: tc.input_message,
+            actual: `InfraError: ${String(retryErr)}`,
+            status: 'infra_error',
+            passed: false,
+            assertions: assertions.map(a => ({ ...a, passed: false, detail: `基础设施异常（已重试）: ${String(retryErr)}` })),
+            tools_called: [],
+            skills_loaded: [],
+          });
+        }
+      } else if (isInfraError(err)) {
+        // 基础设施错误但未开启重试
+        results.push({
+          test_id: tc.id,
+          input: tc.input_message,
+          actual: `InfraError: ${String(err)}`,
+          status: 'infra_error',
+          passed: false,
+          assertions: assertions.map(a => ({ ...a, passed: false, detail: `基础设施异常: ${String(err)}` })),
+          tools_called: [],
+          skills_loaded: [],
+        });
+      } else {
+        // 真正的内容/逻辑错误
+        results.push({
+          test_id: tc.id,
+          input: tc.input_message,
+          actual: `Error: ${String(err)}`,
+          status: 'failed',
+          passed: false,
+          assertions: assertions.map(a => ({ ...a, passed: false, detail: `执行异常: ${String(err)}` })),
+          tools_called: [],
+          skills_loaded: [],
+        });
+      }
+    }
+
+    // 用例间退避，避免 429
+    if (i < cases.length - 1) await sleep(delayMs);
+  }
+
+  const passed = results.filter(r => r.status === 'passed').length;
+  const failed = results.filter(r => r.status === 'failed').length;
+  const infraError = results.filter(r => r.status === 'infra_error').length;
+
+  logger.info('sandbox', 'regression', { id, total: results.length, passed, failed, infra_error: infraError });
+  return c.json({ total: results.length, passed, failed, infra_error: infraError, content_evaluated: passed + failed, results });
 });
 
 // DELETE /api/sandbox/:id

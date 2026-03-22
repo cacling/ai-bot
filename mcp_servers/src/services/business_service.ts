@@ -29,13 +29,16 @@ function createServer(): McpServer {
       mcpLog("business", "cancel_service", { phone, service_id, success: res.success, operator, reason, traceId, idempotencyKey, ms: Math.round(performance.now() - t0) });
 
       return { content: [{ type: "text" as const, text: JSON.stringify({
+        order_id: res.order_id ?? null,
         phone: res.phone ?? phone,
         service_id: res.service_id ?? service_id,
         service_name: res.service_name ?? null,
         monthly_fee: res.monthly_fee ?? 0,
+        status: res.status ?? null,
         effective_end: res.effective_at ?? null,
         refund_eligible: res.refund_eligible ?? false,
-        refund_note: res.refund_note ?? "当月费用不退，次月起不再扣费。",
+        refund_note: res.refund_note || "当月费用不退，次月起不再扣费。",
+        requires_manual_review: res.requires_manual_review ?? false,
       }) }] };
     } catch (err) {
       mcpLog("business", "cancel_service", { phone, service_id, success: false, error: String(err), ms: Math.round(performance.now() - t0) });
