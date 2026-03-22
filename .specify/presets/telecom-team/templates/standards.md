@@ -202,6 +202,21 @@ import { logger } from '../services/logger';
 
 所有面向用户的字符串使用 `{ zh: '中文', en: 'English' }` 双语对象，通过 `lang` 参数选择。
 
+<!-- scope: general -->
+### 三层架构术语（必读：`docs/glossary.md`）
+
+本项目采用严格 MCP 对齐的三层架构：
+
+| 层级 | 核心概念 | 说明 |
+|------|---------|------|
+| Skill 编排层 | Skill, Tool Call Plan, Execution Trace | 平台自有，不属于 MCP |
+| MCP 协议层 | MCP Server, MCP Tool, MCP Resource, MCP Prompt | 严格对应 MCP 官方语义 |
+| Backend Systems 层 | mock_apis (demo) / 真实系统 (prod) | MCP Server 通过 HTTP 调用 |
+
+- **不要**把 DB/API 连接叫做"资源"或 `MCP Resource`，应叫 `Connector`
+- **不要**把实现方式（脚本/DB/API）当成 Tool 的身份，Tool 身份是契约
+- **不要**在 Skill 层暴露 SQL、表名、API URL 等实现细节
+
 <!-- scope: backend -->
 ### 后端命名约定
 
@@ -266,12 +281,31 @@ logger.error('chat-ws', 'agent_error', { session: sessionId, error: String(err) 
 <!-- scope: mcp -->
 ### MCP 工具约定
 
+> 术语参考：`docs/glossary.md`
+
+MCP Server 和 Tool 属于 **MCP 协议层**：
+- MCP Server = 业务域稳定 API 边界（防腐层），按未来真实系统域划分
+- Tool = 契约（name + inputSchema + outputSchema + annotations）
+- SQLite / mock_apis / scripts = demo backend 二级实现路径，属于 **Backend Systems 层**
+- Connector = 当前 demo backend target（将来替换为真实系统 URL + auth）
+- MCP Resource = 通过 `resources/list` 暴露的 URI 标识上下文数据（不是 DB/API 连接）
+
 - 入参使用 Zod schema 做运行时校验
 - handler 中**不抛异常**，始终返回结构化结果 `{ content: [{ type: "text", text: JSON.stringify(result) }] }`
 - 失败时返回 `{ success: false, message: '...' }` 或 `{ found: false }`
+- 动作类工具（创建/修改/删除）应接受可选治理字段：`operator`, `reason`, `traceId`, `idempotencyKey`
+- Tool annotations 标注语义属性：`readOnlyHint`, `idempotentHint`, `openWorldHint`
 
 <!-- scope: skills -->
 ### Skill 编写约定
+
+> 术语参考：`docs/glossary.md`
+
+Skill 属于 **Skill 编排层**（平台自有），不属于 MCP 协议：
+- Skill 只依赖 Tool Contract（名称 + 输入/输出 schema）
+- Skill 不感知 Tool 的实现方式（脚本/DB/API）
+- Skill 不感知 Connector（DB 连接、API URL）
+- Skill 通过 Tool Call Plan 显式声明调用哪些 Tool
 
 - 目录名 kebab-case：`bill-inquiry`、`fault-diagnosis`
 - 必须包含 `SKILL.md`，可选 `references/`、`scripts/`
@@ -291,12 +325,18 @@ logger.error('chat-ws', 'agent_error', { session: sessionId, error: String(err) 
 - **不要**直接导入 `schema/business.ts` 或 `schema/platform.ts`，统一从 `schema/index.ts` 导入
 - **不要**在不可逆操作（退订、删除）前跳过用户确认步骤
 - **不要**阻塞语音主音频流程做同步分析（情感分析、Handoff 分析必须异步）
+- **不要**在 runner.ts 中新增直接 DB 工具注入（DB Binding 已移除）
+- **不要**使用 `mcpResources` 表新增数据，应使用 `connectors` 表
+- MCP Server = 业务域稳定边界（防腐层），内部通过 HTTP 调用 mock_apis (demo backend)
+- Runner 中的 API 工具路由由 `TOOL_ROUTING_MODE` 环境变量控制（`hybrid` → `mcp_only`）
 
 <!-- scope: mcp -->
 - **不要**在 MCP 工具 handler 中抛出异常，始终返回结构化结果
+- **不要**在 Tool 契约层（mcp_tools 表）存放实现配置，实现配置放 tool_implementations 表
 
 <!-- scope: frontend -->
 - **不要**在前端组件中直接调用后端 URL，统一通过 `api.ts` 辅助函数
 
 <!-- scope: skills -->
 - **不要**在 SKILL.md 状态图的 `<<choice>>` 节点中遗漏任何分支路径
+- **不要**在 SKILL.md 中暴露 Tool 的实现细节（DB 表名、API 路径等）

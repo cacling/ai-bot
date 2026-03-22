@@ -2,7 +2,7 @@
 paths:
   - "frontend/src/**"
 ---
-<!-- auto-generated on 2026-03-21 from standards.md -->
+<!-- auto-generated on 2026-03-22 from standards.md -->
 
 # 前端编码规则
 
