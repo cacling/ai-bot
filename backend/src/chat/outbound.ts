@@ -280,8 +280,8 @@ outbound.get(
               output_audio_format: 'mp3',
               turn_detection: {
                 type: 'server_vad',
-                silence_duration_ms: 1500,
-                threshold: 0.6,
+                silence_duration_ms: Number(process.env.VAD_SILENCE_MS ?? 2000),
+                threshold: Number(process.env.VAD_THRESHOLD ?? 0.8),
                 interrupt_response: false,
               },
               temperature: 0.2,
