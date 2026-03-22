@@ -70,6 +70,7 @@ export class VoiceSessionState {
   collectedSlots: Record<string, unknown> = {};
   transferTriggered     = false; // 防止重复触发转人工
   farewellDone          = false; // 告别语播完后为 true，之后才拦截 GLM 响应
+  muteNextResponse      = false; // 转写失败时标记，拦截 GLM 对噪音的回应
 
   // ── 可观测指标字段 ─────────────────────────────────────────────────────────
   sessionStartTs        = Date.now();

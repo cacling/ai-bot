@@ -237,8 +237,8 @@ voice.get(
               output_audio_format: 'mp3',
               turn_detection: {
                 type: 'server_vad',
-                silence_duration_ms: 1500,
-                threshold: 0.6,
+                silence_duration_ms: 2000,
+                threshold: 0.8,
                 interrupt_response: false,
               },
               temperature: 0.2,
@@ -312,8 +312,16 @@ voice.get(
               }));
             }
 
+            // ── 转写失败（噪音/空语音）→ 标记静默，拦截 GLM 对噪音的回应 ──
+            if (msg.type === 'conversation.item.input_audio_transcription.failed') {
+              state.muteNextResponse = true;
+              logger.info('voice', 'transcription_failed_mute', { session: sessionId });
+              return; // 不透传给前端
+            }
+
             // ── 用户语音转写完成 → 记录用户话语 + 异步情绪分析 ──────────
             if (msg.type === 'conversation.item.input_audio_transcription.completed') {
+              state.muteNextResponse = false; // 有效转写，取消静默
               const transcript = (msg.transcript ?? '') as string;
               if (transcript) {
                 state.addUserTurn(transcript);
@@ -533,12 +541,27 @@ voice.get(
 
             // ── 首包时延检测 ──────────────────────
             if (msg.type === 'response.audio.delta') {
+              // 噪音触发的回应 → 不发给前端
+              if (state.muteNextResponse) return;
               const latency = state.markFirstAudioPack();
               if (latency !== null) {
                 logger.info('voice', 'first_pack_latency', { session: sessionId, latency_ms: latency });
               }
               // 非中文模式：拦截 GLM 中文音频，不发给前端
               if (ttsOverride) return;
+            }
+
+            // 噪音触发的回应 → 拦截 transcript 和 response.done
+            if (state.muteNextResponse && (
+              msg.type === 'response.audio_transcript.delta' ||
+              msg.type === 'response.audio_transcript.done'
+            )) {
+              return;
+            }
+            if (state.muteNextResponse && msg.type === 'response.done') {
+              state.muteNextResponse = false; // 回应完毕，重置
+              logger.info('voice', 'muted_response_done', { session: sessionId });
+              return;
             }
 
             // ── 打断检测 ────────────────────────────────────────────────
