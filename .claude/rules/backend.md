@@ -42,7 +42,7 @@ logger.error('chat-ws', 'agent_error', { session: sessionId, error: String(err) 
 - **不要**在不可逆操作（退订、删除）前跳过用户确认步骤
 - **不要**阻塞语音主音频流程做同步分析（情感分析、Handoff 分析必须异步）
 - **不要**在 runner.ts 中新增直接 DB 工具注入（DB Binding 已移除）
-- **不要**使用已废弃的 `mcp_resources` / `mcp_prompts` 表，连接器管理使用 `connectors` 表
+- **不要**使用 `mcpResources` 表新增数据，应使用 `connectors` 表
 - MCP Server = 业务域稳定边界（防腐层），内部通过 HTTP 调用 mock_apis (demo backend)
 - Runner 中的 API 工具路由由 `TOOL_ROUTING_MODE` 环境变量控制（`hybrid` → `mcp_only`）
 
