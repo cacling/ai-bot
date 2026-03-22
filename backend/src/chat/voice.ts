@@ -400,6 +400,7 @@ voice.get(
             if (msg.type === 'response.function_call_arguments.done') {
               const toolName = msg.name as string;
               const toolArgs = JSON.parse(msg.arguments ?? '{}') as Record<string, unknown>;
+              state.toolProcessing = true; // 拦截 GLM 在工具处理期间的过渡回复
               logger.info('voice', 'tool_called', { session: sessionId, tool: toolName });
 
               // ── 转人工（工具调用路径） ─────────────────────────────────────
@@ -502,6 +503,22 @@ voice.get(
                 client_timestamp: Date.now(),
                 type: 'response.create',
               }));
+              state.toolProcessing = false; // 工具处理完毕，允许 GLM 后续回复透传
+              return;
+            }
+
+            // ── 工具处理中：拦截 GLM 的过渡回复（音频/文本），防止未经加工的数据泄漏 ──
+            if (state.toolProcessing && (
+              msg.type === 'response.audio.delta' ||
+              msg.type === 'response.audio_transcript.delta' ||
+              msg.type === 'response.audio_transcript.done'
+            )) {
+              logger.info('voice', 'tool_processing_muted', { session: sessionId, type: msg.type });
+              return;
+            }
+            if (state.toolProcessing && msg.type === 'response.done') {
+              // GLM 的过渡回复结束，但工具还在处理，继续拦截
+              logger.info('voice', 'tool_processing_response_done', { session: sessionId });
               return;
             }
 

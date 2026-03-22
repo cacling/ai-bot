@@ -71,6 +71,7 @@ export class VoiceSessionState {
   transferTriggered     = false; // 防止重复触发转人工
   farewellDone          = false; // 告别语播完后为 true，之后才拦截 GLM 响应
   muteNextResponse      = false; // 转写失败时标记，拦截 GLM 对噪音的回应
+  toolProcessing        = false; // 工具调用中标记，拦截 GLM 的过渡回复（防止未经加工的数据泄漏）
 
   // ── 可观测指标字段 ─────────────────────────────────────────────────────────
   sessionStartTs        = Date.now();
