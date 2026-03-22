@@ -1275,19 +1275,8 @@ async function seed() {
   }
 
   // DB Binding 工具：覆盖 impl_type 和 execution_config
-  const dbBindingTools: Array<{ name: string; resource_id: string; table: string; operation: string; where: Array<{ param: string; column: string; op: string }>; columns: string[] }> = [
-    { name: 'query_plans', resource_id: 'res-user-info-db', table: 'plans', operation: 'select_many', where: [{ param: 'plan_id', column: 'plan_id', op: '=' }], columns: ['plan_id', 'name', 'monthly_fee', 'data_gb', 'voice_min', 'sms', 'features', 'description'] },
-    { name: 'check_account_balance', resource_id: 'res-account-db', table: 'subscribers', operation: 'select_one', where: [{ param: 'phone', column: 'phone', op: '=' }], columns: ['phone', 'balance', 'status', 'overdue_days'] },
-    { name: 'check_contracts', resource_id: 'res-account-db', table: 'contracts', operation: 'select_many', where: [{ param: 'phone', column: 'phone', op: '=' }], columns: ['contract_id', 'name', 'start_date', 'end_date', 'penalty', 'risk_level', 'status'] },
-  ];
-  for (const dbt of dbBindingTools) {
-    db.update(mcpTools).set({
-      impl_type: 'db',
-      handler_key: null,
-      execution_config: JSON.stringify({ resource_id: dbt.resource_id, impl_type: 'db', db: { table: dbt.table, operation: dbt.operation, where: dbt.where, columns: dbt.columns } }),
-      updated_at: now,
-    }).where(eq(mcpTools.name, dbt.name)).run();
-  }
+  // DB Binding 已移除 — query_plans, check_account_balance, check_contracts
+  // 现已全部通过 MCP Server 脚本实现（account_service.ts / user_info_service.ts）
 
   // API Binding 工具：覆盖 impl_type 和 execution_config
   const apiBindingTools: Array<{ name: string; resource_id: string; url: string; method?: string }> = [
