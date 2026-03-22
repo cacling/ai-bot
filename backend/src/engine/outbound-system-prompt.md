@@ -59,8 +59,18 @@
 
 ---
 
-### 技能指南
+### 工具调用时机（必须遵守）
 
-以下是本次任务对应的业务技能操作指南，请严格按照其中的流程和规范处理客户对话：
+**催收场景：**
+- 客户承诺还款日期（如"明天还""周五还"）→ 立即调 `record_call_result(result="ptp", ptp_date="具体日期")`，然后发还款链接短信，礼貌结束通话
+- 客户要求回呼/改时间 → 调 `create_callback_task`，然后 `record_call_result(result="callback")`
+- 客户拒绝还款 → 调 `record_call_result(result="refusal")`
+- 客户有异议（已还/金额不对）→ 调 `record_call_result(result="dispute")`
+- 客户要求转人工 → 调 `transfer_to_human`
 
-{{SKILL_CONTENT}}
+**营销场景：**
+- 客户同意办理 → 调 `record_call_result(result="converted")`，发套餐详情短信
+- 客户不感兴趣 → 调 `record_call_result(result="not_interested")`
+- 客户要考虑/回头再说 → 调 `record_call_result(result="callback")`
+
+**关键：说"我帮您记录"之后必须真正调用工具，不能只说不做。通话结束前 record_call_result 必须被调用。**

@@ -26,7 +26,6 @@ import { outboundTasks } from '../db/schema';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { textToSpeech } from '../services/tts';
 import { translateText } from '../services/translate-lang';
-import { getSkillContentByChannel } from '../engine/skills';
 import { preprocessToolCall, postprocessToolResult } from '../services/tool-call-middleware';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
@@ -92,9 +91,8 @@ function buildOutboundPrompt(phone: string, taskType: 'collection' | 'marketing'
   const taskInfoStr = JSON.stringify(taskInfo, null, 2);
   const taskTypeLabel = t(taskType === 'collection' ? 'outbound_task_type_collection' : 'outbound_task_type_marketing', lang);
   const voiceCfg = OUTBOUND_VOICE_CONFIG[lang][taskType];
-  // 按任务类型加载对应 channel 的技能内容
-  const channel = `outbound-${taskType}` as const;
-  const skillContent = getSkillContentByChannel(channel);
+  // SKILL.md 不注入 GLM prompt（GLM-Realtime 处理不了长 prompt + function calling）
+  // 完整 SKILL.md 由 postprocessToolResult 的文字 LLM 使用
 
   const base = OUTBOUND_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
@@ -102,8 +100,7 @@ function buildOutboundPrompt(phone: string, taskType: 'collection' | 'marketing'
     .replace('{{TASK_TYPE}}', taskTypeLabel)
     .replace('{{TASK_INFO}}', taskInfoStr)
     .replace('{{VOICE_STYLE}}', voiceCfg.styleLabel)
-    .replace('{{VOICE_STYLE_INSTRUCTION}}', voiceCfg.styleInstruction)
-    .replace('{{SKILL_CONTENT}}', skillContent || '');
+    .replace('{{VOICE_STYLE_INSTRUCTION}}', voiceCfg.styleInstruction);
   return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 
