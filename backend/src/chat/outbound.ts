@@ -413,9 +413,11 @@ outbound.get(
               }
 
               // ── 参数标准化（通过统一中间件）──────────────────────────
+              const lastUserTurn = [...state.turns].reverse().find(t => t.role === 'user');
               preprocessToolCall({
                 channel: 'outbound', toolName, toolArgs,
                 userPhone, lang, activeSkillName: currentSkillName,
+                lastUserMessage: lastUserTurn?.text,
               });
 
               const mcpResult = await callMcpTool(sessionId, toolName, toolArgs);

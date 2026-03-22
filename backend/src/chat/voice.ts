@@ -418,9 +418,11 @@ voice.get(
               }
 
               // ── 参数标准化（通过统一中间件）──────────────────────────────
+              const lastUserTurn = [...state.turns].reverse().find(t => t.role === 'user');
               preprocessToolCall({
                 channel: 'voice', toolName, toolArgs,
                 userPhone, lang, activeSkillName,
+                lastUserMessage: lastUserTurn?.text,
               });
 
               // ── MCP 工具调用（支持工具级 mock）─────────────────────────────

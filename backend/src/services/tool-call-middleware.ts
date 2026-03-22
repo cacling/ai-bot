@@ -10,6 +10,7 @@ import { generateText } from 'ai';
 import { siliconflow } from '../engine/llm';
 import { getSkillContent, getToolSkillMap, getToolToSkillsMap } from '../engine/skills';
 import { normalizeMonthParam } from './query-normalizer/month';
+import { resolveTime } from './query-normalizer/time-resolver';
 import { logger } from './logger';
 
 // ── 配置 ─────────────────────────────────────────────────────────────────────
@@ -28,6 +29,8 @@ export interface ToolCallInput {
   userPhone: string;
   lang: 'zh' | 'en';
   activeSkillName: string | null;
+  /** 最近的用户话语（用于语音通道从对话历史中解析时间） */
+  lastUserMessage?: string;
 }
 
 export interface ToolCallPreResult {
@@ -80,7 +83,7 @@ export function inferSkillName(toolName: string, current: string | null): string
 export function preprocessToolCall(input: ToolCallInput): ToolCallPreResult {
   const args = input.toolArgs;
 
-  // 月份参数标准化
+  // 月份参数标准化（格式修正）
   if (typeof args.month === 'string') {
     const raw = args.month;
     args.month = normalizeMonthParam(raw);
@@ -88,6 +91,37 @@ export function preprocessToolCall(input: ToolCallInput): ToolCallPreResult {
       logger.info('tool-middleware', 'month_normalized', {
         channel: input.channel, tool: input.toolName, raw, normalized: args.month,
       });
+    }
+  }
+
+  // 语音通道：用 resolveTime 从用户最后一句话中解析时间意图，辅助修正 month
+  // 场景：用户说"这个月为什么比上个月贵"，GLM 可能传错 month
+  if (input.channel !== 'online' && input.lastUserMessage && typeof args.month === 'string') {
+    const timeResult = resolveTime(input.lastUserMessage);
+    if (timeResult.matches.length > 0) {
+      // 取用户话语中第一个时间表达
+      const firstTime = timeResult.matches[0].slot;
+      if (firstTime.kind === 'natural_month') {
+        const userIntendedMonth = firstTime.value; // e.g. "2026-03"
+        // 对 analyze_bill_anomaly：month 应是"要分析的当月"（较大的月份）
+        // 如果用户说"这个月为什么贵"，month 应是当前月，不是上个月
+        if (input.toolName === 'analyze_bill_anomaly' && args.month !== userIntendedMonth) {
+          // 用户话语中有两个时间（"这个月比上个月"），取较大的
+          const allMonths = timeResult.matches
+            .filter(m => m.slot.kind === 'natural_month')
+            .map(m => m.slot.value)
+            .sort();
+          const bestMonth = allMonths[allMonths.length - 1]; // 最大月份
+          if (bestMonth && bestMonth !== args.month) {
+            logger.info('tool-middleware', 'month_corrected_by_user_intent', {
+              channel: input.channel, tool: input.toolName,
+              glmMonth: args.month, userIntended: bestMonth,
+              userMessage: input.lastUserMessage.slice(0, 60),
+            });
+            args.month = bestMonth;
+          }
+        }
+      }
     }
   }
 
