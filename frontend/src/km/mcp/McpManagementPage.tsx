@@ -84,10 +84,10 @@ export function McpManagementPage({ externalNavigateToTool, onExternalNavigateHa
       </div>
 
       {/* 内容区 */}
-      <div className="flex-1 overflow-auto">
-        {tab === 'tools' && <McpToolListPage navigateToTool={navigateToTool} onNavigateHandled={() => setNavigateToTool(null)} onBackToServers={handleBackToServers} />}
-        {tab === 'servers' && <McpServerList onOpenTool={handleOpenTool} onOpenConnectors={() => setTab('connectors')} />}
-        {tab === 'connectors' && <ConnectorListPage />}
+      <div className="flex-1 overflow-auto relative">
+        <div className={`absolute inset-0 ${tab !== 'tools' ? 'hidden' : ''}`}><McpToolListPage navigateToTool={navigateToTool} onNavigateHandled={() => setNavigateToTool(null)} onBackToServers={handleBackToServers} /></div>
+        <div className={`absolute inset-0 ${tab !== 'servers' ? 'hidden' : ''}`}><McpServerList onOpenTool={handleOpenTool} onOpenConnectors={() => setTab('connectors')} /></div>
+        <div className={`absolute inset-0 ${tab !== 'connectors' ? 'hidden' : ''}`}><ConnectorListPage /></div>
       </div>
     </div>
   );

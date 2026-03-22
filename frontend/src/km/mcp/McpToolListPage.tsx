@@ -180,36 +180,40 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
 
   // ── Edit view ───────────────────────────────────────────────────────────────
 
-  if (view === 'edit' && editId) {
-    const handleEditorBack = () => {
-      if (editFromServer && onBackToServers) {
-        // Came from Server Console — go back to Servers tab
-        setView('list');
-        setEditId(null);
-        setEditInitialStep(undefined);
-        setEditFromServer(undefined);
-        onBackToServers();
-      } else {
-        setView('list');
-        setEditId(null);
-        setEditInitialStep(undefined);
-        setEditFromServer(undefined);
-      }
-    };
-    return (
-      <McpToolEditor
-        toolId={editId}
-        onBack={handleEditorBack}
-        onUpdated={load}
-        initialStep={editInitialStep as any}
-        fromServer={editFromServer}
-      />
-    );
-  }
+  const handleEditorBack = () => {
+    if (editFromServer && onBackToServers) {
+      setView('list');
+      setEditId(null);
+      setEditInitialStep(undefined);
+      setEditFromServer(undefined);
+      onBackToServers();
+    } else {
+      setView('list');
+      setEditId(null);
+      setEditInitialStep(undefined);
+      setEditFromServer(undefined);
+    }
+  };
 
-  // ── List view ───────────────────────────────────────────────────────────────
+  // ── 双视图：list + editor 同时渲染，用 hidden 切换 ──
 
   return (
+    <>
+    {/* Editor（editId 存在时渲染，hidden 切换） */}
+    {editId && (
+      <div className={view !== 'edit' ? 'hidden' : 'h-full'}>
+        <McpToolEditor
+          toolId={editId}
+          onBack={handleEditorBack}
+          onUpdated={load}
+          initialStep={editInitialStep as any}
+          fromServer={editFromServer}
+        />
+      </div>
+    )}
+
+    {/* List */}
+    <div className={view !== 'list' ? 'hidden' : ''}>
     <div className="p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -377,5 +381,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
         }}
       />
     </div>
+    </div>
+    </>
   );
 }

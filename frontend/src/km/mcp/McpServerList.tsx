@@ -127,12 +127,21 @@ export function McpServerList({ onOpenTool, onOpenConnectors }: Props = {}) {
 
   // ── Early returns (after all hooks) ─────────────────────────────────────────
 
-  if (view === 'create') return <McpServerConsole onBack={() => setView('list')} onSaved={handleSaved} onCreated={handleCreated} onOpenTool={onOpenTool} onOpenConnectors={onOpenConnectors} />;
-  if (view === 'edit' && editId) return <McpServerConsole serverId={editId} onBack={() => { setView('list'); setEditId(null); }} onSaved={handleSaved} onOpenTool={onOpenTool} onOpenConnectors={onOpenConnectors} />;
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── 多视图同时渲染，用 hidden 切换 ──────────────────────────────────────────
 
   return (
+    <>
+    {view === 'create' && (
+      <div className="h-full">
+        <McpServerConsole onBack={() => setView('list')} onSaved={handleSaved} onCreated={handleCreated} onOpenTool={onOpenTool} onOpenConnectors={onOpenConnectors} />
+      </div>
+    )}
+    {editId && (
+      <div className={view !== 'edit' ? 'hidden' : 'h-full'}>
+        <McpServerConsole serverId={editId} onBack={() => { setView('list'); setEditId(null); }} onSaved={handleSaved} onOpenTool={onOpenTool} onOpenConnectors={onOpenConnectors} />
+      </div>
+    )}
+    <div className={view !== 'list' ? 'hidden' : ''}>
     <div className="p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -275,5 +284,7 @@ export function McpServerList({ onOpenTool, onOpenConnectors }: Props = {}) {
         </div>
       )}
     </div>
+    </div>
+    </>
   );
 }

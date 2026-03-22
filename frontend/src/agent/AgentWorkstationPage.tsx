@@ -363,8 +363,7 @@ export function AgentWorkstationPage() {
       </nav>
 
       {/* Knowledge Base tab */}
-      {agentTab === 'editor' && (
-        <div className="flex-1 flex flex-col overflow-hidden">
+      <div className={`flex-1 flex flex-col overflow-hidden ${agentTab !== 'editor' ? 'hidden' : ''}`}>
           {/* Secondary menu */}
           <div className="bg-background border-b border-border px-4 flex items-center h-9 flex-shrink-0">
             <Button
@@ -412,8 +411,7 @@ export function AgentWorkstationPage() {
             <div className={`absolute inset-0 ${knowledgeSubTab !== 'skill' ? 'hidden' : ''}`}><SkillManagerPage onOpenToolContract={(toolName) => { setPendingToolNav({ toolName }); setKnowledgeSubTab('mcp'); }} /></div>
             <div className={`absolute inset-0 ${knowledgeSubTab !== 'mcp' ? 'hidden' : ''}`}><McpManagementPage externalNavigateToTool={pendingToolNav} onExternalNavigateHandled={() => setPendingToolNav(null)} /></div>
           </div>
-        </div>
-      )}
+      </div>
 
       {/* Main content: Chat left + CardPanel right */}
       <div className={`flex-1 overflow-hidden p-4 ${agentTab !== 'chat' ? 'hidden' : ''}`}>
