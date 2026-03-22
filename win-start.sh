@@ -35,16 +35,26 @@ ok()   { echo -e "  ${GRN}✓${NC} $*"; }
 fail() { echo -e "  ${RED}✗${NC} $*"; }
 warn() { echo -e "  ${YEL}!${NC} $*"; }
 
-# ── 按端口杀进程（PowerShell） ───────────────────────────────────────────────
+# ── 按端口杀进程（netstat + taskkill，避免 PowerShell 冷启动） ─────────────
 kill_port() {
   local port=$1
-  powershell.exe -NoProfile -Command "
-    \$conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
-    if (\$conn) {
-      \$conn.OwningProcess | Select-Object -Unique |
-        ForEach-Object { Stop-Process -Id \$_ -Force -ErrorAction SilentlyContinue }
-    }
-  " 2>/dev/null || true
+  local pids
+  pids=$(netstat -ano 2>/dev/null | grep ":${port} " | grep 'LISTENING' | awk '{print $5}' | sort -u)
+  for pid in $pids; do
+    [[ "$pid" =~ ^[0-9]+$ ]] && [[ "$pid" -ne 0 ]] && taskkill //F //PID "$pid" >/dev/null 2>&1 || true
+  done
+}
+
+kill_ports_batch() {
+  local pids=""
+  for port in "$@"; do
+    local p
+    p=$(netstat -ano 2>/dev/null | grep ":${port} " | grep 'LISTENING' | awk '{print $5}' | sort -u)
+    pids="$pids $p"
+  done
+  for pid in $(echo "$pids" | tr ' ' '\n' | sort -u); do
+    [[ "$pid" =~ ^[0-9]+$ ]] && [[ "$pid" -ne 0 ]] && taskkill //F //PID "$pid" >/dev/null 2>&1 || true
+  done
 }
 
 # ── PID 记录 ────────────────────────────────────────────────────────────────
@@ -57,12 +67,7 @@ cleanup() {
   for pid in "${WRAPPER_PIDS[@]}"; do
     kill "$pid" 2>/dev/null || true
   done
-  for port in "${ALL_PORTS[@]}"; do
-    kill_port "$port"
-  done
-  for port in 5174 5175 5176 5177 5178; do
-    kill_port "$port"
-  done
+  kill_ports_batch "${ALL_PORTS[@]}" 5174 5175 5176 5177 5178
   rm -f "$PID_FILE"
   wait 2>/dev/null || true
   echo -e "${YEL}所有服务已停止。${NC}"
@@ -85,7 +90,7 @@ ok "日志已清空"
 
 # ── 清除端口残留进程 ─────────────────────────────────────────────────────────
 log "清理端口残留进程..."
-for port in "${ALL_PORTS[@]}"; do kill_port "$port"; done
+kill_ports_batch "${ALL_PORTS[@]}"
 ok "端口已清理"
 
 # ── 检查运行时 ───────────────────────────────────────────────────────────────
@@ -119,22 +124,11 @@ ok "frontend 依赖就绪"
 echo -e "\n${BLU}══════ 数据库准备 ══════${NC}"
 
 mkdir -p "$BASE_DIR/data"
-export SQLITE_PATH="$BASE_DIR/data/telecom.db"
+export SQLITE_PATH="../data/telecom.db"
 
 log "同步数据库 Schema..."
 cd "$BASE_DIR/backend"
-PUSH_OUTPUT=$("$BUN" drizzle-kit push 2>&1 || true)
-if echo "$PUSH_OUTPUT" | grep -q "rename column\|created or renamed"; then
-  warn "检测到 Schema 破坏性变更，重建数据库表..."
-  "$BUN" -e "
-    import Database from 'bun:sqlite';
-    const db = new Database(process.env.SQLITE_PATH || '../data/telecom.db');
-    const tables = db.prepare(\"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'\").all();
-    for (const t of tables) { db.exec('DROP TABLE IF EXISTS ' + t.name); }
-    console.log('Dropped', tables.length, 'tables');
-  " 2>/dev/null
-  "$BUN" drizzle-kit push 2>&1 | tail -3
-fi
+"$BUN" drizzle-kit push --force 2>/dev/null
 ok "数据库 Schema 就绪"
 
 if [[ "$RESET_MODE" == true ]]; then
@@ -185,7 +179,7 @@ if [[ "$RESET_MODE" == true ]]; then
   find "$BASE_DIR/backend/skills" -name "*.draft" -delete 2>/dev/null
   ok "草稿文件已清理"
 
-  "$BUN" drizzle-kit push 2>&1 | tail -3
+  "$BUN" drizzle-kit push --force 2>/dev/null
   "$BUN" run db:seed 2>&1 | tail -5
   ok "数据已重置为初始状态"
 else
@@ -220,19 +214,19 @@ echo -e "\n${BLU}══════ 启动服务 ══════${NC}"
 # MCP 服务（顺序启动）
 for i in "${!MCP_SERVICES[@]}"; do
   start_service "${MCP_LABELS[$i]}-mcp" "$BASE_DIR/mcp_servers" \
-    "$NODE --import tsx/esm src/services/${MCP_SERVICES[$i]}.ts"
+    "\"$NODE\" --import tsx/esm src/services/${MCP_SERVICES[$i]}.ts"
   sleep 0.5
 done
 
 # Mock APIs
 start_service "mock-apis" "$BASE_DIR/mock_apis" \
-  "$NODE --import tsx/esm src/server.ts"
+  "\"$NODE\" --import tsx/esm src/server.ts"
 
 # Backend
-start_service "backend" "$BASE_DIR/backend" "$BUN src/index.ts"
+start_service "backend" "$BASE_DIR/backend" "\"$BUN\" src/index.ts"
 
 # Frontend
-start_service "frontend" "$BASE_DIR/frontend" "$NPM run dev"
+start_service "frontend" "$BASE_DIR/frontend" "\"$NPM\" run dev"
 
 # 保存 wrapper PIDs
 printf '%s\n' "${WRAPPER_PIDS[@]}" > "$PID_FILE"

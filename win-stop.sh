@@ -8,19 +8,18 @@ ok()   { echo -e "  ${GRN}✓${NC} $*"; }
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PID_FILE="${BASE_DIR}/.win-pids"
 
-# ── 按端口杀进程（PowerShell） ───────────────────────────────────────────────
+# ── 按端口杀进程（netstat + taskkill，避免 PowerShell 冷启动） ─────────────
 kill_port() {
   local port=$1
-  local killed
-  killed=$(powershell.exe -NoProfile -Command "
-    \$conn = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
-    if (\$conn) {
-      \$conn.OwningProcess | Select-Object -Unique |
-        ForEach-Object { Stop-Process -Id \$_ -Force -ErrorAction SilentlyContinue }
-      Write-Output 'killed'
-    }
-  " 2>/dev/null)
-  if [[ "$killed" == *"killed"* ]]; then
+  local pids
+  pids=$(netstat -ano 2>/dev/null | grep ":${port} " | grep 'LISTENING' | awk '{print $5}' | sort -u)
+  local found=false
+  for pid in $pids; do
+    if [[ "$pid" =~ ^[0-9]+$ ]] && [[ "$pid" -ne 0 ]]; then
+      taskkill //F //PID "$pid" >/dev/null 2>&1 && found=true
+    fi
+  done
+  if [[ "$found" == true ]]; then
     ok "端口 $port 已释放"
   else
     echo "  - 端口 $port 无进程"
