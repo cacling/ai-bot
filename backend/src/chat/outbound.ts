@@ -267,6 +267,13 @@ outbound.get(
 
         glmWs.on('open', () => {
           logger.info('outbound', 'glm_connected', { session: sessionId });
+          logger.info('outbound', 'session_config', {
+            session: sessionId,
+            promptLen: systemPrompt.length,
+            promptHead: systemPrompt.slice(0, 150),
+            toolCount: OUTBOUND_TOOLS.length,
+            toolNames: OUTBOUND_TOOLS.map((t: any) => t.name),
+          });
           glmWs!.send(JSON.stringify({
             event_id: crypto.randomUUID(),
             client_timestamp: Date.now(),
@@ -347,8 +354,20 @@ outbound.get(
               logger.info('outbound', 'skill_diagram_sent', { session: sessionId, skill: skillName });
             }
 
+            // ── VAD + 转写诊断日志 ──────────────────────────────────────
+            if (msg.type === 'input_audio_buffer.speech_started') {
+              logger.info('outbound', 'vad_speech_started', { session: sessionId, ts: msg.client_timestamp });
+            }
+            if (msg.type === 'input_audio_buffer.speech_stopped') {
+              logger.info('outbound', 'vad_speech_stopped', { session: sessionId, ts: msg.client_timestamp });
+            }
+            if (msg.type === 'conversation.item.input_audio_transcription.failed') {
+              logger.info('outbound', 'transcription_failed', { session: sessionId, ts: msg.client_timestamp });
+            }
+
             // 用户语音转写完成
             if (msg.type === 'conversation.item.input_audio_transcription.completed') {
+              logger.info('outbound', 'vad_transcription', { session: sessionId, transcript: (msg.transcript ?? '').slice(0, 100), ts: msg.client_timestamp });
               const transcript = (msg.transcript ?? '') as string;
               if (transcript) {
                 state.addUserTurn(transcript);
@@ -370,6 +389,7 @@ outbound.get(
             // bot 回复完整文本
             if (msg.type === 'response.audio_transcript.done') {
               const transcript = (msg.transcript ?? '') as string;
+              logger.info('outbound', 'bot_reply', { session: sessionId, transcript: transcript.slice(0, 200), turnCount: state.turns.length });
               if (transcript) {
                 if (ttsOverride) ttsFlushRemainder();
                 state.addAssistantTurn(transcript);
@@ -384,6 +404,13 @@ outbound.get(
                 runProgressTracking(ws, userPhone, outboundSkill, state.turns.slice(-6), lang, sessionId, 'outbound');
               }
               if (ttsOverride) return;
+            }
+
+            // ── response.done → 记录输出类型 ──────────────────────────
+            if (msg.type === 'response.done') {
+              const output = msg.response?.output ?? [];
+              const outputTypes = (output as any[]).map((o: any) => o.type).join(',');
+              logger.info('outbound', 'response_done', { session: sessionId, outputTypes, outputCount: (output as any[]).length, status: msg.response?.status });
             }
 
             // 工具调用拦截
