@@ -149,6 +149,7 @@ function buildVoiceSystemPrompt(skillContent: string | null, lang: 'zh' | 'en'):
 - 不要使用 Markdown、特殊符号、括号注释
 - 语气温暖亲切，像真人客服说话
 - 如果工具调用失败，坦诚告知用户，不要编造数据
+- query_subscriber 是身份确认工具，其返回的 plan_fee、vas_total_fee 等字段不是完整账单。回复时只说用户身份和账户状态（如"已确认您的信息"），不要用这些字段拼凑账单金额。账单金额必须来自 query_bill 工具
 ${langInstruction}`;
 
   if (skillContent) {
