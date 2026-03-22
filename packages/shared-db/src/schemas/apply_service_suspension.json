@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "required": [
+    "success",
+    "message"
+  ],
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "phone": {
+      "type": ["string", "null"]
+    },
+    "suspension_type": {
+      "type": "string",
+      "enum": ["temporary", "permanent"]
+    },
+    "effective_date": {
+      "type": "string",
+      "description": "生效日期 YYYY-MM-DD"
+    },
+    "resume_deadline": {
+      "type": "string",
+      "description": "最迟复机日期 YYYY-MM-DD"
+    },
+    "monthly_fee": {
+      "type": "number",
+      "description": "每月保号费"
+    },
+    "message": {
+      "type": "string"
+    }
+  }
+}

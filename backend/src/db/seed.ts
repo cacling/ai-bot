@@ -1300,6 +1300,7 @@ async function seed() {
     'cancel_service', 'issue_invoice', 'diagnose_network', 'diagnose_app',
     'record_call_result', 'send_followup_sms', 'create_callback_task',
     'record_marketing_result', 'verify_identity', 'check_account_balance', 'check_contracts',
+    'apply_service_suspension',
   ];
   for (const toolName of toolNames) {
     const schemaPath = `${SCHEMA_DIR}/${toolName}.json`;
