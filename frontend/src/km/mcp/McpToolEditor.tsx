@@ -17,6 +17,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import CodeMirror from '@uiw/react-codemirror';
+import { javascript } from '@codemirror/lang-javascript';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { Loader2 } from 'lucide-react';
 
 /**
  * 从 MCP 工具调用结果中提取业务数据。
@@ -622,18 +626,24 @@ function ImplStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
   const [saving, setSaving] = useState(false);
   const [contractMatch, setContractMatch] = useState<{ checked: boolean; valid?: boolean; errors?: string[] }>({ checked: false });
 
+  // 脚本源码预览
+  const [scriptContent, setScriptContent] = useState<string | null>(null);
+  const [scriptLoading, setScriptLoading] = useState(false);
+
   useEffect(() => { mcpApi.listHandlers().then(r => setHandlers(r.handlers)).catch(() => {}); }, []);
 
   const selectedHandler = handlers.find(h => h.key === handlerKey);
-  const execConfig = tool.execution_config ? JSON.parse(tool.execution_config) as Record<string, any> : {};
 
-  // Get current config summary for each impl type
-  const getImplSummary = (type: string): string | null => {
-    if (type === 'script') return tool.handler_key ? `handler: ${tool.handler_key}` : null;
-    if (type === 'db') return execConfig.db?.table ? `表: ${execConfig.db.table}` : null;
-    if (type === 'api') return execConfig.api?.url ? execConfig.api.url : null;
-    return null;
-  };
+  // 加载脚本源码
+  useEffect(() => {
+    if (!selectedHandler?.file) { setScriptContent(null); return; }
+    setScriptLoading(true);
+    fetch(`/api/files/content?path=${encodeURIComponent(selectedHandler.file)}`)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then((d: { content: string }) => setScriptContent(d.content))
+      .catch(() => setScriptContent(null))
+      .finally(() => setScriptLoading(false));
+  }, [selectedHandler?.file]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -647,14 +657,12 @@ function ImplStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
     finally { setSaving(false); }
   };
 
-  // Check contract match after save
   const handleCheckContract = async () => {
     if (!tool.server_id || !tool.output_schema) {
       setContractMatch({ checked: true, valid: undefined, errors: [!tool.output_schema ? '请先定义输出契约' : '请先分配 Server'] });
       return;
     }
     try {
-      // Quick test with empty args to see if the tool runs and matches schema
       const testArgs: Record<string, unknown> = {};
       const inputSchema = tool.input_schema ? JSON.parse(tool.input_schema) : null;
       if (inputSchema?.properties) {
@@ -676,111 +684,116 @@ function ImplStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold mb-1">实现方式</h2>
-        <p className="text-xs text-muted-foreground">选择此工具的 Real 实现方式。</p>
-      </div>
-
-      {/* 模式指示 */}
-      <div className="flex items-center gap-3 bg-muted rounded-lg p-3 text-xs">
-        <span>当前模式：<span className="font-medium">{tool.mocked ? 'Mock' : 'Real'}</span></span>
-        {tool.output_schema && (
-          <>
-            <span className="text-muted-foreground/40">·</span>
-            <button onClick={handleCheckContract} className="text-primary hover:underline">检查契约匹配</button>
-            {contractMatch.checked && (
-              <Badge variant={contractMatch.valid ? 'default' : contractMatch.valid === false ? 'destructive' : 'outline'} className="text-[9px]">
-                {contractMatch.valid ? '契约匹配' : contractMatch.valid === false ? '契约不匹配' : '未知'}
-              </Badge>
+    <div className="flex flex-col h-full">
+      {/* ── 上半区：紧凑配置带 ── */}
+      <div className="shrink-0 space-y-3 pb-3 border-b border-border">
+        {/* 第一行：标题 + 模式 badge + 契约检查 + 保存 */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-semibold">实现方式</h2>
+            <Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[9px]">{tool.mocked ? 'Mock' : 'Real'}</Badge>
+            {tool.output_schema && (
+              <>
+                <button onClick={handleCheckContract} className="text-[11px] text-primary hover:underline">检查契约匹配</button>
+                {contractMatch.checked && (
+                  <Badge variant={contractMatch.valid ? 'default' : contractMatch.valid === false ? 'destructive' : 'outline'} className="text-[9px]">
+                    {contractMatch.valid ? '匹配' : contractMatch.valid === false ? '不匹配' : '未知'}
+                  </Badge>
+                )}
+              </>
             )}
-          </>
-        )}
-      </div>
-
-      {contractMatch.checked && contractMatch.errors && contractMatch.errors.length > 0 && (
-        <div className="text-[11px] text-destructive bg-destructive/5 p-3 rounded-lg space-y-0.5">
-          {contractMatch.errors.map((e, i) => <div key={i}>{e}</div>)}
+          </div>
+          <Button size="sm" onClick={handleSave} disabled={saving} className="text-xs h-7">
+            <Save size={11} /> {saving ? '保存中...' : '保存'}
+          </Button>
         </div>
-      )}
 
-      {/* 三选一卡片 */}
-      <div className="grid grid-cols-3 gap-3">
-        {IMPL_OPTIONS.map(opt => {
-          const isSelected = implType === opt.value;
-          const isCurrentImpl = tool.impl_type === opt.value;
-          const summary = getImplSummary(opt.value);
-          return (
+        {contractMatch.checked && contractMatch.errors && contractMatch.errors.length > 0 && (
+          <div className="text-[10px] text-destructive bg-destructive/5 px-3 py-1.5 rounded space-y-0.5">
+            {contractMatch.errors.map((e, i) => <div key={i}>{e}</div>)}
+          </div>
+        )}
+
+        {/* 第二行：实现类型切换 */}
+        <div className="flex items-center gap-2">
+          {IMPL_OPTIONS.map(opt => (
             <button
               key={opt.value}
               onClick={() => setImplType(opt.value)}
-              className={`p-4 rounded-xl border text-left transition-all ${
-                isSelected
-                  ? 'border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20'
-                  : 'border-border hover:bg-accent hover:border-border/80'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                implType === opt.value
+                  ? 'border-primary bg-primary/5 text-primary'
+                  : 'border-border hover:bg-accent text-muted-foreground'
               }`}
             >
-              <div className="flex items-center gap-2 mb-2">
-                <span className={isSelected ? 'text-primary' : 'text-muted-foreground'}>{opt.icon}</span>
-                <span className="text-sm font-semibold">{opt.label}</span>
-                {isCurrentImpl && <Badge variant="secondary" className="text-[9px] ml-auto">当前</Badge>}
-              </div>
-              <div className="text-[11px] text-muted-foreground mb-2">{opt.desc}</div>
-              <div className="text-[10px] text-muted-foreground/70">{opt.detail}</div>
-              {summary && isCurrentImpl && (
-                <div className="mt-2 pt-2 border-t text-[10px] font-mono text-muted-foreground truncate" title={summary}>
-                  {summary}
-                </div>
-              )}
+              {opt.icon}
+              {opt.label}
+              {tool.impl_type === opt.value && <Badge variant="secondary" className="text-[8px] px-1 ml-1">当前</Badge>}
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      {/* 脚本配置 */}
-      {implType === 'script' && (
-        <div className="space-y-4">
-          <div className="bg-background rounded-xl border p-5 space-y-3">
-            <h3 className="text-sm font-semibold">脚本处理器</h3>
+        {/* 第三行：脚本 handler 选择 + meta */}
+        {implType === 'script' && (
+          <div className="flex items-center gap-3">
             <Select value={handlerKey} onValueChange={v => { if (v) setHandlerKey(v); }}>
-              <SelectTrigger className="text-sm h-9 font-mono"><SelectValue placeholder="选择 handler">{handlerKey || '选择...'}</SelectValue></SelectTrigger>
-              <SelectContent>{handlers.map(h => <SelectItem key={h.key} value={h.key}><span className="font-mono">{h.key}</span></SelectItem>)}</SelectContent>
+              <SelectTrigger className="text-xs h-8 font-mono w-64"><SelectValue placeholder="选择 handler">{handlerKey || '选择...'}</SelectValue></SelectTrigger>
+              <SelectContent>{handlers.map(h => <SelectItem key={h.key} value={h.key}><span className="font-mono text-xs">{h.key}</span></SelectItem>)}</SelectContent>
             </Select>
             {selectedHandler && (
-              <div className="text-[11px] space-y-1.5 bg-muted p-3 rounded-lg">
-                <div className="flex justify-between"><span className="text-muted-foreground">文件</span><span className="font-mono">{selectedHandler.file}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Server</span><span>{selectedHandler.server_name}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">工具名</span><span className="font-mono">{selectedHandler.tool_name}</span></div>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <Badge variant="outline" className="text-[9px] font-mono">{selectedHandler.server_name}</Badge>
+                <span className="font-mono truncate max-w-[200px]" title={selectedHandler.file}>{selectedHandler.file}</span>
               </div>
             )}
           </div>
+        )}
 
-          {/* 脚本字段覆盖卡 — 从第一条 Mock 推断 */}
-          {(() => {
-            const outputSchema = (tool.output_schema_content ?? null) as Record<string, unknown> | null;
-            if (!outputSchema) return null;
-            const mockRules: MockRule[] = tool.mock_rules ? JSON.parse(tool.mock_rules) : [];
-            if (mockRules.length === 0) return (
-              <div className="text-[11px] text-muted-foreground bg-muted rounded-lg p-3">
-                脚本模式的字段对齐需要通过"运行测试"或 Mock 场景来验证。请先添加 Mock 场景或在"测试与发布"步骤中运行一次测试。
-              </div>
-            );
-            const alignment = alignSchemaWithMockResponse(outputSchema, mockRules[0].response);
-            return <ContractAlignmentCard alignment={alignment} title="字段覆盖（基于 Mock 数据推断）" />;
-          })()}
-        </div>
-      )}
-
-      {/* DB Binding 已移除（重构2：MCP Server 内部直查 SQLite 作为 demo backend） */}
-
-      {/* API */}
-      {implType === 'api' && <ApiPanel toolId={tool.id} config={tool.execution_config} outputSchema={(tool.output_schema_content ?? null) as Record<string, unknown> | null} onUpdated={onUpdated} />}
-
-      <div className="flex justify-end">
-        <Button size="sm" onClick={handleSave} disabled={saving}><Save size={12} /> {saving ? '保存中...' : '保存实现配置'}</Button>
+        {/* API 配置 */}
+        {implType === 'api' && <ApiPanel toolId={tool.id} config={tool.execution_config} outputSchema={(tool.output_schema_content ?? null) as Record<string, unknown> | null} onUpdated={onUpdated} />}
       </div>
 
-      <p className="text-[11px] text-muted-foreground">下一步：补 Mock 场景</p>
+      {/* ── 下半区：脚本源码预览 ── */}
+      {implType === 'script' && (
+        <div className="flex-1 flex flex-col min-h-0 pt-2">
+          <div className="flex items-center justify-between px-1 pb-1.5">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              脚本源码（只读）
+            </span>
+            {selectedHandler && (
+              <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[300px]" title={selectedHandler.file}>
+                {selectedHandler.file}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 rounded-lg border overflow-hidden bg-[#282c34]">
+            {scriptLoading ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground gap-2">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-xs">加载中…</span>
+              </div>
+            ) : scriptContent ? (
+              <CodeMirror
+                value={scriptContent}
+                height="100%"
+                theme={oneDark}
+                extensions={[javascript({ typescript: true })]}
+                readOnly
+                basicSetup={{ lineNumbers: true, foldGutter: true }}
+                style={{ fontSize: '12px', height: '100%' }}
+              />
+            ) : selectedHandler ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
+                无法加载源码
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
+                选择 handler 后显示源码
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
