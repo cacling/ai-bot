@@ -174,6 +174,69 @@ function buildRules(): Rule[] {
         replacement: '最近一期',
       }),
     },
+    // 8a. Today/tomorrow/day-after: 今天/明天/后天/大后天
+    {
+      regex: /(大后天|后天|明天|今天|今日)/g,
+      parse: (m, now) => {
+        const offsets: Record<string, number> = { '今天': 0, '今日': 0, '明天': 1, '后天': 2, '大后天': 3 };
+        const delta = offsets[m[1]] ?? 0;
+        const d = new Date(now); d.setDate(d.getDate() + delta);
+        const val = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+        return {
+          slot: { kind: 'specific_date', value: val, source: 'relative' },
+          replacement: `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`,
+        };
+      },
+    },
+    // 8b. N days later: 三天后/3天后/两天内
+    {
+      regex: /([两三四五六七八九十\d]+)\s*天\s*[后内以]/g,
+      parse: (m, now) => {
+        const n = parseCnNumber(m[1]);
+        const d = new Date(now); d.setDate(d.getDate() + n);
+        const val = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+        return {
+          slot: { kind: 'specific_date', value: val, source: 'relative' },
+          replacement: `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`,
+        };
+      },
+    },
+    // 8c. This weekday: 这周五/本周一/周日
+    {
+      regex: /(这|本|下)?\s*周\s*([一二三四五六日天])/g,
+      parse: (m, now) => {
+        const dayMap: Record<string, number> = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0 };
+        const targetDay = dayMap[m[2]] ?? 0;
+        const prefix = m[1] ?? '这';
+        const currentDay = now.getDay(); // 0=Sunday
+        let delta = targetDay - currentDay;
+        if (prefix === '下') {
+          delta += 7;
+        } else {
+          // 这周/本周：如果目标日已过，取下一周
+          if (delta <= 0) delta += 7;
+        }
+        const d = new Date(now); d.setDate(d.getDate() + delta);
+        const val = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+        const weekLabel = prefix === '下' ? '下' : '本';
+        return {
+          slot: { kind: 'specific_date', value: val, source: 'relative' },
+          replacement: `${weekLabel}周${m[2]}（${d.getMonth() + 1}月${d.getDate()}日）`,
+        };
+      },
+    },
+    // 8d. End of month: 月底/月末
+    {
+      regex: /月底|月末/g,
+      parse: (_m, now) => {
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const val = `${lastDay.getFullYear()}-${pad2(lastDay.getMonth() + 1)}-${pad2(lastDay.getDate())}`;
+        return {
+          slot: { kind: 'specific_date', value: val, source: 'relative' },
+          replacement: `${lastDay.getMonth() + 1}月${lastDay.getDate()}日`,
+        };
+      },
+    },
   ];
 }
 
