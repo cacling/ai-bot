@@ -27,6 +27,8 @@ import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHando
 import { textToSpeech } from '../services/tts';
 import { translateText } from '../services/translate-lang';
 import { getSkillContentByChannel } from '../engine/skills';
+import { processToolResultForVoice } from '../services/voice-tool-processor';
+import { normalizeMonthParam } from '../services/query-normalizer/month';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -411,10 +413,20 @@ outbound.get(
                 if (!toolArgs.phone) toolArgs.phone = userPhone;
               }
 
+              // ── 参数标准化：月份格式统一为 YYYY-MM ──────────────────
+              if (typeof toolArgs.month === 'string') {
+                const raw = toolArgs.month;
+                toolArgs.month = normalizeMonthParam(raw);
+                if (toolArgs.month !== raw) {
+                  logger.info('outbound', 'month_normalized', { session: sessionId, tool: toolName, raw, normalized: toolArgs.month });
+                }
+              }
+
               const mcpResult = await callMcpTool(sessionId, toolName, toolArgs);
-              if (mcpResult.success) {
+              const success = mcpResult.success;
+              if (success) {
                 toolResult = mcpResult.text;
-                logger.info('outbound', 'mcp_tool_ok', { session: sessionId, tool: toolName, preview: toolResult.slice(0, 120) });
+                logger.info('outbound', 'mcp_tool_ok', { session: sessionId, tool: toolName, preview: toolResult.slice(0, 200) });
               } else {
                 toolResult = JSON.stringify({ error: `Tool call failed: ${mcpResult.text}` });
                 logger.warn('outbound', 'mcp_tool_fail', { session: sessionId, tool: toolName, error: mcpResult.text });
@@ -424,7 +436,28 @@ outbound.get(
               const currentSkillName = taskParam === 'collection' ? 'outbound-collection' : 'outbound-marketing';
               await sendSkillDiagram(ws, userPhone, currentSkillName, null, lang, sessionId, 'outbound');
 
-              glmWs!.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'conversation.item.create', item: { type: 'function_call_output', call_id: msg.call_id, output: toolResult } }));
+              // ── 文字 LLM 加工：生成口语化回复 ─────────────────────────
+              const conversationHistory = state.turns.map(t => ({ role: t.role, content: t.text }));
+              const processed = await processToolResultForVoice({
+                toolName, toolArgs, toolResult, toolSuccess: success,
+                userPhone, lang,
+                activeSkillName: currentSkillName,
+                conversationHistory,
+              });
+
+              let toolOutput: string;
+              if (processed.spokenText) {
+                toolOutput = `请直接朗读以下内容，不要添加、修改或省略任何内容：\n\n${processed.spokenText}`;
+                logger.info('outbound', 'processor_success', { session: sessionId, tool: toolName, skill: processed.skillLoaded, chars: processed.spokenText.length });
+              } else {
+                toolOutput = toolResult;
+                if (lang === 'en') {
+                  try { toolOutput = await translateText(toolResult, 'en'); } catch { /* keep original */ }
+                }
+                logger.warn('outbound', 'processor_fallback', { session: sessionId, tool: toolName });
+              }
+
+              glmWs!.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'conversation.item.create', item: { type: 'function_call_output', call_id: msg.call_id, output: toolOutput } }));
               glmWs!.send(JSON.stringify({ event_id: crypto.randomUUID(), client_timestamp: Date.now(), type: 'response.create' }));
               return;
             }
