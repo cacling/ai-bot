@@ -128,13 +128,21 @@ function buildVoiceUserMessage(input: ToolResultInput): string {
     .reverse()
     .find(t => t.role === 'user')?.content ?? '';
 
-  return `用户（手机号 ${input.userPhone}）说：${lastUserMsg}
+  // 包含最近的对话历史，让文字 LLM 知道哪些内容已经说过，避免 GLM 重复
+  const recentHistory = input.conversationHistory.slice(-6).map(
+    t => `${t.role === 'user' ? '用户' : '客服'}：${t.content}`
+  ).join('\n');
+
+  return `最近对话：
+${recentHistory || '（无）'}
+
+用户（手机号 ${input.userPhone}）最新说：${lastUserMsg}
 
 工具调用：${input.toolName}(${JSON.stringify(input.toolArgs)})
 工具返回（${input.toolSuccess ? '成功' : '失败'}）：
 ${input.toolResult}
 
-请生成口语化回复：`;
+请生成口语化回复。注意：只回复本次工具返回的新信息，之前已经告知用户的内容不要重复。`;
 }
 
 export async function postprocessToolResult(input: ToolResultInput): Promise<ToolResultOutput> {
