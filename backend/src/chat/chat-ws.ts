@@ -32,6 +32,7 @@ import { t } from '../services/i18n';
 import { checkCompliance, maskPII, sanitizeText } from '../services/keyword-filter';
 import { detectHallucination } from '../services/hallucination-detector';
 import { runProgressTracking } from '../services/voice-common';
+import { normalizeQuery } from '../services/query-normalizer';
 
 const chatWs = new Hono();
 
@@ -161,6 +162,13 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       const message = payload.message;
       logger.info('chat-ws', 'message', { session: sessionId, preview: message.slice(0, 30) });
 
+      // Query normalization
+      const normalizedContext = await normalizeQuery(message, {
+        currentDate: new Date(),
+        phone,
+        lang: langParam,
+      });
+
       if (!botEnabled) {
         // Bot is disabled (human agent mode) — notify agent; re-send transfer_to_human to fix race conditions
         sessionBus.publish(phone, { source: 'user', type: 'user_message', text: message, msg_id: crypto.randomUUID() });
@@ -209,6 +217,8 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           cachedSubscriberName,
           cachedPlanName,
           cachedGender,
+          undefined,
+          { normalizedContext },
         );
       } catch (err) {
         logger.error('chat-ws', 'agent_error', { session: sessionId, error: String(err) });

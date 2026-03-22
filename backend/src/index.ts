@@ -19,8 +19,10 @@ import skillCreatorRoutes from './agent/km/skills/skill-creator';
 import toolBindingsRoutes from './agent/km/skills/tool-bindings';
 import kmRoutes from './agent/km/kms';
 import mcpRoutes from './agent/km/mcp';
+import { resolve } from 'path';
 import { logger } from './services/logger';
 import { runAgent } from './engine/runner';
+import { loadLexicons } from './services/query-normalizer';
 
 const app = new Hono();
 
@@ -98,6 +100,9 @@ logger.info('server', 'starting', {
   skills_dir: process.env.SKILLS_DIR ?? '(default)',
   node_env: process.env.NODE_ENV ?? 'development',
 });
+
+// Initialize Query Normalizer dictionaries
+loadLexicons(resolve(import.meta.dir, 'services/query-normalizer/dictionaries'));
 
 // Warmup: make a lightweight LLM call at startup to avoid cold-start latency on first request
 // Waits up to 30s for the MCP server to become available before warmup

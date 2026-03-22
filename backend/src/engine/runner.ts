@@ -17,6 +17,8 @@ import { mcpTools as mcpToolsTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { SOPGuard } from './sop-guard';
 import { randomUUID } from 'crypto';
+import { type NormalizedQuery } from '../services/query-normalizer';
+import { formatNormalizedContext } from '../services/query-normalizer';
 
 /**
  * 重构2 工具路由模式
@@ -154,6 +156,7 @@ export interface AgentResult {
   card?: CardData;
   skill_diagram?: SkillDiagram;
   transferData?: TransferData;
+  toolRecords?: ToolRecord[];
 }
 
 
@@ -221,6 +224,7 @@ export interface RunAgentOptions {
   useMock?: boolean;
   skillContent?: string; // 预注入的 SKILL.md 内容（测试时使用，避免依赖 LLM 调用 get_skill_instructions）
   skillName?: string; // 预设的技能名（配合 skillContent，用于进度追踪）
+  normalizedContext?: NormalizedQuery;
 }
 
 export async function runAgent(
@@ -413,6 +417,9 @@ export async function runAgent(
   // Inject pre-loaded skill content (for test endpoint — ensures SOP is visible without get_skill_instructions)
   if (options?.skillContent) {
     systemPrompt += '\n\n---\n### 当前测试技能操作指南\n\n' + options.skillContent;
+  }
+  if (options?.normalizedContext) {
+    systemPrompt += formatNormalizedContext(options.normalizedContext);
   }
 
   // Per-request abort controller with 120s timeout
@@ -691,7 +698,7 @@ export async function runAgent(
       }
     }
 
-    return { text, card, skill_diagram: skillDiagram, transferData };
+    return { text, card, skill_diagram: skillDiagram, transferData, toolRecords: collectedToolRecords };
   } finally {
     clearTimeout(timeoutId);
     // Persistent MCP client is intentionally kept open across requests.
