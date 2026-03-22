@@ -8,7 +8,7 @@
  *   GLM-Realtime → 后端代理 → WS → base64 MP3 → MediaSource → <audio> → 扬声器
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, Square, Bot, User, Headset } from 'lucide-react';
@@ -29,6 +29,70 @@ const EMOTION_CLASS: Record<string, string> = {
   orange: 'text-muted-foreground  bg-accent',
   red:    'text-destructive       bg-destructive/10',
 };
+
+// ── 消息气泡（memo 防止流式更新时全部重渲染）──────────────────────────────────
+
+const VoiceMessageBubble = memo(function VoiceMessageBubble({ msg, lang }: { msg: VoiceMessage; lang: Lang }) {
+  const t = T[lang];
+
+  if (msg.role === 'handoff') {
+    return (
+      <div className="mx-1 mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent border border-border text-sm text-muted-foreground">
+        <Headset size={15} className="flex-shrink-0" />
+        <span className="font-medium">{t.voice_handoff_title}</span>
+        {msg.handoffCtx && (
+          <span className="text-muted-foreground text-xs">
+            · {t.voice_transfer_reason[msg.handoffCtx.transfer_reason] ?? msg.handoffCtx.transfer_reason}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex w-full mb-4 ${msg.role !== 'user' ? 'justify-start' : 'justify-end'}`}>
+      {msg.role === 'bot' && (
+        <div className="flex-shrink-0 mr-3">
+          <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
+            <Bot size={18} />
+          </div>
+        </div>
+      )}
+      {msg.role === 'agent' && (
+        <div className="flex-shrink-0 mr-3">
+          <div className="w-8 h-8 bg-accent text-accent-foreground rounded-full flex items-center justify-center">
+            <Headset size={18} />
+          </div>
+        </div>
+      )}
+      <div className={`flex flex-col ${msg.role !== 'user' ? 'items-start' : 'items-end'} max-w-[82%]`}>
+        <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+          msg.role === 'bot'
+            ? 'bg-background text-foreground rounded-tl-none shadow-sm border border-border'
+            : msg.role === 'agent'
+            ? 'bg-accent text-foreground rounded-tl-none shadow-sm border border-border'
+            : 'bg-primary text-primary-foreground rounded-tr-none shadow-sm'
+        }`}>
+          {msg.role === 'bot' ? (
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+            </div>
+          ) : (
+            <span className={msg.text === '...' ? 'text-primary-foreground/50 italic' : ''}>{msg.text}</span>
+          )}
+        </div>
+        <span className="text-[11px] text-muted-foreground mt-1 px-1">{msg.time}</span>
+      </div>
+      {msg.role === 'user' && (
+        <div className="flex-shrink-0 ml-3">
+          <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
+            <User size={18} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 // ── 组件 ──────────────────────────────────────────────────────────────────────
 interface VoiceChatPageProps {
@@ -331,58 +395,8 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', personas = [], sel
                 {new Date().toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-US', { month: 'long', day: 'numeric' })}
               </span>
             </div>
-            {messages.map(msg => msg.role === 'handoff' ? (
-              <div key={msg.id} className="mx-1 mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent border border-border text-sm text-muted-foreground">
-                <Headset size={15} className="flex-shrink-0" />
-                <span className="font-medium">{t.voice_handoff_title}</span>
-                {msg.handoffCtx && (
-                  <span className="text-muted-foreground text-xs">
-                    · {t.voice_transfer_reason[msg.handoffCtx.transfer_reason] ?? msg.handoffCtx.transfer_reason}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div key={msg.id} className={`flex w-full mb-4 ${msg.role !== 'user' ? 'justify-start' : 'justify-end'}`}>
-                {msg.role === 'bot' && (
-                  <div className="flex-shrink-0 mr-3">
-                    <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
-                      <Bot size={18} />
-                    </div>
-                  </div>
-                )}
-                {msg.role === 'agent' && (
-                  <div className="flex-shrink-0 mr-3">
-                    <div className="w-8 h-8 bg-accent text-accent-foreground rounded-full flex items-center justify-center">
-                      <Headset size={18} />
-                    </div>
-                  </div>
-                )}
-                <div className={`flex flex-col ${msg.role !== 'user' ? 'items-start' : 'items-end'} max-w-[82%]`}>
-                  <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                    msg.role === 'bot'
-                      ? 'bg-background text-foreground rounded-tl-none shadow-sm border border-border'
-                      : msg.role === 'agent'
-                      ? 'bg-accent text-foreground rounded-tl-none shadow-sm border border-border'
-                      : 'bg-primary text-primary-foreground rounded-tr-none shadow-sm'
-                  }`}>
-                    {msg.role === 'bot' ? (
-                      <div className="markdown-body">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <span className={msg.text === '...' ? 'text-primary-foreground/50 italic' : ''}>{msg.text}</span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-muted-foreground mt-1 px-1">{msg.time}</span>
-                </div>
-                {msg.role === 'user' && (
-                  <div className="flex-shrink-0 ml-3">
-                    <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
-                      <User size={18} />
-                    </div>
-                  </div>
-                )}
-              </div>
+            {messages.map(msg => (
+              <VoiceMessageBubble key={msg.id} msg={msg} lang={lang} />
             ))}
 
             {/* 思考中动画（转人工后不显示） */}

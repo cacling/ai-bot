@@ -7,7 +7,7 @@
  * 3. WS 端点为 /ws/outbound?task=collection&id=C001
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Square, Phone, Headset } from 'lucide-react';
@@ -17,11 +17,50 @@ import type { ActiveDiagram } from '../shared/DiagramPanel';
 import { T, type Lang } from '../i18n';
 import { broadcastUserSwitch } from './userSync';
 import type { OutboundTask } from './outboundData';
-import { useVoiceEngine, type HandoffContext } from './hooks/useVoiceEngine';
+import { useVoiceEngine, type VoiceMessage, type HandoffContext } from './hooks/useVoiceEngine';
 
 // ── 类型 ──────────────────────────────────────────────────────────────────────
 
 export type TaskType = 'collection' | 'marketing';
+
+// ── 消息气泡（memo 防止流式更新时全部重渲染）──────────────────────────────────
+
+const OutboundBubble = memo(function OutboundBubble({ msg }: { msg: VoiceMessage }) {
+  return (
+    <div className={`flex w-full mb-4 ${msg.role === 'bot' ? 'justify-start' : 'justify-end'}`}>
+      {msg.role === 'bot' && (
+        <div className="flex-shrink-0 mr-3">
+          <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
+            <Phone size={16} />
+          </div>
+        </div>
+      )}
+      <div className={`flex flex-col ${msg.role === 'bot' ? 'items-start' : 'items-end'} max-w-[82%]`}>
+        <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+          msg.role === 'bot'
+            ? 'bg-background text-foreground rounded-tl-none shadow-sm border border-border'
+            : 'bg-primary text-primary-foreground rounded-tr-none shadow-sm'
+        }`}>
+          {msg.role === 'bot' ? (
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+            </div>
+          ) : (
+            <span className={msg.text === '...' ? 'text-primary-foreground/50 italic' : ''}>{msg.text}</span>
+          )}
+        </div>
+        <span className="text-[11px] text-muted-foreground mt-1 px-1">{msg.time}</span>
+      </div>
+      {msg.role === 'user' && (
+        <div className="flex-shrink-0 ml-3">
+          <div className="w-8 h-8 bg-muted text-muted-foreground rounded-full flex items-center justify-center text-xs font-medium">
+            客
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 // ── 主组件 ────────────────────────────────────────────────────────────────────
 
@@ -260,38 +299,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
             )}
 
             {messages.map(msg => (
-              <div key={msg.id} className={`flex w-full mb-4 ${msg.role === 'bot' ? 'justify-start' : 'justify-end'}`}>
-                {msg.role === 'bot' && (
-                  <div className="flex-shrink-0 mr-3">
-                    <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
-                      <Phone size={16} />
-                    </div>
-                  </div>
-                )}
-                <div className={`flex flex-col ${msg.role === 'bot' ? 'items-start' : 'items-end'} max-w-[82%]`}>
-                  <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                    msg.role === 'bot'
-                      ? 'bg-background text-foreground rounded-tl-none shadow-sm border border-border'
-                      : 'bg-primary text-primary-foreground rounded-tr-none shadow-sm'
-                  }`}>
-                    {msg.role === 'bot' ? (
-                      <div className="markdown-body">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <span className={msg.text === '...' ? 'text-primary-foreground/50 italic' : ''}>{msg.text}</span>
-                    )}
-                  </div>
-                  <span className="text-[11px] text-muted-foreground mt-1 px-1">{msg.time}</span>
-                </div>
-                {msg.role === 'user' && (
-                  <div className="flex-shrink-0 ml-3">
-                    <div className="w-8 h-8 bg-muted text-muted-foreground rounded-full flex items-center justify-center text-xs font-medium">
-                      客
-                    </div>
-                  </div>
-                )}
-              </div>
+              <OutboundBubble key={msg.id} msg={msg} />
             ))}
 
             {/* 思考中 */}

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -43,6 +43,93 @@ export interface FaqMessage {
 }
 
 export type Message = TextMessage | FaqMessage;
+
+// ── 消息气泡（提取到组件外 + memo，避免流式更新时所有气泡重新挂载）────────
+
+interface MessageBubbleProps {
+  msg: Message;
+  isTyping: boolean;
+  lang: Lang;
+  onSend: (text: string) => void;
+}
+
+const MessageBubble = memo(function MessageBubble({ msg, isTyping, lang, onSend }: MessageBubbleProps) {
+  const isBot = msg.sender === 'bot';
+  const t = T[lang];
+
+  return (
+    <div className={`flex w-full mb-4 ${isBot ? 'justify-start' : 'justify-end'}`}>
+      {isBot && (
+        <div className="flex-shrink-0 mr-3">
+          <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
+            <Bot size={18} />
+          </div>
+        </div>
+      )}
+
+      <div className={`flex flex-col ${isBot ? 'items-start' : 'items-end'} max-w-[82%]`}>
+        {msg.type === 'text' && (
+          <div className="flex flex-col mb-1 w-full">
+            {(msg.translated_text?.trim() || msg.text?.trim()) && (
+              <div
+                className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
+                  isBot
+                    ? 'bg-background text-foreground rounded-tl-none shadow-sm border border-border'
+                    : 'bg-primary text-primary-foreground rounded-tr-none shadow-sm'
+                }`}
+              >
+                {isBot ? (
+                  <div className="markdown-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.translated_text?.trim() || msg.text}</ReactMarkdown>
+                  </div>
+                ) : (msg.translated_text?.trim() || msg.text)}
+              </div>
+            )}
+            {msg.card && msg.card.type !== 'handoff_card' && (
+              <div className="mt-2 w-full">
+                <CardMessage card={msg.card} lang={lang} />
+              </div>
+            )}
+            <span className="text-[11px] text-muted-foreground mt-1 px-1">
+              {msg.time}
+              {msg.sender === 'bot' && msg._ms != null && (
+                <span className="ml-1.5 text-muted-foreground/60">· {(msg._ms / 1000).toFixed(1)}s</span>
+              )}
+            </span>
+          </div>
+        )}
+
+        {msg.type === 'faq' && (
+          <div className="bg-background p-3 rounded-2xl rounded-tl-none shadow-sm border border-border w-full mb-1">
+            <p className="text-sm text-muted-foreground mb-2 font-medium">{t.chat_faq_hint}</p>
+            <div className="space-y-2">
+              {msg.options.map((opt, idx) => (
+                <Button
+                  key={idx}
+                  variant="outline"
+                  onClick={() => onSend(opt)}
+                  disabled={isTyping}
+                  className="w-full justify-between text-left px-3 py-2 text-sm text-primary hover:bg-accent rounded-lg h-auto"
+                >
+                  <span>{opt}</span>
+                  <ChevronRight size={14} />
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {!isBot && (
+        <div className="flex-shrink-0 ml-3">
+          <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
+            <User size={18} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 // ── 常量 ──────────────────────────────────────────────────────────────────────
 
@@ -290,86 +377,6 @@ export default function App() {
   };
 
   // ── 气泡子组件 ─────────────────────────────────────────────────────────────
-  const MessageBubble = ({ msg }: { msg: Message }) => {
-    const isBot = msg.sender === 'bot';
-
-    return (
-      <div className={`flex w-full mb-4 ${isBot ? 'justify-start' : 'justify-end'}`}>
-        {isBot && (
-          <div className="flex-shrink-0 mr-3">
-            <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
-              <Bot size={18} />
-            </div>
-          </div>
-        )}
-
-        <div className={`flex flex-col ${isBot ? 'items-start' : 'items-end'} max-w-[82%]`}>
-          {/* 文本消息 */}
-          {msg.type === 'text' && (
-            <div className="flex flex-col mb-1 w-full">
-              {/* 只有文本非空时才渲染气泡；有译文时直接显示译文替换原文 */}
-              {(msg.translated_text?.trim() || msg.text?.trim()) && (
-                <div
-                  className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                    isBot
-                      ? 'bg-background text-foreground rounded-tl-none shadow-sm border border-border'
-                      : 'bg-primary text-primary-foreground rounded-tr-none shadow-sm'
-                  }`}
-                >
-                  {isBot ? (
-                    <div className="markdown-body">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.translated_text?.trim() || msg.text}</ReactMarkdown>
-                    </div>
-                  ) : (msg.translated_text?.trim() || msg.text)}
-                </div>
-              )}
-              {/* 结构化卡片（handoff_card 仅坐席侧展示） */}
-              {msg.card && msg.card.type !== 'handoff_card' && (
-                <div className="mt-2 w-full">
-                  <CardMessage card={msg.card} lang={lang} />
-                </div>
-              )}
-              <span className="text-[11px] text-muted-foreground mt-1 px-1">
-                {msg.time}
-                {msg.sender === 'bot' && msg._ms != null && (
-                  <span className="ml-1.5 text-muted-foreground/60">· {(msg._ms / 1000).toFixed(1)}s</span>
-                )}
-              </span>
-            </div>
-          )}
-
-          {/* 快捷选项卡片 */}
-          {msg.type === 'faq' && (
-            <div className="bg-background p-3 rounded-2xl rounded-tl-none shadow-sm border border-border w-full mb-1">
-              <p className="text-sm text-muted-foreground mb-2 font-medium">{t.chat_faq_hint}</p>
-              <div className="space-y-2">
-                {msg.options.map((opt, idx) => (
-                  <Button
-                    key={idx}
-                    variant="outline"
-                    onClick={() => handleSend(opt)}
-                    disabled={isTyping}
-                    className="w-full justify-between text-left px-3 py-2 text-sm text-primary hover:bg-accent rounded-lg h-auto"
-                  >
-                    <span>{opt}</span>
-                    <ChevronRight size={14} />
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {!isBot && (
-          <div className="flex-shrink-0 ml-3">
-            <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center">
-              <User size={18} />
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   // ── 渲染 ───────────────────────────────────────────────────────────────────
   return (
@@ -508,7 +515,7 @@ export default function App() {
               </div>
 
               {messages.map((msg) => (
-                <MessageBubble key={msg.id} msg={msg} />
+                <MessageBubble key={msg.id} msg={msg} isTyping={isTyping} lang={lang} onSend={handleSend} />
               ))}
 
               {/* 打字指示器 */}
