@@ -361,7 +361,9 @@ export function useSkillManager() {
   // ── 打开技能编辑器 ──────────────────────────────────────────────────────────
   const openSkill = useCallback((skill: Skill) => {
     setActiveSkillId(skill.id);
-    setMessages(skill.messages);
+    // 编辑已有技能时，清空创建态的历史消息，用编辑态欢迎语重新开始
+    const isNew = skill.id.startsWith('new-');
+    setMessages(isNew ? skill.messages : [makeExistingSkillMsg(skill)]);
     setSessionId(null); // 重置会话
     setPhase('interview');
     setDraft(null);
