@@ -4,7 +4,7 @@
 > 修改内容请更新 spec-kit 源文档后重新运行脚本（或 `/sync-docs`）。
 > 编码规范按路径分区在 `.claude/rules/` 中，编辑对应目录文件时自动加载。
 
-**自动生成于**: 2026-03-22
+**自动生成于**: 2026-03-23
 
 ## 项目简介
 
@@ -33,9 +33,9 @@
 ./start.sh --reset      # 重置 DB + 重新 seed + 启动
 ./stop.sh               # 停止全部服务
 
-cd backend && bun test ../tests/unittest/backend/    # 后端单元测试
-cd tests/unittest/frontend && npx vitest run          # 前端单元测试
-cd tests/e2e && npx playwright test                   # E2E 测试（需先启动服务）
+cd backend && bun test tests/unittest/                # 后端单元测试
+cd frontend/tests/unittest && npx vitest run          # 前端单元测试
+cd frontend/tests/e2e && npx playwright test          # E2E 测试（需先启动服务）
 
 cd backend && bunx drizzle-kit push    # 应用 Schema 变更
 cd backend && bun run db:seed          # 写入种子数据
@@ -94,7 +94,7 @@ cd backend && bunx drizzle-kit studio  # 数据库可视化管理
 | 1 | `frontend/src/agent/cards/contents/XxxContent.tsx` | 新建卡片内容组件 |
 | 2 | `frontend/src/agent/cards/index.ts` | 调用 `registerCard()` 注册 |
 | 3 | 后端对应路由 | 发送新的 WS 事件类型 |
-| 4 | `tests/unittest/frontend/agent/cards/` | 组件测试 |
+| 4 | `frontend/tests/unittest/agent/cards/` | 组件测试 |
 
 ### 新增一个 KMS 子模块
 

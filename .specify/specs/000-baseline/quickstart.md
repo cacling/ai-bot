@@ -306,24 +306,24 @@ bash tests/scripts/seed.sh
 
 ```bash
 # 后端单元测试（<1s）
-cd backend && bun test ../tests/unittest/backend/
+cd backend && bun test tests/unittest/
 
 # 前端单元测试（~15s）
-cd tests/unittest/frontend && npx vitest run
+cd frontend/tests/unittest && npx vitest run
 
 # 前端覆盖率报告（当前生成报告，但未在 CI 强制阈值）
-cd tests/unittest/frontend && npx vitest run --coverage
+cd frontend/tests/unittest && npx vitest run --coverage
 
 # E2E 测试（需先启动服务，耗时较长）
-bash tests/scripts/start.sh
-cd tests/e2e && npx playwright test
-bash tests/scripts/stop.sh
+bash frontend/tests/e2e/scripts/start.sh
+cd frontend/tests/e2e && npx playwright test
+bash frontend/tests/e2e/scripts/stop.sh
 
 # E2E 有头模式（调试）
-cd tests/e2e && npx playwright test --headed
+cd frontend/tests/e2e && npx playwright test --headed
 
 # 查看 E2E HTML 报告
-cd tests/e2e && npx playwright show-report
+cd frontend/tests/e2e && npx playwright show-report
 ```
 
 ---

@@ -43,9 +43,9 @@
 
 | 层 | 框架 | 位置 |
 |----|------|------|
-| 后端单元 | Bun 内置（`bun:test`） | `tests/unittest/backend/` |
-| 前端单元 | Vitest + @testing-library/react | `tests/unittest/frontend/` |
-| E2E | Playwright（系统 Chrome, workers:1, retries:1） | `tests/e2e/` |
+| 后端单元 | Bun 内置（`bun:test`） | `backend/tests/unittest/` |
+| 前端单元 | Vitest + @testing-library/react | `frontend/tests/unittest/` |
+| E2E | Playwright（系统 Chrome, workers:1, retries:1） | `frontend/tests/e2e/` |
 | 回归测试 | 6 种断言类型 | `POST /api/sandbox/:id/regression` |
 
 ### 超时策略

@@ -2,7 +2,7 @@
 paths:
   - "mcp_servers/**"
 ---
-<!-- auto-generated on 2026-03-22 from standards.md -->
+<!-- auto-generated on 2026-03-23 from standards.md -->
 
 # MCP 工具编码规则
 

@@ -503,7 +503,7 @@ tests/unittest/frontend/
 | 1 | `frontend/src/agent/cards/contents/XxxContent.tsx` | 新建卡片内容组件 |
 | 2 | `frontend/src/agent/cards/index.ts` | 调用 `registerCard()` 注册 |
 | 3 | 后端对应路由 | 发送新的 WS 事件类型 |
-| 4 | `tests/unittest/frontend/agent/cards/` | 组件测试 |
+| 4 | `frontend/tests/unittest/agent/cards/` | 组件测试 |
 
 ### 新增一个 KMS 子模块
 

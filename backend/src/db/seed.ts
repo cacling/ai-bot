@@ -9,7 +9,7 @@
 
 import { db, sqlite } from './index';
 import { eq } from 'drizzle-orm';
-import { seededE2ECases } from '../../tests/e2e/usecase';
+import { seededE2ECases } from '../../tests/apitest/usecase';
 import {
   bills,
   billingBillItems,

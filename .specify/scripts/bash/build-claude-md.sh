@@ -190,9 +190,9 @@ cat >> "$OUTPUT" << 'EOF'
 ./start.sh --reset      # 重置 DB + 重新 seed + 启动
 ./stop.sh               # 停止全部服务
 
-cd backend && bun test ../tests/unittest/backend/    # 后端单元测试
-cd tests/unittest/frontend && npx vitest run          # 前端单元测试
-cd tests/e2e && npx playwright test                   # E2E 测试（需先启动服务）
+cd backend && bun test tests/unittest/                # 后端单元测试
+cd frontend/tests/unittest && npx vitest run          # 前端单元测试
+cd frontend/tests/e2e && npx playwright test          # E2E 测试（需先启动服务）
 
 cd backend && bunx drizzle-kit push    # 应用 Schema 变更
 cd backend && bun run db:seed          # 写入种子数据
