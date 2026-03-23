@@ -194,8 +194,20 @@ logger.info('sop-guard', 'operation_tools', { tools: [..._operationTools] });
 
 function getDeps(): Map<string, ToolDependency> {
   if (Date.now() - _depsBuiltAt > 60_000) {
+    const prevOps = new Set(_operationTools);
     _deps = buildGlobalDependencies();
     _depsBuiltAt = Date.now();
+
+    // 记录新增的操作工具（有助于排查新创建技能的 SOP 是否生效）
+    const newOps = [..._operationTools].filter(t => !prevOps.has(t));
+    const removedOps = [...prevOps].filter(t => !_operationTools.has(t));
+    if (newOps.length > 0 || removedOps.length > 0) {
+      logger.info('sop-guard', 'deps_refreshed', {
+        operation_tools: [..._operationTools],
+        new_ops: newOps,
+        removed_ops: removedOps,
+      });
+    }
   }
   return _deps;
 }
@@ -220,10 +232,12 @@ export class SOPGuard {
    * 返回 null 表示允许，返回 string 表示拒绝原因。
    */
   check(toolName: string): string | null {
+    // 先刷新依赖图（如果超过 TTL），确保新创建的技能的工具约束能被及时加载
+    const deps = getDeps();
+
     // 查询类工具不拦截（不在操作工具集中的就是查询类）
     if (!_operationTools.has(toolName)) return null;
 
-    const deps = getDeps();
     const dep = deps.get(toolName);
     if (!dep || dep.requiredTools.length === 0) return null;
 

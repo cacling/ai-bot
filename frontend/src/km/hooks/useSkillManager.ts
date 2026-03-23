@@ -469,6 +469,14 @@ export function useSkillManager() {
 
       try {
         const isNew = activeSkillId?.startsWith('new-');
+        const fetchStartTs = performance.now();
+        console.log('[skill-creator] sending chat request', {
+          session_id: sessionId,
+          enable_thinking: showThinking,
+          has_image: !!submittedImage,
+          message_len: submittedText.length,
+        });
+
         const res = await fetch('/api/skill-creator/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -481,6 +489,12 @@ export function useSkillManager() {
           }),
         });
 
+        console.log('[skill-creator] response received', {
+          status: res.status,
+          content_type: res.headers.get('content-type'),
+          elapsed_ms: Math.round(performance.now() - fetchStartTs),
+        });
+
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.error ?? `HTTP ${res.status}`);
@@ -490,16 +504,28 @@ export function useSkillManager() {
 
         // ── 流式模式（SSE）──
         if (contentType.includes('text/event-stream') && res.body) {
+          const streamStartTs = performance.now();
+          console.log('[skill-creator] SSE stream started');
           const msgId = Date.now();
           setMessages((prev) => [...prev, { id: msgId, role: 'assistant', text: '', thinking: '' }]);
 
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
+          let sseEventCount = 0;
+          let lastEventType = '';
 
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+              console.log('[skill-creator] SSE stream ended', {
+                total_events: sseEventCount,
+                last_event_type: lastEventType,
+                stream_duration_ms: Math.round(performance.now() - streamStartTs),
+                total_duration_ms: Math.round(performance.now() - fetchStartTs),
+              });
+              break;
+            }
 
             buffer += decoder.decode(value, { stream: true });
             const parts = buffer.split('\n\n');
@@ -510,6 +536,24 @@ export function useSkillManager() {
               if (!line.startsWith('data: ')) continue;
               try {
                 const data = JSON.parse(line.slice(6));
+                sseEventCount++;
+                lastEventType = data.type;
+
+                // 对关键事件记录日志
+                if (data.type === 'done' || data.type === 'error' || data.type === 'vision_result') {
+                  console.log(`[skill-creator] SSE event: ${data.type}`, {
+                    event_count: sseEventCount,
+                    elapsed_ms: Math.round(performance.now() - streamStartTs),
+                    ...(data.type === 'done' ? { phase: data.phase, has_draft: !!data.draft, reply_len: data.reply?.length } : {}),
+                    ...(data.type === 'error' ? { error: data.error } : {}),
+                  });
+                } else if (sseEventCount === 1) {
+                  console.log('[skill-creator] SSE first event', {
+                    type: data.type,
+                    time_to_first_event_ms: Math.round(performance.now() - streamStartTs),
+                  });
+                }
+
                 if (data.type === 'vision_result') {
                   // 图片解析结果：插入一条系统消息，在 AI 回复之前展示
                   setMessages((prev) => {
@@ -541,11 +585,14 @@ export function useSkillManager() {
                     m.id === msgId ? { ...m, text: `请求失败: ${data.error}。请重试。`, thinking: undefined } : m
                   ));
                 }
-              } catch { /* 忽略解析错误 */ }
+              } catch (parseErr) {
+                console.warn('[skill-creator] SSE parse error', { raw: line.slice(0, 200), error: String(parseErr) });
+              }
             }
           }
         } else {
           // ── 非流式模式（JSON）──
+          console.log('[skill-creator] non-streaming JSON response');
           const data = await res.json() as {
             session_id: string;
             reply: string;
@@ -554,6 +601,16 @@ export function useSkillManager() {
             thinking?: string | null;
             vision_result?: string | null;
           };
+
+          console.log('[skill-creator] JSON response parsed', {
+            session_id: data.session_id,
+            phase: data.phase,
+            has_draft: !!data.draft,
+            reply_len: data.reply?.length,
+            has_thinking: !!data.thinking,
+            has_vision: !!data.vision_result,
+            total_duration_ms: Math.round(performance.now() - fetchStartTs),
+          });
 
           setSessionId(data.session_id);
           setPhase(data.phase);
@@ -571,6 +628,11 @@ export function useSkillManager() {
           }
         }
       } catch (err: any) {
+        console.error('[skill-creator] request failed', {
+          error: err.message,
+          stack: err.stack?.slice(0, 300),
+          elapsed_ms: Math.round(performance.now() - fetchStartTs),
+        });
         setMessages((prev) => [
           ...prev,
           {

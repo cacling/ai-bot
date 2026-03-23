@@ -385,6 +385,7 @@ stateDiagram-v2
 const skillCreator = new Hono();
 
 skillCreator.post('/chat', async (c) => {
+  const reqStartTs = Date.now();
   const body = await c.req.json<{
     message: string;
     session_id?: string;
@@ -392,6 +393,14 @@ skillCreator.post('/chat', async (c) => {
     enable_thinking?: boolean;
     image?: string; // base64 编码的图片数据（data:image/xxx;base64,...）
   }>();
+
+  logger.info('skill-creator', 'chat_request_start', {
+    session_id: body.session_id ?? '(new)',
+    skill_id: body.skill_id ?? null,
+    enable_thinking: !!body.enable_thinking,
+    has_image: !!body.image,
+    message_preview: (body.message ?? '').slice(0, 80),
+  });
 
   if (!body.message?.trim() && !body.image) {
     return c.json({ error: 'message 或 image 不能为空' }, 400);
@@ -404,10 +413,12 @@ skillCreator.post('/chat', async (c) => {
   // 如果有图片，先解析视觉模型
   if (hasImage) {
     try {
+      const visionStartTs = Date.now();
+      logger.info('skill-creator', 'vision_start', { session_id: body.session_id ?? '(new)' });
       imageDescription = await parseFlowchartImage(body.image!);
-      logger.info('skill-creator', 'image_parsed', { result_length: imageDescription.length });
+      logger.info('skill-creator', 'image_parsed', { result_length: imageDescription.length, duration_ms: Date.now() - visionStartTs });
     } catch (err) {
-      logger.error('skill-creator', 'image_parse_error', { error: String(err) });
+      logger.error('skill-creator', 'image_parse_error', { error: String(err), duration_ms: Date.now() - reqStartTs });
       return c.json({ error: `图片解析失败: ${String(err)}` }, 500);
     }
   }
@@ -442,11 +453,25 @@ skillCreator.post('/chat', async (c) => {
   const skillIndex = loadSkillIndex();
   const systemPrompt = buildSystemPrompt(session, skillIndex);
 
+  logger.info('skill-creator', 'prompt_built', {
+    session_id: session.id,
+    phase: session.phase,
+    history_turns: session.history.length,
+    system_prompt_len: systemPrompt.length,
+    skill_index_count: skillIndex.length,
+    duration_ms: Date.now() - reqStartTs,
+  });
+
   const skillTools = {
     read_skill: tool({
       description: '读取已有业务技能的 SKILL.md 内容',
       parameters: z.object({ skill_name: z.string().describe('技能名称（kebab-case）') }),
-      execute: async ({ skill_name }) => readSkillContent(skill_name) ?? `技能 "${skill_name}" 不存在`,
+      execute: async ({ skill_name }) => {
+        logger.info('skill-creator', 'tool_call', { tool: 'read_skill', args: { skill_name }, session_id: session.id });
+        const result = readSkillContent(skill_name) ?? `技能 "${skill_name}" 不存在`;
+        logger.info('skill-creator', 'tool_result', { tool: 'read_skill', result_len: result.length, session_id: session.id });
+        return result;
+      },
     }),
     read_reference: tool({
       description: '读取业务技能的参考文档',
@@ -454,26 +479,38 @@ skillCreator.post('/chat', async (c) => {
         skill_name: z.string().describe('技能名称'),
         ref_name: z.string().describe('参考文档文件名'),
       }),
-      execute: async ({ skill_name, ref_name }) => readSkillReference(skill_name, ref_name) ?? `参考文档 "${ref_name}" 不存在`,
+      execute: async ({ skill_name, ref_name }) => {
+        logger.info('skill-creator', 'tool_call', { tool: 'read_reference', args: { skill_name, ref_name }, session_id: session.id });
+        const result = readSkillReference(skill_name, ref_name) ?? `参考文档 "${ref_name}" 不存在`;
+        logger.info('skill-creator', 'tool_result', { tool: 'read_reference', result_len: result.length, session_id: session.id });
+        return result;
+      },
     }),
     list_skills: tool({
       description: '列出所有已有业务技能及其参考文档',
       parameters: z.object({}),
-      execute: async () => JSON.stringify(skillIndex.map(s => ({ ...s, references: listSkillReferences(s.name) }))),
+      execute: async () => {
+        logger.info('skill-creator', 'tool_call', { tool: 'list_skills', session_id: session.id });
+        const result = JSON.stringify(skillIndex.map(s => ({ ...s, references: listSkillReferences(s.name) })));
+        logger.info('skill-creator', 'tool_result', { tool: 'list_skills', result_len: result.length, skill_count: skillIndex.length, session_id: session.id });
+        return result;
+      },
     }),
     list_mcp_tools: tool({
       description: '列出系统中所有已注册的 MCP 工具（含名称、描述、来源服务、状态、关联技能）。用于工具可行性检查，判断流程中需要的工具是否已存在。',
       parameters: z.object({}),
       execute: async () => {
+        logger.info('skill-creator', 'tool_call', { tool: 'list_mcp_tools', session_id: session.id });
         const items = getToolsOverview();
-        // 只返回 LLM 需要的字段，减少 token 消耗
-        return JSON.stringify(items.map(t => ({
+        const result = JSON.stringify(items.map(t => ({
           name: t.name,
           description: t.description,
           source: t.source,
-          status: t.status, // available | disabled | planned
+          status: t.status,
           skills: t.skills,
         })));
+        logger.info('skill-creator', 'tool_result', { tool: 'list_mcp_tools', result_len: result.length, tool_count: items.length, session_id: session.id });
+        return result;
       },
     }),
     get_mcp_tool_detail: tool({
@@ -482,9 +519,13 @@ skillCreator.post('/chat', async (c) => {
         tool_name: z.string().describe('工具名称（snake_case）'),
       }),
       execute: async ({ tool_name }) => {
+        logger.info('skill-creator', 'tool_call', { tool: 'get_mcp_tool_detail', args: { tool_name }, session_id: session.id });
         const detail = getToolDetail(tool_name);
-        if (!detail) return JSON.stringify({ found: false, message: `工具 "${tool_name}" 未注册。可能需要新建。` });
-        return JSON.stringify({
+        if (!detail) {
+          logger.info('skill-creator', 'tool_result', { tool: 'get_mcp_tool_detail', found: false, session_id: session.id });
+          return JSON.stringify({ found: false, message: `工具 "${tool_name}" 未注册。可能需要新建。` });
+        }
+        const result = JSON.stringify({
           found: true,
           name: detail.name,
           description: detail.description,
@@ -494,6 +535,8 @@ skillCreator.post('/chat', async (c) => {
           responseExample: detail.responseExample,
           skills: detail.skills,
         });
+        logger.info('skill-creator', 'tool_result', { tool: 'get_mcp_tool_detail', found: true, result_len: result.length, session_id: session.id });
+        return result;
       },
     }),
   };
@@ -503,6 +546,14 @@ skillCreator.post('/chat', async (c) => {
   // ── 流式模式（thinking 开启时）──
   if (body.enable_thinking) {
     try {
+      const llmStartTs = Date.now();
+      logger.info('skill-creator', 'llm_stream_start', {
+        session_id: session.id,
+        model: 'thinking',
+        history_turns: session.history.length,
+        elapsed_ms: llmStartTs - reqStartTs,
+      });
+
       const result = streamText({
         model,
         system: systemPrompt,
@@ -522,13 +573,63 @@ skillCreator.post('/chat', async (c) => {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'vision_result', text: imageDescription })}\n\n`));
             }
 
+            let firstChunkTs = 0;
+            let chunkCount = 0;
+            let lastLogTs = Date.now();
+
             for await (const part of result.fullStream) {
+              if (chunkCount === 0) {
+                firstChunkTs = Date.now();
+                logger.info('skill-creator', 'llm_first_chunk', {
+                  session_id: session.id,
+                  type: part.type,
+                  time_to_first_chunk_ms: firstChunkTs - llmStartTs,
+                });
+              }
+              chunkCount++;
+
+              // 每 30 秒输出一次进度日志，防止长时间无输出不知道状态
+              if (Date.now() - lastLogTs > 30_000) {
+                logger.info('skill-creator', 'llm_stream_progress', {
+                  session_id: session.id,
+                  chunk_count: chunkCount,
+                  elapsed_ms: Date.now() - llmStartTs,
+                  last_chunk_type: part.type,
+                });
+                lastLogTs = Date.now();
+              }
+
               if (part.type === 'reasoning') {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'thinking', text: part.textDelta })}\n\n`));
               } else if (part.type === 'text-delta') {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', text: part.textDelta })}\n\n`));
+              } else if (part.type === 'tool-call') {
+                logger.info('skill-creator', 'llm_tool_call_request', {
+                  session_id: session.id,
+                  tool_name: (part as any).toolName,
+                  step: chunkCount,
+                  elapsed_ms: Date.now() - llmStartTs,
+                });
+              } else if (part.type === 'tool-result') {
+                logger.info('skill-creator', 'llm_tool_call_done', {
+                  session_id: session.id,
+                  tool_name: (part as any).toolName,
+                  elapsed_ms: Date.now() - llmStartTs,
+                });
+              } else if (part.type === 'step-finish') {
+                logger.info('skill-creator', 'llm_step_finish', {
+                  session_id: session.id,
+                  step: chunkCount,
+                  elapsed_ms: Date.now() - llmStartTs,
+                });
               }
             }
+
+            logger.info('skill-creator', 'llm_stream_end', {
+              session_id: session.id,
+              total_chunks: chunkCount,
+              stream_duration_ms: Date.now() - llmStartTs,
+            });
 
             // 流结束后，获取完整文本并解析
             let text = await result.text;
@@ -562,10 +663,21 @@ skillCreator.post('/chat', async (c) => {
               thinking: reasoning || null,
             })}\n\n`));
 
-            logger.info('skill-creator', 'chat_stream', { session_id: session.id, phase: session.phase, has_reasoning: !!reasoning });
+            logger.info('skill-creator', 'chat_stream', {
+              session_id: session.id,
+              phase: session.phase,
+              has_reasoning: !!reasoning,
+              total_duration_ms: Date.now() - reqStartTs,
+              text_length: text.length,
+              reasoning_length: reasoning?.toString().length ?? 0,
+            });
           } catch (err) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: String(err) })}\n\n`));
-            logger.error('skill-creator', 'chat_stream_error', { error: String(err) });
+            logger.error('skill-creator', 'chat_stream_error', {
+              error: String(err),
+              stack: (err as Error).stack?.slice(0, 500),
+              elapsed_ms: Date.now() - reqStartTs,
+            });
           } finally {
             controller.close();
           }
@@ -587,6 +699,14 @@ skillCreator.post('/chat', async (c) => {
 
   // ── 非流式模式（thinking 关闭时）──
   try {
+    const llmStartTs = Date.now();
+    logger.info('skill-creator', 'llm_generate_start', {
+      session_id: session.id,
+      model: 'non-thinking',
+      history_turns: session.history.length,
+      elapsed_ms: llmStartTs - reqStartTs,
+    });
+
     const { text } = await generateText({
       model,
       system: systemPrompt,
@@ -597,6 +717,12 @@ skillCreator.post('/chat', async (c) => {
       temperature: 0.3,
     });
 
+    logger.info('skill-creator', 'llm_generate_done', {
+      session_id: session.id,
+      text_length: text.length,
+      llm_duration_ms: Date.now() - llmStartTs,
+    });
+
     const cleanedText = truncateRepetition(text);
     const parsed = parseSkillCreatorResponse(cleanedText, session);
 
@@ -604,11 +730,20 @@ skillCreator.post('/chat', async (c) => {
     if (parsed.draft) session.draft = parsed.draft;
     session.history.push({ role: 'assistant', content: parsed.reply });
 
-    logger.info('skill-creator', 'chat', { session_id: session.id, phase: session.phase, has_draft: !!session.draft });
+    logger.info('skill-creator', 'chat', {
+      session_id: session.id,
+      phase: session.phase,
+      has_draft: !!session.draft,
+      total_duration_ms: Date.now() - reqStartTs,
+    });
 
     return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft, thinking: null, vision_result: imageDescription ?? null });
   } catch (err) {
-    logger.error('skill-creator', 'chat_error', { error: String(err) });
+    logger.error('skill-creator', 'chat_error', {
+      error: String(err),
+      stack: (err as Error).stack?.slice(0, 500),
+      elapsed_ms: Date.now() - reqStartTs,
+    });
     return c.json({ error: `对话失败: ${String(err)}` }, 500);
   }
 });

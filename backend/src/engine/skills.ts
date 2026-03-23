@@ -271,7 +271,7 @@ function reconcileWithDisk(): void {
       } catch { /* ignore stat errors */ }
     }
 
-    // 2. 检查磁盘上是否有新技能目录不在 DB 中
+    // 2. 检查磁盘上是否有新技能目录不在 DB 中 → 自动补录发布
     try {
       const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
         .filter(d => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'));
@@ -279,7 +279,24 @@ function reconcileWithDisk(): void {
         if (publishedIds.has(dir.name)) continue;
         const mdPath = join(SKILLS_DIR, dir.name, 'SKILL.md');
         if (!existsSync(mdPath)) continue;
-        // 磁盘上有但 DB 中没发布 → 不主动补录（只有通过 API 发布的才算）
+        // 磁盘上有 SKILL.md 但 DB 中没发布 → 自动补录（DB 重置后恢复）
+        try {
+          const content = readFileSync(mdPath, 'utf-8');
+          const meta = extractSkillMetadata(content);
+          db.insert(skillRegistry).values({
+            id: dir.name,
+            published_version: 1,
+            latest_version: 1,
+            description: meta.description,
+          }).onConflictDoUpdate({
+            target: skillRegistry.id,
+            set: { published_version: 1, updated_at: new Date().toISOString() },
+          }).run();
+          syncSkillMetadata(dir.name, content);
+          logger.info('skills', 'reconcile_auto_publish', { skill: dir.name });
+        } catch (e) {
+          logger.warn('skills', 'reconcile_auto_publish_error', { skill: dir.name, error: String(e) });
+        }
       }
     } catch { /* ignore */ }
   } catch (e) {
