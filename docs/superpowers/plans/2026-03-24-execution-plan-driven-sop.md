@@ -61,10 +61,12 @@ export const skillWorkflowSpecs = sqliteTable('skill_workflow_specs', {
   spec_json: text('spec_json').notNull(),
   created_at: text('created_at').default(sql`(datetime('now'))`),
   updated_at: text('updated_at').default(sql`(datetime('now'))`),
-});
+}, (table) => ({
+  uniqSkillVersion: unique().on(table.skill_id, table.version_no),
+}));
 ```
 
-Add `import { sql } from 'drizzle-orm';` if not present.
+Add `import { sql } from 'drizzle-orm';` and `import { unique } from 'drizzle-orm/sqlite-core';` if not present.
 
 - [ ] **Step 3: Re-export from backend schema**
 
@@ -331,14 +333,23 @@ const toolHasData = !isNoDataResult(result);
 sopGuard.recordToolCall(name, { success: toolSuccess, hasData: toolHasData });
 ```
 
-Use the existing `isNoDataResult` import. Add a helper `isErrorResult`:
+Use the existing `isNoDataResult` import. Add a helper `isErrorResult` that parses JSON and checks for explicit error signals (avoid string-matching which can false-positive on legitimate data containing "error"):
 
 ```typescript
 function isErrorResult(result: unknown): boolean {
-  const text = typeof result === 'string' ? result :
-    result && typeof result === 'object' && 'content' in result ?
-    (result as any).content?.[0]?.text ?? '' : '';
-  return text.includes('"error"') || text.startsWith('Error:');
+  try {
+    let text = '';
+    if (typeof result === 'string') {
+      text = result;
+    } else if (result && typeof result === 'object' && 'content' in result) {
+      text = (result as any).content?.[0]?.text ?? '';
+    }
+    if (text.startsWith('Error:')) return true;
+    const parsed = JSON.parse(text);
+    return parsed.success === false || parsed.error !== undefined;
+  } catch {
+    return false;
+  }
 }
 ```
 
@@ -359,25 +370,91 @@ At the beginning of `runAgent`, after `sopGuard` is created/restored:
 sopGuard.onUserMessage(userMessage);
 ```
 
-- [ ] **Step 4: Activate plan on skill load**
+- [ ] **Step 4: Activate plan on skill load via closure wrapper**
 
-In `skills.ts`, in the `get_skill_instructions` tool execute handler, after successful content load:
+**Important:** `skillsTools` is a module-level constant in `skills.ts` — it has no access to the per-request `sopGuard` instance. Do NOT use a module-level setter (concurrency unsafe with multiple users).
 
-This requires the `sopGuard` instance to be accessible from the tool. Since `skillsTools` is merged into `runAgent`'s tools, the SOPGuard instance is in the same closure scope.
-
-Option A: Pass `sopGuard` as a parameter to a factory function that creates `skillsTools`.
-Option B: Add a module-level setter `setSopGuard(guard)` that the tool reads.
-
-Choose the simplest approach that fits the existing code pattern in runner.ts. The key line to add:
+Instead, wrap `skillsTools` in the `runAgent` closure (same pattern as `sopWrappedTools`). In `runner.ts`, before the `generateText` call, replace:
 
 ```typescript
-import { findPublishedSpec } from './skill-workflow-compiler'; // or a store function
-// In get_skill_instructions execute:
-const plan = findPublishedSpec(resolvedName);
-if (plan && currentSopGuard) {
-  currentSopGuard.activatePlan(resolvedName, JSON.parse(plan.spec_json));
+tools: {
+  ...sopWrappedTools,
+  ...skillsTools,
+},
+```
+
+with:
+
+```typescript
+// Wrap get_skill_instructions to activate plan on skill load
+const planAwareSkillsTools = {
+  ...skillsTools,
+  get_skill_instructions: {
+    ...skillsTools.get_skill_instructions,
+    execute: async (args: { skill_name: string }) => {
+      const result = await skillsTools.get_skill_instructions.execute(args);
+      // Activate plan if available (after successful load)
+      if (typeof result === 'string' && !result.startsWith('Error:')) {
+        const resolvedName = args.skill_name.replace(/_/g, '-');
+        try {
+          const planRow = findPublishedSpec(resolvedName) ?? findPublishedSpec(args.skill_name);
+          if (planRow) {
+            sopGuard.activatePlan(resolvedName, JSON.parse(planRow.spec_json));
+          }
+        } catch { /* ignore parse errors */ }
+      }
+      return result;
+    },
+  },
+};
+
+// In generateText:
+tools: {
+  ...sopWrappedTools,
+  ...planAwareSkillsTools,
+},
+```
+
+Add `findPublishedSpec` function (query `skill_workflow_specs` table by skill_id + status='published'):
+
+```typescript
+import { db } from '../db';
+import { skillWorkflowSpecs } from '../db/schema';
+import { eq, and } from 'drizzle-orm';
+
+function findPublishedSpec(skillId: string) {
+  return db.select().from(skillWorkflowSpecs)
+    .where(and(eq(skillWorkflowSpecs.skill_id, skillId), eq(skillWorkflowSpecs.status, 'published')))
+    .get();
 }
 ```
+
+- [ ] **Step 4a: When plan active, replace SOP_ENFORCEMENT_SUFFIX with lighter version**
+
+In the closure wrapper above, when plan is activated, replace the full `SOP_ENFORCEMENT_SUFFIX` with a shorter version that doesn't conflict with `promptHint`:
+
+```typescript
+if (planRow) {
+  // Replace verbose SOP suffix with plan-aware hint
+  return result.replace(SOP_ENFORCEMENT_SUFFIX, '\n\n---\n## SOP 执行要求\n按照状态图顺序执行，系统会自动约束工具调用顺序。\n');
+}
+```
+
+- [ ] **Step 4b: Pass default result in history replay**
+
+In the existing history replay loop (around line 381-388), change:
+
+```typescript
+sopGuard.recordToolCall(part.toolName);
+```
+
+to:
+
+```typescript
+sopGuard.recordToolCall(part.toolName, { success: true, hasData: true });
+```
+
+This ensures SOPGuard V2 rebuilds `currentStepId` correctly from history.
 
 - [ ] **Step 5: Run full test suite**
 
@@ -400,21 +477,25 @@ git commit -m "feat: integrate SOPGuard V2 into runner and skill loading"
 
 - [ ] **Step 1: Add compile-on-save**
 
-In `skill-creator.ts`, after `syncSkillMetadata()`:
+In `skill-creator.ts` (path: `backend/src/agent/km/skills/skill-creator.ts`), after `syncSkillMetadata()`:
 
 ```typescript
 try {
-  const { compileWorkflow } = await import('../../engine/skill-workflow-compiler');
+  const { compileWorkflow } = await import('../../../engine/skill-workflow-compiler');
+  const { extractMermaidBlock } = await import('../../../engine/skill-workflow-compiler');
   const compileResult = compileWorkflow(body.skill_md, body.skill_name, 1);
   if (compileResult.spec) {
-    // Save to DB
+    const mermaidSrc = extractMermaidBlock(body.skill_md) ?? '';
     db.insert(skillWorkflowSpecs).values({
       skill_id: body.skill_name,
       version_no: 1,
       status: 'draft',
       spec_json: JSON.stringify(compileResult.spec),
-      mermaid_checksum: Bun.hash(JSON.stringify(compileResult.spec)).toString(16),
-    }).onConflictDoNothing().run();
+      mermaid_checksum: Bun.hash(mermaidSrc).toString(16),
+    }).onConflictDoUpdate({
+      target: [skillWorkflowSpecs.skill_id, skillWorkflowSpecs.version_no],
+      set: { spec_json: JSON.stringify(compileResult.spec), status: 'draft', mermaid_checksum: Bun.hash(mermaidSrc).toString(16), updated_at: new Date().toISOString() },
+    }).run();
   }
 } catch (e) {
   logger.warn('skill-creator', 'compile_error', { error: String(e) });
@@ -423,16 +504,33 @@ try {
 
 - [ ] **Step 2: Add compile-on-publish**
 
-In `skill-versions.ts`, before `publishVersion()`:
+In `skill-versions.ts` (path: `backend/src/agent/km/skills/skill-versions.ts`), before `publishVersion()`.
+
+To read the skill content, use the existing version detail pattern (see `/test` endpoint around line 119-126):
 
 ```typescript
-const { compileWorkflow } = await import('../../engine/skill-workflow-compiler');
-// Read skill content for this version
-const skillMd = ...; // read from .versions path
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import { BIZ_SKILLS_DIR } from '../../../services/paths';
+
+// In the publish handler, before publishVersion():
+const { compileWorkflow } = await import('../../../engine/skill-workflow-compiler');
+// Read skill content from the published version's snapshot
+const versionDetail = getVersionDetail(body.skill, body.version_no);
+let skillMd: string | null = null;
+if (versionDetail?.snapshot_path) {
+  try {
+    skillMd = readFileSync(resolve(BIZ_SKILLS_DIR, '..', '.versions', versionDetail.snapshot_path, 'SKILL.md'), 'utf-8');
+  } catch { /* fallback: read from biz-skills */ }
+}
+if (!skillMd) {
+  try { skillMd = readFileSync(resolve(BIZ_SKILLS_DIR, body.skill, 'SKILL.md'), 'utf-8'); } catch { /* ignore */ }
+}
+
 if (skillMd) {
   const result = compileWorkflow(skillMd, body.skill, body.version_no);
   if (result.errors.length > 0) {
-    return c.json({ error: 'Workflow compile failed', details: result.errors }, 400);
+    return c.json({ error: 'Workflow 编译失败', details: result.errors }, 400);
   }
   if (result.spec) {
     db.insert(skillWorkflowSpecs).values({
@@ -440,8 +538,43 @@ if (skillMd) {
       version_no: body.version_no,
       status: 'published',
       spec_json: JSON.stringify(result.spec),
-    }).onConflictDoNothing().run();
+    }).onConflictDoUpdate({
+      target: [skillWorkflowSpecs.skill_id, skillWorkflowSpecs.version_no],
+      set: { spec_json: JSON.stringify(result.spec), status: 'published', updated_at: new Date().toISOString() },
+    }).run();
   }
+}
+```
+
+- [ ] **Step 3: Add compile-on-startup in syncAllSkillMetadata**
+
+In `backend/src/engine/skills.ts`, at the end of `syncAllSkillMetadata()`:
+
+```typescript
+// Compile workflow specs for published skills that don't have one yet
+try {
+  const { compileWorkflow } = await import('./skill-workflow-compiler');
+  for (const row of rows) {
+    const existing = db.select().from(skillWorkflowSpecs)
+      .where(and(eq(skillWorkflowSpecs.skill_id, row.id), eq(skillWorkflowSpecs.status, 'published')))
+      .get();
+    if (existing) continue;
+    const mdPath = join(SKILLS_DIR, row.id, 'SKILL.md');
+    if (!existsSync(mdPath)) continue;
+    const content = readFileSync(mdPath, 'utf-8');
+    const result = compileWorkflow(content, row.id, row.published_version ?? 1);
+    if (result.spec) {
+      db.insert(skillWorkflowSpecs).values({
+        skill_id: row.id,
+        version_no: row.published_version ?? 1,
+        status: 'published',
+        spec_json: JSON.stringify(result.spec),
+      }).onConflictDoNothing().run();
+      logger.info('skills', 'workflow_spec_compiled', { skill: row.id });
+    }
+  }
+} catch (e) {
+  logger.warn('skills', 'workflow_compile_startup_error', { error: String(e) });
 }
 ```
 
