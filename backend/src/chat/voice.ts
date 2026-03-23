@@ -25,6 +25,7 @@ import { mcpTools as mcpToolsTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
 import { getSkillsDescriptionByChannel, getSkillContent } from '../engine/skills';
+import { SOPGuard } from '../engine/sop-guard';
 import { preprocessToolCall, postprocessToolResult, inferSkillName } from '../services/tool-call-middleware';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
@@ -177,6 +178,8 @@ voice.get(
     const sessionId = crypto.randomUUID();
     let glmWs: InstanceType<typeof NodeWebSocket> | null = null;
     const state = new VoiceSessionState(userPhone, sessionId);
+    // SOP Guard：与在线客服统一，拦截未满足前置条件的操作类工具调用
+    const sopGuard = new SOPGuard();
     let pendingHandoff: Promise<void> | null = null;
     let unsubscribeAgent: (() => void) | null = null;
     let activeSkillName: string | null = null; // 当前活跃 skill，用于进度追踪
@@ -461,6 +464,7 @@ voice.get(
                 const skillName = (toolArgs.skill_name ?? '') as string;
                 const content = getSkillContent(skillName) ?? getSkillContent(skillName.replace(/_/g, '-')) ?? `技能 "${skillName}" 不存在`;
                 activeSkillName = skillName.replace(/_/g, '-');
+                sopGuard.recordToolCall('get_skill_instructions');
                 logger.info('voice', 'skill_loaded', { session: sessionId, skill: activeSkillName, content_len: content.length });
 
                 // 推送状态图给坐席端
@@ -490,6 +494,26 @@ voice.get(
                 lastUserMessage: lastUserTurn?.text,
               });
 
+              // ── SOP Guard：拦截未满足前置条件的操作类工具 ──────────────────
+              const rejection = sopGuard.check(toolName);
+              if (rejection) {
+                logger.warn('voice', 'sop_guard_blocked', { session: sessionId, tool: toolName });
+                // 将拒绝原因返回给 GLM，让它补调前置工具
+                glmWs!.send(JSON.stringify({
+                  event_id: crypto.randomUUID(),
+                  client_timestamp: Date.now(),
+                  type: 'conversation.item.create',
+                  item: { type: 'function_call_output', call_id: msg.call_id, output: JSON.stringify({ error: rejection }) },
+                }));
+                glmWs!.send(JSON.stringify({
+                  event_id: crypto.randomUUID(),
+                  client_timestamp: Date.now(),
+                  type: 'response.create',
+                }));
+                state.toolProcessing = false;
+                return;
+              }
+
               // ── MCP 工具调用（支持工具级 mock）─────────────────────────────
               logger.info('voice', 'tool_call_start', { session: sessionId, tool: toolName, args: toolArgs });
               let result: string;
@@ -506,11 +530,12 @@ voice.get(
                   success = false;
                 }
               } else {
-                // 重构2：所有工具通过 MCP Server 调用（MCP Server = 业务域稳定边界）
                 const mcpResult = await callMcpTool(sessionId, toolName, toolArgs);
                 result = mcpResult.text;
                 success = mcpResult.success;
               }
+              // 记录成功调用，供后续 SOP guard 检查前置条件
+              if (success) sopGuard.recordToolCall(toolName);
               state.recordTool(toolName, toolArgs, result, success);
               logger.info('voice', 'mcp_result_raw', { session: sessionId, tool: toolName, success, resultPreview: result.slice(0, 200) });
 
