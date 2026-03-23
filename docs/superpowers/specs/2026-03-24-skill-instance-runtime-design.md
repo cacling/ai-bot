@@ -72,6 +72,7 @@ Key architectural change: the Agent no longer reads the full skill and decides w
 - Annotations go at the end of transition lines or state lines (same as existing `%% tool:`)
 - `guard` only appears on transition lines (`-->`)
 - `step` and `kind` can appear on either state or transition lines
+- **Annotation-to-node propagation**: when annotations appear on a transition line (`A --> B %% tool:xxx`), they are associated with the **target** node (B), not the source. This matches the existing convention where `%% tool:query_subscriber` on a transition means the target state performs the query. The compiler must propagate transition-line annotations to their target nodes during parsing.
 
 ### Guard Type Enumeration
 
@@ -82,9 +83,10 @@ type GuardType =
   | 'tool.no_data'      // Tool succeeded but returned no data
   | 'user.confirm'      // User confirmed
   | 'user.cancel'       // User cancelled/refused
-  | 'user.input'        // User provided input
   | 'always';           // Unconditional transition
 ```
+
+Note: `user.input` removed from v1 scope. If future skills need "collect user data" steps, add `kind:input` + `user.input` guard in v2.
 
 ### Example: Annotated State Diagram
 
@@ -120,6 +122,7 @@ stateDiagram-v2
 | `skills/tech-skills/skill-creator-spec/references/spec-checklist.md` | Add checklist items for step ids, guard coverage |
 | `skills/tech-skills/skill-creator-spec/scripts/validate_statediagram.ts` | Parse and validate new annotations |
 | `skills/tech-skills/skill-creator-spec/SKILL.md` | Require new annotations in generated skills |
+| `skills/tech-skills/skill-creator-spec/scripts/types.ts` | Expand `MermaidAnnotation.type` union with `'step' \| 'kind' \| 'guard' \| 'output'` |
 | `skills/biz-skills/suspend-service/SKILL.md` | Manually add annotations (grayscale target) |
 | `skills/biz-skills/service-cancel/SKILL.md` | Manually add annotations (second batch) |
 
@@ -127,7 +130,11 @@ stateDiagram-v2
 
 ## 2. Data Model
 
-Three new tables in `backend/src/db/schema/platform.ts`.
+Three new tables. Definitions go in `packages/shared-db/src/schema/platform.ts` (the source), then re-export from `backend/src/db/schema/platform.ts` (same pattern as existing tables).
+
+```typescript
+import { sql } from 'drizzle-orm';
+```
 
 ### `skill_workflow_specs` — Compiled workflow definitions
 
@@ -181,12 +188,34 @@ export const skillInstanceEvents = sqliteTable('skill_instance_events', {
 });
 ```
 
+### Indexes
+
+```typescript
+// For findActiveInstance(sessionId) — frequent per-turn lookup
+index('idx_skill_instances_session_status').on(skillInstances.session_id, skillInstances.status)
+
+// For ordered event retrieval
+index('idx_skill_instance_events_instance_seq').on(skillInstanceEvents.instance_id, skillInstanceEvents.seq)
+```
+
+### Event `seq` Generation
+
+`seq` is application-managed: within the `advanceStep` transaction, compute `MAX(seq) + 1` for the instance. Since `advanceStep` uses optimistic locking (`revision`), concurrent writes are already serialized.
+
+### Why a Separate Table Instead of Adding `spec_json` to `skillVersions`
+
+`skillVersions` tracks file-level snapshots (`snapshot_path`) with version lifecycle semantics (draft/published). `skill_workflow_specs` is a derived artifact — it can be regenerated from the source mermaid anytime. Keeping it separate means:
+- Recompilation doesn't create a new version
+- `skillVersions` stays file-oriented, `skill_workflow_specs` stays runtime-oriented
+- `skill_workflow_specs.version_no` references `skillVersions.version_no` (same skill, same version number) but they are not FK-linked — the spec can be deleted and regenerated without affecting version history
+
 ### Design Decisions
 
 - **Don't modify messages table** — HTTP chat responseMessages persistence is a separate concern
 - **One active instance per session** — v1 constraint, avoids multi-intent state conflicts
 - **Events are append-only** — write can be async, doesn't block main flow
 - **Optimistic locking via revision** — prevents concurrent messages from corrupting state
+- **`mermaid_checksum`** — MD5 of mermaid content, used by `syncSkillMetadata()` at startup to skip recompilation when content hasn't changed
 
 ---
 
@@ -227,7 +256,7 @@ export interface WorkflowTransition {
 
 export type GuardType =
   | 'tool.success' | 'tool.error' | 'tool.no_data'
-  | 'user.confirm' | 'user.cancel' | 'user.input'
+  | 'user.confirm' | 'user.cancel'
   | 'always';
 
 export type InstanceStatus =
@@ -235,11 +264,36 @@ export type InstanceStatus =
   | 'completed' | 'escalated' | 'aborted';
 ```
 
+### Nested State Handling
+
+Existing skills like `service-cancel` use nested `state ... { }` blocks (composite states). The compiler **flattens** nested states with prefixed step IDs:
+
+```mermaid
+state StandardCancelFlow {
+  入口 --> 查询已订业务
+  查询已订业务 --> 执行退订
+}
+```
+
+Compiles to flat steps:
+- `standard-cancel-flow.入口`
+- `standard-cancel-flow.查询已订业务`
+- `standard-cancel-flow.执行退订`
+
+Rules:
+- Prefix = parent state name (slugified to kebab-case)
+- Transitions crossing composite boundaries are resolved to the flattened IDs
+- Entry transitions into a composite state (`X --> CompositeState`) are rewritten to target the composite's first internal state
+- The existing `parseStateDiagram` already detects `isNested` — the compiler uses this flag to trigger flattening
+- If a nested state has a `%% step:xxx` annotation, that prefix overrides the auto-generated one
+
 ### Compilation Pipeline
 
 ```
 1. Extract mermaid code block from SKILL.md
 2. Parse lines → raw nodes + raw transitions (reuse parseStateDiagram from validate_statediagram.ts)
+2a. Flatten nested states: prefix internal node IDs with parent name, rewrite cross-boundary transitions
+2b. Propagate transition-line annotations to target nodes (e.g., A --> B %% tool:xxx → node B gets kind:tool, tool:xxx)
 3. Determine step id per node:
    - Has %% step:xxx → use xxx
    - No annotation → use Chinese label as fallback
@@ -422,7 +476,6 @@ function evaluateGuard(guard: GuardType, context: {
 | `tool.no_data` | toolResult.success && !toolResult.hasData |
 | `user.confirm` | userIntent === 'confirm' |
 | `user.cancel` | userIntent === 'cancel' |
-| `user.input` | userMessage is non-empty |
 | `always` | true |
 
 ### Runtime: User Intent Classification (lightweight)
@@ -433,9 +486,11 @@ function classifyUserIntent(text: string): 'confirm' | 'cancel' | 'other' {
   const CANCEL  = /取消|不要|算了|放弃|不用|再说|不办/;
   if (CONFIRM.test(text)) return 'confirm';
   if (CANCEL.test(text)) return 'cancel';
-  return 'other';  // LLM continues dialogue to clarify
+  return 'other';  // LLM continues dialogue to clarify, next turn re-evaluates
 }
 ```
+
+When `classifyUserIntent` returns `other`, the runtime does NOT advance the state. Instead, it calls `runAgent` with the confirm step's context, letting the LLM naturally re-ask the user. The next user message is re-evaluated — this implicit retry loop is the intended behavior for ambiguous responses.
 
 ### Runtime: Per-Turn Flow
 
@@ -498,6 +553,107 @@ Runner changes when `workflowContext` is present:
 1. **Tool filtering**: only inject `allowedTools` + `transfer_to_human` + `get_skill_reference`
 2. **Prompt injection**: append `promptHint` to system prompt tail
 3. **Skip SOPGuard**: runtime handles gating, SOPGuard is bypassed
+4. **maxSteps: 1** when workflow-controlled — runtime drives the outer loop (see below)
+
+### Runtime Loop Architecture (critical design decision)
+
+The current `runAgent` uses `generateText({ maxSteps: 10 })`, which lets the LLM chain multiple tool calls autonomously within a single invocation. With the workflow runtime, we need to intercept between steps to update state and recompute allowed tools.
+
+**Approach: runtime-driven outer loop with `maxSteps: 1` per iteration.**
+
+```typescript
+async function runWorkflowTurn(
+  sessionId: string,
+  userMessage: string,
+  history: CoreMessage[],
+  // ...other params
+): Promise<AgentResult> {
+  const instance = findActiveInstance(sessionId);
+  const spec = loadSpec(instance.skillId, instance.skillVersion);
+  let combinedResult: AgentResult;
+
+  while (true) {
+    const step = spec.steps[instance.currentStepId];
+    const actions = computeAllowedActions(spec, instance);
+
+    // For confirm nodes: don't call LLM yet if intent is clear
+    if (step.kind === 'confirm') {
+      const intent = classifyUserIntent(userMessage);
+      if (intent === 'other') {
+        // Ambiguous — let LLM clarify, don't advance
+        combinedResult = await runAgent(userMessage, history, {
+          workflowContext: actions, maxStepsOverride: 1
+        });
+        break;
+      }
+      // Clear intent — advance and continue loop
+      evaluateAndAdvance(instance, spec, { userIntent: intent });
+      continue;
+    }
+
+    // For tool/message/ref nodes: call runAgent with maxSteps:1
+    combinedResult = await runAgent(userMessage, history, {
+      workflowContext: actions, maxStepsOverride: 1
+    });
+
+    // After tool return: evaluate guard and advance
+    if (step.kind === 'tool') {
+      const toolResult = extractToolResult(combinedResult);
+      evaluateAndAdvance(instance, spec, { toolResult });
+    } else if (step.kind === 'message') {
+      advanceStep(instance, step.transitions[0].target);
+    } else if (step.kind === 'ref') {
+      // ref content was injected into context, auto-advance
+      advanceStep(instance, step.transitions[0].target);
+    }
+
+    // Check if next step needs another LLM call or can auto-advance
+    const nextStep = spec.steps[instance.currentStepId];
+    if (nextStep.kind === 'choice') {
+      // Choice nodes auto-evaluate (guard was already set by previous tool/user result)
+      evaluateAndAdvance(instance, spec, lastContext);
+      continue;
+    }
+    if (nextStep.kind === 'end') {
+      finishInstance(instance.id, 'completed');
+      break;
+    }
+    if (nextStep.kind === 'confirm') {
+      suspendForUser(instance.id, 'confirm');
+      break; // Wait for next user message
+    }
+    if (nextStep.kind === 'human') {
+      finishInstance(instance.id, 'escalated');
+      break;
+    }
+    // For consecutive tool/message nodes: continue loop (no user input needed)
+    // Update history with previous result for context continuity
+    history = [...history, ...combinedResult.responseMessages];
+    userMessage = ''; // No new user input for continuation steps
+  }
+
+  return combinedResult;
+}
+```
+
+**Why `maxSteps: 1` instead of hooking `onStepFinish`?**
+- `onStepFinish` runs synchronously within `generateText` — it can log/observe but cannot change `allowedTools` for the next step
+- With `maxSteps: 1`, the runtime loop has full control between each LLM invocation
+- Consecutive query steps (tool → tool) still execute efficiently — the loop continues without waiting for user input
+- The tradeoff is slightly more LLM round-trips, but each round-trip is precisely scoped
+
+### `kind:ref` Handling
+
+When the current step is `kind:ref`, the runtime loads the reference content directly (via `get_skill_reference`) and appends it to the LLM context before calling `runAgent`. The LLM does not call `get_skill_reference` itself — the runtime injects the content into `workflowContext.promptHint`:
+
+```typescript
+if (step.kind === 'ref' && step.ref) {
+  const refContent = getSkillReferenceContent(instance.skillId, step.ref);
+  actions.promptHint += `\n\n---\nReference: ${step.ref}\n${refContent}`;
+}
+```
+
+After injection, the runtime auto-advances to the next step.
 
 ### Fallback Strategy
 
@@ -583,6 +739,7 @@ New: WS event includes `active_step_id`, frontend highlights directly.
 - ExecutionTracePanel (events replay)
 - Agent workspace changes
 - SkillManagerPage test flow changes
+- **Voice channel (`/ws/voice`) integration** — voice uses pre-loaded skill content via `getSkillContentByChannel('voice')` injected into the system prompt at session start, not lazy `get_skill_instructions` calls. Voice channel workflow runtime integration requires a different approach (injecting runtime constraints into the pre-loaded prompt) and is deferred to v2.
 
 ---
 
