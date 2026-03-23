@@ -170,8 +170,14 @@ export function useSkillManager() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showThinking, setShowThinking] = useState(true);
   // AI 助手当前操作的版本号（由页面同步设置，切换版本时重置会话）
-  const [chatVersionNo, setChatVersionNo] = useState<number | null>(null);
+  const [chatVersionNo, _setChatVersionNo] = useState<number | null>(null);
+  const chatVersionRef = useRef<number | null>(null);
   const prevChatVersionRef = useRef<number | null>(null);
+  // 同步更新 state + ref，确保 handleSubmit 闭包中始终用最新值
+  const setChatVersionNo = useCallback((v: number | null) => {
+    chatVersionRef.current = v;
+    _setChatVersionNo(v);
+  }, []);
 
   // 文件树
   const [fileTree, setFileTree] = useState<SkillFileNode[]>([]);
@@ -504,7 +510,7 @@ export function useSkillManager() {
             message: submittedText,
             session_id: sessionId,
             skill_id: isNew ? null : activeSkillId,
-            version_no: isNew ? undefined : chatVersionNo ?? undefined,
+            version_no: isNew ? undefined : chatVersionRef.current ?? undefined,
             enable_thinking: showThinking,
             image: submittedImage ?? undefined,
           }),
@@ -676,6 +682,7 @@ export function useSkillManager() {
 
     setSaveStatus('saving');
     try {
+      const isNew = activeSkillId?.startsWith('new-');
       const res = await fetch('/api/skill-creator/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -684,6 +691,7 @@ export function useSkillManager() {
           skill_name: draft.skill_name,
           skill_md: draft.skill_md,
           references: draft.references,
+          version_no: isNew ? undefined : chatVersionRef.current ?? undefined,
         }),
       });
 
@@ -746,7 +754,8 @@ export function useSkillManager() {
       ]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, sessionId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, sessionId, chatVersionNo, activeSkillId]);
 
   const activeSkill = skills.find((s) => s.id === activeSkillId) ?? null;
   const canSave =

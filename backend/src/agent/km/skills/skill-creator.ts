@@ -499,7 +499,10 @@ skillCreator.post('/chat', async (c) => {
       parameters: z.object({ skill_name: z.string().describe('技能名称（kebab-case）') }),
       execute: async ({ skill_name }) => {
         logger.info('skill-creator', 'tool_call', { tool: 'read_skill', args: { skill_name }, session_id: session.id });
-        const result = readSkillContent(skill_name) ?? `技能 "${skill_name}" 不存在`;
+        // 当读取的是当前编辑的技能且有版本号时，从版本快照读取而非发布版
+        const result = (skill_name === session.skill_id && session.version_no
+          ? readVersionedSkillContent(skill_name, session.version_no)
+          : readSkillContent(skill_name)) ?? `技能 "${skill_name}" 不存在`;
         logger.info('skill-creator', 'tool_result', { tool: 'read_skill', result_len: result.length, session_id: session.id });
         return result;
       },
@@ -787,6 +790,7 @@ skillCreator.post('/save', async (c) => {
     skill_name: string;
     skill_md: string;
     references?: Array<{ filename: string; content: string }>;
+    version_no?: number; // 指定写入的版本号（编辑模式下直接更新该版本，而非创建新版本）
     test_cases?: Array<{
       input: string;
       assertions: Array<{ type: string; value: string }>;
@@ -871,16 +875,25 @@ skillCreator.post('/save', async (c) => {
         writeFileSync(join(refsDir, ref.filename), ref.content, 'utf-8');
       }
     } else {
-      // 已有技能 → 基于最新版本创建新版本，然后写入文件
-      const latestVersion = reg.latest_version ?? 1;
-      const { versionNo, snapshotPath } = await createVersionFrom(
-        body.skill_name, latestVersion, '通过技能创建器编辑', 'skill-creator',
-      );
-      // 覆盖新版本的 SKILL.md 和 references
       const { writeVersionFile } = await import('./version-manager');
-      await writeVersionFile(body.skill_name, versionNo, 'SKILL.md', body.skill_md);
-      for (const ref of refs) {
-        await writeVersionFile(body.skill_name, versionNo, `references/${ref.filename}`, ref.content);
+
+      if (body.version_no) {
+        // 指定了版本号 → 直接更新该版本的文件（不创建新版本）
+        await writeVersionFile(body.skill_name, body.version_no, 'SKILL.md', body.skill_md);
+        for (const ref of refs) {
+          await writeVersionFile(body.skill_name, body.version_no, `references/${ref.filename}`, ref.content);
+        }
+        logger.info('skill-creator', 'save_to_version', { skill: body.skill_name, version_no: body.version_no });
+      } else {
+        // 未指定版本号 → 基于最新版本创建新版本（兼容旧行为）
+        const latestVersion = reg.latest_version ?? 1;
+        const { versionNo } = await createVersionFrom(
+          body.skill_name, latestVersion, '通过技能创建器编辑', 'skill-creator',
+        );
+        await writeVersionFile(body.skill_name, versionNo, 'SKILL.md', body.skill_md);
+        for (const ref of refs) {
+          await writeVersionFile(body.skill_name, versionNo, `references/${ref.filename}`, ref.content);
+        }
       }
     }
 
