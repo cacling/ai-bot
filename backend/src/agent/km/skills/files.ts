@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { resolve, join, relative, extname, basename } from 'node:path';
+import { resolve, join, relative, extname, basename, sep } from 'node:path';
 import { readdir, readFile, writeFile, stat, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { logger } from '../../../services/logger';
@@ -78,7 +78,7 @@ async function scanDir(absPath: string, relPath: string): Promise<FileNode[]> {
 
 function isPathSafe(filePath: string): boolean {
   const resolved = resolve(PROJECT_ROOT, filePath);
-  return ALLOWED_ROOTS.some(root => resolved.startsWith(root + '/') || resolved === root);
+  return ALLOWED_ROOTS.some(root => resolved.startsWith(root + sep) || resolved === root);
 }
 
 // GET /api/files/tree

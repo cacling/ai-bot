@@ -512,44 +512,15 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
   const testMsgIdRef = useRef(0);
   const testEndRef = useRef<HTMLDivElement>(null);
 
-  const handleStartTest = useCallback(async (versionNo: number) => {
+  const handleStartTest = useCallback((versionNo: number) => {
     setTestingVersion(versionNo);
     setTestMessages([]);
     setTestInput('');
+    setTestDiagram(null);
     setDiagramCollapsed(false);
     setRightTab('test');
-
-    // Extract mermaid diagram from current editor content (if viewing SKILL.md)
-    // or fetch from the version's SKILL.md file
-    if (activeSkill) {
-      // Try current editor content first (user may be viewing SKILL.md)
-      const tryExtractFromContent = (content: string) => {
-        const match = content.match(/```mermaid\r?\n([\s\S]*?)```/);
-        if (match) {
-          setTestDiagram({ skill_name: activeSkill.id, mermaid: match[1].trim() });
-          return true;
-        }
-        return false;
-      };
-
-      if (selectedFile?.name === 'SKILL.md' && editorContent) {
-        tryExtractFromContent(editorContent);
-      } else {
-        // Fetch SKILL.md from version snapshot
-        try {
-          const versionDetail = versions.find(v => v.version_no === versionNo);
-          const skillMdPath = versionDetail?.snapshot_path
-            ? `backend/skills/${versionDetail.snapshot_path}/SKILL.md`
-            : `backend/skills/biz-skills/${activeSkill.id}/SKILL.md`;
-          const res = await fetch(`/api/files/content?path=${encodeURIComponent(skillMdPath)}`);
-          if (res.ok) {
-            const data = await res.json();
-            tryExtractFromContent(data.content ?? '');
-          }
-        } catch { /* ignore */ }
-      }
-    }
-  }, [activeSkill, versions, selectedFile, editorContent]);
+    // 流程图不在此处提取，等测试消息返回时由后端 skill_diagram 字段驱动展示
+  }, []);
 
   const handleSendTest = useCallback(async () => {
     if (!activeSkill || testingVersion === null || !testInput.trim()) return;
@@ -571,7 +542,9 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
       });
       const data = await res.json();
       setTestMessages(prev => [...prev, { id: ++testMsgIdRef.current, role: 'assistant', text: data.text ?? data.error ?? '无返回' }]);
-      if (data.skill_diagram) { setTestDiagram(data.skill_diagram); setDiagramCollapsed(false); }
+      if (data.skill_diagram) {
+        setTestDiagram(data.skill_diagram);
+      }
     } catch (e) {
       setTestMessages(prev => [...prev, { id: ++testMsgIdRef.current, role: 'assistant', text: `测试失败: ${e}` }]);
     }
@@ -1152,16 +1125,22 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
           </div>
         )}
 
-        {/* ── 底部流程图卡片（测试进行中时展开） ── */}
-        {testDiagram && (
+        {/* ── 底部流程图卡片（测试中始终保留，固定高度避免跳动） ── */}
+        {testingVersion !== null && (
           <div className="border-t border-border shrink-0">
             <Button variant="ghost" size="sm" onClick={() => setDiagramCollapsed(prev => !prev)} className="w-full justify-start rounded-none text-xs">
               {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-              <GitBranch size={12} /> 流程图 — {testDiagram.skill_name}
+              <GitBranch size={12} /> 流程图{testDiagram ? ` — ${testDiagram.skill_name}` : ''}
             </Button>
             {!diagramCollapsed && (
-              <div className="px-3 pb-3 max-h-[35vh] overflow-auto">
-                <MermaidRenderer mermaid={testDiagram.mermaid} height="30vh" zoom={true} autoFocus={true} emptyText="暂无流程图" />
+              <div className="px-3 pb-3 h-[30vh] overflow-auto">
+                {testDiagram ? (
+                  <MermaidRenderer mermaid={testDiagram.mermaid} height="28vh" zoom={true} autoFocus={true} emptyText="暂无流程图" />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                    发送测试消息后展示流程图
+                  </div>
+                )}
               </div>
             )}
           </div>

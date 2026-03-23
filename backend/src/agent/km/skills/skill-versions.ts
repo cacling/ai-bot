@@ -137,12 +137,12 @@ app.post('/test', async (c) => {
   const { SOP_ENFORCEMENT_SUFFIX } = await import('../../../engine/skills');
 
   try {
-    // Create a virtual skills dir structure: tempParent/{skillId}/ -> snapshot
-    const { mkdtempSync, symlinkSync, rmSync } = await import('node:fs');
+    // Create a virtual skills dir structure: tempParent/{skillId}/ -> snapshot (copy)
+    const { mkdtempSync, cpSync, rmSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const tempParent = mkdtempSync(join(tmpdir(), 'skill-test-'));
     try {
-      symlinkSync(snapshotAbsPath, join(tempParent, body.skill));
+      cpSync(snapshotAbsPath, join(tempParent, body.skill), { recursive: true });
       const history = (body.history ?? []).map(m => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,

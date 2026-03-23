@@ -11,7 +11,7 @@
  */
 
 import { Hono } from 'hono';
-import { resolve, join, dirname } from 'node:path';
+import { resolve, join, dirname, basename } from 'node:path';
 import { readFile, writeFile, mkdir, rm, cp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { type CoreMessage } from 'ai';
@@ -58,7 +58,7 @@ sandbox.post('/create', async (c) => {
 
   // 复制整个 Skill 目录到沙箱（如 bill-inquiry/ 包含 SKILL.md + references/）
   const skillDir = dirname(absSource);
-  const sandboxSkillDir = resolve(sandboxDir, 'biz-skills', dirname(skillPath).split('/').pop()!);
+  const sandboxSkillDir = resolve(sandboxDir, 'biz-skills', basename(dirname(skillPath)));
 
   await mkdir(dirname(sandboxSkillDir), { recursive: true });
   await cp(skillDir, sandboxSkillDir, { recursive: true });
@@ -82,7 +82,7 @@ sandbox.get('/:id/content', async (c) => {
   if (!info) return c.json({ error: '沙箱不存在' }, 404);
 
   const fileName = c.req.query('file') ?? 'SKILL.md';
-  const skillDirName = dirname(info.skillPath).split('/').pop()!;
+  const skillDirName = basename(dirname(info.skillPath));
   const absPath = resolve(info.sandboxDir, 'biz-skills', skillDirName, fileName);
 
   try {
@@ -103,7 +103,7 @@ sandbox.put('/:id/content', async (c) => {
   if (body.content === undefined) return c.json({ error: 'content 不能为空' }, 400);
 
   const fileName = body.file ?? 'SKILL.md';
-  const skillDirName = dirname(info.skillPath).split('/').pop()!;
+  const skillDirName = basename(dirname(info.skillPath));
   const absPath = resolve(info.sandboxDir, 'biz-skills', skillDirName, fileName);
 
   await writeFile(absPath, body.content, 'utf-8');
@@ -150,7 +150,7 @@ sandbox.post('/:id/validate', async (c) => {
   const info = sandboxes.get(id);
   if (!info) return c.json({ error: '沙箱不存在' }, 404);
 
-  const skillDirName = dirname(info.skillPath).split('/').pop()!;
+  const skillDirName = basename(dirname(info.skillPath));
   const skillMdPath = resolve(info.sandboxDir, 'biz-skills', skillDirName, 'SKILL.md');
   const issues: string[] = [];
 
@@ -210,7 +210,7 @@ sandbox.post('/:id/publish', requireRole('flow_manager'), async (c) => {
   const info = sandboxes.get(id);
   if (!info) return c.json({ error: '沙箱不存在' }, 404);
 
-  const skillDirName = dirname(info.skillPath).split('/').pop()!;
+  const skillDirName = basename(dirname(info.skillPath));
   const sandboxMdPath = resolve(info.sandboxDir, 'biz-skills', skillDirName, 'SKILL.md');
 
   try {
@@ -357,7 +357,7 @@ sandbox.post('/:id/regression', async (c) => {
   const info = sandboxes.get(id);
   if (!info) return c.json({ error: '沙箱不存在' }, 404);
 
-  const skillDirName = dirname(info.skillPath).split('/').pop()!;
+  const skillDirName = basename(dirname(info.skillPath));
   const skillsDir = resolve(info.sandboxDir, 'biz-skills');
 
   // 可配置参数
