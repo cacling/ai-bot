@@ -693,10 +693,29 @@ export async function runAgent(
     // that text is lost from result.text. Fall back to the last non-empty step text.
     // For transfer_to_human, the model-generated farewell text is often lost; use a default.
     const transferDefault = t('transfer_default', lang);
-    const text =
+    let text =
       result.text ||
       [...(result.steps ?? [])].reverse().find((s) => s.text)?.text ||
       (transferRequested ? transferDefault : '');
+
+    // ── 防御：LLM 将工具调用格式泄露到文本输出 ──
+    // 部分模型（如 qwen）在长对话后可能退化，不走 function calling 协议，
+    // 而是把 <tool_call> JSON 作为普通文本输出。用户会看到原始 JSON，体验极差。
+    // 检测到此类输出时：清理掉原始标签，提示用户重试。
+    if (text.includes('<tool_call>') || text.includes('</tool_call')) {
+      logger.warn('agent', 'tool_call_leaked_as_text', {
+        text_preview: text.slice(0, 200),
+        history_len: history.length,
+        steps: result.steps?.length ?? 0,
+      });
+      text = text
+        .replace(/<tool_call>\s*[\s\S]*?<\/tool_call>?/g, '')
+        .replace(/<tool_call>[\s\S]*/g, '')
+        .trim();
+      if (!text) {
+        text = '系统处理遇到异常，请重新发送您的请求。';
+      }
+    }
 
     // ── 流程进度追踪 ──
     if (lastActiveSkill && text) {
