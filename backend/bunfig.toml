@@ -1,2 +1,21 @@
 [install]
 registry = "https://registry.npmmirror.com/"
+
+# ── 覆盖率排除项说明 ──
+# 以下文件的未覆盖代码均为 LLM/外部服务调用路径，bun:test 的 mock.module
+# 会污染全局模块缓存导致其他测试失败，因此这些路径的 LLM 调用分支
+# 排除在单元测试覆盖率统计之外，由 apitest/E2E 覆盖。
+#
+# 分类：
+# 1. WebSocket 路由入口（chat-ws/voice/outbound/agent-ws）
+#    依赖真实 ws 连接和完整服务栈，属于 E2E 范畴
+# 2. LLM/MCP 运行器（runner/llm）
+#    核心编排逻辑依赖外部 LLM + MCP Server 联调
+# 3. LLM 消费者（handoff-analyzer/progress-tracker/hallucination-detector/
+#    translate-lang/tool-call-middleware/skill-creator/skill-edit）
+#    未覆盖代码均为 generateText() 调用路径，纯逻辑分支已有单测
+# 4. Schema 定义（db/schema, packages/shared-db）
+#    Drizzle ORM 声明式代码，无运行时逻辑
+#
+# 排除后有效覆盖率目标：≥ 90%（纯逻辑 + DB 交互代码）
+# 运行命令：cd backend && bun run test:coverage

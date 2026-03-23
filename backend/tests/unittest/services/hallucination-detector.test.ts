@@ -1,32 +1,33 @@
 /**
- * hallucination-detector.test.ts — 幻觉检测测试
+ * hallucination-detector.test.ts — Pure logic branch tests only.
  *
- * 仅测试纯逻辑分支（空输入/无工具结果），不调用 LLM。
+ * LLM-dependent paths are excluded (they require external service).
+ * Only the early-return branches (empty input) are tested.
  */
 
 import { describe, test, expect } from 'bun:test';
-import { detectHallucination, type HallucinationResult } from '../../../src/services/hallucination-detector';
+import { detectHallucination } from '../../../src/services/hallucination-detector';
 
-describe('detectHallucination — 纯逻辑分支', () => {
-  test('空回复返回无幻觉', async () => {
+describe('detectHallucination — empty input branches', () => {
+  test('empty reply returns no hallucination', async () => {
     const result = await detectHallucination('', [{ tool: 'query_bill', result: '{"total":100}' }]);
     expect(result.has_hallucination).toBe(false);
     expect(result.evidence).toBe('');
   });
 
-  test('空白回复返回无幻觉', async () => {
+  test('whitespace-only reply returns no hallucination', async () => {
     const result = await detectHallucination('   ', [{ tool: 'query_bill', result: '{"total":100}' }]);
     expect(result.has_hallucination).toBe(false);
     expect(result.evidence).toBe('');
   });
 
-  test('无工具结果返回无幻觉', async () => {
-    const result = await detectHallucination('您好，请问有什么可以帮您？', []);
+  test('empty tool results returns no hallucination', async () => {
+    const result = await detectHallucination('Your bill is 100 yuan.', []);
     expect(result.has_hallucination).toBe(false);
     expect(result.evidence).toBe('');
   });
 
-  test('返回的类型符合 HallucinationResult 接口', async () => {
+  test('result conforms to HallucinationResult interface', async () => {
     const result = await detectHallucination('', []);
     expect(typeof result.has_hallucination).toBe('boolean');
     expect(typeof result.evidence).toBe('string');

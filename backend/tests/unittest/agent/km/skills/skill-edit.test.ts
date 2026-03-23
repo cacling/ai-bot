@@ -1,9 +1,13 @@
 /**
  * skill-edit.test.ts — Tests for NL skill editing routes (validation paths)
  */
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, afterAll } from 'bun:test';
 import { Hono } from 'hono';
+import { resolve } from 'node:path';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import skillEdit from '../../../../../src/agent/km/skills/skill-edit';
+import { REPO_ROOT } from '../../../../../src/services/paths';
 
 const app = new Hono();
 app.route('/skill-edit', skillEdit);
@@ -73,6 +77,66 @@ describe('skill-edit — POST /apply validation', () => {
       new_fragment: 'new text',
     });
     expect(status).toBe(404);
+  });
+});
+
+// Temp file for apply tests
+const TEMP_DIR = resolve(REPO_ROOT, '_test_skill_edit_tmp');
+const TEMP_FILE_REL = '_test_skill_edit_tmp/test-skill.md';
+const TEMP_FILE_ABS = resolve(REPO_ROOT, TEMP_FILE_REL);
+
+afterAll(async () => {
+  await rm(TEMP_DIR, { recursive: true, force: true });
+});
+
+describe('skill-edit — POST /apply with real file', () => {
+  test('successful apply replaces old_fragment with new_fragment', async () => {
+    await mkdir(TEMP_DIR, { recursive: true });
+    await writeFile(TEMP_FILE_ABS, '# Test Skill\nOld wording here\nFooter line', 'utf-8');
+
+    const { status, data } = await req('POST', '/skill-edit/apply', {
+      skill_path: TEMP_FILE_REL,
+      old_fragment: 'Old wording here',
+      new_fragment: 'New wording here',
+    });
+    expect(status).toBe(200);
+    expect(data.ok).toBe(true);
+
+    // Verify file was actually modified
+    const content = readFileSync(TEMP_FILE_ABS, 'utf-8');
+    expect(content).toContain('New wording here');
+    expect(content).not.toContain('Old wording here');
+    expect(content).toContain('Footer line');
+  });
+
+  test('old_fragment mismatch returns 409', async () => {
+    await mkdir(TEMP_DIR, { recursive: true });
+    await writeFile(TEMP_FILE_ABS, '# Test Skill\nCurrent content', 'utf-8');
+
+    const { status, data } = await req('POST', '/skill-edit/apply', {
+      skill_path: TEMP_FILE_REL,
+      old_fragment: 'This text does not exist in file',
+      new_fragment: 'replacement',
+    });
+    expect(status).toBe(409);
+    expect((data.error as string)).toContain('不匹配');
+  });
+
+  test('apply with empty new_fragment effectively deletes old_fragment', async () => {
+    await mkdir(TEMP_DIR, { recursive: true });
+    await writeFile(TEMP_FILE_ABS, '# Test\nRemove this line\nKeep this', 'utf-8');
+
+    const { status, data } = await req('POST', '/skill-edit/apply', {
+      skill_path: TEMP_FILE_REL,
+      old_fragment: 'Remove this line\n',
+      new_fragment: '',
+    });
+    expect(status).toBe(200);
+    expect(data.ok).toBe(true);
+
+    const content = readFileSync(TEMP_FILE_ABS, 'utf-8');
+    expect(content).not.toContain('Remove this line');
+    expect(content).toContain('Keep this');
   });
 });
 

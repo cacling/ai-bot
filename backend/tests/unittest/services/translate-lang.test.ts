@@ -1,23 +1,23 @@
 /**
- * translate-lang.test.ts — 翻译模块测试
+ * translate-lang.test.ts — Pure logic branch tests only.
  *
- * 仅测试不调用 LLM 的纯逻辑分支（中文源语言直接返回）。
+ * LLM-dependent paths (translateText, translateMermaid with en) are excluded.
+ * Only the synchronous early-return branch is tested.
  */
 
 import { describe, test, expect } from 'bun:test';
 import { translateMermaid } from '../../../src/services/translate-lang';
 
-describe('translateMermaid — 中文直接返回', () => {
-  test('目标语言为 zh 时直接返回原文', async () => {
-    const mermaid = `stateDiagram-v2
-    [*] --> 接入
-    接入 --> 查询账户`;
+describe('translateMermaid', () => {
+  test('returns original mermaid for targetLang zh (no LLM call)', async () => {
+    const mermaid = `stateDiagram-v2\n  [*] --> 接入`;
     const result = await translateMermaid(mermaid, 'zh');
     expect(result).toBe(mermaid);
   });
 
-  test('目标语言为 zh 时空字符串也直接返回', async () => {
-    const result = await translateMermaid('', 'zh');
-    expect(result).toBe('');
+  test('returns original for zh regardless of content', async () => {
+    const mermaid = `flowchart TD\n  A --> B`;
+    const result = await translateMermaid(mermaid, 'zh');
+    expect(result).toBe(mermaid);
   });
 });

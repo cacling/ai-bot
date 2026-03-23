@@ -48,6 +48,15 @@ function loadAllMockRules(): MockRule[] {
  * Try to match a mock rule for the given tool and args.
  * Returns the mock response text if matched, or null if no match.
  */
+/**
+ * 尝试为给定工具和参数匹配一条 mock 规则。
+ *
+ * 匹配优先级：
+ *   1. 具体表达式匹配（match 字段为 JS 表达式，如 `phone === '138...'`）
+ *   2. 通配符匹配（match 为空或 '*'，作为默认 fallback）
+ *
+ * @returns mock 响应文本（JSON string），无匹配时返回 null
+ */
 export function matchMockRule(
   toolName: string,
   args: Record<string, unknown>,
@@ -59,15 +68,17 @@ export function matchMockRule(
   let matched: MockRule | undefined;
 
   for (const rule of toolRules) {
+    // 通配符规则（空 match 或 '*'）作为 fallback，不覆盖更具体的匹配
     if (!rule.match || rule.match.trim() === '' || rule.match.trim() === '*') {
       if (!matched) matched = rule;
       continue;
     }
+    // 具体表达式匹配：将 args 的 key 作为函数参数，match 作为函数体
     try {
       const fn = new Function(...Object.keys(args), `return (${rule.match})`);
       if (fn(...Object.values(args))) {
         matched = rule;
-        break;
+        break; // 具体匹配优先，立即返回
       }
     } catch { /* invalid expression, skip */ }
   }
@@ -83,7 +94,10 @@ export function matchMockRule(
   return typeof response === 'string' ? response : JSON.stringify(response);
 }
 
-/** Get set of tool names that should use mock instead of real call */
+/**
+ * 获取所有标记为 mock 模式的工具名称集合。
+ * 优先从 mcp_tools 表读取（tool.mocked=true），回退到 mcp_servers.mocked_tools。
+ */
 export function getMockedToolNames(): Set<string> {
   const names = new Set<string>();
 
@@ -148,7 +162,10 @@ export function getMockedToolDefinitions(): Array<{ name: string; description: s
   return result;
 }
 
-/** Get all known tool names (from mcp_tools + built-in) */
+/**
+ * 获取所有已注册的工具名称（mcp_tools 表 + 内建工具）。
+ * 内建工具：get_skill_instructions, get_skill_reference, transfer_to_human
+ */
 export function getRegisteredToolNames(): Set<string> {
   const names = new Set<string>();
 

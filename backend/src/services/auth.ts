@@ -40,7 +40,7 @@ export function requireRole(minRole: UserRole) {
   return async (c: Context, next: Next) => {
     const userId = c.req.header('X-User-Id');
 
-    // 开发模式：无认证头时放行
+    // 开发模式：无认证头时放行（方便本地调试，生产环境必须提供认证）
     if (!userId) {
       if (process.env.NODE_ENV !== 'production') {
         await next();
@@ -49,7 +49,7 @@ export function requireRole(minRole: UserRole) {
       return c.json({ error: '需要提供 X-User-Id 请求头' }, 401);
     }
 
-    // 查询用户
+    // 从 DB 查询用户角色
     const rows = await db
       .select({ role: users.role })
       .from(users)

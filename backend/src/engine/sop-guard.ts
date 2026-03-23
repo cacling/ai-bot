@@ -210,7 +210,7 @@ export class SOPGuard {
   private calledTools = new Set<string>();
   private violations = 0;  // 连续违规次数
 
-  /** 记录一个工具已被成功调用 */
+  /** 记录一个工具已被成功调用（用于后续 check 判断前置条件是否满足） */
   recordToolCall(toolName: string): void {
     this.calledTools.add(toolName);
   }
