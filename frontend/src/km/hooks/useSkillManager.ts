@@ -169,6 +169,9 @@ export function useSkillManager() {
   const [phase, setPhase] = useState<Phase>('capture');
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showThinking, setShowThinking] = useState(true);
+  // AI 助手当前操作的版本号（由页面同步设置，切换版本时重置会话）
+  const [chatVersionNo, setChatVersionNo] = useState<number | null>(null);
+  const prevChatVersionRef = useRef<number | null>(null);
 
   // 文件树
   const [fileTree, setFileTree] = useState<SkillFileNode[]>([]);
@@ -212,6 +215,21 @@ export function useSkillManager() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  // ── 切换版本时重置 AI 助手会话 ─────────────────────────────────────────────
+  useEffect(() => {
+    if (chatVersionNo === prevChatVersionRef.current) return;
+    prevChatVersionRef.current = chatVersionNo;
+    // 版本切换 → 清空 AI 助手会话，避免跨版本对话混淆
+    if (chatVersionNo !== null && activeSkillId && !activeSkillId.startsWith('new-')) {
+      const skill = skills.find(s => s.id === activeSkillId);
+      setMessages(skill ? [makeExistingSkillMsg(skill)] : []);
+      setSessionId(null);
+      setPhase('interview');
+      setDraft(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatVersionNo]);
 
   // ── 加载文件树（activeSkillId 变化时触发）────────────────────────────────────
   useEffect(() => {
@@ -486,6 +504,7 @@ export function useSkillManager() {
             message: submittedText,
             session_id: sessionId,
             skill_id: isNew ? null : activeSkillId,
+            version_no: isNew ? undefined : chatVersionNo ?? undefined,
             enable_thinking: showThinking,
             image: submittedImage ?? undefined,
           }),
@@ -648,7 +667,7 @@ export function useSkillManager() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [inputValue, isTyping, activeSkillId, sessionId, showThinking, pendingImage]
+    [inputValue, isTyping, activeSkillId, sessionId, showThinking, pendingImage, chatVersionNo]
   );
 
   // ── 发布新技能（将 draft 写入磁盘）─────────────────────────────────────────
@@ -756,6 +775,7 @@ export function useSkillManager() {
     pendingImage, setPendingImage,
     // skill-creator 状态
     phase, draft, canPublish, publishSkill,
+    chatVersionNo, setChatVersionNo,
     // thinking 模式
     showThinking, setShowThinking,
     // 导航

@@ -307,6 +307,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
     phase,
     canPublish,
     publishSkill,
+    chatVersionNo, setChatVersionNo,
     // thinking 模式
     showThinking,
     setShowThinking,
@@ -412,6 +413,10 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
     setTestDiagram(null);
     setRightTab('chat');
   }, [activeSkill, reloadVersions]);
+
+  // 同步 AI 助手操作的版本号
+  const effectiveVersionNo = viewingVersion ?? versions.find(v => v.status === 'published')?.version_no ?? null;
+  useEffect(() => { setChatVersionNo(effectiveVersionNo); }, [effectiveVersionNo, setChatVersionNo]);
 
   // Derive pipeline stage from selected version's status
   const selectedVersion = viewingVersion !== null
@@ -1166,7 +1171,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
             }`}
           >
             <Sparkles className="w-3 h-3" />
-            AI 助手
+            AI 助手{selectedVersion && !isNewSkill ? ` v${selectedVersion.version_no}` : ''}
           </Button>
           <Button
             variant="ghost"

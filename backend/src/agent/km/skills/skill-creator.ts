@@ -24,7 +24,7 @@ import { refreshSkillsCache, syncSkillMetadata } from '../../../engine/skills';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR } from '../../../services/paths';
+import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR, SKILLS_ROOT } from '../../../services/paths';
 import { db } from '../../../db';
 import { testCases } from '../../../db/schema';
 import { getToolsOverview, getToolDetail } from '../mcp/tools-overview';
@@ -34,6 +34,7 @@ import { getToolsOverview, getToolDetail } from '../mcp/tools-overview';
 interface Session {
   id: string;
   skill_id: string | null; // null = 新建
+  version_no: number | null; // 编辑模式下操作的版本号
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
   phase: Phase;
   draft: Draft | null;
@@ -123,6 +124,12 @@ function readSkillContent(skillName: string): string | null {
   try { return readFileSync(mdPath, 'utf-8'); } catch { return null; }
 }
 
+/** 读取指定版本的 SKILL.md（从 .versions/ 快照目录） */
+function readVersionedSkillContent(skillName: string, versionNo: number): string | null {
+  const mdPath = join(SKILLS_ROOT, '.versions', skillName, `v${versionNo}`, 'SKILL.md');
+  try { return readFileSync(mdPath, 'utf-8'); } catch { return null; }
+}
+
 function listSkillReferences(skillName: string): string[] {
   const refDir = join(SKILLS_DIR, skillName, 'references');
   try { return readdirSync(refDir).filter(f => f.endsWith('.md')); } catch { return []; }
@@ -200,11 +207,19 @@ function buildSystemPrompt(session: Session, skillIndex: Array<{ name: string; d
   const prompt = loadSkillPrompt();
 
   // 1. 运行时上下文（JSON）
+  // 编辑模式下，优先从指定版本快照读取 SKILL.md；无版本号时回退到主目录
+  const existingSkill = session.skill_id
+    ? (session.version_no
+        ? readVersionedSkillContent(session.skill_id, session.version_no)
+        : readSkillContent(session.skill_id))
+    : null;
+
   const context = JSON.stringify({
     mode: session.skill_id ? 'edit' : 'create',
     phase: session.phase,
     skill_id: session.skill_id,
-    existing_skill: session.skill_id ? readSkillContent(session.skill_id) : null,
+    version_no: session.version_no,
+    existing_skill: existingSkill,
     existing_refs: session.skill_id ? listSkillReferences(session.skill_id) : [],
   }, null, 2);
 
@@ -403,6 +418,7 @@ skillCreator.post('/chat', async (c) => {
     message: string;
     session_id?: string;
     skill_id?: string | null;
+    version_no?: number; // 指定操作的版本号（编辑模式下从版本快照读取 SKILL.md）
     enable_thinking?: boolean;
     image?: string; // base64 编码的图片数据（data:image/xxx;base64,...）
   }>();
@@ -410,6 +426,7 @@ skillCreator.post('/chat', async (c) => {
   logger.info('skill-creator', 'chat_request_start', {
     session_id: body.session_id ?? '(new)',
     skill_id: body.skill_id ?? null,
+    version_no: body.version_no ?? null,
     enable_thinking: !!body.enable_thinking,
     has_image: !!body.image,
     message_preview: (body.message ?? '').slice(0, 80),
@@ -453,6 +470,7 @@ skillCreator.post('/chat', async (c) => {
     session = {
       id,
       skill_id: body.skill_id ?? null,
+      version_no: body.version_no ?? null,
       history: [],
       phase: 'interview',
       draft: null,
