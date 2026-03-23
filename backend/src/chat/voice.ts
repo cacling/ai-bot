@@ -24,7 +24,7 @@ import { getMockedToolNames, matchMockRule } from '../services/mock-engine';
 import { mcpTools as mcpToolsTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
-import { getSkillContentByChannel } from '../engine/skills';
+import { getSkillsDescriptionByChannel, getSkillContent } from '../engine/skills';
 import { preprocessToolCall, postprocessToolResult, inferSkillName } from '../services/tool-call-middleware';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
@@ -78,14 +78,14 @@ function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberNam
       : (gender === 'male' ? '先生' : gender === 'female' ? '女士' : '');
     displayName = lang === 'en' ? `${title}${subscriberName}` : `${subscriberName}${title}`;
   }
-  // 注入完整技能内容（含状态图 SOP），而非仅描述，确保新增技能自动生效
-  const skillContent = getSkillContentByChannel('voice');
+  // 只注入技能描述（精简），完整 SOP 通过 get_skill_instructions 按需加载
+  const voiceSkills = getSkillsDescriptionByChannel('voice');
   const base = VOICE_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
     .replace('{{SUBSCRIBER_NAME}}', displayName)
     .replace('{{PLAN_NAME}}', planName ?? defaultPlan)
     .replace('{{CURRENT_DATE}}', today)
-    .replace('{{SKILL_CONTENT}}', skillContent || '（暂无可用技能）');
+    .replace('{{SKILL_CONTENT}}', voiceSkills || '（暂无可用技能）');
   return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 
@@ -121,8 +121,20 @@ function buildVoiceTools(): Array<Record<string, unknown>> {
   const tools: Array<Record<string, unknown>> = [];
   const allTools = getToolsOverview();
 
+  // get_skill_instructions：语音渠道也按需加载技能 SOP，与在线客服架构统一
+  tools.push({
+    type: 'function',
+    name: 'get_skill_instructions',
+    description: '加载指定技能的完整操作指南（含状态图 SOP）。收到用户问题后，必须先调用此工具加载对应技能，再按 SOP 逐步执行。',
+    parameters: {
+      type: 'object',
+      properties: { skill_name: { type: 'string', description: '技能名称（kebab-case）' } },
+      required: ['skill_name'],
+    },
+  });
+
   for (const t of allTools) {
-    if (t.source_type === 'builtin') continue; // 内建工具（get_skill_instructions 等）不暴露给语音
+    if (t.source_type === 'builtin') continue; // 其他内建工具不暴露给语音
     if (t.status !== 'available') continue; // 只用 available 的工具
 
     const schema = (() => {
@@ -441,6 +453,32 @@ voice.get(
                 }
 
                 doTriggerHandoff(ws, reason, toolArgs);
+                return;
+              }
+
+              // ── get_skill_instructions：按需加载技能 SOP ───────────────────
+              if (toolName === 'get_skill_instructions') {
+                const skillName = (toolArgs.skill_name ?? '') as string;
+                const content = getSkillContent(skillName) ?? getSkillContent(skillName.replace(/_/g, '-')) ?? `技能 "${skillName}" 不存在`;
+                activeSkillName = skillName.replace(/_/g, '-');
+                logger.info('voice', 'skill_loaded', { session: sessionId, skill: activeSkillName, content_len: content.length });
+
+                // 推送状态图给坐席端
+                await sendSkillDiagram(ws, userPhone, activeSkillName, null, lang, sessionId, 'voice');
+
+                // 将技能内容返回给 GLM，让它按 SOP 执行
+                glmWs!.send(JSON.stringify({
+                  event_id: crypto.randomUUID(),
+                  client_timestamp: Date.now(),
+                  type: 'conversation.item.create',
+                  item: { type: 'function_call_output', call_id: msg.call_id, output: content },
+                }));
+                glmWs!.send(JSON.stringify({
+                  event_id: crypto.randomUUID(),
+                  client_timestamp: Date.now(),
+                  type: 'response.create',
+                }));
+                state.toolProcessing = false;
                 return;
               }
 
