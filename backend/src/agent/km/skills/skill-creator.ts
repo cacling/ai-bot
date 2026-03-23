@@ -28,6 +28,8 @@ import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR, SKILLS_ROOT } from '../.
 import { db } from '../../../db';
 import { testCases } from '../../../db/schema';
 import { getToolsOverview, getToolDetail } from '../mcp/tools-overview';
+import { runValidation } from '../../../../skills/tech-skills/skill-creator-spec/scripts/run_validation.ts';
+import type { ValidationResult } from '../../../../skills/tech-skills/skill-creator-spec/scripts/types.ts';
 
 // ── 类型定义 ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,7 @@ interface Draft {
   skill_name: string;
   skill_md: string;
   references: Array<{ filename: string; content: string }>;
+  assets: Array<{ filename: string; content: string }>;
   description: string;
   test_cases?: Array<{
     input: string;
@@ -74,10 +77,15 @@ const referenceSchema = z.object({
   filename: z.string().regex(REFERENCE_FILE_RE),
   content: z.string().min(1),
 });
+const assetSchema = z.object({
+  filename: z.string().regex(REFERENCE_FILE_RE),
+  content: z.string().min(1),
+});
 const llmDraftSchema = z.object({
   skill_name: z.string().regex(SKILL_NAME_RE),
   skill_md: z.string().min(1),
   references: z.array(referenceSchema).default([]),
+  assets: z.array(assetSchema).default([]),
   description: z.string().min(1),
   test_cases: z.array(testCaseSchema).optional().transform(arr => arr?.slice(0, 5)),
 });
@@ -197,8 +205,26 @@ function loadSkillPrompt(): string {
   return raw.replace(/^---[\s\S]*?---\s*/, '');
 }
 
-function loadBizSkillSpec(): string {
-  return readCached(join(SPEC_SKILL_DIR, 'references', 'biz-skill-spec.md'));
+/** 按阶段加载编写规范（减少 token 消耗，提升注意力集中度） */
+function loadBizSkillSpec(phase: Phase): string {
+  const refsDir = join(SPEC_SKILL_DIR, 'references');
+  switch (phase) {
+    case 'interview':
+      // 访谈阶段只需概览（目录结构、章节顺序、frontmatter）
+      return readCached(join(refsDir, 'spec-overview.md'));
+    case 'draft':
+      // 生成阶段需要完整编写规范 + 示例
+      return [
+        readCached(join(refsDir, 'spec-overview.md')),
+        readCached(join(refsDir, 'spec-writing.md')),
+        readCached(join(refsDir, 'spec-example.md')),
+      ].filter(Boolean).join('\n\n---\n\n');
+    case 'confirm':
+      // 确认阶段只需检查清单
+      return readCached(join(refsDir, 'spec-checklist.md'));
+    case 'done':
+      return '';
+  }
 }
 
 // ── System Prompt 组装（仅注入 3 个动态变量）──────────────────────────────────
@@ -223,19 +249,32 @@ function buildSystemPrompt(session: Session, skillIndex: Array<{ name: string; d
     existing_refs: session.skill_id ? listSkillReferences(session.skill_id) : [],
   }, null, 2);
 
-  // 2. 编写规范
-  const spec = loadBizSkillSpec() || '（规范文件未找到，请按通用 Markdown 技能格式生成）';
+  // 2. 编写规范（按阶段按需加载）
+  const spec = loadBizSkillSpec(session.phase) || '（规范文件未找到，请按通用 Markdown 技能格式生成）';
 
   // 3. 已有技能列表
   const skillIndexText = skillIndex.length
     ? skillIndex.map(s => `- **${s.name}**: ${s.description}`).join('\n')
     : '（暂无已有技能）';
 
-  // 替换 3 个占位符
+  // 4. 能力落地检查详细步骤（interview 阶段注入，其他阶段省略）
+  const refsDir = join(SPEC_SKILL_DIR, 'references');
+  const capabilityCheck = session.phase === 'interview'
+    ? readCached(join(refsDir, 'interview-capability-check.md'))
+    : '';
+
+  // 5. Few-shot 示例（interview + draft 阶段注入）
+  const fewShot = (session.phase === 'interview' || session.phase === 'draft')
+    ? readCached(join(refsDir, 'few-shot-examples.md'))
+    : '';
+
+  // 替换 5 个占位符
   return prompt
     .replace('{{CONTEXT}}', context)
     .replace('{{SPEC}}', spec)
-    .replace('{{SKILL_INDEX}}', skillIndexText);
+    .replace('{{SKILL_INDEX}}', skillIndexText)
+    .replace('{{CAPABILITY_CHECK}}', capabilityCheck)
+    .replace('{{FEW_SHOT}}', fewShot);
 }
 
 function stripJsonFences(text: string): string {
@@ -277,6 +316,10 @@ function normalizeDraft(draft: z.infer<typeof llmDraftSchema>): Draft {
     references: dedupeReferences(draft.references.map(ref => ({
       filename: ref.filename,
       content: ref.content,
+    }))),
+    assets: dedupeReferences(draft.assets.map(a => ({
+      filename: a.filename,
+      content: a.content,
     }))),
     test_cases: draft.test_cases?.map(tc => ({
       input: tc.input,
@@ -362,6 +405,18 @@ function parseSkillCreatorResponse(rawText: string, session: Session): { reply: 
     phase,
     draft,
   };
+}
+
+// ── Draft 自动校验 ──────────────────────────────────────────────────────────
+
+function validateDraft(draft: Draft): ValidationResult {
+  return runValidation({
+    skill_name: draft.skill_name,
+    skill_md: draft.skill_md,
+    references: draft.references.map(r => ({ filename: r.filename })),
+    assets: draft.assets.map(a => ({ filename: a.filename })),
+    registered_tools: getToolsOverview().map(t => t.name),
+  });
 }
 
 // ── 图片解析（调用视觉模型）─────────────────────────────────────────────────
@@ -687,6 +742,31 @@ skillCreator.post('/chat', async (c) => {
             if (parsed.draft) session.draft = parsed.draft;
             session.history.push({ role: 'assistant', content: parsed.reply });
 
+            // ── Draft 自动校验 ──
+            let validation: ValidationResult | null = null;
+            if (session.draft && (session.phase === 'draft' || session.phase === 'confirm')) {
+              validation = validateDraft(session.draft);
+              if (!validation.valid) {
+                session.phase = 'draft'; // 有 error 时打回 draft 阶段
+              }
+              logger.info('skill-creator', 'draft_validation', {
+                session_id: session.id,
+                valid: validation.valid,
+                errors: validation.errors.length,
+                warnings: validation.warnings.length,
+                error_details: validation.errors.map(e => ({ rule: e.rule, message: e.message, location: e.location })),
+                warning_details: validation.warnings.map(w => ({ rule: w.rule, message: w.message })),
+              });
+
+              // 将校验结果注入会话历史，LLM 下一轮可自修复
+              const issues = [...validation.errors, ...validation.warnings];
+              if (issues.length > 0) {
+                const feedback = '【系统自动校验反馈】草稿存在以下问题，请在下一轮修复：\n'
+                  + issues.map(i => `- [${i.severity}] ${i.message}`).join('\n');
+                session.history.push({ role: 'user', content: feedback });
+              }
+            }
+
             // 发送最终结果事件
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
               type: 'done',
@@ -695,6 +775,7 @@ skillCreator.post('/chat', async (c) => {
               phase: session.phase,
               draft: session.draft,
               thinking: reasoning || null,
+              validation: validation ?? undefined,
             })}\n\n`));
 
             logger.info('skill-creator', 'chat_stream', {
@@ -764,6 +845,31 @@ skillCreator.post('/chat', async (c) => {
     if (parsed.draft) session.draft = parsed.draft;
     session.history.push({ role: 'assistant', content: parsed.reply });
 
+    // ── Draft 自动校验 ──
+    let validation: ValidationResult | null = null;
+    if (session.draft && (session.phase === 'draft' || session.phase === 'confirm')) {
+      validation = validateDraft(session.draft);
+      if (!validation.valid) {
+        session.phase = 'draft';
+      }
+      logger.info('skill-creator', 'draft_validation', {
+        session_id: session.id,
+        valid: validation.valid,
+        errors: validation.errors.length,
+        warnings: validation.warnings.length,
+        error_details: validation.errors.map(e => ({ rule: e.rule, message: e.message, location: e.location })),
+        warning_details: validation.warnings.map(w => ({ rule: w.rule, message: w.message })),
+      });
+
+      // 将校验结果注入会话历史，LLM 下一轮可自修复
+      const issues = [...validation.errors, ...validation.warnings];
+      if (issues.length > 0) {
+        const feedback = '【系统自动校验反馈】草稿存在以下问题，请在下一轮修复：\n'
+          + issues.map(i => `- [${i.severity}] ${i.message}`).join('\n');
+        session.history.push({ role: 'user', content: feedback });
+      }
+    }
+
     logger.info('skill-creator', 'chat', {
       session_id: session.id,
       phase: session.phase,
@@ -771,7 +877,7 @@ skillCreator.post('/chat', async (c) => {
       total_duration_ms: Date.now() - reqStartTs,
     });
 
-    return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft, thinking: null, vision_result: imageDescription ?? null });
+    return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft, thinking: null, vision_result: imageDescription ?? null, validation: validation ?? undefined });
   } catch (err) {
     logger.error('skill-creator', 'chat_error', {
       error: String(err),
@@ -790,6 +896,7 @@ skillCreator.post('/save', async (c) => {
     skill_name: string;
     skill_md: string;
     references?: Array<{ filename: string; content: string }>;
+    assets?: Array<{ filename: string; content: string }>;
     version_no?: number; // 指定写入的版本号（编辑模式下直接更新该版本，而非创建新版本）
     test_cases?: Array<{
       input: string;
@@ -809,6 +916,11 @@ skillCreator.post('/save', async (c) => {
   const referencesValidation = z.array(referenceSchema).safeParse(body.references ?? []);
   if (!referencesValidation.success) {
     return c.json({ error: `references 非法: ${referencesValidation.error.issues[0]?.message ?? '未知错误'}` }, 400);
+  }
+
+  const assetsValidation = z.array(assetSchema).safeParse(body.assets ?? []);
+  if (!assetsValidation.success) {
+    return c.json({ error: `assets 非法: ${assetsValidation.error.issues[0]?.message ?? '未知错误'}` }, 400);
   }
 
   const duplicateRef = (() => {
@@ -850,6 +962,29 @@ skillCreator.post('/save', async (c) => {
     }
   }
 
+  // ── 结构化校验门禁 ──
+  const draftValidation = runValidation({
+    skill_name: body.skill_name,
+    skill_md: body.skill_md,
+    references: referencesValidation.data.map(r => ({ filename: r.filename })),
+    assets: assetsValidation.data.map(a => ({ filename: a.filename })),
+    registered_tools: getToolsOverview().map(t => t.name),
+  });
+  if (!draftValidation.valid) {
+    const errorSummary = draftValidation.errors.map(e => `[${e.rule}] ${e.message}`).join('; ');
+    logger.warn('skill-creator', 'save_validation_failed', {
+      skill: body.skill_name,
+      errors: draftValidation.errors.length,
+      warnings: draftValidation.warnings.length,
+      error_details: draftValidation.errors.map(e => ({ rule: e.rule, message: e.message, location: e.location })),
+    });
+    return c.json({
+      error: `技能校验未通过（${draftValidation.errors.length} 项错误）：${errorSummary}`,
+      validation_errors: draftValidation.errors,
+      validation_warnings: draftValidation.warnings,
+    }, 422);
+  }
+
   const reg = getSkillRegistry(body.skill_name);
   const isNew = !reg;
 
@@ -857,6 +992,10 @@ skillCreator.post('/save', async (c) => {
     // 创建新版本到 .versions/ 目录（不写 biz-skills/ 主目录）
     const refs = referencesValidation.data.map((r: { filename: string; content: string }) => ({
       filename: r.filename, content: r.content,
+    }));
+
+    const assets = assetsValidation.data.map((a: { filename: string; content: string }) => ({
+      filename: a.filename, content: a.content,
     }));
 
     if (isNew) {
@@ -874,6 +1013,11 @@ skillCreator.post('/save', async (c) => {
       for (const ref of refs) {
         writeFileSync(join(refsDir, ref.filename), ref.content, 'utf-8');
       }
+      const assetsDir = join(skillDir, 'assets');
+      if (!existsSync(assetsDir)) mkdirSync(assetsDir, { recursive: true });
+      for (const asset of assets) {
+        writeFileSync(join(assetsDir, asset.filename), asset.content, 'utf-8');
+      }
     } else {
       const { writeVersionFile } = await import('./version-manager');
 
@@ -882,6 +1026,9 @@ skillCreator.post('/save', async (c) => {
         await writeVersionFile(body.skill_name, body.version_no, 'SKILL.md', body.skill_md);
         for (const ref of refs) {
           await writeVersionFile(body.skill_name, body.version_no, `references/${ref.filename}`, ref.content);
+        }
+        for (const asset of assets) {
+          await writeVersionFile(body.skill_name, body.version_no, `assets/${asset.filename}`, asset.content);
         }
         logger.info('skill-creator', 'save_to_version', { skill: body.skill_name, version_no: body.version_no });
       } else {
@@ -893,6 +1040,9 @@ skillCreator.post('/save', async (c) => {
         await writeVersionFile(body.skill_name, versionNo, 'SKILL.md', body.skill_md);
         for (const ref of refs) {
           await writeVersionFile(body.skill_name, versionNo, `references/${ref.filename}`, ref.content);
+        }
+        for (const asset of assets) {
+          await writeVersionFile(body.skill_name, versionNo, `assets/${asset.filename}`, asset.content);
         }
       }
     }

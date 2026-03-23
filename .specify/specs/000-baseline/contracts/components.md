@@ -145,9 +145,9 @@ Bot 启动时根据自身渠道标识过滤并加载匹配的技能集。
 
 | 技能 | 说明 |
 |------|------|
-| `skill-creator-spec` | 技能创建器的系统提示词模板，含 `references/biz-skill-spec.md`（业务技能规范文档） |
+| `skill-creator-spec` | 技能创建器的系统提示词模板，含编写规范（按阶段拆分加载）、Few-shot 示例、能力落地检查指引、draft 结构化校验脚本 |
 
-`skill-creator-spec/SKILL.md` 作为技能创建器（§ 23）的驱动提示词模板，内含 `{{CONTEXT}}`、`{{SPEC}}`、`{{SKILL_INDEX}}` 占位符。`references/biz-skill-spec.md` 定义了 v3 SKILL.md 的完整编写规范，是技能创建器生成新技能时的参考标准。
+`skill-creator-spec/SKILL.md` 作为技能创建器（§ 27）的驱动提示词模板，内含 5 个占位符（`{{CONTEXT}}`、`{{CAPABILITY_CHECK}}`、`{{FEW_SHOT}}`、`{{SPEC}}`、`{{SKILL_INDEX}}`），按阶段动态注入。编写规范已拆分为 `spec-overview.md`、`spec-writing.md`、`spec-checklist.md`、`spec-example.md` 四个文件按需加载。`scripts/` 目录包含 draft 结构化校验脚本。
 
 ### 2.3 故障诊断脚本编排
 
@@ -1151,44 +1151,78 @@ getLangs(phone: string): { customer: Lang; agent: Lang }
 
 ## 27. AI 技能创建器（backend/src/agent/km/skills/skill-creator.ts）
 
-### 31.1 职责
+### 27.1 职责
 
-通过多轮对话引导业务人员从零创建新 Skill，LLM 驱动的需求访谈 → 草稿生成 → 确认保存流程。参考 Anthropic skill-creator 设计模式。
+通过多轮对话引导业务人员从零创建新 Skill，LLM 驱动的需求访谈 → 草稿生成 → 自动校验 → 确认保存流程。参考 Anthropic skill-creator 设计模式。
 
-### 31.2 提示词架构
+### 27.2 提示词架构
 
-技能创建器由 `tech-skills/skill-creator-spec/SKILL.md` 驱动，该文件是一份**自包含的系统提示词**，包含 3 个占位符：
+技能创建器由 `tech-skills/skill-creator-spec/SKILL.md` 驱动，该文件是一份**自包含的系统提示词**，包含 5 个占位符，按阶段动态注入以减少 token 消耗：
 
-| 占位符 | 注入内容 |
-|--------|---------|
-| `{{CONTEXT}}` | 当前会话上下文（阶段、已收集信息、对话历史） |
-| `{{SPEC}}` | `references/biz-skill-spec.md` 的完整内容（v3 SKILL.md 编写规范） |
-| `{{SKILL_INDEX}}` | 现有技能索引（名称 + channels + 触发条件摘要） |
+| 占位符 | 注入内容 | 注入阶段 |
+|--------|---------|---------|
+| `{{CONTEXT}}` | 当前会话上下文（mode、phase、skill_id、existing_skill） | 所有阶段 |
+| `{{CAPABILITY_CHECK}}` | 能力落地检查详细步骤 A-G（`references/interview-capability-check.md`） | interview |
+| `{{FEW_SHOT}}` | 3 个 Few-shot 示例（`references/few-shot-examples.md`） | interview + draft |
+| `{{SPEC}}` | 业务技能编写规范（按阶段拆分加载） | 所有阶段（内容不同） |
+| `{{SKILL_INDEX}}` | 现有技能索引（名称 + description） | 所有阶段 |
 
-代码层仅做这 3 个变量替换，所有访谈逻辑、生成规则、验证标准均在 SKILL.md 中定义。
+`{{SPEC}}` 按阶段加载不同的规范文件：
 
-### 31.3 工作流阶段
+| 阶段 | 加载文件 | 说明 |
+|------|---------|------|
+| interview | `spec-overview.md` (~111 行) | 目录结构、frontmatter、章节顺序 |
+| draft | `spec-overview.md` + `spec-writing.md` + `spec-example.md` (~571 行) | 完整编写指引 + 示例 |
+| confirm | `spec-checklist.md` (~57 行) | 检查清单（已标注 `[AUTO]` 自动化项） |
+| done | 空 | 不注入 |
+
+### 27.3 工作流阶段
 
 ```
-interview → draft → confirm → done
+interview → draft → [自动校验] → confirm → done
+                       ↓ (有问题)
+                  校验反馈注入历史 → LLM 自修复 → 重新生成 draft
 ```
 
 | 阶段 | 说明 |
 |------|------|
-| `interview` | LLM 访谈收集 **9 个维度**：技能名称、目标场景、触发条件、channels（适用渠道）、工具需求、参考文档、合规规则、升级条件、回复规范 |
-| `draft` | 生成 SKILL.md + references 草稿预览 |
-| `confirm` | 用户确认或修改；自动生成 **3-5 条测试用例**，每条包含 `input_message` + `assertions`（含多种断言类型，见 § 26），支持用户审阅和调整 |
-| `done` | 写入 SKILL.md + references 到磁盘，测试用例批量写入数据库（调用 § 26 批量创建 API） |
+| `interview` | LLM 逐步访谈收集需求（角色、触发条件、渠道、流程、能力落地检查、升级处理、合规规则、回复规范） |
+| `draft` | 生成 SKILL.md + references + assets 草稿；生成后**自动执行结构化校验** |
+| `confirm` | 用户确认或修改；自动生成 3-5 条测试用例 |
+| `done` | 写入 SKILL.md + references/ + assets/ 到磁盘，测试用例写入数据库 |
 
-### 31.4 LLM 工具
+### 27.4 Draft 自动校验流程
 
-创建过程中 LLM 可调用：`read_skill`（读取已有 Skill 参考）、`read_reference`（读取参考文档）、`list_skills`（列出已有技能）。
+LLM 生成 draft 后，`runValidation()` 自动执行以下确定性校验：
 
-### 31.5 保存逻辑
+| 校验模块 | 检查内容 | 级别 |
+|---------|---------|------|
+| `validate_frontmatter` | YAML frontmatter 字段完整性（name/desc/version/tags/mode/trigger/channels） | error |
+| `validate_sections` | 6 个必要章节存在性和顺序 | error |
+| `validate_statediagram` | Mermaid 状态图：起止状态、tool 后 choice 分支、全局转人工出口、outbound 门控 | warning |
+| `validate_refs` | `%% ref:` 引用的文件在 references/assets 中存在、`%% tool:` 引用的工具已注册 | error |
+| `detect_asset_need` | 操作工具多路径调用时检测是否需要 assets 回复模板 | warning |
 
-创建 Skill 目录结构（`SKILL.md`、`references/`），已存在的 Skill 通过版本管理器保存，新 Skill 直接写入。保存后自动刷新技能缓存。测试用例通过批量创建 API（`POST /api/test-cases/batch`）一并持久化。
+校验结果处理：
+- **error 级别**：阻塞 save 端点（422），phase 打回 draft
+- **warning 级别**：不阻塞保存，在前端展示提示
+- **所有 error + warning**：自动注入到会话历史（作为 user message），LLM 下一轮可看到并自修复
 
-### 31.6 会话管理
+校验脚本位于 `tech-skills/skill-creator-spec/scripts/`，测试位于 `tests/unittest/backend/skills/skill-creator-spec/`。
+
+### 27.5 LLM 工具
+
+创建过程中 LLM 可调用：`read_skill`、`read_reference`、`list_skills`、`list_mcp_tools`、`get_mcp_tool_detail`。
+
+### 27.6 保存逻辑
+
+创建 Skill 目录结构（`SKILL.md` + `references/` + `assets/`），新 Skill 同时写入 `biz-skills/` 主目录和 `.versions/` 快照。保存前执行 `runValidation()` 门禁（error 阻塞，warning 放行）。保存后自动刷新技能缓存。
+
+### 27.7 Assets（回复模板）
+
+新建技能默认包含 `assets/` 目录。当技能包含可能被多次调用的操作类工具时，skill-creator 自动生成回复模板，约束 LLM "每次只执行一个操作 → 回复结果 → 等用户确认再执行下一个"，防止 tool_call_leaked_as_text 问题。
+
+### 27.8 会话管理
 
 内存会话 Map，1 小时自动过期，跟踪阶段、草稿内容、对话历史。
 
