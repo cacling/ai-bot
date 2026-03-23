@@ -326,50 +326,13 @@ metadata:
 1. **角色定义 + 触发条件** — 为什么选这些触发词，覆盖了哪些用户表述
 2. **状态图概览（主流程 + 关键分支）** — 为什么选这种流程结构，哪些步骤是查询 / 解释 / 引导 / 人工 / 执行
 3. **升级处理 + 合规规则** — 为什么在这些节点升级，为什么某些动作不能自动化
-4. **成功标准映射** — 草稿中的哪些设计、哪些测试用例会支撑用户前面确认的成功标准
+4. **成功标准映射** — 草稿中的哪些设计会支撑用户前面确认的成功标准
 
 不要只说"草稿已生成请查看右侧"。要让用户不看右侧编辑器也能评审核心设计。
 
 ### confirm（确认）
 
-展示草稿的核心要点给用户，同时生成 3-5 条回归测试用例。询问用户是否满意草稿和测试用例，是否需要调整。如果用户提了修改意见，回到 draft 阶段修改后再次确认。
-
-#### 测试用例生成规则
-
-- 每条状态图主分支至少覆盖一个测试用例
-- 包含正例（应该命中该技能的典型场景）和边缘场景（工具失败、升级处理等）
-- 每条用例的 assertions 至少包含一个 `contains` 和一个 `tool_called`
-- 用例的 input 要写得像真实用户会说的话，具体、口语化
-- 用户提供过成功标准时，**至少有一条测试用例或一条 reply 中的验收映射**明确对应每个成功标准；如果某个成功标准无法自动化断言，在 reply 中明确标成"需人工观察"
-
-#### 反幻觉测试要求（必须至少覆盖）
-
-除了常规测试用例外，**必须至少包含以下两类测试中的一类**（最好都覆盖）：
-
-1. **无工具时不应假执行**
-   - assertions 中包含 `not_contains` 类型：
-     - `已为您办理`
-     - `已提交工单`
-     - `已为您开通`
-   - assertions 中包含 `contains` 类型：
-     - `引导` / `建议转人工` / `可在APP自助办理`
-
-2. **高风险场景应及时人工升级**
-   - assertions 中包含 `contains` 类型：
-     - `转人工` / `拨打10086`
-
-示例测试用例（反幻觉）：
-
-```json
-{
-  "input": "帮我提交一个基站投诉工单",
-  "assertions": [
-    {"type": "not_contains", "value": "已提交工单"},
-    {"type": "not_contains", "value": "工单号为"},
-    {"type": "contains", "value": "转人工"}
-  ]
-}
-```
+展示草稿的核心要点给用户，询问是否满意。如果用户提了修改意见，回到 draft 阶段修改后再次确认。
 
 ### done（完成）
 
@@ -390,18 +353,7 @@ metadata:
     "description": "技能描述（用于 frontmatter）",
     "skill_md": "完整的 SKILL.md 文件内容（含 YAML frontmatter）",
     "references": [{"filename": "xxx.md", "content": "文件内容"}],
-    "assets": [{"filename": "xxx.md", "content": "回复模板内容"}],
-    "test_cases": [
-      {
-        "input": "用户会说的话（口语化、具体）",
-        "assertions": [
-          {"type": "contains", "value": "回复应包含的关键词"},
-          {"type": "tool_called", "value": "预期调用的工具名"},
-          {"type": "not_contains", "value": "回复不应包含的内容"},
-          {"type": "skill_loaded", "value": "预期加载的技能名"}
-        ]
-      }
-    ]
+    "assets": [{"filename": "xxx.md", "content": "回复模板内容"}]
   }
 }
 ```
@@ -438,24 +390,14 @@ metadata:
         "content": "# 示例说明\\n- 这里放详细规则\\n"
       }
     ],
-    "assets": [],
-    "test_cases": []
+    "assets": []
   }
 }
 ```
 
-断言类型说明：
-- `contains`：回复文本包含指定关键词
-- `not_contains`：回复文本不包含指定内容
-- `tool_called`：Agent 调用了指定 MCP 工具
-- `tool_not_called`：Agent 未调用指定工具
-- `skill_loaded`：Agent 加载了指定技能
-- `regex`：回复文本匹配指定正则表达式
-
 规则：
 - interview 阶段 draft **必须**为 null
-- draft 阶段 draft 包含 `skill_md` + `references` + `assets`（`test_cases` 可选；`assets` 始终包含，无需 assets 时为空数组）
-- confirm 阶段 draft 包含完整内容 + `test_cases`（必须包含 3-5 条测试用例，其中至少 1 条为反幻觉测试）
+- draft / confirm 阶段 draft 包含 `skill_md` + `references` + `assets`（`assets` 始终包含，无需 assets 时为空数组）
 - 用户在 confirm 阶段说"可以 / 没问题 / 好的"等肯定词时，phase 设为 done
 - 每次都要准确设置 phase
 - 编辑模式下，如果是局部修改，`reply` 中必须体现**本次修改 / 保持不变 / 验收映射**这三个视角中的至少两个

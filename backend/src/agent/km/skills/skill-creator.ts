@@ -392,13 +392,7 @@ function parseSkillCreatorResponse(rawText: string, session: Session): { reply: 
     phase = session.phase;
   }
 
-  if (phase === 'confirm' && draft && (!draft.test_cases || draft.test_cases.length < 3)) {
-    logger.warn('skill-creator', 'response_confirm_without_tests', {
-      session_id: session.id,
-      test_case_count: draft.test_cases?.length ?? 0,
-    });
-    phase = 'draft';
-  }
+
 
   return {
     reply: validated.data.reply,
