@@ -24,7 +24,7 @@ import { getMockedToolNames, matchMockRule } from '../services/mock-engine';
 import { mcpTools as mcpToolsTable } from '../db/schema';
 import { eq as dbEq } from 'drizzle-orm';
 import { sendSkillDiagram, runEmotionAnalysis, runProgressTracking, triggerHandoff, setupGlmCloseHandlers } from '../services/voice-common';
-import { getSkillsDescriptionByChannel } from '../engine/skills';
+import { getSkillContentByChannel } from '../engine/skills';
 import { preprocessToolCall, postprocessToolResult, inferSkillName } from '../services/tool-call-middleware';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
@@ -78,13 +78,14 @@ function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberNam
       : (gender === 'male' ? '先生' : gender === 'female' ? '女士' : '');
     displayName = lang === 'en' ? `${title}${subscriberName}` : `${subscriberName}${title}`;
   }
-  const voiceSkills = getSkillsDescriptionByChannel('voice');
+  // 注入完整技能内容（含状态图 SOP），而非仅描述，确保新增技能自动生效
+  const skillContent = getSkillContentByChannel('voice');
   const base = VOICE_PROMPT_TEMPLATE
     .replace('{{PHONE}}', phone)
     .replace('{{SUBSCRIBER_NAME}}', displayName)
     .replace('{{PLAN_NAME}}', planName ?? defaultPlan)
     .replace('{{CURRENT_DATE}}', today)
-    .replace('{{AVAILABLE_SKILLS}}', voiceSkills || '（暂无可用技能）');
+    .replace('{{SKILL_CONTENT}}', skillContent || '（暂无可用技能）');
   return lang === 'en' ? ENGLISH_LANG_INSTRUCTION + '\n\n' + base : base;
 }
 
