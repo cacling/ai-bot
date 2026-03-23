@@ -4,7 +4,8 @@
  * 这些表由 backend 读写，MCP Server 不访问。
  * 包括：对话、用户、技能注册、知识管理、MCP 配置、测试/运营辅助。
  */
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 
 // ── 对话管理 ─────────────────────────────────────────────────────────────────
 
@@ -497,3 +498,18 @@ export const mcpServerSyncRuns = sqliteTable('mcp_server_sync_runs', {
   started_at: text('started_at'),
   finished_at: text('finished_at'),
 });
+
+// ── Skill Workflow Specs ────────────────────────────────────────────
+
+export const skillWorkflowSpecs = sqliteTable('skill_workflow_specs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  skill_id: text('skill_id').notNull(),
+  version_no: integer('version_no').notNull(),
+  status: text('status').notNull(),
+  mermaid_checksum: text('mermaid_checksum'),
+  spec_json: text('spec_json').notNull(),
+  created_at: text('created_at').default(sql`(datetime('now'))`),
+  updated_at: text('updated_at').default(sql`(datetime('now'))`),
+}, (t) => ({
+  uniqSkillVersion: uniqueIndex('skill_workflow_specs_skill_id_version_no_unique').on(t.skill_id, t.version_no),
+}));

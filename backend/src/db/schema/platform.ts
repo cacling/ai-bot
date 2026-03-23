@@ -33,4 +33,5 @@ export {
   toolImplementations,
   skillToolBindings,
   mcpServerSyncRuns,
+  skillWorkflowSpecs,
 } from '../../../../packages/shared-db/src/schema/platform';
