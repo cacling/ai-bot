@@ -78,7 +78,7 @@ const llmDraftSchema = z.object({
   skill_md: z.string().min(1),
   references: z.array(referenceSchema).default([]),
   description: z.string().min(1),
-  test_cases: z.array(testCaseSchema).max(5).optional(),
+  test_cases: z.array(testCaseSchema).optional().transform(arr => arr?.slice(0, 5)),
 });
 const llmResponseSchema = z.object({
   reply: z.string().min(1),
@@ -300,10 +300,23 @@ function parseSkillCreatorResponse(rawText: string, session: Session): { reply: 
       issues: validated.error.issues.map(issue => `${issue.path.join('.') || '(root)'}: ${issue.message}`),
       text_preview: rawText.slice(0, 200),
     });
-    const reply = typeof parsedValue === 'object' && parsedValue && 'reply' in parsedValue && typeof (parsedValue as { reply?: unknown }).reply === 'string'
-      ? (parsedValue as { reply: string }).reply
-      : stripJsonFences(rawText);
-    return { reply, phase: session.phase, draft: null };
+
+    // 宽容恢复：即使 schema 校验失败，也尝试从原始 JSON 中提取 reply/phase/draft
+    const raw = parsedValue as Record<string, unknown>;
+    const reply = typeof raw.reply === 'string' ? raw.reply : stripJsonFences(rawText);
+    const phase = PHASE_VALUES.includes(raw.phase as Phase) ? (raw.phase as Phase) : session.phase;
+
+    // 尝试单独解析 draft（schema 失败可能只是 test_cases 超限等小问题）
+    let draft: Draft | null = null;
+    if (raw.draft && typeof raw.draft === 'object') {
+      const draftValidated = llmDraftSchema.safeParse(raw.draft);
+      if (draftValidated.success) {
+        draft = normalizeDraft(draftValidated.data);
+        logger.info('skill-creator', 'response_draft_recovered', { session_id: session.id, phase });
+      }
+    }
+
+    return { reply, phase, draft };
   }
 
   let phase = validated.data.phase;
