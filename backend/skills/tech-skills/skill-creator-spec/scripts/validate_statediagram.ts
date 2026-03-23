@@ -12,6 +12,10 @@ const RE_NESTED_OPEN = /^\s*state\s+(.+?)\s*\{/;
 const RE_ANNOTATION_TOOL = /%%\s*tool:(\w+)/g;
 const RE_ANNOTATION_REF = /%%\s*ref:([^\s]+)/g;
 const RE_ANNOTATION_BRANCH = /%%\s*branch:(\w+)/g;
+const RE_ANNOTATION_STEP = /%%\s*step:([\w-]+)/g;
+const RE_ANNOTATION_KIND = /%%\s*kind:(\w+)/g;
+const RE_ANNOTATION_GUARD = /%%\s*guard:([\w.]+)/g;
+const RE_ANNOTATION_OUTPUT = /%%\s*output:(\w+)/g;
 
 /** 清理状态名：去除引号和前后空格 */
 function cleanStateName(raw: string): string {
@@ -34,6 +38,22 @@ function extractAnnotations(line: string, lineNum: number, targetState?: string)
   RE_ANNOTATION_BRANCH.lastIndex = 0;
   while ((m = RE_ANNOTATION_BRANCH.exec(line))) {
     anns.push({ type: 'branch', value: m[1], line: lineNum, targetState });
+  }
+  RE_ANNOTATION_STEP.lastIndex = 0;
+  while ((m = RE_ANNOTATION_STEP.exec(line))) {
+    anns.push({ type: 'step', value: m[1], line: lineNum, targetState });
+  }
+  RE_ANNOTATION_KIND.lastIndex = 0;
+  while ((m = RE_ANNOTATION_KIND.exec(line))) {
+    anns.push({ type: 'kind', value: m[1], line: lineNum, targetState });
+  }
+  RE_ANNOTATION_GUARD.lastIndex = 0;
+  while ((m = RE_ANNOTATION_GUARD.exec(line))) {
+    anns.push({ type: 'guard', value: m[1], line: lineNum, targetState });
+  }
+  RE_ANNOTATION_OUTPUT.lastIndex = 0;
+  while ((m = RE_ANNOTATION_OUTPUT.exec(line))) {
+    anns.push({ type: 'output', value: m[1], line: lineNum, targetState });
   }
   return anns;
 }
