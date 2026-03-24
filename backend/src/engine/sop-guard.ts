@@ -228,6 +228,7 @@ export class SOPGuard {
   private activePlan: WorkflowSpec | null = null;
   private currentStepId: string | null = null;
   private pendingConfirm: boolean = false;
+  private lastToolResult: { success: boolean; hasData: boolean } | null = null;
 
   /** Activate a skill's execution plan */
   activatePlan(skillName: string, plan: WorkflowSpec): void {
@@ -235,7 +236,8 @@ export class SOPGuard {
     this.activePlan = plan;
     this.currentStepId = plan.startStepId;
     this.pendingConfirm = false;
-    // Auto-advance through non-actionable start nodes
+    this.lastToolResult = null;
+    // Auto-advance through non-actionable start nodes (message/ref with single always exit)
     this.autoAdvance();
   }
 
@@ -285,6 +287,7 @@ export class SOPGuard {
 
     // Evaluate guards based on result
     const guardResult = result ?? { success: true, hasData: true };
+    this.lastToolResult = guardResult;
     for (const t of step.transitions) {
       if (evaluateGuard(t.guard, guardResult)) {
         this.currentStepId = t.target;
@@ -375,7 +378,7 @@ export class SOPGuard {
     this.violations = 0;
   }
 
-  /** Auto-advance through non-actionable nodes (choice, end, human) */
+  /** Auto-advance through non-actionable nodes (choice, message/ref with single always exit, end, human) */
   private autoAdvance(): void {
     if (!this.activePlan || !this.currentStepId) return;
 
@@ -385,8 +388,19 @@ export class SOPGuard {
       if (!step) break;
 
       if (step.kind === 'choice') {
-        // Auto-evaluate: use last tool result context
-        // For now, take the first transition (tool result already selected the right target)
+        // Evaluate guards using lastToolResult (set by recordToolCall)
+        if (this.lastToolResult) {
+          let advanced = false;
+          for (const t of step.transitions) {
+            if (evaluateGuard(t.guard, this.lastToolResult)) {
+              this.currentStepId = t.target;
+              advanced = true;
+              break;
+            }
+          }
+          if (advanced) continue;
+        }
+        // No result or no guard matched — fallback to first transition
         if (step.transitions.length > 0) {
           this.currentStepId = step.transitions[0].target;
           continue;
@@ -400,14 +414,21 @@ export class SOPGuard {
       }
 
       if (step.kind === 'end' || step.kind === 'human') {
-        // Workflow complete or escalated
         this.activePlan = null;
         this.activeSkill = null;
         this.currentStepId = null;
+        this.lastToolResult = null;
         break;
       }
 
-      // message, ref, tool — these are handled by LLM, don't auto-advance
+      // message/ref with single 'always' exit → auto-advance to next actionable step
+      if ((step.kind === 'message' || step.kind === 'ref') &&
+          step.transitions.length === 1 && step.transitions[0].guard === 'always') {
+        this.currentStepId = step.transitions[0].target;
+        continue;
+      }
+
+      // tool or message/ref with multiple exits — stop, LLM handles
       break;
     }
   }
