@@ -59,116 +59,116 @@ metadata:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 接收请求: 用户咨询套餐或想变更套餐
+    [*] --> 接收请求: 用户咨询套餐或想变更套餐 %% step:plan-receive-request %% kind:message
 
     state 请求类型 <<choice>>
     接收请求 --> 请求类型
-    请求类型 --> 套餐浏览: 想了解有哪些套餐 %% branch:browse
-    请求类型 --> 套餐变更: 想升级或降级套餐 %% branch:change
-    请求类型 --> 套餐对比: 对比多个套餐差异 %% branch:compare
-    请求类型 --> 网速问题分流: 流量用完、上网慢、被限速 %% branch:data_shortage
+    请求类型 --> 套餐浏览: 想了解有哪些套餐 %% branch:browse %% guard:always
+    请求类型 --> 套餐变更: 想升级或降级套餐 %% branch:change %% guard:always
+    请求类型 --> 套餐对比: 对比多个套餐差异 %% branch:compare %% guard:always
+    请求类型 --> 网速问题分流: 流量用完、上网慢、被限速 %% branch:data_shortage %% guard:always
 
     %% 网速问题前置分流：区分故障 vs 流量不足
     state 网速分流判断 <<choice>>
-    网速问题分流 --> 网速分流判断: 询问"是最近突然变慢还是经常月底不够用？"
-    网速分流判断 --> 引导故障诊断: 最近突然变慢/突然上不了网（疑似故障）
-    网速分流判断 --> 流量不够用: 经常月底不够用/用量长期超额/被限速
+    网速问题分流 --> 网速分流判断: 询问"是最近突然变慢还是经常月底不够用？" %% step:plan-speed-triage %% kind:message
+    网速分流判断 --> 引导故障诊断: 最近突然变慢/突然上不了网（疑似故障） %% step:plan-guide-fault %% kind:end %% guard:always
+    网速分流判断 --> 流量不够用: 经常月底不够用/用量长期超额/被限速 %% guard:always
     引导故障诊断 --> [*]: 建议转至故障诊断流程排查网络问题
 
-    用户要求转人工 --> 转接10086: 引导拨打10086
+    用户要求转人工 --> 转接10086: 引导拨打10086 %% step:plan-request-human %% kind:human
     转接10086 --> [*]
 
     state 套餐浏览流程 {
-        套餐浏览 --> 获取套餐列表: query_plans() %% tool:query_plans
+        套餐浏览 --> 获取套餐列表: query_plans() %% tool:query_plans %% step:plan-browse-query-plans %% kind:tool
         state 获取套餐列表结果 <<choice>>
         获取套餐列表 --> 获取套餐列表结果
-        获取套餐列表结果 --> 了解需求: 成功
-        获取套餐列表结果 --> 浏览查询异常: 系统异常
+        获取套餐列表结果 --> 了解需求: 成功 %% guard:tool.success
+        获取套餐列表结果 --> 浏览查询异常: 系统异常 %% step:plan-browse-query-retry %% kind:end %% guard:tool.error
         浏览查询异常 --> [*]: 提示稍后重试或拨打10086
-        了解需求 --> 推荐套餐: 询问预算偏好和更看重流量还是月费，根据需求匹配最优套餐 %% ref:plan-details.md#套餐推荐指引
-        推荐套餐 --> 展示详情: 说明月费、流量、通话时长、特色权益
+        了解需求 --> 推荐套餐: 询问预算偏好和更看重流量还是月费，根据需求匹配最优套餐 %% ref:plan-details.md#套餐推荐指引 %% step:plan-browse-understand-needs %% kind:message
+        推荐套餐 --> 展示详情: 说明月费、流量、通话时长、特色权益 %% step:plan-browse-recommend %% kind:message
         state 浏览后意愿 <<choice>>
-        展示详情 --> 浏览后意愿
-        浏览后意愿 --> 浏览结束: 用户仅了解
-        浏览后意愿 --> 查询当前套餐: 用户想办理
+        展示详情 --> 浏览后意愿 %% step:plan-browse-show-details %% kind:message
+        浏览后意愿 --> 浏览结束: 用户仅了解 %% step:plan-browse-done %% kind:end %% guard:user.cancel
+        浏览后意愿 --> 查询当前套餐: 用户想办理 %% guard:user.confirm
     }
 
     state 套餐变更流程 {
-        套餐变更 --> 查询当前套餐: query_subscriber(phone) %% tool:query_subscriber
+        套餐变更 --> 查询当前套餐: query_subscriber(phone) %% tool:query_subscriber %% step:plan-change-query-subscriber %% kind:tool
         state 查询当前套餐结果 <<choice>>
         查询当前套餐 --> 查询当前套餐结果
-        查询当前套餐结果 --> 分析用量: 成功
-        查询当前套餐结果 --> 变更查询异常: 系统异常
+        查询当前套餐结果 --> 分析用量: 成功 %% guard:tool.success
+        查询当前套餐结果 --> 变更查询异常: 系统异常 %% step:plan-change-query-retry %% kind:end %% guard:tool.error
         变更查询异常 --> [*]: 提示稍后重试或拨打10086
-        分析用量 --> 合约期检查: 评估流量、通话使用情况
+        分析用量 --> 合约期检查: 评估流量、通话使用情况 %% step:plan-change-analyze-usage %% kind:message
         state 合约状态 <<choice>>
-        合约期检查 --> 合约状态
-        合约状态 --> 推荐方向: 无合约或合约已到期
-        合约状态 --> 合约期内告知: 合约期内
+        合约期检查 --> 合约状态 %% step:plan-change-contract-check %% kind:message
+        合约状态 --> 推荐方向: 无合约或合约已到期 %% guard:always
+        合约状态 --> 合约期内告知: 合约期内 %% step:plan-change-contract-block %% kind:end %% guard:always
         合约期内告知 --> [*]: 告知合约期内变更可能有违约金，引导前往营业厅 %% escalation:store_visit
         state 推荐方向 <<choice>>
-        推荐方向 --> 建议升级: 流量用量>80%或经常超额 %% ref:plan-details.md#套餐推荐指引
-        推荐方向 --> 建议降级: 流量用量<30%，可节省费用 %% ref:plan-details.md#套餐推荐指引
-        推荐方向 --> 建议维持: 用量匹配当前套餐
-        推荐方向 --> 已是最高套餐: 已在最高套餐
-        推荐方向 --> 已是最低套餐: 已在最低套餐且建议降级
+        推荐方向 --> 建议升级: 流量用量>80%或经常超额 %% ref:plan-details.md#套餐推荐指引 %% step:plan-change-suggest-upgrade %% kind:message %% guard:always
+        推荐方向 --> 建议降级: 流量用量<30%，可节省费用 %% ref:plan-details.md#套餐推荐指引 %% step:plan-change-suggest-downgrade %% kind:message %% guard:always
+        推荐方向 --> 建议维持: 用量匹配当前套餐 %% step:plan-change-suggest-keep %% kind:end %% guard:always
+        推荐方向 --> 已是最高套餐: 已在最高套餐 %% step:plan-change-max-plan %% kind:end %% guard:always
+        推荐方向 --> 已是最低套餐: 已在最低套餐且建议降级 %% step:plan-change-min-plan %% kind:end %% guard:always
         已是最高套餐 --> [*]: 告知当前已是最高档套餐
         已是最低套餐 --> [*]: 告知已是最低档，无法继续降级
-        建议升级 --> 对比展示: 对比当前vs推荐套餐差异
+        建议升级 --> 对比展示: 对比当前vs推荐套餐差异 %% step:plan-change-compare %% kind:message
         建议降级 --> 对比展示
-        对比展示 --> 说明生效规则: 告知变更规则 %% ref:plan-details.md#套餐变更指引
-        说明生效规则 --> 确认用户意愿: 用户是否同意变更
+        对比展示 --> 说明生效规则: 告知变更规则 %% ref:plan-details.md#套餐变更指引 %% step:plan-change-effective-rules %% kind:message
+        说明生效规则 --> 确认用户意愿: 用户是否同意变更 %% step:plan-change-confirm %% kind:confirm
         state 用户意愿 <<choice>>
         确认用户意愿 --> 用户意愿
-        用户意愿 --> 引导办理: 用户同意
-        用户意愿 --> 建议维持: 用户拒绝
-        引导办理 --> 引导办理完成: 引导用户在APP→套餐变更自助办理，或前往营业厅（系统不直接变更套餐）
+        用户意愿 --> 引导办理: 用户同意 %% guard:user.confirm
+        用户意愿 --> 建议维持: 用户拒绝 %% guard:user.cancel
+        引导办理 --> 引导办理完成: 引导用户在APP→套餐变更自助办理，或前往营业厅（系统不直接变更套餐） %% step:plan-change-guide %% kind:message
     }
 
     state 套餐对比流程 {
-        套餐对比 --> 获取对比数据: query_plans() %% tool:query_plans
+        套餐对比 --> 获取对比数据: query_plans() %% tool:query_plans %% step:plan-compare-query-plans %% kind:tool
         state 获取对比数据结果 <<choice>>
         获取对比数据 --> 获取对比数据结果
-        获取对比数据结果 --> 输出对比: 成功
-        获取对比数据结果 --> 对比查询异常: 系统异常
+        获取对比数据结果 --> 输出对比: 成功 %% guard:tool.success
+        获取对比数据结果 --> 对比查询异常: 系统异常 %% step:plan-compare-query-retry %% kind:end %% guard:tool.error
         对比查询异常 --> [*]: 提示稍后重试或拨打10086
-        输出对比 --> 对比后意愿: 按月费/流量/通话/权益四维对比 %% ref:plan-details.md#套餐对比指引
+        输出对比 --> 对比后意愿: 按月费/流量/通话/权益四维对比 %% ref:plan-details.md#套餐对比指引 %% step:plan-compare-output %% kind:message
         state 对比后意愿 <<choice>>
-        对比后意愿 --> 对比结束: 用户仅了解
-        对比后意愿 --> 套餐变更: 用户想办理
+        对比后意愿 --> 对比结束: 用户仅了解 %% step:plan-compare-done %% kind:end %% guard:user.cancel
+        对比后意愿 --> 套餐变更: 用户想办理 %% guard:user.confirm
     }
 
     state 流量不够用流程 {
-        流量不够用 --> 查询用量: query_subscriber(phone) %% tool:query_subscriber
+        流量不够用 --> 查询用量: query_subscriber(phone) %% tool:query_subscriber %% step:plan-data-query-subscriber %% kind:tool
         state 查询用量结果 <<choice>>
         查询用量 --> 查询用量结果
-        查询用量结果 --> 检查剩余流量: 成功
-        查询用量结果 --> 用量查询异常: 系统异常
+        查询用量结果 --> 检查剩余流量: 成功 %% guard:tool.success
+        查询用量结果 --> 用量查询异常: 系统异常 %% step:plan-data-query-retry %% kind:end %% guard:tool.error
         用量查询异常 --> [*]: 提示稍后重试或拨打10086
-        检查剩余流量 --> 剩余量判断: 确认当前剩余流量和套餐 %% ref:plan-details.md#流量不足处理指引
+        检查剩余流量 --> 剩余量判断: 确认当前剩余流量和套餐 %% ref:plan-details.md#流量不足处理指引 %% step:plan-data-check-remaining %% kind:message
         state 剩余量判断 <<choice>>
-        剩余量判断 --> 推荐加油包: 剩余流量接近零，急需用网
-        剩余量判断 --> 分析使用习惯: 尚有余量但经常不够用
+        剩余量判断 --> 推荐加油包: 剩余流量接近零，急需用网 %% step:plan-data-recommend-booster %% kind:confirm %% guard:always
+        剩余量判断 --> 分析使用习惯: 尚有余量但经常不够用 %% guard:always
         state 加油包确认 <<choice>>
         推荐加油包 --> 加油包确认
-        加油包确认 --> 引导购买加油包: 用户确认购买
+        加油包确认 --> 引导购买加油包: 用户确认购买 %% step:plan-data-guide-booster %% kind:end %% guard:user.confirm
         引导购买加油包 --> [*]: 引导用户在APP→流量加油包自助购买，告知生效时间
-        加油包确认 --> 分析使用习惯: 用户不需要
-        分析使用习惯 --> 建议套餐升级: 根据用量匹配更大套餐 %% ref:plan-details.md#套餐推荐指引
-        建议套餐升级 --> 对比当前与推荐: 展示升级前后差异 %% ref:plan-details.md#套餐对比指引
-        对比当前与推荐 --> 确认升级意愿: 用户是否同意升级
+        加油包确认 --> 分析使用习惯: 用户不需要 %% guard:user.cancel
+        分析使用习惯 --> 建议套餐升级: 根据用量匹配更大套餐 %% ref:plan-details.md#套餐推荐指引 %% step:plan-data-analyze-habits %% kind:message
+        建议套餐升级 --> 对比当前与推荐: 展示升级前后差异 %% ref:plan-details.md#套餐对比指引 %% step:plan-data-suggest-upgrade %% kind:message
+        对比当前与推荐 --> 确认升级意愿: 用户是否同意升级 %% step:plan-data-compare-upgrade %% kind:confirm
         state 升级意愿 <<choice>>
         确认升级意愿 --> 升级意愿
-        升级意愿 --> 引导升级办理: 用户同意 %% ref:plan-details.md#套餐变更指引
-        升级意愿 --> 仅使用加油包: 用户暂不升级
+        升级意愿 --> 引导升级办理: 用户同意 %% ref:plan-details.md#套餐变更指引 %% guard:user.confirm
+        升级意愿 --> 仅使用加油包: 用户暂不升级 %% guard:user.cancel
     }
 
     浏览结束 --> [*]
-    引导办理完成 --> [*]
+    引导办理完成 --> [*] %% step:plan-change-guide-done %% kind:end
     建议维持 --> [*]: 告知当前套餐匹配良好
     对比结束 --> [*]
-    引导升级办理 --> [*]: APP→套餐变更 或 营业厅办理
-    仅使用加油包 --> [*]: 引导购买加油包，告知后续可随时升级
+    引导升级办理 --> [*]: APP→套餐变更 或 营业厅办理 %% step:plan-data-guide-upgrade %% kind:end
+    仅使用加油包 --> [*]: 引导购买加油包，告知后续可随时升级 %% step:plan-data-booster-only %% kind:end
 ```
 
 ## 升级处理
