@@ -3,9 +3,9 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { resolve, join } from 'path';
 import { z } from 'zod';
 import { logger } from '../services/logger';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
-import { skillRegistry } from '../db/schema';
+import { skillRegistry, skillWorkflowSpecs } from '../db/schema';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
@@ -227,6 +227,35 @@ export function syncAllSkillMetadata(): void {
   } catch (e) {
     logger.warn('skills', 'sync_all_error', { error: String(e) });
   }
+
+  // Compile workflow specs for published skills that don't have one yet
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  import('./skill-workflow-compiler').then(({ compileWorkflow }) => {
+    const allSkills = db.select().from(skillRegistry).all();
+    for (const row of allSkills) {
+      if (!row.published_version) continue;
+      const existing = db.select().from(skillWorkflowSpecs)
+        .where(and(eq(skillWorkflowSpecs.skill_id, row.id), eq(skillWorkflowSpecs.status, 'published')))
+        .get();
+      if (existing) continue;
+
+      const mdPath = join(SKILLS_DIR, row.id, 'SKILL.md');
+      if (!existsSync(mdPath)) continue;
+      const content = readFileSync(mdPath, 'utf-8');
+      const result = compileWorkflow(content, row.id, row.published_version);
+      if (result.spec && result.errors.length === 0) {
+        db.insert(skillWorkflowSpecs).values({
+          skill_id: row.id,
+          version_no: row.published_version,
+          status: 'published',
+          spec_json: JSON.stringify(result.spec),
+        }).run();
+        logger.info('skills', 'workflow_spec_compiled', { skill: row.id });
+      }
+    }
+  }).catch((e: unknown) => {
+    logger.warn('skills', 'workflow_compile_startup_error', { error: String(e) });
+  });
 }
 
 // 缓存 + 定时校验（每 30 秒）

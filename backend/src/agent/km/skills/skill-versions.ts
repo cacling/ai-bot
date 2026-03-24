@@ -13,6 +13,7 @@
 import { Hono } from 'hono';
 import { readdir, stat } from 'node:fs/promises';
 import { resolve, join, relative } from 'node:path';
+import { readFileSync } from 'node:fs';
 import {
   getVersionList,
   getVersionDetail,
@@ -23,6 +24,8 @@ import {
 } from './version-manager';
 import { logger } from '../../../services/logger';
 import { SKILLS_ROOT } from '../../../services/paths';
+import { db } from '../../../db';
+import { eq, and } from 'drizzle-orm';
 
 import { REPO_ROOT } from '../../../services/paths';
 const PROJECT_ROOT = REPO_ROOT;
@@ -92,6 +95,37 @@ app.post('/save-version', async (c) => {
 app.post('/publish', async (c) => {
   const body = await c.req.json<{ skill: string; version_no: number; operator?: string }>();
   if (!body.skill || !body.version_no) return c.json({ error: 'skill 和 version_no 必填' }, 400);
+
+  // Compile workflow spec — block publish if errors
+  try {
+    const { compileWorkflow } = await import('../../../engine/skill-workflow-compiler');
+    const mainPath = resolve(SKILLS_ROOT, 'biz-skills', body.skill, 'SKILL.md');
+    let skillMd: string | null = null;
+    try { skillMd = readFileSync(mainPath, 'utf-8'); } catch { /* ignore */ }
+
+    if (skillMd) {
+      const result = compileWorkflow(skillMd, body.skill, body.version_no);
+      if (result.errors.length > 0) {
+        return c.json({ error: 'Workflow 编译失败', details: result.errors }, 400);
+      }
+      if (result.spec) {
+        const { skillWorkflowSpecs } = await import('../../../db/schema');
+        const specJson = JSON.stringify(result.spec);
+        db.delete(skillWorkflowSpecs)
+          .where(and(eq(skillWorkflowSpecs.skill_id, body.skill), eq(skillWorkflowSpecs.version_no, body.version_no)))
+          .run();
+        db.insert(skillWorkflowSpecs).values({
+          skill_id: body.skill,
+          version_no: body.version_no,
+          status: 'published',
+          spec_json: specJson,
+        }).run();
+      }
+    }
+  } catch (e) {
+    logger.warn('skill-versions', 'compile_error', { skill: body.skill, error: String(e) });
+  }
+
   const result = await publishVersion(body.skill, body.version_no, body.operator ?? 'system');
   if (!result.success) return c.json({ error: result.error }, 400);
   return c.json({ ok: true });

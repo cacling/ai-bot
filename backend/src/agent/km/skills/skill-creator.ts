@@ -1064,6 +1064,31 @@ skillCreator.post('/save', async (c) => {
     syncSkillMetadata(body.skill_name, body.skill_md);
     refreshSkillsCache();
 
+    // Compile workflow spec (non-blocking, warnings only)
+    try {
+      const { compileWorkflow } = await import('../../../engine/skill-workflow-compiler');
+      const compileResult = compileWorkflow(body.skill_md, body.skill_name, 1);
+      if (compileResult.spec) {
+        const { skillWorkflowSpecs } = await import('../../../db/schema');
+        const { eq: eqSpec, and: andSpec } = await import('drizzle-orm');
+        const specJson = JSON.stringify(compileResult.spec);
+        db.delete(skillWorkflowSpecs)
+          .where(andSpec(eqSpec(skillWorkflowSpecs.skill_id, body.skill_name), eqSpec(skillWorkflowSpecs.version_no, 1)))
+          .run();
+        db.insert(skillWorkflowSpecs).values({
+          skill_id: body.skill_name,
+          version_no: 1,
+          status: 'draft',
+          spec_json: specJson,
+        }).run();
+      }
+      if (compileResult.warnings.length > 0) {
+        logger.info('skill-creator', 'compile_warnings', { skill: body.skill_name, warnings: compileResult.warnings });
+      }
+    } catch (e) {
+      logger.warn('skill-creator', 'compile_error', { skill: body.skill_name, error: String(e) });
+    }
+
     const allToolsReady = toolWarnings.length === 0;
     logger.info('skill-creator', 'saved', {
       skill_name: body.skill_name, is_new: isNew,
