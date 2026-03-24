@@ -229,7 +229,7 @@ sandbox.post('/:id/publish', requireRole('flow_manager'), async (c) => {
 
 interface Assertion {
   type: 'contains' | 'not_contains' | 'tool_called' | 'tool_not_called' | 'skill_loaded' | 'regex'
-    | 'tool_called_any_of' | 'response_mentions_all' | 'response_mentions_any' | 'response_has_next_step';
+    | 'tool_called_any_of' | 'tool_called_before' | 'response_mentions_all' | 'response_mentions_any' | 'response_has_next_step';
   value: string;
 }
 
@@ -300,6 +300,20 @@ function runAssertions(
         const matched = candidates.filter(t => toolsCalled.includes(t));
         const ok = matched.length > 0;
         return { ...a, passed: ok, detail: ok ? `调用了工具 ${matched.join(', ')}` : `未调用任一工具 [${candidates.join(', ')}]（已调用: ${toolsCalled.join(', ') || '无'}）` };
+      }
+      case 'tool_called_before': {
+        // value format: "toolA,toolB" — asserts toolA was called before toolB
+        const [before, after] = a.value.split(',').map(s => s.trim());
+        const idxBefore = toolsCalled.indexOf(before);
+        const idxAfter = toolsCalled.indexOf(after);
+        if (idxBefore === -1) {
+          return { ...a, passed: false, detail: `工具 ${before} 未被调用（已调用: ${toolsCalled.join(', ') || '无'}）` };
+        }
+        if (idxAfter === -1) {
+          return { ...a, passed: false, detail: `工具 ${after} 未被调用（已调用: ${toolsCalled.join(', ') || '无'}）` };
+        }
+        const ok = idxBefore < idxAfter;
+        return { ...a, passed: ok, detail: ok ? `${before} 在 ${after} 之前调用（SOP 顺序正确）` : `${before} 在 ${after} 之后调用（SOP 顺序违规）` };
       }
       case 'response_mentions_all': {
         const keywords = a.value.split(',').map(s => s.trim());

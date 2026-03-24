@@ -59,7 +59,7 @@ interface Draft {
 }
 
 const PHASE_VALUES = ['interview', 'draft', 'confirm', 'done'] as const;
-const ASSERTION_TYPE_VALUES = ['contains', 'not_contains', 'tool_called', 'tool_not_called', 'skill_loaded', 'regex'] as const;
+const ASSERTION_TYPE_VALUES = ['contains', 'not_contains', 'tool_called', 'tool_not_called', 'tool_called_before', 'tool_called_any_of', 'skill_loaded', 'regex', 'response_mentions_all', 'response_mentions_any', 'response_has_next_step'] as const;
 const SKILL_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const REFERENCE_FILE_RE = /^[a-z0-9]+(-[a-z0-9]+)*\.md$/;
 
