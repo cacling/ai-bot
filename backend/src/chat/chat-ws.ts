@@ -22,7 +22,11 @@ import { asc, eq } from 'drizzle-orm';
 import { type CoreMessage } from 'ai';
 import { db } from '../db';
 import { messages, sessions, subscribers, plans } from '../db/schema';
-import { runAgent } from '../engine/runner';
+import { runAgent, getMcpToolsForRuntime } from '../engine/runner';
+import { routeSkill, shouldUseRuntime } from '../engine/skill-router';
+import { runSkillTurn } from '../engine/skill-runtime';
+import { createInstance, findActiveInstance } from '../engine/skill-instance-store';
+import { getSkillMermaid } from '../engine/skills';
 import { upgradeWebSocket } from './voice';
 import { sessionBus } from '../services/session-bus';
 import { logger } from '../services/logger';
@@ -219,8 +223,106 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
         return { role: r.role as CoreMessage['role'], content: r.content };
       });
 
-      // Run agent (AI responds in agentLang so agent sees their own language)
+      // ── Workflow Runtime routing ──────────────────────────────────────
       const { agent: agentLang, customer: customerLang } = getLangs(phone);
+      const route = routeSkill(sessionId);
+      if (route.mode === 'runtime' && route.spec) {
+        try {
+          const mcpTools = await getMcpToolsForRuntime();
+          const turnResult = await runSkillTurn(sessionId, message, route.spec, mcpTools, {
+            phone,
+            subscriberName: cachedSubscriberName,
+            lang: agentLang as 'zh' | 'en',
+            history: history.map(m => ({
+              role: m.role,
+              content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+            })),
+          });
+
+          const msg_id = crypto.randomUUID();
+
+          // Persist messages
+          const rtMsgRows: Array<{ sessionId: string; role: string; content: string }> = [
+            { sessionId, role: 'user', content: message },
+            { sessionId, role: 'assistant', content: turnResult.text },
+          ];
+          await db.insert(messages).values(rtMsgRows);
+
+          // Push diagram with active step
+          const rawMermaid = getSkillMermaid(route.spec.skillId);
+          if (rawMermaid) {
+            const mermaid = await translateMermaid(rawMermaid, langParam);
+            const diagramEv = {
+              source: 'user' as const, type: 'skill_diagram_update' as const,
+              skill_name: route.spec.skillId, mermaid,
+              active_step_id: turnResult.currentStepId,
+              msg_id,
+            };
+            try { ws.send(JSON.stringify(diagramEv)); } catch { /* ws closed */ }
+            sessionBus.publish(phone, diagramEv);
+          }
+
+          // Stream text response
+          const CHUNK_SIZE_RT = 3;
+          const CHUNK_DELAY_RT = 20;
+          for (let i = 0; i < turnResult.text.length; i += CHUNK_SIZE_RT) {
+            const delta = turnResult.text.slice(i, i + CHUNK_SIZE_RT);
+            const ev = { source: 'user' as const, type: 'text_delta' as const, delta, msg_id };
+            try { ws.send(JSON.stringify(ev)); } catch { break; }
+            sessionBus.publish(phone, ev);
+            if (i + CHUNK_SIZE_RT < turnResult.text.length) {
+              await new Promise(r => setTimeout(r, CHUNK_DELAY_RT));
+            }
+          }
+
+          // Final response event
+          ws.send(JSON.stringify({
+            source: 'user', type: 'response',
+            text: turnResult.text,
+            card: null,
+            skill_diagram: rawMermaid ? { skill_name: route.spec.skillId, mermaid: rawMermaid } : null,
+            current_step_id: turnResult.currentStepId,
+            pending_confirm: turnResult.pendingConfirm,
+            msg_id,
+          }));
+          sessionBus.publish(phone, {
+            source: 'user', type: 'response',
+            text: turnResult.text,
+            card: null,
+            skill_diagram: null,
+            msg_id,
+          });
+
+          // Handle transfer
+          if (turnResult.transferRequested) {
+            botEnabled = false;
+            try { ws.send(JSON.stringify({ type: 'transfer_to_human', msg_id })); } catch { /* ws closed */ }
+            sessionBus.publish(phone, { source: 'user', type: 'transfer_data', msg_id });
+            logger.info('chat-ws', 'bot_disabled', { phone, session: sessionId });
+          }
+
+          // Track metrics
+          messageCount += 2;
+          if (turnResult.toolRecords.length > 0) {
+            toolCallCount += turnResult.toolRecords.length;
+            toolSuccessCount += turnResult.toolRecords.filter(r => r.success).length;
+          }
+
+          logger.info('chat-ws', 'runtime_turn_complete', {
+            session: sessionId, skill: route.spec.skillId,
+            step: turnResult.currentStepId, finished: turnResult.finished,
+            tools: turnResult.toolRecords.map(r => r.tool).join(','),
+          });
+
+          return; // Don't fall through to legacy runAgent
+        } catch (err) {
+          logger.error('chat-ws', 'runtime_error', { session: sessionId, error: String(err) });
+          // Fall through to legacy runAgent on runtime error
+        }
+      }
+      // ── End Workflow Runtime routing ──────────────────────────────────
+
+      // Run agent (AI responds in agentLang so agent sees their own language)
       logger.info('chat-ws', 'run_agent_langs', { phone, agentLang, customerLang, willTranslate: agentLang !== customerLang });
       const t0 = Date.now();
       logger.info('chat-ws', 'agent_start', { session: sessionId });
@@ -398,6 +500,20 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
         recentTurns.push({ role: 'user', text: message });
         recentTurns.push({ role: 'assistant', text: result.text });
         runProgressTracking(ws, phone, diagramSkill, recentTurns, langParam, sessionId, 'chat');
+      }
+
+      // ── Check if matched skill should use runtime for next turn ──
+      if (lastActiveSkill) {
+        const rt = shouldUseRuntime(lastActiveSkill);
+        if (rt.use && rt.spec) {
+          const existing = findActiveInstance(sessionId);
+          if (!existing) {
+            createInstance(sessionId, rt.spec.skillId, rt.spec.version, rt.spec.startStepId);
+            logger.info('chat-ws', 'runtime_instance_created_after_legacy', {
+              session: sessionId, skill: lastActiveSkill,
+            });
+          }
+        }
       }
 
       // Signal agent side to run handoff analysis (never sent to customer WS)
