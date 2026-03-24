@@ -319,8 +319,14 @@ bash frontend/tests/e2e/scripts/start.sh
 cd frontend/tests/e2e && npx playwright test
 bash frontend/tests/e2e/scripts/stop.sh
 
-# E2E 有头模式（调试）
+# E2E 有头模式（调试，Chrome 146）
 cd frontend/tests/e2e && npx playwright test --headed
+
+# SOP 步骤遵循验证（UI 驱动，打开浏览器验证 Agent 严格按状态图走）
+cd frontend/tests/e2e && npx playwright test 12-sop-ui-verification.spec.ts --headed
+
+# SOP API 级验证（不打开浏览器，直接调 test 端点）
+cd frontend/tests/e2e && npx playwright test 11-sop-enforcement.spec.ts
 
 # 查看 E2E HTML 报告
 cd frontend/tests/e2e && npx playwright show-report
