@@ -11,6 +11,7 @@ import actionDrafts from './action-drafts';
 import assets from './assets';
 import tasks from './tasks';
 import audit from './audit';
+import replyCopilot from './reply-copilot';
 
 const km = new Hono();
 
@@ -23,5 +24,6 @@ km.route('/action-drafts', actionDrafts);
 km.route('/assets', assets);
 km.route('/tasks', tasks);
 km.route('/audit-logs', audit);
+km.route('/reply-copilot', replyCopilot);
 
 export default km;

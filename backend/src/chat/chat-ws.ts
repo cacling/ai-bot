@@ -33,6 +33,7 @@ import { checkCompliance, maskPII, sanitizeText } from '../services/keyword-filt
 import { detectHallucination } from '../services/hallucination-detector';
 import { runProgressTracking } from '../services/voice-common';
 import { normalizeQuery } from '../services/query-normalizer';
+import { buildReplyHints } from '../services/reply-copilot';
 
 const chatWs = new Hono();
 
@@ -172,6 +173,19 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       if (!botEnabled) {
         // Bot is disabled (human agent mode) — notify agent; re-send transfer_to_human to fix race conditions
         sessionBus.publish(phone, { source: 'user', type: 'user_message', text: message, msg_id: crypto.randomUUID() });
+        // Async: generate reply hints for the human agent
+        buildReplyHints({ message, phone, normalizedQuery: normalizedContext?.rewritten_query, intentHints: normalizedContext?.intent_hints })
+          .then(hints => {
+            if (hints) {
+              sessionBus.publish(phone, {
+                source: 'system', type: 'reply_hints',
+                data: hints as unknown as Record<string, unknown>,
+                phone,
+                msg_id: crypto.randomUUID(),
+              });
+            }
+          })
+          .catch(err => logger.warn('chat-ws', 'reply_hints_error', { phone, error: String(err) }));
         try { ws.send(JSON.stringify({ type: 'transfer_to_human' })); } catch { /* ws closed */ }
         return;
       }
