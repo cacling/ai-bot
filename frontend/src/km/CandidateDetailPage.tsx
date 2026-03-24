@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, XCircle, Clock, Plus, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Clock, Plus, ShieldCheck, Save } from 'lucide-react';
 import { kmApi, type KMCandidateDetail } from './api';
 import type { KMPage } from './KnowledgeManagementPage';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
 
@@ -114,6 +116,9 @@ export function CandidateDetailPage({ id, navigate }: { id: string; navigate: (p
         })}
       </div>
 
+      {/* 结构化提示配置 */}
+      <StructuredHintEditor candidateId={id} initialData={data} onSaved={load} />
+
       {/* 证据列表 */}
       <Card className="mb-3">
         <CardHeader className="py-2 px-3">
@@ -163,5 +168,126 @@ export function CandidateDetailPage({ id, navigate }: { id: string; navigate: (p
         </Alert>
       )}
     </div>
+  );
+}
+
+function StructuredHintEditor({ candidateId, initialData, onSaved }: {
+  candidateId: string;
+  initialData: KMCandidateDetail;
+  onSaved: () => void;
+}) {
+  const existing = initialData.structured_json ? JSON.parse(initialData.structured_json) : null;
+
+  const [sceneCode, setSceneCode] = useState(initialData.scene_code ?? '');
+  const [tags, setTags] = useState(initialData.retrieval_tags_json ? JSON.parse(initialData.retrieval_tags_json).join(', ') : '');
+  const [requiredSlots, setRequiredSlots] = useState(existing?.required_slots?.join(', ') ?? '');
+  const [recommendedTerms, setRecommendedTerms] = useState(existing?.recommended_terms?.join(', ') ?? '');
+  const [forbiddenTerms, setForbiddenTerms] = useState(existing?.forbidden_terms?.join(', ') ?? '');
+  const [nextActions, setNextActions] = useState(existing?.next_actions?.join(', ') ?? '');
+  const [sources, setSources] = useState(existing?.sources?.join(', ') ?? '');
+  const [riskLevel, setRiskLevel] = useState(existing?.scene?.risk ?? 'low');
+  const [replyStandard, setReplyStandard] = useState(existing?.reply_options?.find((o: { label: string }) => o.label === '标准版')?.text ?? '');
+  const [replySoothe, setReplySoothe] = useState(existing?.reply_options?.find((o: { label: string }) => o.label === '安抚版')?.text ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const splitComma = (s: string) => s.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const structured = {
+        scene: { code: sceneCode, label: sceneCode.replace(/_/g, ' '), risk: riskLevel },
+        required_slots: splitComma(requiredSlots),
+        recommended_terms: splitComma(recommendedTerms),
+        forbidden_terms: splitComma(forbiddenTerms),
+        reply_options: [
+          ...(replyStandard ? [{ label: '标准版', text: replyStandard }] : []),
+          ...(replySoothe ? [{ label: '安抚版', text: replySoothe }] : []),
+        ],
+        next_actions: splitComma(nextActions),
+        sources: splitComma(sources),
+        retrieval_tags: splitComma(tags),
+      };
+      await kmApi.updateCandidate(candidateId, {
+        scene_code: sceneCode,
+        retrieval_tags_json: JSON.stringify(splitComma(tags)),
+        structured_json: JSON.stringify(structured),
+      });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="mb-3">
+      <CardHeader className="py-2 px-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-xs">结构化提示配置</CardTitle>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            <Save size={12} /> {saving ? '保存中...' : '保存'}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">场景编码</label>
+            <Input value={sceneCode} onChange={e => setSceneCode(e.target.value)} className="text-xs font-mono" placeholder="billing_abnormal" />
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">风险级别</label>
+            <Select value={riskLevel} onValueChange={setRiskLevel}>
+              <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">低</SelectItem>
+                <SelectItem value="medium">中</SelectItem>
+                <SelectItem value="high">高</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">检索标签（逗号分隔）</label>
+            <Input value={tags} onChange={e => setTags(e.target.value)} className="text-xs" placeholder="计费, 扣费, 争议" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-1 block">必追问槽位（逗号分隔）</label>
+          <Input value={requiredSlots} onChange={e => setRequiredSlots(e.target.value)} className="text-xs" placeholder="手机号, 账期, 账单月份" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">推荐术语（逗号分隔）</label>
+            <Input value={recommendedTerms} onChange={e => setRecommendedTerms(e.target.value)} className="text-xs" placeholder="以账单和详单为准, 为您核实" />
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">禁用术语（逗号分隔）</label>
+            <Input value={forbiddenTerms} onChange={e => setForbiddenTerms(e.target.value)} className="text-xs" placeholder="系统出错了, 肯定是误扣" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-1 block">推荐回复 — 标准版</label>
+          <Textarea value={replyStandard} onChange={e => setReplyStandard(e.target.value)} className="text-xs min-h-[60px]" placeholder="承接情绪 + 结论 + 原因 + 下一步 + 时效" />
+        </div>
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-1 block">推荐回复 — 安抚版</label>
+          <Textarea value={replySoothe} onChange={e => setReplySoothe(e.target.value)} className="text-xs min-h-[60px]" placeholder="安抚 + 核实 + 下一步" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">下一步动作（逗号分隔）</label>
+            <Input value={nextActions} onChange={e => setNextActions(e.target.value)} className="text-xs" placeholder="查充值流水, 发起异常工单" />
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">证据来源（逗号分隔）</label>
+            <Input value={sources} onChange={e => setSources(e.target.value)} className="text-xs" placeholder="计费规则第5章, 停复机规则" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

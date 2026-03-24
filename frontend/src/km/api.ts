@@ -109,6 +109,9 @@ export interface KMCandidate {
   risk_level: string; gate_evidence: string; gate_conflict: string; gate_ownership: string;
   target_asset_id: string | null; status: string; review_pkg_id: string | null;
   created_by: string | null; created_at: string; updated_at: string;
+  scene_code: string | null;
+  retrieval_tags_json: string | null;
+  structured_json: string | null;
 }
 export interface KMCandidateDetail extends KMCandidate {
   evidences: KMEvidence[];
