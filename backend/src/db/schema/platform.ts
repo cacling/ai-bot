@@ -35,4 +35,6 @@ export {
   skillToolBindings,
   mcpServerSyncRuns,
   skillWorkflowSpecs,
+  skillInstances,
+  skillInstanceEvents,
 } from '../../../../packages/shared-db/src/schema/platform';

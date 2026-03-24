@@ -528,3 +528,34 @@ export const skillWorkflowSpecs = sqliteTable('skill_workflow_specs', {
 }, (t) => ({
   uniqSkillVersion: uniqueIndex('skill_workflow_specs_skill_id_version_no_unique').on(t.skill_id, t.version_no),
 }));
+
+// ── Skill 实例（运行时状态快照）────────────────────────────────────────────
+
+export const skillInstances = sqliteTable('skill_instances', {
+  id: text('id').primaryKey(),
+  session_id: text('session_id').notNull(),
+  skill_id: text('skill_id').notNull(),
+  skill_version: integer('skill_version').notNull(),
+  status: text('status').notNull(),
+  current_step_id: text('current_step_id'),
+  pending_confirm: integer('pending_confirm').default(0),
+  branch_context: text('branch_context'),
+  last_tool_result: text('last_tool_result'),
+  revision: integer('revision').default(1),
+  started_at: text('started_at').default(sql`(datetime('now'))`),
+  updated_at: text('updated_at').default(sql`(datetime('now'))`),
+  finished_at: text('finished_at'),
+});
+
+// ── Skill 实例事件日志（不可变追加）────────────────────────────────────────
+
+export const skillInstanceEvents = sqliteTable('skill_instance_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  instance_id: text('instance_id').notNull(),
+  seq: integer('seq').notNull(),
+  event_type: text('event_type').notNull(),
+  step_id: text('step_id'),
+  tool_name: text('tool_name'),
+  payload_json: text('payload_json'),
+  created_at: text('created_at').default(sql`(datetime('now'))`),
+});

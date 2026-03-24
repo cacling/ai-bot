@@ -41,3 +41,9 @@ export interface CompileResult {
   errors: string[];
   warnings: string[];
 }
+
+export type InstanceStatus = 'running' | 'waiting_user' | 'completed' | 'escalated' | 'aborted';
+
+export type EventType =
+  | 'state_enter' | 'tool_call' | 'tool_result' | 'branch_taken'
+  | 'user_confirm' | 'user_cancel' | 'guard_block' | 'handoff' | 'completed';
