@@ -42,7 +42,7 @@ export interface StateNode {
 }
 
 export interface MermaidAnnotation {
-  type: 'tool' | 'ref' | 'branch';
+  type: 'tool' | 'ref' | 'branch' | 'step' | 'kind' | 'guard' | 'output';
   value: string;
   line: number;
   /** 该注释所在转移的目标节点 */
@@ -64,6 +64,9 @@ export const VALID_TRIGGERS = ['user_intent', 'task_dispatch'] as const;
 export const VALID_CHANNELS = ['online', 'voice', 'outbound-collection', 'outbound-marketing'] as const;
 
 export type SkillMode = typeof VALID_MODES[number];
+
+export type StepKind = 'tool' | 'confirm' | 'ref' | 'human' | 'message' | 'choice' | 'end';
+export type GuardType = 'tool.success' | 'tool.error' | 'tool.no_data' | 'user.confirm' | 'user.cancel' | 'always';
 
 export interface ParsedFrontmatter {
   name?: string;

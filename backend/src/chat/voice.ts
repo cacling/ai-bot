@@ -464,7 +464,19 @@ voice.get(
                 const skillName = (toolArgs.skill_name ?? '') as string;
                 const content = getSkillContent(skillName) ?? getSkillContent(skillName.replace(/_/g, '-')) ?? `技能 "${skillName}" 不存在`;
                 activeSkillName = skillName.replace(/_/g, '-');
-                sopGuard.recordToolCall('get_skill_instructions');
+                sopGuard.recordToolCall('get_skill_instructions', { success: true, hasData: true });
+                // Activate workflow plan if available
+                try {
+                  const { skillWorkflowSpecs } = await import('../db/schema');
+                  const { eq, and } = await import('drizzle-orm');
+                  const planRow = db.select().from(skillWorkflowSpecs)
+                    .where(and(eq(skillWorkflowSpecs.skill_id, activeSkillName), eq(skillWorkflowSpecs.status, 'published')))
+                    .get();
+                  if (planRow) {
+                    sopGuard.activatePlan(activeSkillName, JSON.parse(planRow.spec_json));
+                    logger.info('voice', 'plan_activated', { session: sessionId, skill: activeSkillName });
+                  }
+                } catch { /* ignore */ }
                 logger.info('voice', 'skill_loaded', { session: sessionId, skill: activeSkillName, content_len: content.length });
 
                 // 推送状态图给坐席端
@@ -534,8 +546,8 @@ voice.get(
                 result = mcpResult.text;
                 success = mcpResult.success;
               }
-              // 记录成功调用，供后续 SOP guard 检查前置条件
-              if (success) sopGuard.recordToolCall(toolName);
+              // 记录调用结果，供 SOP guard V2 推进状态
+              sopGuard.recordToolCall(toolName, { success, hasData: success && !result.includes('"found":false') });
               state.recordTool(toolName, toolArgs, result, success);
               logger.info('voice', 'mcp_result_raw', { session: sessionId, tool: toolName, success, resultPreview: result.slice(0, 200) });
 

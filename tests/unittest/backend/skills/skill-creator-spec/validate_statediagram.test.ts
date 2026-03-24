@@ -236,6 +236,64 @@ describe('validateStatediagram - inbound', () => {
   });
 });
 
+describe('workflow annotation parsing', () => {
+  const WORKFLOW_ANNOTATIONS = `
+\`\`\`mermaid
+stateDiagram-v2
+    [*] --> 查询账单: %% step:query-bill %% kind:tool
+    查询账单 --> 账单结果: %% guard:tool.success
+    查询账单 --> 查询失败: %% guard:tool.error
+    查询账单 --> 无数据: %% guard:tool.no_data
+    账单结果 --> 确认退订: %% step:confirm-cancel %% kind:confirm
+    确认退订 --> 执行退订: %% guard:user.confirm %% output:confirmed
+    确认退订 --> 取消流程: %% guard:user.cancel
+    执行退订 --> [*]
+    查询失败 --> [*]
+    无数据 --> [*]
+    取消流程 --> [*]
+    用户要求转人工 --> 转接人工
+    转接人工 --> [*]
+\`\`\`
+`;
+
+  test('parses %% step:', () => {
+    const block = extractMermaidBlock(WORKFLOW_ANNOTATIONS)!;
+    const diagram = parseStateDiagram(block);
+    const steps = diagram.annotations.filter(a => a.type === 'step');
+    expect(steps.length).toBeGreaterThanOrEqual(2);
+    expect(steps.map(s => s.value)).toContain('query-bill');
+    expect(steps.map(s => s.value)).toContain('confirm-cancel');
+  });
+
+  test('parses %% kind:', () => {
+    const block = extractMermaidBlock(WORKFLOW_ANNOTATIONS)!;
+    const diagram = parseStateDiagram(block);
+    const kinds = diagram.annotations.filter(a => a.type === 'kind');
+    expect(kinds.length).toBeGreaterThanOrEqual(2);
+    expect(kinds.map(k => k.value)).toContain('tool');
+    expect(kinds.map(k => k.value)).toContain('confirm');
+  });
+
+  test('parses %% guard: with dot notation (tool.success, tool.error, tool.no_data)', () => {
+    const block = extractMermaidBlock(WORKFLOW_ANNOTATIONS)!;
+    const diagram = parseStateDiagram(block);
+    const guards = diagram.annotations.filter(a => a.type === 'guard');
+    expect(guards.length).toBeGreaterThanOrEqual(3);
+    const guardValues = guards.map(g => g.value);
+    expect(guardValues).toContain('tool.success');
+    expect(guardValues).toContain('tool.error');
+    expect(guardValues).toContain('tool.no_data');
+  });
+
+  test('parses %% output:', () => {
+    const block = extractMermaidBlock(WORKFLOW_ANNOTATIONS)!;
+    const diagram = parseStateDiagram(block);
+    const outputs = diagram.annotations.filter(a => a.type === 'output');
+    expect(outputs.length).toBeGreaterThanOrEqual(1);
+    expect(outputs.map(o => o.value)).toContain('confirmed');
+  });
+});
+
 describe('validateStatediagram - outbound', () => {
   test('正确的 outbound 状态图无 error', () => {
     const checks = validateStatediagram(VALID_OUTBOUND, 'outbound');

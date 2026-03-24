@@ -59,7 +59,7 @@ interface Draft {
 }
 
 const PHASE_VALUES = ['interview', 'draft', 'confirm', 'done'] as const;
-const ASSERTION_TYPE_VALUES = ['contains', 'not_contains', 'tool_called', 'tool_not_called', 'skill_loaded', 'regex'] as const;
+const ASSERTION_TYPE_VALUES = ['contains', 'not_contains', 'tool_called', 'tool_not_called', 'tool_called_before', 'tool_called_any_of', 'skill_loaded', 'regex', 'response_mentions_all', 'response_mentions_any', 'response_has_next_step'] as const;
 const SKILL_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const REFERENCE_FILE_RE = /^[a-z0-9]+(-[a-z0-9]+)*\.md$/;
 
@@ -1063,6 +1063,31 @@ skillCreator.post('/save', async (c) => {
     // 同步元数据到 DB
     syncSkillMetadata(body.skill_name, body.skill_md);
     refreshSkillsCache();
+
+    // Compile workflow spec (non-blocking, warnings only)
+    try {
+      const { compileWorkflow } = await import('../../../engine/skill-workflow-compiler');
+      const compileResult = compileWorkflow(body.skill_md, body.skill_name, 1);
+      if (compileResult.spec) {
+        const { skillWorkflowSpecs } = await import('../../../db/schema');
+        const { eq: eqSpec, and: andSpec } = await import('drizzle-orm');
+        const specJson = JSON.stringify(compileResult.spec);
+        db.delete(skillWorkflowSpecs)
+          .where(andSpec(eqSpec(skillWorkflowSpecs.skill_id, body.skill_name), eqSpec(skillWorkflowSpecs.version_no, 1)))
+          .run();
+        db.insert(skillWorkflowSpecs).values({
+          skill_id: body.skill_name,
+          version_no: 1,
+          status: 'draft',
+          spec_json: specJson,
+        }).run();
+      }
+      if (compileResult.warnings.length > 0) {
+        logger.info('skill-creator', 'compile_warnings', { skill: body.skill_name, warnings: compileResult.warnings });
+      }
+    } catch (e) {
+      logger.warn('skill-creator', 'compile_error', { skill: body.skill_name, error: String(e) });
+    }
 
     const allToolsReady = toolWarnings.length === 0;
     logger.info('skill-creator', 'saved', {

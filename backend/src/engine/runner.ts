@@ -4,17 +4,17 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { type CoreMessage, generateText, jsonSchema } from 'ai';
 import { experimental_createMCPClient as createMCPClient } from 'ai';
 import { chatModel } from './llm';
-import { skillsTools, getSkillsDescriptionByChannel, getToolSkillMap, getSkillContent, getSkillMermaid } from './skills';
+import { skillsTools, SOP_ENFORCEMENT_SUFFIX, getSkillsDescriptionByChannel, getToolSkillMap, getSkillContent, getSkillMermaid } from './skills';
 import { logger } from '../services/logger';
 import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../agent/card/handoff-analyzer';
 import { t } from '../services/i18n';
 import { translateText } from '../services/translate-lang';
-import { isNoDataResult } from '../services/tool-result';
+import { isNoDataResult, isErrorResult } from '../services/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
 import { matchMockRule, getMockedToolNames, getMockedToolDefinitions } from '../services/mock-engine';
-import { mcpTools as mcpToolsTable } from '../db/schema';
-import { eq as dbEq } from 'drizzle-orm';
+import { mcpTools as mcpToolsTable, skillWorkflowSpecs } from '../db/schema';
+import { eq as dbEq, and as dbAnd, desc as dbDesc } from 'drizzle-orm';
 import { SOPGuard } from './sop-guard';
 import { randomUUID } from 'crypto';
 import { type NormalizedQuery } from '../services/query-normalizer';
@@ -43,6 +43,16 @@ function getSkillToolMap(): Record<string, string> {
   return getToolSkillMap();
 }
 
+
+/** Find the latest published workflow spec for a skill */
+function findPublishedSpec(skillId: string) {
+  try {
+    return db.select().from(skillWorkflowSpecs)
+      .where(dbAnd(dbEq(skillWorkflowSpecs.skill_id, skillId), dbEq(skillWorkflowSpecs.status, 'published')))
+      .orderBy(dbDesc(skillWorkflowSpecs.version_no))
+      .get();
+  } catch { return undefined; }
+}
 
 const SYSTEM_PROMPT_TEMPLATE =
   readFileSync(resolve(import.meta.dir, 'inbound-base-system-prompt.md'), 'utf-8') +
@@ -229,6 +239,8 @@ export interface RunAgentOptions {
   skillContent?: string; // 预注入的 SKILL.md 内容（测试时使用，避免依赖 LLM 调用 get_skill_instructions）
   skillName?: string; // 预设的技能名（配合 skillContent，用于进度追踪）
   normalizedContext?: NormalizedQuery;
+  /** 预编译的 WorkflowSpec（测试端点使用，直接激活 SOPGuard V2 plan） */
+  workflowPlan?: import('./skill-workflow-types').WorkflowSpec;
 }
 
 export async function runAgent(
@@ -382,10 +394,15 @@ export async function runAgent(
     if (msg.role === 'assistant' && Array.isArray(msg.content)) {
       for (const part of msg.content) {
         if (part.type === 'tool-call' && part.toolName) {
-          sopGuard.recordToolCall(part.toolName);
+          sopGuard.recordToolCall(part.toolName, { success: true, hasData: true });
         }
       }
     }
+  }
+  sopGuard.onUserMessage(userMessage);
+  // Activate pre-compiled plan (test endpoint injects this)
+  if (options?.workflowPlan && options?.skillName) {
+    sopGuard.activatePlan(options.skillName, options.workflowPlan);
   }
   const sopWrappedTools = Object.fromEntries(
     Object.entries(mcpTools as Record<string, any>).map(([name, tool]) => [
@@ -420,11 +437,18 @@ export async function runAgent(
             if (!enriched.operator) enriched.operator = JSON.stringify({ type: 'ai_skill', id: lastActiveSkill ?? 'unknown' });
           }
           // Execute the tool
-          const result = await tool.execute(...args);
-          // Record successful call
-          sopGuard.recordToolCall(name);
+          const toolResult = await tool.execute(...args);
+          // Record call with result classification
+          const toolSuccess = !isErrorResult(toolResult);
+          const toolHasData = (() => {
+            let text = '';
+            if (typeof toolResult === 'string') text = toolResult;
+            else if (toolResult && typeof toolResult === 'object' && 'content' in toolResult) text = (toolResult as any).content?.[0]?.text ?? '';
+            return !isNoDataResult(text);
+          })();
+          sopGuard.recordToolCall(name, { success: toolSuccess, hasData: toolHasData });
           sopGuard.resetViolations();
-          return result;
+          return toolResult;
         },
       },
     ]),
@@ -435,6 +459,31 @@ export async function runAgent(
 
   let lastActiveSkill: string | undefined = options?.skillName;
 
+  // Create plan-aware skills tools wrapper (activates SOPGuard V2 plan on skill load)
+  const planAwareSkillsTools = { ...skillsTools };
+  const originalGetSkillInstructions = skillsTools.get_skill_instructions;
+  planAwareSkillsTools.get_skill_instructions = {
+    ...originalGetSkillInstructions,
+    execute: async (args: any, options: any) => {
+      const result = await originalGetSkillInstructions.execute(args, options);
+      // Activate plan if skill loaded successfully
+      if (typeof result === 'string' && !result.startsWith('Error:')) {
+        const skillName = args.skill_name?.replace(/_/g, '-') ?? '';
+        try {
+          const planRow = findPublishedSpec(skillName);
+          if (planRow) {
+            sopGuard.activatePlan(skillName, JSON.parse(planRow.spec_json));
+            logger.info('sop-guard', 'plan_activated', { skill: skillName, version: planRow.version_no });
+            // Replace verbose SOP suffix with lightweight version — promptHint handles state-specific guidance
+            return (result as string).replace(SOP_ENFORCEMENT_SUFFIX,
+              '\n\n---\n## SOP 执行要求\n按照状态图顺序执行，系统会自动约束工具调用顺序。\n');
+          }
+        } catch { /* ignore parse errors */ }
+      }
+      return result;
+    },
+  };
+
   let systemPrompt = buildSystemPrompt(userPhone, lang, subscriberName, planName, subscriberGender);
   // Inject pre-loaded skill content (for test endpoint — ensures SOP is visible without get_skill_instructions)
   if (options?.skillContent) {
@@ -443,6 +492,10 @@ export async function runAgent(
   if (options?.normalizedContext) {
     systemPrompt += formatNormalizedContext(options.normalizedContext);
   }
+
+  // Inject SOP progress hint from SOPGuard V2 plan
+  const sopHint = sopGuard.getPromptHint();
+  if (sopHint) systemPrompt += '\n\n' + sopHint;
 
   // Per-request abort controller with 120s timeout
   const AGENT_TIMEOUT_MS = 180_000;
@@ -468,7 +521,7 @@ export async function runAgent(
       messages: [...history, { role: 'user', content: userMessage }],
       tools: {
         ...sopWrappedTools,
-        ...skillsTools,
+        ...planAwareSkillsTools,
       },
       maxSteps: 10,
       abortSignal: controller.signal,

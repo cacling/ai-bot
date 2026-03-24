@@ -59,117 +59,118 @@ metadata:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 任务下发: 催收任务平台下发客户信息、欠款金额、逾期天数、最迟还款日
+    [*] --> 任务下发: 催收任务平台下发客户信息、欠款金额、逾期天数、最迟还款日 %% step:col-task-dispatch %% kind:message
 
     %% OC1 — 接通前门控（PRE-DIAL GATE）
-    任务下发 --> 合规检查: 检查allowed_hours和重试次数
+    任务下发 --> 合规检查: 检查allowed_hours和重试次数 %% step:col-compliance-check %% kind:message
     state 合规结果 <<choice>>
     合规检查 --> 合规结果
-    合规结果 --> 呼叫中: 时段合规且未超max_retry
-    合规结果 --> 任务延后: 当前时段不允许或已达最大重试次数
+    合规结果 --> 呼叫中: 时段合规且未超max_retry %% step:col-dialing %% kind:message %% guard:always
+    合规结果 --> 任务延后: 当前时段不允许或已达最大重试次数 %% step:col-task-deferred %% kind:end %% guard:always
     任务延后 --> [*]: 任务入队等待下次窗口
 
     %% OC2 — 呼叫结果分支
     state 呼叫结果 <<choice>>
     呼叫中 --> 呼叫结果
-    呼叫结果 --> 开场说明: 客户接听
-    呼叫结果 --> 记录未接: 未接通 %% tool:record_call_result
-    呼叫结果 --> 记录忙线: 忙线 %% tool:record_call_result
-    呼叫结果 --> 记录关机: 关机/停机 %% tool:record_call_result
+    呼叫结果 --> 开场说明: 客户接听 %% step:col-opening %% kind:message %% guard:always
+    呼叫结果 --> 记录未接: 未接通 %% tool:record_call_result %% step:col-record-no-answer %% kind:tool %% guard:always
+    呼叫结果 --> 记录忙线: 忙线 %% tool:record_call_result %% step:col-record-busy %% kind:tool %% guard:always
+    呼叫结果 --> 记录关机: 关机/停机 %% tool:record_call_result %% step:col-record-power-off %% kind:tool %% guard:always
     记录未接 --> [*]: record_call_result(no_answer)
     记录忙线 --> [*]: record_call_result(busy)
     记录关机 --> [*]: record_call_result(power_off)
 
-    开场说明 --> 身份确认: 告知录音 + 用已知姓名确认"请问您是XX先生/女士吗？"
+    开场说明 --> 身份确认: 告知录音 + 用已知姓名确认"请问您是XX先生/女士吗？" %% step:col-identity-confirm %% kind:confirm
     %% ref:collection-guide.md#开场白
 
     %% OC3 — 身份确认（客户信息已在任务中注入，不需要客户提供姓名/证件号）
     %% ref:collection-guide.md#身份核验
     state 确认结果 <<choice>>
     身份确认 --> 确认结果
-    确认结果 --> 告知欠款: 确认是本人，告知欠款详情
-    确认结果 --> 记录非本人: 非本人接听 %% tool:record_call_result
+    确认结果 --> 告知欠款: 确认是本人，告知欠款详情 %% step:col-notify-debt %% kind:message %% guard:user.confirm
+    确认结果 --> 记录非本人: 非本人接听 %% tool:record_call_result %% step:col-record-non-owner %% kind:tool %% guard:user.cancel
     记录非本人 --> [*]: record_call_result(non_owner)，请转告机主
-    告知欠款 --> 客户回复意向: 询问还款计划
+    告知欠款 --> 客户回复意向: 询问还款计划 %% step:col-ask-intent %% kind:message
 
     state 意向判断 <<choice>>
     客户回复意向 --> 意向判断
-    意向判断 --> 承诺还款: 明确说出还款日期且口头承诺
-    意向判断 --> 模糊意愿: 只说"最近""回头""晚点看看"但无明确日期
-    意向判断 --> 预约回呼: 现在不方便、要求晚点再打
-    意向判断 --> 明确拒绝: 拒绝还款、不配合
-    意向判断 --> 提出异议: 已还款、金额有误、非本人欠款
-    意向判断 --> 转人工: 要求转人工
-    意向判断 --> 声称已付: 客户称刚刚付款/正在付款
-    意向判断 --> 特殊困难: 严重疾病/丧失劳动能力/机主已故/情绪极度脆弱
+    意向判断 --> 承诺还款: 明确说出还款日期且口头承诺 %% step:col-promise-pay %% kind:message %% guard:always
+    意向判断 --> 模糊意愿: 只说"最近""回头""晚点看看"但无明确日期 %% step:col-vague-intent %% kind:message %% guard:always
+    意向判断 --> 预约回呼: 现在不方便、要求晚点再打 %% step:col-callback-request %% kind:message %% guard:always
+    意向判断 --> 明确拒绝: 拒绝还款、不配合 %% step:col-refusal %% kind:message %% guard:always
+    意向判断 --> 提出异议: 已还款、金额有误、非本人欠款 %% step:col-dispute %% kind:message %% guard:always
+    意向判断 --> 转人工: 要求转人工 %% step:col-transfer-human %% kind:message %% guard:always
+    意向判断 --> 声称已付: 客户称刚刚付款/正在付款 %% step:col-claim-paid %% kind:message %% guard:always
+    意向判断 --> 特殊困难: 严重疾病/丧失劳动能力/机主已故/情绪极度脆弱 %% step:col-vulnerable %% kind:message %% guard:always
 
-    模糊意愿 --> 追问日期: 温和追问具体还款日期
+    模糊意愿 --> 追问日期: 温和追问具体还款日期 %% step:col-followup-date %% kind:message
     state 追问结果 <<choice>>
     追问日期 --> 追问结果
-    追问结果 --> 承诺还款: 客户给出明确日期
-    追问结果 --> 预约回呼: 仍无法给出日期，转为回呼
+    追问结果 --> 承诺还款: 客户给出明确日期 %% guard:user.confirm
+    追问结果 --> 预约回呼: 仍无法给出日期，转为回呼 %% guard:always
 
-    特殊困难 --> 记录困难: 立即停止施压，表达理解 %% tool:record_call_result
-    记录困难 --> 转人工: record_call_result(vulnerable)，转人工跟进
+    特殊困难 --> 记录困难: 立即停止施压，表达理解 %% tool:record_call_result %% step:col-record-vulnerable %% kind:tool
+    记录困难 --> 转人工: record_call_result(vulnerable)，转人工跟进 %% guard:always
 
     %% OC4 — PTP 日期超限（PTP 必须同时满足：有明确日期 + 客户明确承诺）
-    承诺还款 --> 检查还款日期: 确认还款日期 %% ref:collection-guide.md#承诺还款
+    承诺还款 --> 检查还款日期: 确认还款日期 %% ref:collection-guide.md#承诺还款 %% step:col-check-ptp-date %% kind:message
     state 日期是否合规 <<choice>>
     检查还款日期 --> 日期是否合规
-    日期是否合规 --> 发送还款短信: 日期在max_ptp_days内 %% tool:send_followup_sms
-    日期是否合规 --> 协商更近日期: 日期超出max_ptp_days，引导提前
-    协商更近日期 --> 发送还款短信: 客户同意新日期
-    协商更近日期 --> 转人工: 无法达成一致
-    发送还款短信 --> 记录承诺: record_call_result(ptp) %% tool:record_call_result
+    日期是否合规 --> 发送还款短信: 日期在max_ptp_days内 %% tool:send_followup_sms %% step:col-send-payment-sms %% kind:tool %% guard:always
+    日期是否合规 --> 协商更近日期: 日期超出max_ptp_days，引导提前 %% step:col-negotiate-date %% kind:message %% guard:always
+    协商更近日期 --> 发送还款短信: 客户同意新日期 %% guard:user.confirm
+    协商更近日期 --> 转人工: 无法达成一致 %% guard:user.cancel
+    发送还款短信 --> 记录承诺: record_call_result(ptp) %% tool:record_call_result %% step:col-record-ptp %% kind:tool
     记录承诺 --> [*]: 感谢挂断
 
-    预约回呼 --> 确认回呼信息: 询问期望回呼时间 + 确认回呼号码
+    预约回呼 --> 确认回呼信息: 询问期望回呼时间 + 确认回呼号码 %% step:col-confirm-callback-info %% kind:message
     state 号码确认 <<choice>>
     确认回呼信息 --> 号码确认
-    号码确认 --> 回呼已预约: 使用当前号码
-    号码确认 --> 回呼已预约: 客户提供新手机号
-    回呼已预约 --> 创建回访任务: create_callback_task %% tool:create_callback_task
-    创建回访任务 --> 记录回呼: record_call_result(callback_request) %% tool:record_call_result
+    号码确认 --> 回呼已预约: 使用当前号码 %% step:col-callback-scheduled %% kind:message %% guard:always
+    号码确认 --> 回呼已预约: 客户提供新手机号 %% guard:always
+    回呼已预约 --> 创建回访任务: create_callback_task %% tool:create_callback_task %% step:col-create-callback %% kind:tool
+    创建回访任务 --> 记录回呼: record_call_result(callback_request) %% tool:record_call_result %% step:col-record-callback %% kind:tool
     记录回呼 --> [*]: 礼貌挂断
 
-    明确拒绝 --> 提醒后果: 提醒一次逾期后果（仅一次）
+    明确拒绝 --> 提醒后果: 提醒一次逾期后果（仅一次） %% step:col-warn-consequence %% kind:message
     %% ref:collection-guide.md#明确拒绝
     state 拒绝情绪 <<choice>>
     提醒后果 --> 拒绝情绪
-    拒绝情绪 --> 转人工: 情绪激烈或投诉意向
-    拒绝情绪 --> 记录拒绝: 普通拒绝 ▸ record_call_result(refusal) %% tool:record_call_result
+    拒绝情绪 --> 转人工: 情绪激烈或投诉意向 %% guard:always
+    拒绝情绪 --> 记录拒绝: 普通拒绝 ▸ record_call_result(refusal) %% tool:record_call_result %% step:col-record-refusal %% kind:tool %% guard:always
     记录拒绝 --> [*]: 告知后续仍会联系，礼貌挂断
 
     %% OC6 — DND 请求
-    明确拒绝 --> DND请求: 客户要求不再来电
-    提醒后果 --> DND请求: 客户明确要求停止拨打
+    明确拒绝 --> DND请求: 客户要求不再来电 %% guard:always
+    提醒后果 --> DND请求: 客户明确要求停止拨打 %% guard:always
     state DND请求处理 {
-        DND请求 --> 记录DND: 记录客户要求不再来电
+        DND请求 --> 记录DND: 记录客户要求不再来电 %% step:col-record-dnd %% kind:tool
         记录DND --> [*]: record_call_result(dnd)，从外呼名单移除，不再安排后续催收，礼貌结束
     }
 
-    提出异议 --> 收集异议详情: 收集详情（已还款时间渠道、金额差异、非本人说明）
+    提出异议 --> 收集异议详情: 收集详情（已还款时间渠道、金额差异、非本人说明） %% step:col-collect-dispute-detail %% kind:message
     %% ref:collection-guide.md#提出异议
-    收集异议详情 --> 记录异议: record_call_result(dispute) %% tool:record_call_result
+    收集异议详情 --> 记录异议: record_call_result(dispute) %% tool:record_call_result %% step:col-record-dispute %% kind:tool
     state 异议复杂度 <<choice>>
     记录异议 --> 异议复杂度
-    异议复杂度 --> 转人工: 情况复杂需人工复核
-    异议复杂度 --> [*]: 简单情况，告知核查时限，礼貌挂断
+    异议复杂度 --> 转人工: 情况复杂需人工复核 %% guard:always
+    异议复杂度 --> 简单异议结案: 简单情况，告知核查时限，礼貌挂断 %% step:col-dispute-simple-close %% kind:end %% guard:always
+    简单异议结案 --> [*]
 
     %% OC5 — 客户声称刚付款
-    声称已付 --> 收集付款信息: 询问付款时间、渠道、金额
-    收集付款信息 --> 记录待核实: record_call_result(dispute, paid) %% tool:record_call_result
+    声称已付 --> 收集付款信息: 询问付款时间、渠道、金额 %% step:col-collect-payment-info %% kind:message
+    收集付款信息 --> 记录待核实: record_call_result(dispute, paid) %% tool:record_call_result %% step:col-record-pending-verify %% kind:tool
     记录待核实 --> [*]: 告知1-3工作日核查，礼貌挂断
 
-    转人工 --> 转接坐席: transfer_to_human %% tool:transfer_to_human
+    转人工 --> 转接坐席: transfer_to_human %% tool:transfer_to_human %% step:col-transfer-agent %% kind:human
     转接坐席 --> [*]: 人工接通处理
 
     %% OC7 — 全局情绪升级出口
     %% 任意节点均可触发：情绪激烈失控、威胁自伤、威胁法律诉讼
-    提醒后果 --> 情绪升级: 情绪激烈失控/威胁自伤/威胁诉讼
-    收集异议详情 --> 情绪升级: 情绪激烈失控/威胁自伤/威胁诉讼
+    提醒后果 --> 情绪升级: 情绪激烈失控/威胁自伤/威胁诉讼 %% guard:always
+    收集异议详情 --> 情绪升级: 情绪激烈失控/威胁自伤/威胁诉讼 %% guard:always
     state 紧急转人工 {
-        情绪升级 --> 立即转接: transfer_to_human %% tool:transfer_to_human
+        情绪升级 --> 立即转接: transfer_to_human %% tool:transfer_to_human %% step:col-emergency-transfer %% kind:human
         立即转接 --> [*]: 人工接管处理
     }
 ```
