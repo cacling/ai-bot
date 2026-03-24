@@ -840,3 +840,9 @@ export async function runAgent(
     // Persistent MCP client is intentionally kept open across requests.
   }
 }
+
+/** Get raw MCP tools for the workflow runtime (no SOP wrapping needed) */
+export async function getMcpToolsForRuntime(): Promise<Record<string, any>> {
+  const { tools } = await getMCPTools();
+  return tools as Record<string, any>;
+}
