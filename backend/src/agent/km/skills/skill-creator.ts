@@ -992,8 +992,10 @@ skillCreator.post('/save', async (c) => {
       filename: a.filename, content: a.content,
     }));
 
+    let savedVersionNo = 1; // tracks which version was actually saved
     if (isNew) {
       // 全新技能 → 创建 v1（写入 .versions/ 目录）
+      savedVersionNo = 1;
       await createNewSkillVersion(
         body.skill_name, body.skill_md, refs,
         '通过技能创建器新建', 'skill-creator',
@@ -1017,6 +1019,7 @@ skillCreator.post('/save', async (c) => {
 
       if (body.version_no) {
         // 指定了版本号 → 直接更新该版本的文件（不创建新版本）
+        savedVersionNo = body.version_no;
         await writeVersionFile(body.skill_name, body.version_no, 'SKILL.md', body.skill_md);
         for (const ref of refs) {
           await writeVersionFile(body.skill_name, body.version_no, `references/${ref.filename}`, ref.content);
@@ -1031,6 +1034,7 @@ skillCreator.post('/save', async (c) => {
         const { versionNo } = await createVersionFrom(
           body.skill_name, latestVersion, '通过技能创建器编辑', 'skill-creator',
         );
+        savedVersionNo = versionNo;
         await writeVersionFile(body.skill_name, versionNo, 'SKILL.md', body.skill_md);
         for (const ref of refs) {
           await writeVersionFile(body.skill_name, versionNo, `references/${ref.filename}`, ref.content);
@@ -1065,19 +1069,20 @@ skillCreator.post('/save', async (c) => {
     refreshSkillsCache();
 
     // Compile workflow spec (non-blocking, warnings only)
+    // savedVersionNo tracks the actual version that was saved above
     try {
       const { compileWorkflow } = await import('../../../engine/skill-workflow-compiler');
-      const compileResult = compileWorkflow(body.skill_md, body.skill_name, 1);
+      const compileResult = compileWorkflow(body.skill_md, body.skill_name, savedVersionNo);
       if (compileResult.spec) {
         const { skillWorkflowSpecs } = await import('../../../db/schema');
         const { eq: eqSpec, and: andSpec } = await import('drizzle-orm');
         const specJson = JSON.stringify(compileResult.spec);
         db.delete(skillWorkflowSpecs)
-          .where(andSpec(eqSpec(skillWorkflowSpecs.skill_id, body.skill_name), eqSpec(skillWorkflowSpecs.version_no, 1)))
+          .where(andSpec(eqSpec(skillWorkflowSpecs.skill_id, body.skill_name), eqSpec(skillWorkflowSpecs.version_no, savedVersionNo)))
           .run();
         db.insert(skillWorkflowSpecs).values({
           skill_id: body.skill_name,
-          version_no: 1,
+          version_no: savedVersionNo,
           status: 'draft',
           spec_json: specJson,
         }).run();

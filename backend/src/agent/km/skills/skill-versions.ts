@@ -97,11 +97,20 @@ app.post('/publish', async (c) => {
   if (!body.skill || !body.version_no) return c.json({ error: 'skill 和 version_no 必填' }, 400);
 
   // Compile workflow spec — block publish if errors
+  // Read from the version snapshot (not biz-skills/ main dir) to ensure plan matches the published version
   try {
     const { compileWorkflow } = await import('../../../engine/skill-workflow-compiler');
-    const mainPath = resolve(SKILLS_ROOT, 'biz-skills', body.skill, 'SKILL.md');
+    const version = getVersionDetail(body.skill, body.version_no);
     let skillMd: string | null = null;
-    try { skillMd = readFileSync(mainPath, 'utf-8'); } catch { /* ignore */ }
+    if (version?.snapshot_path) {
+      try {
+        skillMd = readFileSync(resolve(SKILLS_ROOT, version.snapshot_path, 'SKILL.md'), 'utf-8');
+      } catch { /* snapshot not found, try main dir as fallback */ }
+    }
+    if (!skillMd) {
+      const mainPath = resolve(SKILLS_ROOT, 'biz-skills', body.skill, 'SKILL.md');
+      try { skillMd = readFileSync(mainPath, 'utf-8'); } catch { /* ignore */ }
+    }
 
     if (skillMd) {
       const result = compileWorkflow(skillMd, body.skill, body.version_no);
