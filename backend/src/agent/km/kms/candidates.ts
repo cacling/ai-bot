@@ -94,7 +94,7 @@ app.put('/:id', async (c) => {
   const body = await c.req.json<Record<string, unknown>>();
   const now = new Date().toISOString();
   // 只允许更新指定字段
-  const allowed = ['normalized_q', 'draft_answer', 'variants_json', 'category', 'risk_level', 'target_asset_id', 'status'];
+  const allowed = ['normalized_q', 'draft_answer', 'variants_json', 'category', 'risk_level', 'target_asset_id', 'status', 'scene_code', 'retrieval_tags_json', 'structured_json'];
   const updates: Record<string, unknown> = { updated_at: now };
   for (const key of allowed) {
     if (key in body) updates[key] = body[key];

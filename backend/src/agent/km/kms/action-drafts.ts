@@ -94,6 +94,7 @@ app.post('/:id/execute', async (c) => {
             await db.insert(kmAssetVersions).values({
               id: rollbackId, asset_id: assetId, version_no: newVer,
               content_snapshot: JSON.stringify({ q: cand.normalized_q, a: cand.draft_answer }),
+              structured_snapshot_json: cand.structured_json,
               scope_snapshot: asset.scope_json, action_draft_id: id,
               rollback_point_id: `v${asset.current_version}`,
               effective_from: now, created_at: now,
@@ -110,6 +111,7 @@ app.post('/:id/execute', async (c) => {
           await db.insert(kmAssetVersions).values({
             id: nanoid(), asset_id: assetId, version_no: 1,
             content_snapshot: JSON.stringify({ q: cand.normalized_q, a: cand.draft_answer }),
+            structured_snapshot_json: cand.structured_json,
             action_draft_id: id, effective_from: now, created_at: now,
           });
         }
