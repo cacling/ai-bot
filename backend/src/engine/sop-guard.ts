@@ -324,16 +324,55 @@ export class SOPGuard {
         return null; // allow — matches current step
       }
 
-      // Check if tool is in any reachable step (query tools may be called ahead)
-      // For now: if it's a read-only tool hint, allow it
-      // Otherwise block
-      const isCurrentStepTool = step?.kind === 'tool';
-      if (isCurrentStepTool && step?.tool !== toolName) {
+      // Current step is a tool step but wrong tool → block
+      if (step?.kind === 'tool' && step?.tool !== toolName) {
         this.violations++;
         return `当前在 [${step?.label}] 状态，应该调用 ${step?.tool}，不能调用 ${toolName}。`;
       }
 
-      // Fall through to existing check for non-tool steps
+      // Current step is NOT a tool step (message/ref/choice) →
+      // Allow tools that are reachable from current step within a few hops
+      // Block tools that exist in the plan but aren't reachable yet
+      if (step?.kind !== 'tool') {
+        // BFS from current step to find next reachable tool steps (within 5 hops)
+        const reachableTools = new Set<string>();
+        const visited = new Set<string>();
+        const queue = [this.currentStepId!];
+        let hops = 0;
+        while (queue.length > 0 && hops < 5) {
+          const batch = [...queue];
+          queue.length = 0;
+          for (const id of batch) {
+            if (visited.has(id)) continue;
+            visited.add(id);
+            const s = this.activePlan.steps[id];
+            if (!s) continue;
+            if (s.kind === 'tool' && s.tool) reachableTools.add(s.tool);
+            for (const t of s.transitions) queue.push(t.target);
+          }
+          hops++;
+        }
+
+        if (reachableTools.has(toolName)) {
+          return null; // allow — tool is reachable from current position
+        }
+
+        // If BFS found no reachable tools at all (broken graph / nested state edge case),
+        // fall through to legacy check rather than blocking everything
+        if (reachableTools.size === 0) {
+          // Fall through to legacy check
+        } else {
+          // Check if tool exists elsewhere in plan (not reachable yet)
+          const isToolInPlan = Object.values(this.activePlan.steps).some(
+            s => s.kind === 'tool' && s.tool === toolName
+          );
+          if (isToolInPlan) {
+            this.violations++;
+            return `当前在 [${step?.label}] 状态，尚未到达可执行 ${toolName} 的步骤。`;
+          }
+        }
+        // Tool not in plan or broken graph → fall through to legacy check
+      }
     }
 
     // 先刷新依赖图（如果超过 TTL），确保新创建的技能的工具约束能被及时加载
