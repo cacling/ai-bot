@@ -72,7 +72,7 @@ export function ConnectorListPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="p-4 space-y-4">
       {/* Stats */}
       {!loading && connectors.length > 0 && (
         <div className="grid grid-cols-4 gap-3">
@@ -217,7 +217,7 @@ function ConnectorEditor({ connectorId, onBack, onSaved }: { connectorId: string
   };
 
   return (
-    <div className="space-y-4">
+    <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft size={14} /> 返回</Button>
         <Button size="sm" onClick={handleSave} disabled={saving}>
