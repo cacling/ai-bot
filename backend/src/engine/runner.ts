@@ -390,11 +390,27 @@ export async function runAgent(
   // SOP Guard: wrap operation tools with precondition checks
   const sopGuard = new SOPGuard();
   // 从 history 中恢复已调用的工具（多轮对话时保持 SOP 状态连续）
+  // Build a map of toolCallId → result from tool-result messages for accurate guard evaluation
+  const toolResultMap = new Map<string, { success: boolean; hasData: boolean }>();
+  for (const msg of history) {
+    if (msg.role === 'tool' && Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === 'tool-result' && part.toolCallId) {
+          const text = typeof part.result === 'string' ? part.result : JSON.stringify(part.result ?? '');
+          toolResultMap.set(part.toolCallId, {
+            success: !isErrorResult(text),
+            hasData: !isNoDataResult(text),
+          });
+        }
+      }
+    }
+  }
   for (const msg of history) {
     if (msg.role === 'assistant' && Array.isArray(msg.content)) {
       for (const part of msg.content) {
         if (part.type === 'tool-call' && part.toolName) {
-          sopGuard.recordToolCall(part.toolName, { success: true, hasData: true });
+          const result = toolResultMap.get(part.toolCallId) ?? { success: true, hasData: true };
+          sopGuard.recordToolCall(part.toolName, result);
         }
       }
     }
