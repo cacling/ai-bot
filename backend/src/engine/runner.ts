@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { type CoreMessage, generateText, jsonSchema } from 'ai';
 import { experimental_createMCPClient as createMCPClient } from 'ai';
 import { chatModel } from './llm';
-import { skillsTools, getSkillsDescriptionByChannel, getToolSkillMap, getSkillContent, getSkillMermaid } from './skills';
+import { skillsTools, SOP_ENFORCEMENT_SUFFIX, getSkillsDescriptionByChannel, getToolSkillMap, getSkillContent, getSkillMermaid } from './skills';
 import { logger } from '../services/logger';
 import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../agent/card/handoff-analyzer';
 import { t } from '../services/i18n';
@@ -468,6 +468,9 @@ export async function runAgent(
           if (planRow) {
             sopGuard.activatePlan(skillName, JSON.parse(planRow.spec_json));
             logger.info('sop-guard', 'plan_activated', { skill: skillName, version: planRow.version_no });
+            // Replace verbose SOP suffix with lightweight version — promptHint handles state-specific guidance
+            return (result as string).replace(SOP_ENFORCEMENT_SUFFIX,
+              '\n\n---\n## SOP 执行要求\n按照状态图顺序执行，系统会自动约束工具调用顺序。\n');
           }
         } catch { /* ignore parse errors */ }
       }
