@@ -93,6 +93,24 @@ stateDiagram-v2
     }
 ```
 
+### 运行时执行注释（推荐）
+
+以下注释用于让状态图可被编译为运行时执行计划。新建技能时建议添加：
+
+| 注释 | 语义 | 示例 |
+|------|------|------|
+| `%% step:<id>` | 节点稳定标识（kebab-case） | `%% step:query-subscriber` |
+| `%% kind:<type>` | 节点类型 | `%% kind:tool` / `kind:confirm` / `kind:ref` / `kind:human` / `kind:message` / `kind:end` |
+| `%% guard:<condition>` | 转移条件（结构化） | `%% guard:tool.success` / `guard:tool.error` / `guard:user.confirm` / `guard:user.cancel` / `guard:always` |
+| `%% output:<key>` | 工具返回值引用键名 | `%% output:subscriber_info` |
+
+规则：
+- 注释写在转移行或状态行末尾，和 `%% tool:` 一样
+- 转移行上的注释关联到**目标**节点（如 `A --> B %% tool:xxx` 表示 B 执行查询）
+- `guard` 只写在转移行（`-->`）上
+- `kind:confirm` 的节点必须有 `user.confirm` 和 `user.cancel` 两条出边
+- 编译器会从中文标签推断 guard（如"成功"→`tool.success`），但显式标注更可靠
+
 **其他约定：**
 
 | 约定 | 说明 |
