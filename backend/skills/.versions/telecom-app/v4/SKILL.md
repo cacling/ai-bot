@@ -55,108 +55,111 @@ metadata:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 接收问题: 客户反映营业厅 App 使用问题
-    接收问题 --> 判断问题类型: 根据客户描述确定 issue_type
+    [*] --> 接收问题: 客户反映营业厅 App 使用问题 %% step:app-receive %% kind:message
+    接收问题 --> 判断问题类型: 根据客户描述确定 issue_type %% step:app-classify %% kind:message
 
-    state 问题分类 <<choice>>
+    state 问题分类 <<choice>> %% kind:choice
     判断问题类型 --> 问题分类
-    问题分类 --> TC1_闪退: app_crash %% branch:app_crash
-    问题分类 --> TC2_登录: login_issue %% branch:login_issue
-    问题分类 --> TC3_功能异常: feature_error %% branch:feature_error
-    问题分类 --> TC4_安装更新: install_update %% branch:install_update
-    问题分类 --> TC5_安全: security_check %% branch:security_check
+    问题分类 --> TC1_闪退: app_crash %% branch:app_crash %% guard:always
+    问题分类 --> TC2_登录: login_issue %% branch:login_issue %% guard:always
+    问题分类 --> TC3_功能异常: feature_error %% branch:feature_error %% guard:always
+    问题分类 --> TC4_安装更新: install_update %% branch:install_update %% guard:always
+    问题分类 --> TC5_安全: security_check %% branch:security_check %% guard:always
 
     %% T7 — 全局升级出口：用户随时可要求转人工
-    用户要求转人工 --> 转接人工: 转接人工客服
-    转接人工 --> [*]
+    用户要求转人工 --> 转接人工: 转接人工客服 %% step:app-request-human %% kind:human
+    转接人工 --> [*] %% kind:end
 
     state TC1_闪退 {
-        [*] --> 检查版本_1 %% ref:troubleshoot-guide.md#TC1
-        state 版本结果_1 <<choice>>
+        [*] --> 检查版本_1 %% ref:troubleshoot-guide.md#TC1 %% step:app-tc1-check-version %% kind:message
+        state 版本结果_1 <<choice>> %% kind:choice
         检查版本_1 --> 版本结果_1
-        版本结果_1 --> 引导更新App: 版本过旧
-        版本结果_1 --> 清缓存_重启_清存储: 版本正常
+        版本结果_1 --> 引导更新App: 版本过旧 %% step:app-tc1-guide-update %% kind:message %% guard:always
+        版本结果_1 --> 清缓存_重启_清存储: 版本正常 %% step:app-tc1-clear-cache %% kind:message %% guard:always
         引导更新App --> 确认是否解决
-        state 自助结果_1 <<choice>>
+        state 自助结果_1 <<choice>> %% kind:choice
         清缓存_重启_清存储 --> 自助结果_1
-        自助结果_1 --> 确认是否解决: 问题解决
-        自助结果_1 --> 升级frontline_1: 以上无效，提交设备信息工单
-        升级frontline_1 --> [*]
+        自助结果_1 --> 确认是否解决: 问题解决 %% guard:always
+        自助结果_1 --> 升级frontline_1: 以上无效，提交设备信息工单 %% step:app-tc1-escalate-frontline %% kind:human %% guard:always
+        升级frontline_1 --> [*] %% kind:end
     }
 
     state TC2_登录 {
-        [*] --> 登录分类 %% ref:troubleshoot-guide.md#TC2
-        state 登录类型 <<choice>>
+        [*] --> 登录分类 %% ref:troubleshoot-guide.md#TC2 %% step:app-tc2-login-classify %% kind:message
+        state 登录类型 <<choice>> %% kind:choice
         登录分类 --> 登录类型
-        登录类型 --> 安全诊断: 账号被锁或风控限制
-        登录类型 --> 引导重置密码: 密码错误，引导"忘记密码"
-        登录类型 --> OTP排查: OTP 未送达，核验手机号 ▸ 等待重发 ▸ 切换验证方式
-        登录类型 --> 引导切换密码登录或重新注册生物识别: 生物识别失败，设置→安全→重新录入指纹/面容
-        安全诊断 --> 按诊断引导: diagnose_app(phone, issue_type) %% tool:diagnose_app
-        state 诊断结果_2 <<choice>>
+        登录类型 --> 安全诊断: 账号被锁或风控限制 %% step:app-tc2-security-diag %% kind:message %% guard:always
+        登录类型 --> 引导重置密码: 密码错误，引导"忘记密码" %% step:app-tc2-reset-password %% kind:message %% guard:always
+        登录类型 --> OTP排查: OTP 未送达，核验手机号 ▸ 等待重发 ▸ 切换验证方式 %% step:app-tc2-otp-check %% kind:message %% guard:always
+        登录类型 --> 引导切换密码登录或重新注册生物识别: 生物识别失败，设置→安全→重新录入指纹/面容 %% step:app-tc2-biometric %% kind:message %% guard:always
+        安全诊断 --> 按诊断引导: diagnose_app(phone, issue_type) %% tool:diagnose_app %% step:app-tc2-diagnose %% kind:tool
+        state 诊断结果_2 <<choice>> %% kind:choice
         按诊断引导 --> 诊断结果_2
-        诊断结果_2 --> 确认是否解决: 诊断成功
-        诊断结果_2 --> 诊断不可用_2: 诊断失败
-        诊断不可用_2 --> 升级frontline_2: 系统诊断不可用，升级 frontline
-        升级frontline_2 --> [*]
+        诊断结果_2 --> 确认是否解决: 诊断成功 %% guard:tool.success
+        诊断结果_2 --> 诊断不可用_2: 诊断失败 %% step:app-tc2-diag-unavailable %% kind:message %% guard:tool.error
+        诊断不可用_2 --> 升级frontline_2: 系统诊断不可用，升级 frontline %% step:app-tc2-escalate-frontline %% kind:human
+        升级frontline_2 --> [*] %% kind:end
         引导重置密码 --> 确认是否解决
         OTP排查 --> 确认是否解决
-        引导切换密码登录或重新注册生物识别 --> [*]
+        引导切换密码登录或重新注册生物识别 --> [*] %% kind:end
     }
 
     state TC3_功能异常 {
-        [*] --> 逐项排查: 检查网络 ▸ 检查版本 ▸ 清缓存 %% ref:troubleshoot-guide.md#TC3
-        state 排查结果_3 <<choice>>
+        [*] --> 逐项排查: 检查网络 ▸ 检查版本 ▸ 清缓存 %% ref:troubleshoot-guide.md#TC3 %% step:app-tc3-step-by-step %% kind:message
+        state 排查结果_3 <<choice>> %% kind:choice
         逐项排查 --> 排查结果_3
-        排查结果_3 --> 引导缴费: 账户欠费或停机
-        排查结果_3 --> 升级frontline_3: 以上无效，记录问题截图提交工单
-        排查结果_3 --> 确认是否解决: 问题解决
-        排查结果_3 --> 建议换支付方式或稍后重试: 缴费/支付网关错误
+        排查结果_3 --> 引导缴费: 账户欠费或停机 %% step:app-tc3-guide-payment %% kind:message %% guard:always
+        排查结果_3 --> 升级frontline_3: 以上无效，记录问题截图提交工单 %% step:app-tc3-escalate-frontline %% kind:human %% guard:always
+        排查结果_3 --> 确认是否解决: 问题解决 %% guard:always
+        排查结果_3 --> 建议换支付方式或稍后重试: 缴费/支付网关错误 %% step:app-tc3-switch-payment %% kind:end %% guard:always
         引导缴费 --> 确认是否解决
-        建议换支付方式或稍后重试 --> [*]
-        升级frontline_3 --> [*]
+        建议换支付方式或稍后重试 --> [*] %% kind:end
+        升级frontline_3 --> [*] %% kind:end
     }
 
     state TC4_安装更新 {
-        [*] --> 基础排查: 检查系统版本 ▸ 检查空间 ▸ 切换网络 %% ref:troubleshoot-guide.md#TC4
-        state 排查结果_4 <<choice>>
+        [*] --> 基础排查: 检查系统版本 ▸ 检查空间 ▸ 切换网络 %% ref:troubleshoot-guide.md#TC4 %% step:app-tc4-basic-check %% kind:message
+        state 排查结果_4 <<choice>> %% kind:choice
         基础排查 --> 排查结果_4
-        排查结果_4 --> 确认是否解决: 问题解决
-        排查结果_4 --> 提供下载渠道: 仍失败，引导官方应用商店或直链下载
+        排查结果_4 --> 确认是否解决: 问题解决 %% guard:always
+        排查结果_4 --> 提供下载渠道: 仍失败，引导官方应用商店或直链下载 %% step:app-tc4-download-link %% kind:message %% guard:always
         提供下载渠道 --> 确认是否解决
     }
 
     state TC5_安全 {
-        [*] --> 安全诊断_5: diagnose_app(phone, issue_type) %% tool:diagnose_app %% ref:troubleshoot-guide.md#TC5
-        state 诊断结果_5 <<choice>>
+        [*] --> 安全诊断_5: diagnose_app(phone, issue_type) %% tool:diagnose_app %% ref:troubleshoot-guide.md#TC5 %% step:app-tc5-diagnose %% kind:tool
+        state 诊断结果_5 <<choice>> %% kind:choice
         安全诊断_5 --> 诊断结果_5
-        诊断结果_5 --> 风险等级: 诊断成功
-        诊断结果_5 --> 诊断不可用_5: 诊断失败
-        诊断不可用_5 --> 升级frontline_5: 系统诊断不可用，升级 frontline
-        升级frontline_5 --> [*]
-        state 风险等级 <<choice>>
-        风险等级 --> 升级security_team: 高风险（屏幕共享、flagged、异地登录否认），反诈提醒
-        风险等级 --> 告知硬性限制: 设备问题（Root或模拟器），须使用正常设备
-        风险等级 --> 逐项引导修复: 可修复，删除应用、关闭VPN、更新版本
-        升级security_team --> [*]
-        state 硬性限制反馈 <<choice>>
+        诊断结果_5 --> 风险等级: 诊断成功 %% guard:tool.success
+        诊断结果_5 --> 诊断不可用_5: 诊断失败 %% step:app-tc5-diag-unavailable %% kind:message %% guard:tool.error
+        诊断不可用_5 --> 升级frontline_5: 系统诊断不可用，升级 frontline %% step:app-tc5-escalate-frontline %% kind:human
+        升级frontline_5 --> [*] %% kind:end
+        state 风险等级 <<choice>> %% kind:choice
+        风险等级 --> 升级security_team: 高风险（屏幕共享、flagged、异地登录否认），反诈提醒 %% step:app-tc5-escalate-security %% kind:human %% guard:always
+        风险等级 --> 告知硬性限制: 设备问题（Root或模拟器），须使用正常设备 %% step:app-tc5-hard-limit %% kind:message %% guard:always
+        风险等级 --> 逐项引导修复: 可修复，删除应用、关闭VPN、更新版本 %% step:app-tc5-guide-fix %% kind:message %% guard:always
+        升级security_team --> [*] %% kind:end
+        state 硬性限制反馈 <<choice>> %% kind:choice
         告知硬性限制 --> 硬性限制反馈
-        硬性限制反馈 --> [*]: 用户接受
-        硬性限制反馈 --> 升级frontline_5b: 用户声明未Root，升级 frontline 人工核查设备状态
-        升级frontline_5b --> [*]
-        逐项引导修复 --> 二次诊断: 重新运行diagnose_app确认修复 %% tool:diagnose_app
-        state 二次结果 <<choice>>
+        硬性限制反馈 --> 用户接受硬性限制: 用户接受 %% step:app-tc5-accept-limit %% kind:end %% guard:user.confirm
+        用户接受硬性限制 --> [*]
+        硬性限制反馈 --> 升级frontline_5b: 用户声明未Root，升级 frontline 人工核查设备状态 %% step:app-tc5-escalate-frontline-b %% kind:human %% guard:user.cancel
+        升级frontline_5b --> [*] %% kind:end
+        逐项引导修复 --> 二次诊断: 重新运行diagnose_app确认修复 %% tool:diagnose_app %% step:app-tc5-re-diagnose %% kind:tool
+        state 二次结果 <<choice>> %% kind:choice
         二次诊断 --> 二次结果
-        二次结果 --> [*]: 通过
-        二次结果 --> 升级security_team_2: 仍有问题，升级security_team
-        升级security_team_2 --> [*]
+        二次结果 --> 二次诊断通过: 通过 %% step:app-tc5-rediag-pass %% kind:end %% guard:tool.success
+        二次诊断通过 --> [*]
+        二次结果 --> 升级security_team_2: 仍有问题，升级security_team %% step:app-tc5-escalate-security-2 %% kind:human %% guard:tool.error
+        升级security_team_2 --> [*] %% kind:end
     }
 
     %% T3 — 共享终态确认环：所有"问题解决"出口汇入此处
-    state 确认是否解决 <<choice>>
-    确认是否解决 --> [*]: 已解决
-    确认是否解决 --> 升级frontline_确认: 未解决
-    升级frontline_确认 --> [*]
+    state 确认是否解决 <<choice>> %% kind:choice
+    确认是否解决 --> 问题已解决: 已解决 %% step:app-resolved %% kind:end %% guard:user.confirm
+    问题已解决 --> [*]
+    确认是否解决 --> 升级frontline_确认: 未解决 %% step:app-escalate-frontline-final %% kind:human %% guard:user.cancel
+    升级frontline_确认 --> [*] %% kind:end
 
     TC1_闪退 --> [*]
     TC2_登录 --> [*]
