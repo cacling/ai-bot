@@ -211,6 +211,15 @@ app.post('/test', async (c) => {
         else skillContent = personaContext;
       }
 
+      // Compile workflow plan for SOPGuard V2
+      let workflowPlan: import('../../../engine/skill-workflow-types').WorkflowSpec | undefined;
+      try {
+        const { compileWorkflow } = await import('../../../engine/skill-workflow-compiler');
+        const raw = readFileSync(skillMdPath, 'utf-8');
+        const compileResult = compileWorkflow(raw, body.skill, body.version_no);
+        if (compileResult.spec) workflowPlan = compileResult.spec;
+      } catch { /* compilation optional */ }
+
       const result = await runAgent(
         body.message,
         history,
@@ -222,7 +231,7 @@ app.post('/test', async (c) => {
         planName,         // planName
         undefined,        // subscriberGender
         tempParent,       // overrideSkillsDir
-        { useMock: body.useMock !== false, skillContent, skillName: body.skill },
+        { useMock: body.useMock !== false, skillContent, skillName: body.skill, workflowPlan },
       );
       return c.json({ text: result.text, card: result.card ?? null, skill_diagram: result.skill_diagram ?? null, mock: body.useMock !== false });
     } finally {

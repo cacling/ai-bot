@@ -239,6 +239,8 @@ export interface RunAgentOptions {
   skillContent?: string; // 预注入的 SKILL.md 内容（测试时使用，避免依赖 LLM 调用 get_skill_instructions）
   skillName?: string; // 预设的技能名（配合 skillContent，用于进度追踪）
   normalizedContext?: NormalizedQuery;
+  /** 预编译的 WorkflowSpec（测试端点使用，直接激活 SOPGuard V2 plan） */
+  workflowPlan?: import('./skill-workflow-types').WorkflowSpec;
 }
 
 export async function runAgent(
@@ -398,6 +400,10 @@ export async function runAgent(
     }
   }
   sopGuard.onUserMessage(userMessage);
+  // Activate pre-compiled plan (test endpoint injects this)
+  if (options?.workflowPlan && options?.skillName) {
+    sopGuard.activatePlan(options.skillName, options.workflowPlan);
+  }
   const sopWrappedTools = Object.fromEntries(
     Object.entries(mcpTools as Record<string, any>).map(([name, tool]) => [
       name,
