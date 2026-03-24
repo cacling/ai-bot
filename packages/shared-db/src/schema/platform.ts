@@ -167,6 +167,9 @@ export const kmCandidates = sqliteTable('km_candidates', {
   draft_answer: text('draft_answer'),
   variants_json: text('variants_json'),
   category: text('category'),
+  scene_code: text('scene_code'),
+  retrieval_tags_json: text('retrieval_tags_json'),
+  structured_json: text('structured_json'),
   risk_level: text('risk_level').notNull().default('low'),
   gate_evidence: text('gate_evidence').notNull().default('pending'),
   gate_conflict: text('gate_conflict').notNull().default('pending'),
@@ -262,6 +265,7 @@ export const kmAssetVersions = sqliteTable('km_asset_versions', {
   content_snapshot: text('content_snapshot'),
   scope_snapshot: text('scope_snapshot'),
   evidence_summary: text('evidence_summary'),
+  structured_snapshot_json: text('structured_snapshot_json'),
   rollback_point_id: text('rollback_point_id'),
   action_draft_id: text('action_draft_id'),
   effective_from: text('effective_from'),
@@ -302,6 +306,17 @@ export const kmAuditLogs = sqliteTable('km_audit_logs', {
   object_id: text('object_id').notNull(),
   operator: text('operator').notNull().default('system'),
   risk_level: text('risk_level'),
+  detail_json: text('detail_json'),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+export const kmReplyFeedback = sqliteTable('km_reply_feedback', {
+  id: text('id').primaryKey(),
+  session_id: text('session_id'),
+  phone: text('phone'),
+  message_id: text('message_id'),
+  asset_version_id: text('asset_version_id'),
+  event_type: text('event_type').notNull(), // 'shown' | 'use' | 'copy' | 'edit' | 'dismiss'
   detail_json: text('detail_json'),
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
 });

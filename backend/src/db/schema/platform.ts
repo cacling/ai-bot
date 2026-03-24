@@ -26,6 +26,7 @@ export {
   kmGovernanceTasks,
   kmRegressionWindows,
   kmAuditLogs,
+  kmReplyFeedback,
   mcpServers,
   mcpTools,
   // 严格 MCP 对齐：新增三层架构表
