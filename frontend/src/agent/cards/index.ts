@@ -9,7 +9,7 @@
  *   2. Call registerCard() here
  */
 
-import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle, ShieldAlert } from 'lucide-react';
+import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle, ShieldAlert, MessageSquareText } from 'lucide-react';
 import { registerCard } from './registry';
 import { DiagramContent      } from './contents/DiagramContent';
 import { EmotionContent      } from './contents/EmotionContent';
@@ -17,6 +17,7 @@ import { HandoffContent      } from './contents/HandoffContent';
 import { OutboundTaskContent } from './contents/OutboundTaskContent';
 import { UserDetailContent   } from './contents/UserDetailContent';
 import { ComplianceContent   } from './contents/ComplianceContent';
+import { ReplyHintContent    } from './contents/ReplyHintContent';
 
 // Registration order determines default layout.
 // col-span-1 cards first → they pair side-by-side in row 1.
@@ -98,6 +99,20 @@ registerCard({
   wsEvents: ['handoff_card'],
   dataExtractor: (msg) => msg.data,
   component: HandoffContent,
+});
+
+// ── 回复提示卡片 (col-span-2, full width) ───────────────────────────────────
+registerCard({
+  id: 'reply_hint',
+  title: { zh: '回复提示', en: 'Reply Hints' },
+  Icon: MessageSquareText,
+  headerClass: 'bg-gradient-to-r from-indigo-600 to-blue-500',
+  colSpan: 2,
+  defaultOpen: true,
+  defaultCollapsed: false,
+  wsEvents: ['reply_hints'],
+  dataExtractor: (msg) => msg.data,
+  component: ReplyHintContent,
 });
 
 // ── 流程图卡片 (col-span-2, full width below) ──────────────────────────────────

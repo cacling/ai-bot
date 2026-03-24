@@ -257,6 +257,29 @@ export function AgentWorkstationPage() {
     }
   }, [lang]);
 
+  // ── Reply Copilot: listen for CustomEvents from ReplyHintContent card ────────
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.type === 'insert_text') {
+        setInputValue(prev => prev + detail.text);
+      }
+      if (detail?.type === 'reply_feedback') {
+        fetch('/api/km/reply-copilot/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: userPhone,
+            asset_version_id: detail.assetVersionId,
+            event_type: detail.event,
+          }),
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('reply-copilot-action', handler);
+    return () => window.removeEventListener('reply-copilot-action', handler);
+  }, [userPhone]);
+
   // ── 用户详情 & 外呼任务详情卡片：随客户手机号或数据变更自动注入 ────────────────
   useEffect(() => {
     const user = allPersonas.find(p => (p.context.phone as string) === userPhone) ?? null;
