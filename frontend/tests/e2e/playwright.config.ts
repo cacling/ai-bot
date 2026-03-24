@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Bypass proxy for localhost connections — proxy process may be dead
+// but env vars (ALL_PROXY, HTTP_PROXY) remain, causing timeouts
+delete process.env.ALL_PROXY;
+delete process.env.HTTP_PROXY;
+delete process.env.HTTPS_PROXY;
+
 /**
  * 测试配置
  * - 需要先通过 tests/scripts/start.sh 启动服务

@@ -7,6 +7,10 @@ import { execSync } from 'child_process';
 import path from 'path';
 
 export default function globalSetup() {
+  // Ensure E2E tests don't route localhost requests through a proxy
+  // (proxy may be dead but env vars remain, causing connection timeouts)
+  process.env.NO_PROXY = (process.env.NO_PROXY ?? '') + ',127.0.0.1,localhost';
+
   const backendDir = path.resolve(__dirname, '../../../backend');
   console.log('[global-setup] Re-seeding database...');
   try {
