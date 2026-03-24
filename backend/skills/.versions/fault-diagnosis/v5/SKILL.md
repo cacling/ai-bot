@@ -122,31 +122,31 @@ metadata:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 接收问题: 客户反映网络问题（无信号/网速慢/掉线/上不了网）
-    接收问题 --> 安抚与采集: 安抚客户，询问具体故障现象
+    [*] --> 接收问题: 客户反映网络问题（无信号/网速慢/掉线/上不了网） %% step:diag-receive %% kind:message
+    接收问题 --> 安抚与采集: 安抚客户，询问具体故障现象 %% step:diag-comfort %% kind:message
 
     state 已尝试自查 <<choice>>
     安抚与采集 --> 已尝试自查: 确认用户是否已做过基本自查
-    已尝试自查 --> 判断故障类型: 用户未尝试自查，继续正常流程
-    已尝试自查 --> 系统诊断: 用户声明已完成自查，直接进入系统诊断
+    已尝试自查 --> 判断故障类型: 用户未尝试自查，继续正常流程 %% step:diag-determine-type %% kind:message %% guard:always
+    已尝试自查 --> 系统诊断: 用户声明已完成自查，直接进入系统诊断 %% guard:always
 
     判断故障类型 --> 系统诊断: 确定 issue_type（no_signal/slow_data/call_drop/no_network）
-    系统诊断 --> 诊断结果判断: diagnose_network(phone, issue_type) %% tool:diagnose_network
+    系统诊断 --> 诊断结果判断: diagnose_network(phone, issue_type) %% tool:diagnose_network %% step:diag-run-diagnose %% kind:tool
 
     state 诊断结果判断 <<choice>>
-    诊断结果判断 --> 分析诊断结果: 诊断成功
-    诊断结果判断 --> 诊断失败兜底: 诊断失败
+    诊断结果判断 --> 分析诊断结果: 诊断成功 %% guard:tool.success
+    诊断结果判断 --> 诊断失败兜底: 诊断失败 %% step:diag-fail-fallback %% kind:human %% guard:tool.error
 
     诊断失败兜底 --> 转接人工: 无法获取诊断数据，转人工处理
-    转接人工 --> [*]
+    转接人工 --> [*] %% kind:end
 
     state 分析诊断结果 <<choice>>
-    分析诊断结果 --> 账号停机: error — 账号欠费 %% branch:account_error
-    分析诊断结果 --> 流量耗尽: error — 流量用完 %% branch:data_exhausted
-    分析诊断结果 --> APN异常: warning — APN 配置问题 %% branch:apn_warning
-    分析诊断结果 --> 基站异常: warning或error — 基站信号问题 %% branch:signal_weak
-    分析诊断结果 --> 网络拥塞: warning — 高峰期拥塞 %% branch:congestion
-    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok
+    分析诊断结果 --> 账号停机: error — 账号欠费 %% branch:account_error %% step:diag-account-suspend %% kind:message %% guard:always
+    分析诊断结果 --> 流量耗尽: error — 流量用完 %% branch:data_exhausted %% step:diag-data-exhausted %% kind:message %% guard:always
+    分析诊断结果 --> APN异常: warning — APN 配置问题 %% branch:apn_warning %% step:diag-apn-issue %% kind:message %% guard:always
+    分析诊断结果 --> 基站异常: warning或error — 基站信号问题 %% branch:signal_weak %% step:diag-signal-weak %% kind:message %% guard:always
+    分析诊断结果 --> 网络拥塞: warning — 高峰期拥塞 %% branch:congestion %% step:diag-congestion %% kind:message %% guard:always
+    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok %% step:diag-self-check %% kind:message %% guard:always
 
     账号停机 --> 确认恢复: 告知充值方式及恢复时间
     流量耗尽 --> 确认恢复: 推荐加油包或升级套餐
@@ -154,30 +154,31 @@ stateDiagram-v2
 
     APN异常 --> 等待APN操作结果: 引导重置 APN（设置→移动网络→APN→重置为默认）
     state 等待APN操作结果 <<choice>>
-    等待APN操作结果 --> 确认恢复: 问题解决
-    等待APN操作结果 --> 升级处理: APN重置后问题仍未解决
+    等待APN操作结果 --> 确认恢复: 问题解决 %% guard:user.confirm
+    等待APN操作结果 --> 升级处理: APN重置后问题仍未解决 %% guard:user.cancel
 
-    基站异常 --> 工单已提交: 告知信号弱，建议换位置；提交基站覆盖投诉工单
-    工单已提交 --> 已解决: 告知工单号及预计处理时效
+    基站异常 --> 工单已提交: 告知信号弱，建议换位置；提交基站覆盖投诉工单 %% step:diag-ticket-submitted %% kind:message
+    工单已提交 --> 已解决: 告知工单号及预计处理时效 %% step:diag-resolved %% kind:message
 
-    确认恢复 --> 确认恢复结果: 请问问题现在解决了吗？
+    确认恢复 --> 确认恢复结果: 请问问题现在解决了吗？ %% step:diag-confirm-recovery %% kind:confirm
     state 确认恢复结果 <<choice>>
-    确认恢复结果 --> 已解决: 用户确认已恢复
-    确认恢复结果 --> 升级处理: 用户确认仍未恢复
+    确认恢复结果 --> 已解决: 用户确认已恢复 %% guard:user.confirm
+    确认恢复结果 --> 升级处理: 用户确认仍未恢复 %% guard:user.cancel
 
     用户自查 --> 等待自查结果: 引导：①确认未开飞行模式 ②重新插拔SIM卡 ③重启手机
     state 等待自查结果 <<choice>>
-    等待自查结果 --> 已解决: 问题解决
-    等待自查结果 --> 升级处理: 自查无效且诊断全部正常，升级处理（附诊断日志）
+    等待自查结果 --> 已解决: 问题解决 %% guard:user.confirm
+    等待自查结果 --> 升级处理: 自查无效且诊断全部正常，升级处理（附诊断日志） %% guard:user.cancel
 
     state 升级判断 <<choice>>
     已解决 --> 升级判断
-    升级判断 --> [*]: 未满足升级条件，流程结束
-    升级判断 --> 升级处理: 满足升级条件（基站故障/连续重启无信号/漫游失效/SIM卡损坏）
-    升级处理 --> [*]: 转接人工客服或引导前往营业厅
+    升级判断 --> 流程结束: 未满足升级条件，流程结束 %% step:diag-flow-end %% kind:end %% guard:always
+    升级判断 --> 升级处理: 满足升级条件（基站故障/连续重启无信号/漫游失效/SIM卡损坏） %% guard:always
+    流程结束 --> [*]
+    升级处理 --> [*]: 转接人工客服或引导前往营业厅 %% step:diag-escalate %% kind:human
 
-    用户要求转人工 --> 转接人工: 转接人工客服或引导拨打10086
-    转接人工 --> [*]
+    用户要求转人工 --> 转接人工: 转接人工客服或引导拨打10086 %% step:diag-request-human %% kind:human
+    转接人工 --> [*] %% kind:end
 ```
 
 ## 升级处理
