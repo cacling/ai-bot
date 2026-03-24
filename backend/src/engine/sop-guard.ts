@@ -295,11 +295,13 @@ export class SOPGuard {
         return;
       }
     }
-    // No guard matched — fallback to first transition
-    if (step.transitions.length > 0) {
-      this.currentStepId = step.transitions[0].target;
-      this.autoAdvance();
-    }
+    // No guard matched — stay at current step, log warning
+    // Don't blindly take first transition (could jump to wrong branch)
+    logger.warn('sop-guard', 'no_guard_matched', {
+      tool: toolName, step: this.currentStepId,
+      guards: step.transitions.map(t => t.guard),
+      result: guardResult,
+    });
   }
 
   /**
@@ -331,26 +333,28 @@ export class SOPGuard {
       }
 
       // Current step is NOT a tool step (message/ref/choice) →
-      // Allow tools that are reachable from current step within a few hops
-      // Block tools that exist in the plan but aren't reachable yet
+      // BFS to find the NEXT actionable frontier only.
+      // Stop at tool/confirm/human/end — don't look past them.
       if (step?.kind !== 'tool') {
-        // BFS from current step to find next reachable tool steps (within 5 hops)
         const reachableTools = new Set<string>();
         const visited = new Set<string>();
         const queue = [this.currentStepId!];
-        let hops = 0;
-        while (queue.length > 0 && hops < 5) {
-          const batch = [...queue];
-          queue.length = 0;
-          for (const id of batch) {
-            if (visited.has(id)) continue;
-            visited.add(id);
-            const s = this.activePlan.steps[id];
-            if (!s) continue;
-            if (s.kind === 'tool' && s.tool) reachableTools.add(s.tool);
-            for (const t of s.transitions) queue.push(t.target);
+        while (queue.length > 0) {
+          const id = queue.shift()!;
+          if (visited.has(id)) continue;
+          visited.add(id);
+          const s = this.activePlan.steps[id];
+          if (!s) continue;
+          // Frontier nodes — collect but don't expand past them
+          if (s.kind === 'tool' && s.tool) {
+            reachableTools.add(s.tool);
+            continue; // don't look past this tool
           }
-          hops++;
+          if (s.kind === 'confirm' || s.kind === 'human' || s.kind === 'end') {
+            continue; // don't look past blocking nodes
+          }
+          // message/ref/choice — expand to find the frontier
+          for (const t of s.transitions) queue.push(t.target);
         }
 
         if (reachableTools.has(toolName)) {
@@ -427,6 +431,11 @@ export class SOPGuard {
       if (!step) break;
 
       if (step.kind === 'choice') {
+        // Single 'always' exit → auto-advance unconditionally
+        if (step.transitions.length === 1 && step.transitions[0].guard === 'always') {
+          this.currentStepId = step.transitions[0].target;
+          continue;
+        }
         // Evaluate guards using lastToolResult (set by recordToolCall)
         if (this.lastToolResult) {
           let advanced = false;
@@ -439,11 +448,13 @@ export class SOPGuard {
           }
           if (advanced) continue;
         }
-        // No result or no guard matched — fallback to first transition
-        if (step.transitions.length > 0) {
-          this.currentStepId = step.transitions[0].target;
-          continue;
-        }
+        // No result or no guard matched — stop here, don't guess
+        // (previous behavior blindly took first transition, causing wrong-branch jumps)
+        logger.warn('sop-guard', 'choice_unresolved', {
+          step: this.currentStepId,
+          guards: step.transitions.map(t => t.guard),
+          hasToolResult: !!this.lastToolResult,
+        });
         break;
       }
 

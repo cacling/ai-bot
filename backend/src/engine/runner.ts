@@ -389,6 +389,10 @@ export async function runAgent(
   );
   // SOP Guard: wrap operation tools with precondition checks
   const sopGuard = new SOPGuard();
+  // Activate plan FIRST so history replay runs in plan-aware mode
+  if (options?.workflowPlan && options?.skillName) {
+    sopGuard.activatePlan(options.skillName, options.workflowPlan);
+  }
   // 从 history 中恢复已调用的工具（多轮对话时保持 SOP 状态连续）
   // Build a map of toolCallId → result from tool-result messages for accurate guard evaluation
   const toolResultMap = new Map<string, { success: boolean; hasData: boolean }>();
@@ -416,10 +420,6 @@ export async function runAgent(
     }
   }
   sopGuard.onUserMessage(userMessage);
-  // Activate pre-compiled plan (test endpoint injects this)
-  if (options?.workflowPlan && options?.skillName) {
-    sopGuard.activatePlan(options.skillName, options.workflowPlan);
-  }
   const sopWrappedTools = Object.fromEntries(
     Object.entries(mcpTools as Record<string, any>).map(([name, tool]) => [
       name,
