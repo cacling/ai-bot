@@ -123,11 +123,11 @@ stateDiagram-v2
     发送还款短信 --> 记录承诺: record_call_result(ptp) %% tool:record_call_result %% step:col-record-ptp %% kind:tool
     记录承诺 --> [*]: 感谢挂断
 
-    预约回呼 --> 确认回呼信息: 询问期望回呼时间 + 确认回呼号码 %% step:col-confirm-callback-info %% kind:llm
+    预约回呼 --> 确认回呼信息: 询问期望回呼时间 + 确认回呼号码 %% step:col-confirm-callback-info %% kind:human
     state 号码确认 <<choice>>
     确认回呼信息 --> 号码确认
-    号码确认 --> 回呼已预约: 使用当前号码 %% step:col-callback-scheduled %% kind:llm %% guard:always
-    号码确认 --> 回呼已预约: 客户提供新手机号 %% guard:always
+    号码确认 --> 回呼已预约: 使用当前号码 %% step:col-callback-scheduled %% kind:llm %% guard:user.confirm
+    号码确认 --> 回呼已预约: 客户提供新手机号 %% guard:user.cancel
     回呼已预约 --> 创建回访任务: create_callback_task %% tool:create_callback_task %% step:col-create-callback %% kind:tool
     创建回访任务 --> 记录回呼: record_call_result(callback_request) %% tool:record_call_result %% step:col-record-callback %% kind:tool
     记录回呼 --> [*]: 礼貌挂断
