@@ -229,8 +229,9 @@ export function syncAllSkillMetadata(): void {
   }
 
   // Compile workflow specs for published skills that don't have one yet
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  import('./skill-workflow-compiler').then(({ compileWorkflow }) => {
+  // Use synchronous require to avoid async race condition (seed process may exit before .then runs)
+  try {
+    const { compileWorkflow } = require('./skill-workflow-compiler');
     const allSkills = db.select().from(skillRegistry).all();
     for (const row of allSkills) {
       if (!row.published_version) continue;
@@ -253,9 +254,9 @@ export function syncAllSkillMetadata(): void {
         logger.info('skills', 'workflow_spec_compiled', { skill: row.id });
       }
     }
-  }).catch((e: unknown) => {
+  } catch (e) {
     logger.warn('skills', 'workflow_compile_startup_error', { error: String(e) });
-  });
+  }
 }
 
 // 缓存 + 定时校验（每 30 秒）
