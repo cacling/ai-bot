@@ -12,6 +12,7 @@ import { T, type Lang } from '../../../i18n';
 interface DiagramData {
   skill_name: string;
   mermaid: string;
+  nodeTypeMap?: Record<string, string>;
 }
 
 export const DiagramContent = memo(function DiagramContent({ data, lang }: { data: unknown; lang: Lang }) {
@@ -36,6 +37,7 @@ export const DiagramContent = memo(function DiagramContent({ data, lang }: { dat
     <div className="p-3">
       <MermaidRenderer
         mermaid={diagram.mermaid}
+        nodeTypeMap={diagram.nodeTypeMap}
         height="60vh"
         emptyText={t.diagram_empty_title}
         loadingText={t.diagram_loading}

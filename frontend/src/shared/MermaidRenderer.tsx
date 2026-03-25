@@ -19,6 +19,55 @@ const MAX_ZOOM = 5;
 const FOCUS_ZOOM_MIN = 0.8;
 const FOCUS_ZOOM_MAX = 1.5;
 
+// ── Node type color mapping ──────────────────────────────────────────────────
+
+const NODE_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
+  tool:       { fill: '#dbeafe', stroke: '#3b82f6' },
+  llm:        { fill: '#dcfce7', stroke: '#22c55e' },
+  human:      { fill: '#fef3c7', stroke: '#f59e0b' },
+  switch:     { fill: '#f3e8ff', stroke: '#a855f7' },
+  guard:      { fill: '#fef2f2', stroke: '#ef4444' },
+  end:        { fill: '#f1f5f9', stroke: '#94a3b8' },
+  start:      { fill: '#ccfbf1', stroke: '#14b8a6' },
+  // Legacy aliases
+  message:    { fill: '#dcfce7', stroke: '#22c55e' },
+  ref:        { fill: '#dcfce7', stroke: '#22c55e' },
+  confirm:    { fill: '#fef3c7', stroke: '#f59e0b' },
+  choice:     { fill: '#f3e8ff', stroke: '#a855f7' },
+};
+
+/** Apply color-coding to diagram nodes based on their semantic type */
+export function applyNodeTypeColors(container: HTMLElement, nodeTypeMap: Record<string, string>): void {
+  const candidates = container.querySelectorAll<Element>('.nodeLabel, text, tspan, foreignObject span, foreignObject div');
+  const allTexts = Array.from(candidates).map(el => ({ el, text: el.textContent?.trim() ?? '' }));
+
+  for (const [label, nodeType] of Object.entries(nodeTypeMap)) {
+    const colors = NODE_TYPE_COLORS[nodeType];
+    if (!colors) continue;
+
+    for (const { el, text } of allTexts) {
+      if (text !== label) continue;
+      let node: Element | null = el;
+      for (let depth = 0; depth < 8; depth++) {
+        node = node?.parentElement ?? null;
+        if (!node) break;
+        const cls = node.getAttribute('class') ?? '';
+        const id = node.id ?? '';
+        if (cls.includes('node') || cls.includes('statediagram') || id.includes('state-')) {
+          const rect = node.querySelector(':scope > rect, :scope > path, :scope > polygon');
+          if (rect) {
+            (rect as SVGElement).style.fill = colors.fill;
+            (rect as SVGElement).style.stroke = colors.stroke;
+            (rect as SVGElement).style.strokeWidth = '2px';
+            break;
+          }
+        }
+      }
+      break;
+    }
+  }
+}
+
 // ── Progress marker helpers ──────────────────────────────────────────────────
 
 /** Extract `%% progress:stateName` marker from mermaid source */
@@ -90,6 +139,8 @@ function getSvgNaturalSize(svgEl: SVGSVGElement): { w: number; h: number } {
 export interface MermaidRendererProps {
   /** Mermaid source code (may contain %% progress: marker) */
   mermaid: string | null;
+  /** Label → nodeType mapping for semantic color-coding */
+  nodeTypeMap?: Record<string, string>;
   /** Enable zoom controls (default: true) */
   zoom?: boolean;
   /** Auto-focus on highlighted node (default: true) */
@@ -108,6 +159,7 @@ export interface MermaidRendererProps {
 
 export const MermaidRenderer = memo(function MermaidRenderer({
   mermaid: mermaidSrc,
+  nodeTypeMap,
   zoom: zoomEnabled = true,
   autoFocus = true,
   height = '60vh',
@@ -123,7 +175,13 @@ export const MermaidRenderer = memo(function MermaidRenderer({
   const viewportRef = useRef<HTMLDivElement>(null);
   const wrapRef     = useRef<HTMLDivElement>(null);
   const svgSizeRef  = useRef({ w: 0, h: 0 });
-  const progressRef = useRef<string | null>(null);
+  const progressRef    = useRef<string | null>(null);
+  const nodeTypeMapRef = useRef<Record<string, string> | undefined>();
+
+  // Keep nodeTypeMap ref in sync with prop
+  useEffect(() => {
+    nodeTypeMapRef.current = nodeTypeMap;
+  }, [nodeTypeMap]);
 
   /* ── mermaid render ── */
   useEffect(() => {
@@ -160,6 +218,11 @@ export const MermaidRenderer = memo(function MermaidRenderer({
       svgSizeRef.current = size;
 
       requestAnimationFrame(() => {
+        // Apply node-type color-coding (before progress highlight so current step overrides)
+        if (nodeTypeMapRef.current && Object.keys(nodeTypeMapRef.current).length > 0) {
+          applyNodeTypeColors(wrap, nodeTypeMapRef.current);
+        }
+
         // Apply DOM-based progress highlighting
         if (progressRef.current) {
           applyProgressHighlightDOM(wrap, progressRef.current);

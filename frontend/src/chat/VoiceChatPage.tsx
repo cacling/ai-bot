@@ -242,7 +242,7 @@ export function VoiceChatPage({ onDiagramUpdate, lang = 'zh', personas = [], sel
 
     // Skill 时序图推送
     if (type === 'skill_diagram_update') {
-      onDiagramUpdate?.({ skill_name: msg.skill_name as string, mermaid: msg.mermaid as string });
+      onDiagramUpdate?.({ skill_name: msg.skill_name as string, mermaid: msg.mermaid as string, nodeTypeMap: msg.node_type_map as Record<string, string> | undefined });
       return;
     }
 

@@ -12,6 +12,7 @@ import { T, type Lang } from '../i18n';
 export interface ActiveDiagram {
   skill_name: string;
   mermaid: string;
+  nodeTypeMap?: Record<string, string>;
 }
 
 interface Props {
@@ -67,6 +68,7 @@ export function DiagramPanel({ diagram, onClose, lang = 'zh' }: Props) {
         ) : (
           <MermaidRenderer
             mermaid={diagram.mermaid}
+            nodeTypeMap={diagram.nodeTypeMap}
             height="100%"
             emptyText={t.diagram_empty_title}
             loadingText={t.diagram_loading}
