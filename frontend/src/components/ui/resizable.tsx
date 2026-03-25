@@ -30,7 +30,9 @@ function ResizableHandle({
     <Separator
       data-slot="resizable-handle"
       className={cn(
-        "bg-border relative flex w-px items-center justify-center after:absolute after:inset-y-0 after:-left-1 after:-right-1 hover:bg-primary/50 transition-colors",
+        "bg-border relative flex items-center justify-center hover:bg-primary/50 transition-colors",
+        "data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full data-[panel-group-direction=vertical]:after:left-0 data-[panel-group-direction=vertical]:after:right-0 data-[panel-group-direction=vertical]:after:-top-1 data-[panel-group-direction=vertical]:after:-bottom-1",
+        "data-[panel-group-direction=horizontal]:w-px data-[panel-group-direction=horizontal]:after:inset-y-0 data-[panel-group-direction=horizontal]:after:-left-1 data-[panel-group-direction=horizontal]:after:-right-1",
         className
       )}
       {...props}

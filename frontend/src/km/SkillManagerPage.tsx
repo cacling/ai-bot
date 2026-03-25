@@ -1098,7 +1098,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
           const showDiagram = !!activeMermaid || isTestMode;
 
           return (
-            <ResizablePanelGroup direction="vertical" className="flex-1">
+            <ResizablePanelGroup orientation="vertical" className="flex-1">
               <ResizablePanel defaultSize={showDiagram ? 60 : 100} minSize={20}>
                 <div className="h-full overflow-hidden">
                   {fileLoading && (
