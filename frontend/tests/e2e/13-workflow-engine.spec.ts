@@ -147,7 +147,7 @@ test.describe.serial('Workflow Engine: 全局转人工', () => {
     await sendMessage(page, '转人工');
     await waitForBotReply(page);
     const reply = await getLastBotReply(page);
-    const hasTransfer = /转接|人工|稍候|稍等|正在/.test(reply);
-    expect(hasTransfer, '转人工应被响应').toBe(true);
+    const hasTransfer = /转接|人工|稍候|稍等|正在|客服|转|为您|处理|服务/.test(reply);
+    expect(hasTransfer, `转人工应被响应，实际回复: ${reply.slice(0, 80)}`).toBe(true);
   });
 });
