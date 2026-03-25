@@ -38,27 +38,39 @@ const NODE_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
 
 /** Apply color-coding to diagram nodes based on their semantic type */
 export function applyNodeTypeColors(container: HTMLElement, nodeTypeMap: Record<string, string>): void {
-  const candidates = container.querySelectorAll<Element>('*');
-  const allTexts: Array<{ el: Element; text: string }> = [];
-  for (const el of candidates) {
-    const text = el.textContent?.trim() ?? '';
-    if (!text || text.length > 200) continue;
-    allTexts.push({ el, text });
-  }
+  const allEls = container.querySelectorAll<Element>('[id]');
 
   for (const [label, nodeType] of Object.entries(nodeTypeMap)) {
     const colors = NODE_TYPE_COLORS[nodeType];
     if (!colors) continue;
 
-    for (const { el, text } of allTexts) {
+    // Strategy 1: Match by mermaid element ID containing label
+    let found = false;
+    for (const el of allEls) {
+      if (!el.id.includes(label)) continue;
+      const rect = el.querySelector('rect, path, polygon');
+      if (rect) {
+        (rect as SVGElement).style.fill = colors.fill;
+        (rect as SVGElement).style.stroke = colors.stroke;
+        (rect as SVGElement).style.strokeWidth = '2px';
+        found = true;
+        break;
+      }
+    }
+    if (found) continue;
+
+    // Strategy 2: Fall back to text content matching
+    const candidates = container.querySelectorAll<Element>('span, div, text, tspan');
+    for (const el of candidates) {
+      const text = el.textContent?.trim() ?? '';
       if (text !== label) continue;
       let node: Element | null = el;
-      for (let depth = 0; depth < 8; depth++) {
+      for (let depth = 0; depth < 10; depth++) {
         node = node?.parentElement ?? null;
         if (!node) break;
         const cls = node.getAttribute('class') ?? '';
-        const id = node.id ?? '';
-        if (cls.includes('node') || cls.includes('statediagram') || id.includes('state-')) {
+        const nid = node.id ?? '';
+        if (cls.includes('node') || cls.includes('statediagram') || nid.includes('state-')) {
           const rect = node.querySelector(':scope > rect, :scope > path, :scope > polygon');
           if (rect) {
             (rect as SVGElement).style.fill = colors.fill;
@@ -86,31 +98,41 @@ export function stripProgressMarker(mermaid: string): string {
   return mermaid.replace(/\n%% progress:.+$/m, '');
 }
 
-/** Apply DOM-based highlighting to a state node by matching its text content */
+/** Apply DOM-based highlighting to a state node by matching its text content or mermaid node ID */
 export function applyProgressHighlightDOM(container: HTMLElement, stateName: string): boolean {
-  // Search ALL text-bearing elements in the SVG — mermaid nests deeply in stateDiagram-v2
-  const candidates = container.querySelectorAll<Element>('*');
-  const allTexts: Array<{ el: Element; text: string }> = [];
-  for (const el of candidates) {
-    // Only leaf-ish elements with direct text content
-    const text = el.textContent?.trim() ?? '';
-    if (!text || text.length > 200) continue;
-    allTexts.push({ el, text });
+  // Strategy 1: Find by mermaid-generated element ID (most reliable for nested states)
+  // Mermaid stateDiagram-v2 generates IDs like "state-获取账单-XXX" or containing the state name
+  const allEls = container.querySelectorAll<Element>('[id]');
+  for (const el of allEls) {
+    const id = el.id;
+    if (!id.includes(stateName)) continue;
+    // Found a matching element — find its rect/path for coloring
+    const rect = el.querySelector('rect, path, polygon') ??
+                 el.closest('[class*="state"]')?.querySelector(':scope > rect, :scope > path');
+    if (rect) {
+      (rect as SVGElement).style.fill = '#fef08a';
+      (rect as SVGElement).style.stroke = '#f59e0b';
+      (rect as SVGElement).style.strokeWidth = '3px';
+      (rect.parentElement ?? el).classList.add('progressHL');
+      return true;
+    }
   }
 
-  // Try exact match first, then startsWith, then includes
-  for (const { el, text } of allTexts) {
-    if (text !== stateName && !text.startsWith(stateName) && !text.includes(stateName)) continue;
-    // Prefer shorter matches (more likely to be the node label, not a container)
+  // Strategy 2: Fall back to text content matching (works for flat state diagrams)
+  const candidates = container.querySelectorAll<Element>('span, div, text, tspan');
+  for (const el of candidates) {
+    const text = el.textContent?.trim() ?? '';
+    if (!text) continue;
+    if (text !== stateName && !text.startsWith(stateName)) continue;
     if (text.length > stateName.length * 3) continue;
-    // Walk up to find the outer state node group (skip inner "label" groups)
+    // Walk up to find state node group
     let node: Element | null = el;
-    for (let depth = 0; depth < 8; depth++) {
+    for (let depth = 0; depth < 10; depth++) {
       node = node?.parentElement ?? null;
       if (!node) break;
       const cls = node.getAttribute('class') ?? '';
-      const id = node.id ?? '';
-      if (cls.includes('node') || cls.includes('statediagram') || id.includes('state-')) {
+      const nid = node.id ?? '';
+      if (cls.includes('node') || cls.includes('statediagram') || nid.includes('state-')) {
         const rect = node.querySelector(':scope > rect, :scope > path, :scope > polygon');
         if (rect) {
           (rect as SVGElement).style.fill = '#fef08a';
