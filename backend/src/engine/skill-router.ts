@@ -34,6 +34,11 @@ export function shouldUseRuntime(skillName: string): { use: boolean; spec?: Work
   return { use: true, spec };
 }
 
+/** Check if V2 engine should be used (registry-based runtime) */
+export function useV2Engine(): boolean {
+  return process.env.WORKFLOW_ENGINE_V2 === 'true';
+}
+
 function loadSpec(skillId: string): WorkflowSpec | undefined {
   try {
     const row = db.select().from(skillWorkflowSpecs)
