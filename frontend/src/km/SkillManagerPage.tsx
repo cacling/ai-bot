@@ -499,6 +499,17 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
   const [testMode, setTestMode] = useState<'mock' | 'real'>('mock');
   const [testDiagram, setTestDiagram] = useState<{ skill_name: string; mermaid: string; progressState?: string; nodeTypeMap?: Record<string, string> } | null>(null);
   const [diagramCollapsed, setDiagramCollapsed] = useState(false);
+  // Backend-sourced diagram data (mermaid + nodeTypeMap from compiled WorkflowSpec)
+  const [backendDiagram, setBackendDiagram] = useState<{ mermaid: string; nodeTypeMap: Record<string, string> | null } | null>(null);
+
+  // Fetch diagram data from backend when skill changes
+  useEffect(() => {
+    if (!activeSkill?.id || activeSkill.id.startsWith('new-')) { setBackendDiagram(null); return; }
+    fetch(`/api/skill-versions/${encodeURIComponent(activeSkill.id)}/diagram-data`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.mermaid) setBackendDiagram(data); else setBackendDiagram(null); })
+      .catch(() => setBackendDiagram(null));
+  }, [activeSkill?.id]);
   const [testPersonaId, setTestPersonaId] = useState('');
   const [testPersonaList, setTestPersonaList] = useState<Array<{ id: string; label: string; context: Record<string, unknown> }>>([]);
 
@@ -1074,37 +1085,14 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
 
         {/* ── 编辑区 + 流程图（可拖动分隔） ── */}
         {centerMode === 'edit' && (() => {
-          // Extract mermaid from editor content
-          const rawMermaid = editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1] ?? null;
-          const staticMermaid = rawMermaid?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null;
-
-          // Build nodeTypeMap from annotations
-          // Parse %% kind:<type> from ALL line formats:
-          //   transition: A --> B: label %% kind:tool  → B gets the kind
-          //   state decl: StateName: description %% kind:tool  → StateName gets the kind
-          //   standalone: StateName %% kind:llm  → StateName gets the kind
-          const staticNodeTypeMap: Record<string, string> = {};
-          if (rawMermaid) {
-            for (const line of rawMermaid.split('\n')) {
-              const kindMatch = line.match(/%%\s*kind:(\w+)/);
-              if (!kindMatch) continue;
-              let label: string | null = null;
-              // Try transition target: A --> B
-              const transMatch = line.match(/-->\s*([^:\s%]+)/);
-              if (transMatch) {
-                label = transMatch[1].replace(/^["']|["']$/g, '');
-              } else {
-                // Try state declaration: StateName: description %% kind:xxx
-                // Or standalone: StateName %% kind:xxx
-                const stateMatch = line.trim().match(/^(\S+?)(?:\s*:|(?=\s*%%))/);
-                if (stateMatch) label = stateMatch[1].replace(/^["']|["']$/g, '');
-              }
-              if (label && label !== '[*]' && label !== 'state') staticNodeTypeMap[label] = kindMatch[1];
-            }
-          }
+          // Use backend-sourced diagram data (same source as agent workstation)
+          // Fallback: extract mermaid from editor content if backend data not available
+          const fallbackMermaid = editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1]?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null;
+          const staticMermaid = backendDiagram?.mermaid ?? fallbackMermaid;
+          const staticNodeTypeMap = backendDiagram?.nodeTypeMap ?? undefined;
 
           const activeMermaid = testDiagram?.mermaid ?? staticMermaid;
-          const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? (Object.keys(staticNodeTypeMap).length > 0 ? staticNodeTypeMap : undefined);
+          const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? (staticNodeTypeMap && Object.keys(staticNodeTypeMap).length > 0 ? staticNodeTypeMap : undefined);
           const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedFile?.name === 'SKILL.md' ? activeSkill?.id : null);
           const isTestMode = testingVersion !== null;
           const showDiagram = !!activeMermaid || isTestMode;

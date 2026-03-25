@@ -251,4 +251,32 @@ app.post('/test', async (c) => {
   }
 });
 
+// GET /api/skill-versions/:skill/diagram-data — 获取流程图渲染所需数据（mermaid + nodeTypeMap）
+app.get('/:skill/diagram-data', async (c) => {
+  const skillId = c.req.param('skill');
+  try {
+    const { getSkillMermaid } = await import('../../../engine/skills');
+    const { stripMermaidMarkers, buildNodeTypeMap } = await import('../../../services/mermaid');
+    const { skillWorkflowSpecs } = await import('../../../db/schema');
+
+    const rawMermaid = getSkillMermaid(skillId);
+    if (!rawMermaid) return c.json({ error: 'Skill not found or has no mermaid' }, 404);
+
+    const mermaid = stripMermaidMarkers(rawMermaid);
+
+    // Get nodeTypeMap from compiled spec
+    let nodeTypeMap: Record<string, string> | null = null;
+    const specRow = db.select().from(skillWorkflowSpecs)
+      .where(and(eq(skillWorkflowSpecs.skill_id, skillId), eq(skillWorkflowSpecs.status, 'published')))
+      .get();
+    if (specRow) {
+      nodeTypeMap = buildNodeTypeMap(JSON.parse(specRow.spec_json));
+    }
+
+    return c.json({ mermaid, nodeTypeMap });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
 export default app;
