@@ -1079,15 +1079,27 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
           const staticMermaid = rawMermaid?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null;
 
           // Build nodeTypeMap from annotations
+          // Parse %% kind:<type> from ALL line formats:
+          //   transition: A --> B: label %% kind:tool  → B gets the kind
+          //   state decl: StateName: description %% kind:tool  → StateName gets the kind
+          //   standalone: StateName %% kind:llm  → StateName gets the kind
           const staticNodeTypeMap: Record<string, string> = {};
           if (rawMermaid) {
             for (const line of rawMermaid.split('\n')) {
               const kindMatch = line.match(/%%\s*kind:(\w+)/);
               if (!kindMatch) continue;
+              let label: string | null = null;
+              // Try transition target: A --> B
               const transMatch = line.match(/-->\s*([^:\s%]+)/);
-              const stateMatch = line.match(/^\s*(\S+)\s*-->/);
-              const label = transMatch?.[1]?.replace(/^["']|["']$/g, '') ?? stateMatch?.[1]?.replace(/^["']|["']$/g, '');
-              if (label && label !== '[*]') staticNodeTypeMap[label] = kindMatch[1];
+              if (transMatch) {
+                label = transMatch[1].replace(/^["']|["']$/g, '');
+              } else {
+                // Try state declaration: StateName: description %% kind:xxx
+                // Or standalone: StateName %% kind:xxx
+                const stateMatch = line.trim().match(/^(\S+?)(?:\s*:|(?=\s*%%))/);
+                if (stateMatch) label = stateMatch[1].replace(/^["']|["']$/g, '');
+              }
+              if (label && label !== '[*]' && label !== 'state') staticNodeTypeMap[label] = kindMatch[1];
             }
           }
 
