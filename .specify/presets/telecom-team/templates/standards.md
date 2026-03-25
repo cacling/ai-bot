@@ -36,26 +36,137 @@
 |------|------|
 | 文件覆盖率 | ≥ 90% |
 | 新功能必须有单元测试 | 是 |
-| 新 API 必须有 E2E 测试 | 是 |
+| 新 API 必须有 API 测试（apitest） | 是 |
+| 新 API / 新 Skill 必须有 E2E 测试 | 是 |
 | 新 Skill 必须有回归测试用例 | 是 |
 
-### 框架与约定
+### 测试分层
 
-| 层 | 框架 | 位置 |
-|----|------|------|
-| 后端单元 | Bun 内置（`bun:test`） | `backend/tests/unittest/` |
-| 前端单元 | Vitest + @testing-library/react | `frontend/tests/unittest/` |
-| E2E | Playwright（系统 Chrome, workers:1, retries:1） | `frontend/tests/e2e/` |
-| 回归测试 | 6 种断言类型 | `POST /api/sandbox/:id/regression` |
+系统采用四层测试策略：
+
+| 层 | 目的 | 框架 | 外部依赖 | 位置 |
+|----|------|------|---------|------|
+| **unittest** | 单一模块逻辑覆盖 | Bun:test / Vitest | 全部 mock | `*/tests/unittest/` |
+| **apitest** | API 路由参数组合 × 内部分支覆盖 | Bun:test | db/LLM/MCP/fs 全部 mock | `*/tests/apitest/` |
+| **e2e** | 端到端流程 + 契约合规 | Playwright / Bun:test | 真实服务（需 start.sh） | `*/tests/e2e/` |
+| **regression** | Skill SOP 回归断言 | 内置 6 种断言 | Mock 模式 Agent | `POST /api/sandbox/:id/regression` |
+
+### apitest 规则
+
+- **1:1 映射**：每个提供 API 接口的源文件对应一个 apitest 文件，目录结构镜像 `src/`
+- **全 mock**：所有外部依赖（db、LLM、MCP、HTTP fetch、fs）必须 mock，不启动真实服务
+- **参数覆盖**：测试不同参数组合覆盖内部所有逻辑分支（正常/缺参/非法参数/边界值）
+- **文件命名**：与源文件同名，如 `src/chat/chat.ts` → `tests/apitest/chat/chat.test.ts`
+
+### 前端 E2E 测试规则
+
+#### 目录结构
+
+```
+frontend/tests/e2e/
+├── fixtures/                    # 共享辅助函数
+│   └── chat-helpers.ts          # waitForChatWs, sendMessage, waitForBotReply, getLastBotReply
+├── skills/                      # 业务技能 SOP 测试（动态，跟随技能变更）
+│   ├── inbound/                 # 在线客服 + 语音客服（5 个技能）
+│   ├── outbound/                # 语音外呼（2 个技能）
+│   ├── sandbox-validation.validate.spec.ts
+│   └── sop-guard.constraint.spec.ts
+├── platform/                    # 平台功能测试（稳定，跟随代码变更）
+│   ├── chat/                    # 文字聊天 + 语音 + 外呼 UI
+│   ├── agent/                   # 坐席工作台
+│   ├── api/                     # REST API 契约 + 合规 + 灰度
+│   ├── skill-mgmt/              # 技能管理 + 创建器 + 变更审批
+│   ├── km/                      # 知识资产管理 5 子模块
+│   └── mcp/                     # MCP Server/Tool/Connector 管理
+└── playwright.config.ts         # projects: skills / platform
+```
+
+#### 文件命名规则
+
+`<主题>.<测试类型>.spec.ts`
+
+| 测试类型 | 缩写 | 含义 | 示例 |
+|---------|------|------|------|
+| SOP 多轮流程 | `sop` | 验证技能状态图步骤遵循 | `bill-inquiry.sop.spec.ts` |
+| API 工具调用 | `api` | 验证 MCP 工具端到端调用 | `fault-diagnosis.api.spec.ts` |
+| UI 页面交互 | `ui` | 验证页面加载/交互/渲染 | `chat-page.ui.spec.ts` |
+| CRUD 管理操作 | `crud` | 验证增删改查流程 | `mcp-management.crud.spec.ts` |
+| 接口契约 | `contract` | 验证 API 请求/响应格式 | `endpoints.contract.spec.ts` |
+| 沙箱校验 | `validate` | 验证技能静态校验 + Mock 运行 | `sandbox-validation.validate.spec.ts` |
+| 约束验证 | `constraint` | 验证 SOPGuard 约束规则 | `sop-guard.constraint.spec.ts` |
+| 审计追溯 | `audit` | 验证治理任务 + 审计日志 | `governance.audit.spec.ts` |
+
+#### skills/ 分类规则
+
+- `skills/inbound/`：channels 包含 `online` 或 `voice` 的技能（在线客服 + 语音客服）
+- `skills/outbound/`：channels 包含 `outbound-*` 的技能（催收 + 营销外呼）
+- 每个技能一个 `.sop.spec.ts` 文件，按状态图分支组织 `test.describe.serial`
+- 新增技能时自动创建对应测试文件，初始为 `test.skip` 框架
+
+#### platform/ 分类规则
+
+- 按功能模块分子目录：`chat/` `agent/` `api/` `skill-mgmt/` `km/` `mcp/`
+- 纯后端 API（无 UI）的测试放在 `api/` 下，命名为 `.contract.spec.ts`
+
+#### Playwright 运行方式
+
+```bash
+npx playwright test                              # 全部
+npx playwright test --project=skills             # 只跑业务技能
+npx playwright test --project=platform           # 只跑平台功能
+npx playwright test skills/inbound/bill-inquiry  # 单个技能
+```
+
+### MCP Servers E2E 测试规则
+
+#### 目录结构
+
+```
+mcp_servers/tests/e2e/
+├── contracts/                                # 工具契约（1 tool = 1 file，1:1 映射 seed 中的 tool contract）
+│   ├── query_subscriber.contract.spec.ts     # 验证 output 符合 packages/shared-db/src/schemas/query_subscriber.json
+│   ├── query_bill.contract.spec.ts
+│   ├── query_plans.contract.spec.ts
+│   ├── analyze_bill_anomaly.contract.spec.ts
+│   ├── cancel_service.contract.spec.ts
+│   ├── issue_invoice.contract.spec.ts
+│   ├── diagnose_network.contract.spec.ts
+│   ├── diagnose_app.contract.spec.ts
+│   ├── record_call_result.contract.spec.ts
+│   ├── send_followup_sms.contract.spec.ts
+│   ├── create_callback_task.contract.spec.ts
+│   ├── record_marketing_result.contract.spec.ts
+│   ├── verify_identity.contract.spec.ts
+│   ├── check_account_balance.contract.spec.ts
+│   ├── check_contracts.contract.spec.ts
+│   └── apply_service_suspension.contract.spec.ts
+└── platform/                                 # 平台功能
+    ├── server-lifecycle.spec.ts              # 启动/端口/停止
+    ├── tool-discovery.spec.ts                # MCP tools/list 协议
+    ├── transport.spec.ts                     # StreamableHTTP 合规
+    ├── error-handling.spec.ts                # 异常降级
+    └── logging.spec.ts                       # 日志格式
+```
+
+#### 契约测试规则
+
+- **1:1 映射**：每个 tool contract 一个 `.contract.spec.ts`，与 `packages/shared-db/src/schemas/<tool_name>.json` 一一对应
+- **数据来源**：seed 中的 `input_schema`（入参定义）+ `output_schema`（出参 JSON Schema）
+- **测试模式**：给定合法入参 → 验证出参 required 字段、类型、enum 值域 / 给定非法入参 → 验证错误结构
+- **新增 tool 时**：在 seed 中添加 tool 定义 + 在 `packages/shared-db/src/schemas/` 添加 output schema JSON + 在 `contracts/` 创建对应测试文件
+- 不验证业务逻辑（那是 apitest 的职责），只验证数据格式合规
 
 ### 超时策略
 
 | 场景 | 超时 |
 |------|------|
-| 后端单元测试 | < 1s |
-| 前端单元测试 | ~15s |
-| E2E 全局默认 | 90s |
-| E2E LLM 用例 | 120s–200s |
+| 后端 unittest | < 1s |
+| 后端 apitest | < 1s（全 mock） |
+| 前端 unittest | ~15s |
+| 前端 E2E 全局默认 | 90s |
+| 前端 E2E LLM 用例 | 120s–200s |
+| 前端 E2E SOP 多轮对话 | 300s |
+| MCP E2E 契约测试 | 30s |
 
 ---
 

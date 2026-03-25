@@ -357,21 +357,164 @@ tests/scripts/
 └── seed.sh                      # 重置测试数据（schema sync + seed）
 ```
 
-### E2E 测试
+### 前端 E2E 测试（Playwright）
+
+命名规则：`<主题>.<测试类型>.spec.ts`（类型：sop/api/ui/crud/contract/validate/constraint/audit）
 
 ```
-tests/e2e/
-├── playwright.config.ts         # Playwright 配置（Chrome、workers:1、retries:1、90s 超时）
-├── global-setup.ts              # 全局 setup（每次运行前重置 DB）
-├── 01-chat-page.spec.ts         # 页面结构、消息收发、FAQ、快捷按钮
-├── 03-api-endpoints.spec.ts     # 文件树、文件读写、Chat API（4 种卡片）、会话管理
-├── 04-telecom-cards.spec.ts     # 账单/退订/套餐/诊断卡片前端渲染
-├── 05-real-backend.spec.ts      # 健康检查、文件树、多轮上下文、会话管理
-├── 06-fault-diagnosis.spec.ts   # 4 种故障诊断 + 停机/不存在号码边界
-├── 07-skill-lifecycle.spec.ts   # 技能创建→沙盒验证→发布→生效→清理
-├── 08-mcp-management.spec.ts    # MCP 服务器 CRUD、工具发现、mock 调用
-├── 09-sandbox-mock.spec.ts      # 沙箱 mock 模式测试、mock 规则匹配
-└── 10-skill-test-flow.spec.ts   # 版本创建→编辑→测试→发布完整流程
+frontend/tests/e2e/
+├── fixtures/
+│   └── chat-helpers.ts                          # 共享辅助：waitForChatWs, sendMessage, waitForBotReply, getLastBotReply
+├── skills/                                      # 业务技能 SOP 测试（动态，跟随技能变更）
+│   ├── inbound/
+│   │   ├── bill-inquiry.sop.spec.ts             # 账单查询 SOP 多轮对话（2 场景）
+│   │   ├── fault-diagnosis.api.spec.ts          # 故障诊断 API 工具调用（5 场景）
+│   │   ├── fault-diagnosis.sop.spec.ts          # 故障诊断 SOP 多轮对话（1 场景）
+│   │   ├── plan-inquiry.sop.spec.ts             # 套餐查询 SOP（8 场景框架）
+│   │   ├── service-cancel.sop.spec.ts           # 增值退订 SOP + Workflow Engine（6 场景）
+│   │   └── telecom-app.sop.spec.ts              # App 支持 SOP（10 场景框架）
+│   ├── outbound/
+│   │   ├── outbound-collection.sop.spec.ts      # 催收外呼 SOP（9 场景框架）
+│   │   └── outbound-marketing.sop.spec.ts       # 营销外呼 SOP（7 场景框架）
+│   ├── sandbox-validation.validate.spec.ts      # 全技能沙箱验证 + Mock 运行
+│   └── sop-guard.constraint.spec.ts             # SOPGuard V2 约束验证
+├── platform/                                    # 平台功能测试（稳定，跟随代码变更）
+│   ├── chat/
+│   │   ├── chat-page.ui.spec.ts                 # 文字聊天 UI（13 用例）
+│   │   ├── telecom-cards.ui.spec.ts             # 结构化卡片渲染（10 用例）
+│   │   ├── voice-chat.ui.spec.ts                # 语音客服 UI（8 用例框架）
+│   │   └── outbound-voice.ui.spec.ts            # 外呼语音 UI（7 用例框架）
+│   ├── agent/
+│   │   ├── diagram-rendering.ui.spec.ts         # 坐席流程图渲染（2 用例）
+│   │   └── agent-workstation.ui.spec.ts         # 坐席工作台卡片+交互（20 用例框架）
+│   ├── api/
+│   │   ├── endpoints.contract.spec.ts           # REST API 契约（28 用例）
+│   │   ├── compliance.contract.spec.ts          # 合规词库 API（8 用例框架）
+│   │   └── canary.contract.spec.ts              # 灰度发布 API（5 用例框架）
+│   ├── skill-mgmt/
+│   │   ├── skill-lifecycle.crud.spec.ts         # 技能生命周期 CRUD（13 用例）
+│   │   ├── skill-test-flow.crud.spec.ts         # 版本测试+发布（14 用例）
+│   │   ├── skill-diagram.ui.spec.ts             # 技能管理器流程图（2 用例）
+│   │   ├── skill-creator.crud.spec.ts           # AI 技能创建器（6 用例框架）
+│   │   └── change-request.crud.spec.ts          # 高风险变更审批（4 用例框架）
+│   ├── km/
+│   │   ├── document-management.crud.spec.ts     # 文档管理 CRUD（7 用例框架）
+│   │   ├── candidate-management.crud.spec.ts    # QA 候选 + 三门验证（8 用例框架）
+│   │   ├── review-workflow.crud.spec.ts         # 审核包 + 动作执行（8 用例框架）
+│   │   ├── asset-management.crud.spec.ts        # 已发布资产管理（5 用例框架）
+│   │   └── governance.audit.spec.ts             # 治理任务 + 审计日志（6 用例框架）
+│   └── mcp/
+│       ├── mcp-management.crud.spec.ts          # MCP Server/Tool CRUD（53 用例）
+│       ├── tool-skill-mapping.contract.spec.ts  # Tool-Skill 映射（6 用例）
+│       └── connector-management.crud.spec.ts    # Connector CRUD（6 用例框架）
+└── playwright.config.ts                         # projects: skills / platform
+```
+
+### 后端 API 测试（apitest，全 mock）
+
+1:1 映射所有提供 API 接口的源文件，目录结构镜像 `src/`。
+
+```
+backend/tests/apitest/
+├── chat/
+│   ├── chat.test.ts                             # POST /api/chat, DELETE /api/sessions/:id（12 用例）
+│   └── mock-data.test.ts                        # GET /api/test-personas, /api/outbound-tasks（4 用例）
+├── agent/
+│   ├── card/
+│   │   └── compliance.test.ts                   # /api/compliance/*（12 用例）
+│   └── km/
+│       ├── skills/
+│       │   ├── files.test.ts                    # /api/files/*（14 用例）
+│       │   ├── skills.test.ts                   # /api/skills（7 用例）
+│       │   ├── tool-bindings.test.ts            # /api/skills/:id/tool-bindings（5 用例）
+│       │   ├── skill-versions.test.ts           # /api/skill-versions/*（11 用例）
+│       │   ├── sandbox.test.ts                  # /api/sandbox/*（12 用例）
+│       │   ├── skill-edit.test.ts               # /api/skill-edit/*（6 用例）
+│       │   ├── canary.test.ts                   # /api/canary/*（9 用例）
+│       │   ├── change-requests.test.ts          # /api/change-requests/*（8 用例）
+│       │   ├── test-cases.test.ts               # /api/test-cases/*（7 用例）
+│       │   └── skill-creator.test.ts            # /api/skill-creator/*（9 用例）
+│       ├── kms/
+│       │   ├── documents.test.ts                # /api/km/documents/*（8 用例）
+│       │   ├── candidates.test.ts               # /api/km/candidates/*（11 用例）
+│       │   ├── evidence.test.ts                 # /api/km/evidence/*（6 用例）
+│       │   ├── conflicts.test.ts                # /api/km/conflicts/*（7 用例）
+│       │   ├── review-packages.test.ts          # /api/km/review-packages/*（8 用例）
+│       │   ├── action-drafts.test.ts            # /api/km/action-drafts/*（8 用例）
+│       │   ├── assets.test.ts                   # /api/km/assets/*（5 用例）
+│       │   ├── tasks.test.ts                    # /api/km/tasks/*（5 用例）
+│       │   ├── audit.test.ts                    # /api/km/audit-logs（5 用例）
+│       │   └── reply-copilot.test.ts            # /api/km/reply-copilot/*（4 用例）
+│       └── mcp/
+│           ├── servers.test.ts                  # /api/mcp/servers/*（15 用例）
+│           ├── connectors.test.ts               # /api/mcp/connectors/*（10 用例）
+│           ├── tool-management.test.ts          # /api/mcp/tool-management/*（20 用例）
+│           └── tools-overview.test.ts           # /api/mcp/tools（3 用例）
+```
+
+### MCP Servers API 测试（apitest，全 mock）
+
+1:1 映射 5 个 MCP Server 源文件，mock `backendGet`/`backendPost`。
+
+```
+mcp_servers/tests/apitest/
+├── user_info_service.test.ts                    # 18003: query_subscriber, query_bill, query_plans, analyze_bill_anomaly（24 用例）
+├── business_service.test.ts                     # 18004: cancel_service, issue_invoice（12 用例）
+├── diagnosis_service.test.ts                    # 18005: diagnose_network, diagnose_app（17 用例）
+├── outbound_service.test.ts                     # 18006: record_call_result, send_followup_sms, create_callback_task, record_marketing_result（31 用例）
+└── account_service.test.ts                      # 18007: verify_identity, check_account_balance, check_contracts, apply_service_suspension（13 用例）
+```
+
+### MCP Servers E2E 测试
+
+contracts/ 下 1:1 映射 seed 中 16 个 tool contracts（`packages/shared-db/src/schemas/*.json`），验证实际返回结构。
+
+```
+mcp_servers/tests/e2e/
+├── contracts/                                   # 工具契约验证（1 tool = 1 file）
+│   ├── query_subscriber.contract.spec.ts        # :18003 user-info
+│   ├── query_bill.contract.spec.ts              # :18003 user-info
+│   ├── query_plans.contract.spec.ts             # :18003 user-info
+│   ├── analyze_bill_anomaly.contract.spec.ts    # :18003 user-info
+│   ├── cancel_service.contract.spec.ts          # :18004 business
+│   ├── issue_invoice.contract.spec.ts           # :18004 business
+│   ├── diagnose_network.contract.spec.ts        # :18005 diagnosis
+│   ├── diagnose_app.contract.spec.ts            # :18005 diagnosis
+│   ├── record_call_result.contract.spec.ts      # :18006 outbound
+│   ├── send_followup_sms.contract.spec.ts       # :18006 outbound
+│   ├── create_callback_task.contract.spec.ts    # :18006 outbound
+│   ├── record_marketing_result.contract.spec.ts # :18006 outbound
+│   ├── verify_identity.contract.spec.ts         # :18007 account
+│   ├── check_account_balance.contract.spec.ts   # :18007 account
+│   ├── check_contracts.contract.spec.ts         # :18007 account
+│   └── apply_service_suspension.contract.spec.ts # :18007 account
+└── platform/                                    # MCP 平台功能
+    ├── server-lifecycle.spec.ts                  # 启动/端口/工具数/停止
+    ├── tool-discovery.spec.ts                    # MCP tools/list 协议
+    ├── transport.spec.ts                         # StreamableHTTP 合规
+    ├── error-handling.spec.ts                    # 异常降级
+    └── logging.spec.ts                           # 日志格式
+```
+
+### Mock APIs API 测试（apitest，全 mock）
+
+1:1 映射 13 个 mock 路由源文件，mock db。
+
+```
+mock_apis/tests/apitest/
+├── customer.test.ts                             # /api/customer/*（13 用例）
+├── billing.test.ts                              # /api/billing/*（10 用例）
+├── catalog.test.ts                              # /api/catalog/*（5 用例）
+├── orders.test.ts                               # /api/orders/*（9 用例）
+├── diagnosis.test.ts                            # /api/diagnosis/*（14 用例）
+├── identity.test.ts                             # /api/identity/*（7 用例）
+├── invoice.test.ts                              # /api/invoice/*（4 用例）
+├── outreach.test.ts                             # /api/outreach/*（9 用例）
+├── callback.test.ts                             # /api/callback/*（4 用例）
+├── network.test.ts                              # /api/network/*（3 用例）
+├── offers.test.ts                               # /api/offers/*（4 用例）
+├── payments.test.ts                             # /api/payments/*（5 用例）
+└── risk.test.ts                                 # /api/risk/*（3 用例）
 ```
 
 ### 后端单元测试

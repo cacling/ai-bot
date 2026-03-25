@@ -57,6 +57,7 @@ export function AgentWorkstationPage() {
   const tSendRef        = useRef<number>(0);
   const processedMsgIds = useRef(new Set<string>());
   const messagesEndRef  = useRef<HTMLDivElement>(null);
+  const hiddenCardsRef  = useRef<Set<string>>(new Set());
   const textareaRef     = useRef<HTMLTextAreaElement>(null);
   const msgIdCounter    = useRef(0);
   const nextMsgId = () => ++msgIdCounter.current;
@@ -64,10 +65,17 @@ export function AgentWorkstationPage() {
   // ── 跟随客户侧用户切换 ────────────────────────────────────────────────────────
   useAgentUserSync(setUserPhone);
 
-  // ── 初始加载用户及外呼任务数据 ────────────────────────────────────────────────
+  // ── 初始加载用户及外呼任务数据 + 卡片可见性配置 ──────────────────────────────
   useEffect(() => {
     fetchTestPersonas().then(setAllPersonas).catch(console.error);
     fetchOutboundTasks().then(setOutboundTasksList).catch(console.error);
+    fetch('/api/agent-config').then(r => r.json()).then((cfg: { hiddenCards?: string[] }) => {
+      const hidden = new Set(cfg.hiddenCards ?? []);
+      hiddenCardsRef.current = hidden;
+      if (hidden.size > 0) {
+        setCardStates(prev => prev.map(c => hidden.has(c.id) ? { ...c, isOpen: false } : c));
+      }
+    }).catch(console.error);
   }, []);
 
   useEffect(() => { botModeRef.current = botMode; }, [botMode]);
@@ -77,7 +85,8 @@ export function AgentWorkstationPage() {
     setMessages([]);
     setBotMode('bot');
     botModeRef.current = 'bot';
-    setCardStates(buildInitialCardStates());
+    const hidden = hiddenCardsRef.current;
+    setCardStates(buildInitialCardStates().map(c => hidden.has(c.id) ? { ...c, isOpen: false } : c));
     setIsConnected(false);
     pendingReplyHintRef.current = null;
 
@@ -110,7 +119,8 @@ export function AgentWorkstationPage() {
         // Reset card states but preserve user_detail & outbound_task data
         // (they are driven by userPhone, not by session lifecycle)
         setCardStates(prev => {
-          const fresh = buildInitialCardStates();
+          const hidden = hiddenCardsRef.current;
+          const fresh = buildInitialCardStates().map(c => hidden.has(c.id) ? { ...c, isOpen: false } : c);
           const keep = new Set(['user_detail', 'outbound_task']);
           return fresh.map(c => {
             if (!keep.has(c.id)) return c;

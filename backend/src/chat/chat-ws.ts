@@ -23,7 +23,7 @@ import { type CoreMessage } from 'ai';
 import { db } from '../db';
 import { messages, sessions, subscribers, plans } from '../db/schema';
 import { runAgent, getMcpToolsForRuntime } from '../engine/runner';
-import { buildNodeTypeMap } from '../services/mermaid';
+import { buildNodeTypeMap, stripMermaidMarkers } from '../services/mermaid';
 import { routeSkill, shouldUseRuntime } from '../engine/skill-router';
 import { runSkillTurn } from '../engine/skill-runtime';
 import { createInstance, findActiveInstance } from '../engine/skill-instance-store';
@@ -252,7 +252,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           // Push diagram with active step
           const rawMermaid = getSkillMermaid(route.spec.skillId);
           if (rawMermaid) {
-            const mermaid = await translateMermaid(rawMermaid, langParam);
+            const mermaid = stripMermaidMarkers(await translateMermaid(rawMermaid, langParam));
             const nodeTypeMap = buildNodeTypeMap(route.spec);
             const diagramEv = {
               source: 'user' as const, type: 'skill_diagram_update' as const,

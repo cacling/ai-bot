@@ -83,7 +83,7 @@ describe('skill-creator — POST /save validation', () => {
       skill_name: 'valid-skill-name',
       skill_md: '# Content',
     });
-    // If it gets past validation, it should either succeed (200) or fail on save (500)
-    expect(status === 200 || status === 500).toBe(true);
+    // If it gets past name validation: 200 (saved), 422 (structural validation failed), or 500 (save error)
+    expect(status === 200 || status === 422 || status === 500).toBe(true);
   });
 });

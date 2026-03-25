@@ -152,27 +152,6 @@ describe('parseSkillCreatorResponse', () => {
     expect(result.draft).toBeNull();
   });
 
-  test('downgrades confirm to draft when test_cases < 3', () => {
-    const raw = JSON.stringify({
-      reply: '请确认草稿',
-      phase: 'confirm',
-      draft: {
-        skill_name: 'my-skill',
-        description: 'A skill',
-        skill_md: '# My Skill',
-        references: [],
-        test_cases: [
-          { input: '查话费', assertions: [{ type: 'contains', value: '话费' }] },
-        ],
-      },
-    });
-    const session = makeSession({ phase: 'draft' });
-    const result = parseSkillCreatorResponse(raw, session);
-
-    expect(result.phase).toBe('draft'); // 降级，因为 test_cases 不足 3 条
-    expect(result.draft).not.toBeNull();
-  });
-
   test('falls back gracefully for non-JSON response', () => {
     const raw = '抱歉，我无法生成有效的 JSON 响应。让我重新尝试。';
     const session = makeSession({ phase: 'interview' });

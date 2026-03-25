@@ -38,6 +38,13 @@ app.use(
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
+// Agent workstation config (cards visibility etc.)
+app.get('/api/agent-config', (c) => {
+  const raw = process.env.AGENT_HIDDEN_CARDS ?? '';
+  const hiddenCards = raw.split(',').map(s => s.trim()).filter(Boolean);
+  return c.json({ hiddenCards });
+});
+
 // Mount chat routes: POST /api/chat, DELETE /api/sessions/:id
 app.route('/api', chatRoutes);
 app.route('/api', mockDataRoutes);

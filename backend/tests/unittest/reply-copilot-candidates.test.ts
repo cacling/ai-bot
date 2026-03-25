@@ -8,7 +8,7 @@ describe('candidates PUT accepts structured fields', () => {
     const id = `cand_rc_${Date.now()}`;
     await db.insert(kmCandidates).values({ id, source_type: 'manual', normalized_q: 'test q' });
 
-    const res = await fetch(`http://localhost:${process.env.PORT || 18001}/api/km/candidates/${id}`, {
+    const res = await fetch(`http://localhost:${process.env.PORT || 18472}/api/km/candidates/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

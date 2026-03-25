@@ -268,7 +268,7 @@ describe('fault-diagnosis SKILL.md — stateDiagram 高亮集成验证', () => {
     expect(states).not.toContain('诊断结果判断');
     expect(states).not.toContain('分析诊断结果');
     // Real nodes should be included
-    expect(states).toContain('接收问题');
+    expect(states).toContain('接收并诊断');
     expect(states).toContain('网络拥塞');
     expect(states).toContain('系统诊断');
   });

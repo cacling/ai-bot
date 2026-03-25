@@ -11,6 +11,12 @@ delete process.env.HTTPS_PROXY;
  * - 需要先通过 tests/scripts/start.sh 启动服务
  * - backend(:18472) + telecom-mcp(:8003) + frontend(:5173)
  * - Chat API 调用真实 LLM，单次响应最长 90s
+ *
+ * 运行方式：
+ *   npx playwright test                           # 全部
+ *   npx playwright test --project=skills          # 只跑业务技能
+ *   npx playwright test --project=platform        # 只跑平台功能
+ *   npx playwright test skills/inbound/bill-inquiry  # 单个技能
  */
 export default defineConfig({
   globalSetup: './global-setup.ts',
@@ -29,14 +35,19 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     locale: 'zh-CN',
+    ...devices['Desktop Chrome'],
+    channel: 'chrome',
   },
   projects: [
     {
-      name: 'chrome',
-      use: {
-        ...devices['Desktop Chrome'],
-        channel: 'chrome',
-      },
+      name: 'skills',
+      testDir: './skills',
+      testMatch: '**/*.spec.ts',
+    },
+    {
+      name: 'platform',
+      testDir: './platform',
+      testMatch: '**/*.spec.ts',
     },
   ],
 });

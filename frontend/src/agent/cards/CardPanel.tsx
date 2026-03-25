@@ -1,19 +1,18 @@
 /**
  * CardPanel.tsx — right-panel card container
  *
- * Layout: 2-column CSS grid.
- * - colSpan:2 cards span full width (e.g. diagram)
- * - colSpan:1 cards occupy one column (e.g. emotion, handoff)
+ * Layout: greedy two-column bin packing via useCardPacking.
+ * - colSpan:1 cards are packed into left/right columns to minimise height diff
+ * - colSpan:2 cards span full width between column segments
+ * - Re-packs automatically when a card's height changes >50% or cards appear/hide
  *
  * Drag-to-reorder: swaps order values when a card is dropped onto another.
- *
- * Wrapped with React.memo + useMemo for sorted/visible arrays to avoid
- * unnecessary re-renders of unchanged cards.
  */
 
 import { memo, useState, useMemo, useCallback } from 'react';
 import { CardShell } from './CardShell';
 import { getCardDef, getAllCardDefs, type CardState } from './registry';
+import { useCardPacking } from './useCardPacking';
 import type { Lang } from '../../i18n';
 
 interface Props {
@@ -29,6 +28,8 @@ export const CardPanel = memo(function CardPanel({ cards, lang, onUpdate }: Prop
   const sorted  = useMemo(() => [...cards].sort((a, b) => a.order - b.order), [cards]);
   const visible = useMemo(() => sorted.filter(s => s.isOpen), [sorted]);
   const closed  = useMemo(() => sorted.filter(s => !s.isOpen), [sorted]);
+
+  const { containerRef, segments } = useCardPacking(visible);
 
   const handleDragStart = useCallback((id: string) => (e: React.DragEvent) => {
     setDraggingId(id);
@@ -73,30 +74,39 @@ export const CardPanel = memo(function CardPanel({ cards, lang, onUpdate }: Prop
     onUpdate(cards.map(c => c.id === id ? { ...c, isOpen: true } : c));
   }, [cards, onUpdate]);
 
+  const renderCard = useCallback((id: string) => {
+    const state = cards.find(c => c.id === id);
+    const def = getCardDef(id);
+    if (!state || !def) return null;
+    return (
+      <div key={id} data-card-id={id} className="mb-3">
+        <CardShell
+          def={def}
+          state={state}
+          lang={lang}
+          onToggleCollapse={() => toggleCollapse(id)}
+          onClose={() => closeCard(id)}
+          onDragStart={handleDragStart(id)}
+          onDragOver={handleDragOver(id)}
+          onDrop={handleDrop(id)}
+          isDragging={draggingId === id}
+          isDragOver={dragOverId === id}
+        />
+      </div>
+    );
+  }, [cards, lang, draggingId, dragOverId, toggleCollapse, closeCard, handleDragStart, handleDragOver, handleDrop]);
+
   return (
     <div className="flex flex-col gap-2 w-full">
-      {/* 2-column grid for open cards; dense flow fills gaps when col-span-2 items interrupt col-span-1 pairs */}
-      <div className="columns-2 gap-3">
-        {visible.map(state => {
-          const def = getCardDef(state.id);
-          if (!def) return null;
+      <div ref={containerRef}>
+        {segments.map((seg, i) => {
+          if (seg.type === 'full') {
+            return renderCard(seg.id);
+          }
           return (
-            <div
-              key={state.id}
-              className={`break-inside-avoid mb-3${def.colSpan === 2 ? ' [column-span:all]' : ''}`}
-            >
-              <CardShell
-                def={def}
-                state={state}
-                lang={lang}
-                onToggleCollapse={() => toggleCollapse(state.id)}
-                onClose={() => closeCard(state.id)}
-                onDragStart={handleDragStart(state.id)}
-                onDragOver={handleDragOver(state.id)}
-                onDrop={handleDrop(state.id)}
-                isDragging={draggingId === state.id}
-                isDragOver={dragOverId === state.id}
-              />
+            <div key={`seg-${i}`} className="flex gap-3">
+              <div className="flex-1 flex flex-col">{seg.left.map(id => renderCard(id))}</div>
+              <div className="flex-1 flex flex-col">{seg.right.map(id => renderCard(id))}</div>
             </div>
           );
         })}

@@ -1,9 +1,0 @@
-import type { SeedE2ECase } from './types';
-
-export const outboundMarketingCases: SeedE2ECase[] = [
-  { skill_name: 'outbound-marketing', input_message: '听起来可以，你把套餐详情发我，我自己去办。', expected_keywords: JSON.stringify(['套餐详情', '办理']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'send_followup_sms' }, { type: 'tool_called', value: 'record_marketing_result' }]), persona_id: 'M001' },
-  { skill_name: 'outbound-marketing', input_message: '我先跟家里人商量一下，明天再联系我吧。', expected_keywords: JSON.stringify(['商量', '联系']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'send_followup_sms' }, { type: 'tool_called', value: 'record_marketing_result' }]), persona_id: 'M002' },
-  { skill_name: 'outbound-marketing', input_message: '这个漫游套餐我有兴趣，但你帮我转人工确认一下细节。', expected_keywords: JSON.stringify(['漫游', '人工']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'transfer_to_human' }]), persona_id: 'M003' },
-  { skill_name: 'outbound-marketing', input_message: '我对这个活动没兴趣，你帮我记录一下，别再推了。', expected_keywords: JSON.stringify(['没兴趣', '记录']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'record_marketing_result' }, { type: 'tool_not_called', value: 'send_followup_sms' }]), persona_id: 'M001' },
-  { skill_name: 'outbound-marketing', input_message: '不要再给我打营销电话了，把我标成免打扰。', expected_keywords: JSON.stringify(['免打扰', '营销电话']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'record_marketing_result' }, { type: 'tool_not_called', value: 'send_followup_sms' }, { type: 'response_mentions_any', value: '免打扰,不再打扰,不再拨打' }]), persona_id: 'U002' },
-];
