@@ -218,10 +218,15 @@ export const MermaidRenderer = memo(function MermaidRenderer({
   const progressRef    = useRef<string | null>(null);
   const nodeTypeMapRef = useRef<Record<string, string> | undefined>();
 
-  // Keep nodeTypeMap ref in sync with prop
+  // Re-apply node type colors when nodeTypeMap changes (without re-rendering SVG)
   useEffect(() => {
     nodeTypeMapRef.current = nodeTypeMap;
-  }, [nodeTypeMap]);
+    const wrap = wrapRef.current;
+    if (!wrap || !svgHtml || !nodeTypeMap || Object.keys(nodeTypeMap).length === 0) return;
+    applyNodeTypeColors(wrap, nodeTypeMap);
+    // Re-apply progress highlight on top (so it overrides node color)
+    if (progressRef.current) applyProgressHighlightDOM(wrap, progressRef.current);
+  }, [nodeTypeMap, svgHtml]);
 
   /* ── mermaid render ── */
   useEffect(() => {
