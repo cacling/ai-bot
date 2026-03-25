@@ -247,7 +247,6 @@ export const MermaidRenderer = memo(function MermaidRenderer({
   useEffect(() => {
     progressRef.current = progressStateProp ?? null;
     const wrap = wrapRef.current;
-    if (progressStateProp) console.log('[MermaidRenderer] progressState changed:', progressStateProp, 'svgHtml:', !!svgHtml, 'wrap:', !!wrap);
     if (!wrap || !svgHtml || !progressStateProp) return;
     // Clear previous progress highlight
     wrap.querySelectorAll('.progressHL').forEach(el => {
@@ -262,13 +261,7 @@ export const MermaidRenderer = memo(function MermaidRenderer({
     // Apply progress highlight on top
     const hlResult = applyProgressHighlightDOM(wrap, progressStateProp);
     if (!hlResult) {
-      // Debug: show element IDs and texts to diagnose matching failure
-      const ids = Array.from(wrap.querySelectorAll<Element>('[id]'))
-        .map(el => el.id)
-        .filter(id => id.length > 0 && id.length < 100);
-      console.warn('[MermaidRenderer] highlight FAILED for:', progressStateProp, 'Element IDs (sample):', ids.slice(0, 30));
-    } else {
-      console.log('[MermaidRenderer] highlight OK:', progressStateProp);
+      console.warn('[MermaidRenderer] highlight failed for:', progressStateProp);
     }
   }, [progressStateProp, svgHtml]);
 
