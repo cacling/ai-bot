@@ -497,7 +497,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
   const [testInput, setTestInput] = useState('');
   const [testRunning, setTestRunning] = useState(false);
   const [testMode, setTestMode] = useState<'mock' | 'real'>('mock');
-  const [testDiagram, setTestDiagram] = useState<{ skill_name: string; mermaid: string } | null>(null);
+  const [testDiagram, setTestDiagram] = useState<{ skill_name: string; mermaid: string; progressState?: string; nodeTypeMap?: Record<string, string> } | null>(null);
   const [diagramCollapsed, setDiagramCollapsed] = useState(false);
   const [testPersonaId, setTestPersonaId] = useState('');
   const [testPersonaList, setTestPersonaList] = useState<Array<{ id: string; label: string; context: Record<string, unknown> }>>([]);
@@ -1174,7 +1174,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
                       {!diagramCollapsed && (
                         <div className="flex-1 px-3 pb-2 overflow-auto">
                           {activeMermaid ? (
-                            <MermaidRenderer mermaid={activeMermaid} nodeTypeMap={activeNodeTypeMap} height="100%" zoom={true} autoFocus={!!testDiagram} emptyText="暂无流程图" />
+                            <MermaidRenderer mermaid={activeMermaid} nodeTypeMap={activeNodeTypeMap} progressState={testDiagram?.progressState} height="100%" zoom={true} autoFocus={!!testDiagram} emptyText="暂无流程图" />
                           ) : (
                             <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
                               {isTestMode ? '发送测试消息后展示流程图' : '当前文件无 mermaid 状态图'}
