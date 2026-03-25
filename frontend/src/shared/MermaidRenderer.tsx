@@ -206,6 +206,25 @@ export const MermaidRenderer = memo(function MermaidRenderer({
     return () => { cancelled = true; };
   }, [mermaidSrc, errorText]);
 
+  /* ── re-apply highlighting when progressState prop changes (without re-rendering SVG) ── */
+  useEffect(() => {
+    progressRef.current = progressStateProp ?? null;
+    const wrap = wrapRef.current;
+    if (!wrap || !svgHtml || !progressStateProp) return;
+    // Clear previous progress highlight
+    wrap.querySelectorAll('.progressHL').forEach(el => {
+      const rect = el.querySelector(':scope > rect, :scope > path, :scope > polygon');
+      if (rect) { (rect as SVGElement).style.fill = ''; (rect as SVGElement).style.stroke = ''; (rect as SVGElement).style.strokeWidth = ''; }
+      el.classList.remove('progressHL');
+    });
+    // Re-apply node type colors first
+    if (nodeTypeMapRef.current && Object.keys(nodeTypeMapRef.current).length > 0) {
+      applyNodeTypeColors(wrap, nodeTypeMapRef.current);
+    }
+    // Apply progress highlight on top
+    applyProgressHighlightDOM(wrap, progressStateProp);
+  }, [progressStateProp, svgHtml]);
+
   /* ── after SVG mounts: highlight + measure + auto-focus ── */
   useEffect(() => {
     const wrap = wrapRef.current;

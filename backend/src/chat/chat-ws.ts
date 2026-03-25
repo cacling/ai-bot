@@ -338,7 +338,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           agentLang,
           (skillName: string, rawMermaid: string, nodeTypeMap?: Record<string, string>, progressState?: string) => {
             translateMermaid(rawMermaid, langParam).then(mermaid => {
-              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid, nodeTypeMap, progress_state: progressState, msg_id: crypto.randomUUID() };
+              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid, node_type_map: nodeTypeMap, progress_state: progressState, msg_id: crypto.randomUUID() };
               try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
               sessionBus.publish(phone, ev);
             }).catch(() => {
