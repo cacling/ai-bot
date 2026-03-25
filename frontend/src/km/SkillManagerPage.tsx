@@ -1072,116 +1072,109 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
           </div>
         )}
 
-        {/* ── 编辑模式 ── */}
-        {centerMode === 'edit' && (
-          <div className="flex-1 overflow-hidden">
-            {fileLoading && (
-              <div className="flex items-center justify-center h-full text-muted-foreground gap-2">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span className="text-sm">加载中…</span>
-              </div>
-            )}
-
-            {!fileLoading && selectedFile && selectedIsMd && viewMode === 'edit' && (
-              <Textarea
-                className={`w-full h-full min-h-0 resize-none font-mono text-sm leading-relaxed p-4 border-none shadow-none focus-visible:ring-0 rounded-none ${isPublishedVersion ? 'bg-muted text-muted-foreground' : 'bg-background text-foreground'}`}
-                readOnly={isPublishedVersion}
-                value={editorContent}
-                onChange={(e) => !isPublishedVersion && handleEditorChangeTracked(e.target.value)}
-                spellCheck={false}
-              />
-            )}
-
-            {!fileLoading && selectedFile && selectedIsMd && viewMode === 'preview' && (
-              <div className="h-full overflow-y-auto px-6 py-4 prose prose-sm max-w-none">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-              </div>
-            )}
-
-            {!fileLoading && selectedFile && !selectedIsMd && isTextFile(selectedFile.name) && (
-              <div className="h-full overflow-auto">
-                <CodeMirror
-                  value={editorContent}
-                  height="100%"
-                  theme={oneDark}
-                  extensions={getCodeMirrorLang(selectedFile.name)
-                    ? [getCodeMirrorLang(selectedFile.name)!]
-                    : []}
-                  onChange={isPublishedVersion ? undefined : handleEditorChangeTracked}
-                  readOnly={isPublishedVersion}
-                  basicSetup={{ lineNumbers: true, foldGutter: true }}
-                  style={{ fontSize: '13px', height: '100%' }}
-                />
-              </div>
-            )}
-
-            {!fileLoading && selectedFile && !selectedIsMd && !isTextFile(selectedFile.name) && (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
-                <AlertCircle size={16} />
-                不支持预览此文件类型
-              </div>
-            )}
-
-            {!fileLoading && !selectedFile && (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                选择左侧文件开始编辑
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── 底部流程图卡片（有 mermaid 时常驻，测试时高亮覆盖） ── */}
-        {(() => {
-          // Extract mermaid from editor content (static diagram)
+        {/* ── 编辑区 + 流程图（可拖动分隔） ── */}
+        {centerMode === 'edit' && (() => {
+          // Extract mermaid from editor content
           const rawMermaid = editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1] ?? null;
-          // Strip %% annotations for rendering but keep for nodeTypeMap extraction
           const staticMermaid = rawMermaid?.replace(/%%.*/gm, '').trim() ?? null;
 
-          // Build nodeTypeMap from mermaid annotations for color-coding
-          // Parse %% kind:<type> and node labels from the raw mermaid
+          // Build nodeTypeMap from annotations
           const staticNodeTypeMap: Record<string, string> = {};
           if (rawMermaid) {
-            const lines = rawMermaid.split('\n');
-            for (const line of lines) {
+            for (const line of rawMermaid.split('\n')) {
               const kindMatch = line.match(/%%\s*kind:(\w+)/);
               if (!kindMatch) continue;
-              // Extract the target node label from the transition line
               const transMatch = line.match(/-->\s*([^:\s%]+)/);
               const stateMatch = line.match(/^\s*(\S+)\s*-->/);
               const label = transMatch?.[1]?.replace(/^["']|["']$/g, '') ?? stateMatch?.[1]?.replace(/^["']|["']$/g, '');
-              if (label && label !== '[*]') {
-                staticNodeTypeMap[label] = kindMatch[1];
-              }
+              if (label && label !== '[*]') staticNodeTypeMap[label] = kindMatch[1];
             }
           }
 
-          // Test diagram takes priority (has progress highlighting)
           const activeMermaid = testDiagram?.mermaid ?? staticMermaid;
           const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? (Object.keys(staticNodeTypeMap).length > 0 ? staticNodeTypeMap : undefined);
           const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedFile?.name === 'SKILL.md' ? activeSkill?.id : null);
           const isTestMode = testingVersion !== null;
-
-          if (!activeMermaid && !isTestMode) return null;
+          const showDiagram = !!activeMermaid || isTestMode;
 
           return (
-            <div className="border-t border-border shrink-0">
-              <Button variant="ghost" size="sm" onClick={() => setDiagramCollapsed(prev => !prev)} className="w-full justify-start rounded-none text-xs">
-                {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-                <GitBranch size={12} /> 流程图{diagramLabel ? ` — ${diagramLabel}` : ''}
-                {testDiagram && <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0">测试中</Badge>}
-              </Button>
-              {!diagramCollapsed && (
-                <div className="px-3 pb-3 h-[30vh] overflow-auto">
-                  {activeMermaid ? (
-                    <MermaidRenderer mermaid={activeMermaid} nodeTypeMap={activeNodeTypeMap} height="28vh" zoom={true} autoFocus={!!testDiagram} emptyText="暂无流程图" />
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                      {isTestMode ? '发送测试消息后展示流程图' : '当前文件无 mermaid 状态图'}
+            <ResizablePanelGroup direction="vertical" className="flex-1">
+              <ResizablePanel defaultSize={showDiagram ? 60 : 100} minSize={20}>
+                <div className="h-full overflow-hidden">
+                  {fileLoading && (
+                    <div className="flex items-center justify-center h-full text-muted-foreground gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="text-sm">加载中…</span>
+                    </div>
+                  )}
+                  {!fileLoading && selectedFile && selectedIsMd && viewMode === 'edit' && (
+                    <Textarea
+                      className={`w-full h-full min-h-0 resize-none font-mono text-sm leading-relaxed p-4 border-none shadow-none focus-visible:ring-0 rounded-none ${isPublishedVersion ? 'bg-muted text-muted-foreground' : 'bg-background text-foreground'}`}
+                      readOnly={isPublishedVersion}
+                      value={editorContent}
+                      onChange={(e) => !isPublishedVersion && handleEditorChangeTracked(e.target.value)}
+                      spellCheck={false}
+                    />
+                  )}
+                  {!fileLoading && selectedFile && selectedIsMd && viewMode === 'preview' && (
+                    <div className="h-full overflow-y-auto px-6 py-4 prose prose-sm max-w-none">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                    </div>
+                  )}
+                  {!fileLoading && selectedFile && !selectedIsMd && isTextFile(selectedFile.name) && (
+                    <div className="h-full overflow-auto">
+                      <CodeMirror
+                        value={editorContent}
+                        height="100%"
+                        theme={oneDark}
+                        extensions={getCodeMirrorLang(selectedFile.name) ? [getCodeMirrorLang(selectedFile.name)!] : []}
+                        onChange={isPublishedVersion ? undefined : handleEditorChangeTracked}
+                        readOnly={isPublishedVersion}
+                        basicSetup={{ lineNumbers: true, foldGutter: true }}
+                        style={{ fontSize: '13px', height: '100%' }}
+                      />
+                    </div>
+                  )}
+                  {!fileLoading && selectedFile && !selectedIsMd && !isTextFile(selectedFile.name) && (
+                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
+                      <AlertCircle size={16} />
+                      不支持预览此文件类型
+                    </div>
+                  )}
+                  {!fileLoading && !selectedFile && (
+                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                      选择左侧文件开始编辑
                     </div>
                   )}
                 </div>
+              </ResizablePanel>
+
+              {showDiagram && (
+                <>
+                  <ResizableHandle />
+                  <ResizablePanel defaultSize={40} minSize={15}>
+                    <div className="h-full flex flex-col overflow-hidden">
+                      <Button variant="ghost" size="sm" onClick={() => setDiagramCollapsed(prev => !prev)} className="w-full justify-start rounded-none text-xs shrink-0 border-b border-border">
+                        {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                        <GitBranch size={12} /> 流程图{diagramLabel ? ` — ${diagramLabel}` : ''}
+                        {testDiagram && <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0">测试中</Badge>}
+                      </Button>
+                      {!diagramCollapsed && (
+                        <div className="flex-1 px-3 pb-2 overflow-auto">
+                          {activeMermaid ? (
+                            <MermaidRenderer mermaid={activeMermaid} nodeTypeMap={activeNodeTypeMap} height="100%" zoom={true} autoFocus={!!testDiagram} emptyText="暂无流程图" />
+                          ) : (
+                            <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                              {isTestMode ? '发送测试消息后展示流程图' : '当前文件无 mermaid 状态图'}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </ResizablePanel>
+                </>
               )}
-            </div>
+            </ResizablePanelGroup>
           );
         })()}
 

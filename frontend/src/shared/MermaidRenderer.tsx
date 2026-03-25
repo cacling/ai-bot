@@ -22,17 +22,17 @@ const FOCUS_ZOOM_MAX = 1.5;
 // ── Node type color mapping ──────────────────────────────────────────────────
 
 const NODE_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
-  tool:       { fill: '#dbeafe', stroke: '#3b82f6' },
-  llm:        { fill: '#dcfce7', stroke: '#22c55e' },
-  human:      { fill: '#fef3c7', stroke: '#f59e0b' },
-  switch:     { fill: '#f3e8ff', stroke: '#a855f7' },
-  guard:      { fill: '#fef2f2', stroke: '#ef4444' },
-  end:        { fill: '#f1f5f9', stroke: '#94a3b8' },
-  start:      { fill: '#ccfbf1', stroke: '#14b8a6' },
+  tool:       { fill: '#dbeafe', stroke: '#3b82f6' },   // Blue — MCP tool call
+  llm:        { fill: '#dcfce7', stroke: '#22c55e' },   // Green — AI text generation
+  human:      { fill: '#ffedd5', stroke: '#f97316' },   // Orange — confirm / escalation (not yellow, avoids progress highlight conflict)
+  switch:     { fill: '#f3e8ff', stroke: '#a855f7' },   // Purple — branch / decision
+  guard:      { fill: '#fef2f2', stroke: '#ef4444' },   // Red — compliance check
+  end:        { fill: '#f1f5f9', stroke: '#94a3b8' },   // Gray — terminal
+  start:      { fill: '#ccfbf1', stroke: '#14b8a6' },   // Teal — entry
   // Legacy aliases
   message:    { fill: '#dcfce7', stroke: '#22c55e' },
   ref:        { fill: '#dcfce7', stroke: '#22c55e' },
-  confirm:    { fill: '#fef3c7', stroke: '#f59e0b' },
+  confirm:    { fill: '#ffedd5', stroke: '#f97316' },   // Orange (same as human)
   choice:     { fill: '#f3e8ff', stroke: '#a855f7' },
 };
 
