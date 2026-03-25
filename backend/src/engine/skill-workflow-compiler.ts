@@ -39,8 +39,26 @@ const RE_ANNOTATION_GUARD = /%%\s*guard:([\w.]+)/g;
 const RE_ANNOTATION_OUTPUT = /%%\s*output:(\w+)/g;
 
 const VALID_KINDS: ReadonlySet<string> = new Set<StepKind>([
-  'tool', 'confirm', 'ref', 'human', 'message', 'choice', 'end',
+  // New NodeType-aligned values
+  'start', 'end', 'llm', 'classifier', 'extractor', 'retriever',
+  'transform', 'code', 'state', 'merge',
+  'if', 'switch', 'foreach', 'loop', 'subflow',
+  'tool', 'http', 'db',
+  'human', 'guard',
+  // Legacy aliases
+  'message', 'ref', 'confirm', 'choice',
 ]);
+
+/** Normalize legacy kind values to NodeType-aligned values */
+function normalizeKind(kind: string): string {
+  switch (kind) {
+    case 'message': return 'llm';
+    case 'ref': return 'llm';
+    case 'confirm': return 'human';
+    case 'choice': return 'switch';
+    default: return kind;
+  }
+}
 
 const VALID_GUARDS: ReadonlySet<string> = new Set<GuardType>([
   'tool.success', 'tool.error', 'tool.no_data',
@@ -311,17 +329,17 @@ export function compileWorkflow(
 
   // Determine kind for each node
   const resolveKind = (node: RawNode, nodeName: string): StepKind => {
-    // Priority: %% kind: > %% tool: (→ tool) > <<choice>> (→ choice) > terminal (→ end) > default message
+    // Priority: %% kind: > %% tool: (→ tool) > <<choice>> (→ switch) > terminal (→ end) > default llm
     const kindAnn = node.annotations.find(a => a.type === 'kind');
     if (kindAnn) {
-      if (VALID_KINDS.has(kindAnn.value)) return kindAnn.value as StepKind;
-      warnings.push(`Unknown kind "${kindAnn.value}" on node "${nodeName}", defaulting to message`);
+      if (VALID_KINDS.has(kindAnn.value)) return normalizeKind(kindAnn.value) as StepKind;
+      warnings.push(`Unknown kind "${kindAnn.value}" on node "${nodeName}", defaulting to llm`);
     }
     const toolAnn = node.annotations.find(a => a.type === 'tool');
     if (toolAnn) return 'tool';
-    if (node.isChoice) return 'choice';
+    if (node.isChoice) return 'switch';
     if (terminalSources.includes(nodeName)) return 'end';
-    return 'message';
+    return 'llm';
   };
 
   // Build WorkflowStep for each node

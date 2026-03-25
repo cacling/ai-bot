@@ -49,9 +49,9 @@ describe('skill-workflow-compiler', () => {
     // Check step kinds
     expect(spec.steps['query'].kind).toBe('tool');
     expect(spec.steps['query'].tool).toBe('query_subscriber');
-    expect(spec.steps['check'].kind).toBe('choice');
-    expect(spec.steps['show'].kind).toBe('message');
-    expect(spec.steps['confirm'].kind).toBe('confirm');
+    expect(spec.steps['check'].kind).toBe('switch');
+    expect(spec.steps['show'].kind).toBe('llm');
+    expect(spec.steps['confirm'].kind).toBe('human');
     expect(spec.steps['cancel'].kind).toBe('end');
     expect(spec.steps['exec'].kind).toBe('tool');
     expect(spec.steps['exec'].tool).toBe('do_action');
@@ -95,7 +95,7 @@ describe('skill-workflow-compiler', () => {
     expect(result.spec).not.toBeNull();
 
     const checkStep = result.spec!.steps['check'];
-    expect(checkStep.kind).toBe('choice');
+    expect(checkStep.kind).toBe('switch');
     expect(checkStep.transitions.length).toBe(2);
 
     const successTrans = checkStep.transitions.find(t => t.label === '成功');

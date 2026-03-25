@@ -65,7 +65,15 @@ export const VALID_CHANNELS = ['online', 'voice', 'outbound-collection', 'outbou
 
 export type SkillMode = typeof VALID_MODES[number];
 
-export type StepKind = 'tool' | 'confirm' | 'ref' | 'human' | 'message' | 'choice' | 'end';
+export type StepKind =
+  // New NodeType-aligned values (preferred)
+  | 'start' | 'end' | 'llm' | 'classifier' | 'extractor' | 'retriever'
+  | 'transform' | 'code' | 'state' | 'merge'
+  | 'if' | 'switch' | 'foreach' | 'loop' | 'subflow'
+  | 'tool' | 'http' | 'db'
+  | 'human' | 'guard'
+  // Legacy aliases (backward compat — compiler normalizes)
+  | 'message' | 'ref' | 'confirm' | 'choice';
 export type GuardType = 'tool.success' | 'tool.error' | 'tool.no_data' | 'user.confirm' | 'user.cancel' | 'always';
 
 export interface ParsedFrontmatter {

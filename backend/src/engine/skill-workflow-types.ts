@@ -23,7 +23,15 @@ export interface WorkflowStep {
   transitions: WorkflowTransition[];
 }
 
-export type StepKind = 'tool' | 'confirm' | 'ref' | 'human' | 'message' | 'choice' | 'end';
+export type StepKind =
+  // New NodeType-aligned values (preferred)
+  | 'start' | 'end' | 'llm' | 'classifier' | 'extractor' | 'retriever'
+  | 'transform' | 'code' | 'state' | 'merge'
+  | 'if' | 'switch' | 'foreach' | 'loop' | 'subflow'
+  | 'tool' | 'http' | 'db'
+  | 'human' | 'guard'
+  // Legacy aliases (backward compat — compiler normalizes)
+  | 'message' | 'ref' | 'confirm' | 'choice';
 
 export interface WorkflowTransition {
   target: string;
