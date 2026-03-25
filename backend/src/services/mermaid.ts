@@ -120,7 +120,15 @@ import type { WorkflowSpec } from '../engine/skill-workflow-types';
 export function buildNodeTypeMap(spec: WorkflowSpec): Record<string, string> {
   const map: Record<string, string> = {};
   for (const step of Object.values(spec.steps)) {
-    if (step.label) map[step.label] = step.kind;
+    if (!step.label) continue;
+    map[step.label] = step.kind;
+    // Also add short name (without nested prefix) for SVG ID matching
+    // e.g., "账单查询流程.确认身份" → also add "确认身份"
+    const dotIdx = step.label.lastIndexOf('.');
+    if (dotIdx !== -1) {
+      const shortName = step.label.substring(dotIdx + 1);
+      if (!map[shortName]) map[shortName] = step.kind;
+    }
   }
   return map;
 }
