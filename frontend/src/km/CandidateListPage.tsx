@@ -22,7 +22,9 @@ export function CandidateListPage({ navigate }: { navigate: (p: KMPage) => void 
   const [items, setItems] = useState<KMCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ normalized_q: '', draft_answer: '', source_type: 'manual' });
+  const [form, setForm] = useState({ normalized_q: '', draft_answer: '', variants: '', source_type: 'manual' });
+
+  const splitLines = (s: string) => s.split(/\n+/).map(t => t.trim()).filter(Boolean);
 
   const load = () => {
     setLoading(true);
@@ -32,9 +34,14 @@ export function CandidateListPage({ navigate }: { navigate: (p: KMPage) => void 
 
   const handleCreate = async () => {
     if (!form.normalized_q.trim()) return;
-    await kmApi.createCandidate(form);
+    await kmApi.createCandidate({
+      normalized_q: form.normalized_q,
+      draft_answer: form.draft_answer,
+      source_type: form.source_type,
+      variants_json: JSON.stringify(splitLines(form.variants)),
+    });
     setShowCreate(false);
-    setForm({ normalized_q: '', draft_answer: '', source_type: 'manual' });
+    setForm({ normalized_q: '', draft_answer: '', variants: '', source_type: 'manual' });
     load();
   };
 
@@ -52,6 +59,8 @@ export function CandidateListPage({ navigate }: { navigate: (p: KMPage) => void 
         <Card className="mb-3"><CardContent className="p-3 space-y-2">
           <Input value={form.normalized_q} onChange={e => setForm(f => ({ ...f, normalized_q: e.target.value }))}
             placeholder="标准问句" className="text-xs" />
+          <Textarea value={form.variants} onChange={e => setForm(f => ({ ...f, variants: e.target.value }))}
+            placeholder={'扩展问（每行一条，可选）\n用户没怎么用怎么流量就没了？'} rows={3} className="text-xs" />
           <Textarea value={form.draft_answer} onChange={e => setForm(f => ({ ...f, draft_answer: e.target.value }))}
             placeholder="草案答案" rows={3} className="text-xs" />
           <div className="flex gap-2">

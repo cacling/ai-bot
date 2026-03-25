@@ -10,6 +10,7 @@
 import { db, sqlite } from './index';
 import { eq } from 'drizzle-orm';
 import { seededE2ECases } from '../../tests/apitest/usecase';
+import { seedReplyCopilotKnowledge } from './seed-reply-copilot';
 import {
   bills,
   billingBillItems,
@@ -52,6 +53,7 @@ import {
   kmGovernanceTasks,
   kmRegressionWindows,
   kmAuditLogs,
+  kmReplyFeedback,
   mcpServers,
   mcpTools,
   connectors,
@@ -77,6 +79,10 @@ function recentMonths(n: number): string[] {
     result.push(month);
   }
   return result;
+}
+
+function kmDocPath(name: string): string {
+  return `data/km-documents/${name}`;
 }
 
 function ensureMockBackendTables() {
@@ -824,6 +830,7 @@ async function seed() {
   console.log('[seed] 写入知识管理演示数据...');
 
   // 清空（按外键依赖顺序）
+  db.delete(kmReplyFeedback).run();
   db.delete(kmAuditLogs).run();
   db.delete(kmRegressionWindows).run();
   db.delete(kmGovernanceTasks).run();
@@ -857,12 +864,13 @@ async function seed() {
 
   // ── 8.2 文档版本 ──────────────────────────────────────────────────
   db.insert(kmDocVersions).values([
-    { id: 'dv-cancel-v1', document_id: 'doc-cancel-policy', version_no: 1, scope_json: '{"region":"全国","channel":"全渠道"}', effective_from: '2026-01-01', effective_to: '2026-12-31', diff_summary: null, status: 'parsed', created_at: oneWeekAgo },
-    { id: 'dv-cancel-v2', document_id: 'doc-cancel-policy', version_no: 2, scope_json: '{"region":"全国","channel":"全渠道"}', effective_from: '2026-03-01', effective_to: '2026-12-31', diff_summary: '退订时限从7个工作日缩短为5个工作日；新增即时退订通道', status: 'parsed', created_at: yesterday },
-    { id: 'dv-billing-v1', document_id: 'doc-billing-rules', version_no: 1, scope_json: '{"region":"全国","channel":"线上"}', effective_from: '2026-01-01', effective_to: '2026-06-30', diff_summary: null, status: 'parsed', created_at: oneWeekAgo },
-    { id: 'dv-5g-v1',     document_id: 'doc-5g-plans',      version_no: 1, scope_json: '{"region":"全国","channel":"全渠道"}', effective_from: '2026-01-01', effective_to: '2026-03-31', diff_summary: null, status: 'parsed', created_at: threeDaysAgo },
-    { id: 'dv-network-v1', document_id: 'doc-network-faq',   version_no: 1, scope_json: '{"region":"全国","channel":"客服"}', effective_from: '2025-07-01', effective_to: '2026-06-30', diff_summary: null, status: 'parsed', created_at: oneWeekAgo },
-    { id: 'dv-complaint-v1', document_id: 'doc-complaint-guide', version_no: 1, scope_json: '{"region":"全国","channel":"全渠道"}', effective_from: '2026-03-01', effective_to: '2026-12-31', diff_summary: null, status: 'draft', created_at: twoDaysAgo },
+    { id: 'dv-cancel-v1', document_id: 'doc-cancel-policy', version_no: 1, file_path: kmDocPath('cancel-policy-v1.md'), scope_json: '{"region":"全国","channel":"全渠道"}', effective_from: '2026-01-01', effective_to: '2026-12-31', diff_summary: null, status: 'parsed', created_at: oneWeekAgo },
+    { id: 'dv-cancel-v2', document_id: 'doc-cancel-policy', version_no: 2, file_path: kmDocPath('cancel-policy-v2.md'), scope_json: '{"region":"全国","channel":"全渠道"}', effective_from: '2026-03-01', effective_to: '2026-12-31', diff_summary: '退订时限从7个工作日缩短为5个工作日；新增即时退订通道', status: 'parsed', created_at: yesterday },
+    { id: 'dv-billing-v1', document_id: 'doc-billing-rules', version_no: 1, file_path: kmDocPath('billing-rules-v1.md'), scope_json: '{"region":"全国","channel":"线上"}', effective_from: '2026-01-01', effective_to: '2026-06-30', diff_summary: null, status: 'parsed', created_at: oneWeekAgo },
+    { id: 'dv-5g-v1',     document_id: 'doc-5g-plans',      version_no: 1, file_path: kmDocPath('5g-plans-v1.md'), scope_json: '{"region":"全国","channel":"全渠道"}', effective_from: '2026-01-01', effective_to: '2026-03-31', diff_summary: null, status: 'parsed', created_at: threeDaysAgo },
+    { id: 'dv-network-v1', document_id: 'doc-network-faq',   version_no: 1, file_path: kmDocPath('network-faq-v1.md'), scope_json: '{"region":"全国","channel":"客服"}', effective_from: '2025-07-01', effective_to: '2026-06-30', diff_summary: null, status: 'parsed', created_at: oneWeekAgo },
+    { id: 'dv-complaint-v1', document_id: 'doc-complaint-guide', version_no: 1, file_path: kmDocPath('complaint-guide-v1.md'), scope_json: '{"region":"全国","channel":"全渠道"}', effective_from: '2026-03-01', effective_to: '2026-12-31', diff_summary: null, status: 'parsed', created_at: twoDaysAgo },
+    { id: 'dv-complaint-v2', document_id: 'doc-complaint-guide', version_no: 2, file_path: kmDocPath('complaint-guide-v2.md'), scope_json: '{"region":"全国","channel":"全渠道"}', effective_from: '2026-03-15', effective_to: '2026-12-31', diff_summary: '新增投诉升级和监管触点说明，待重新解析', status: 'draft', created_at: yesterday },
   ]).run();
 
   // ── 8.3 流水线作业 ────────────────────────────────────────────────
@@ -871,7 +879,7 @@ async function seed() {
     { id: 'job-cancel-chunk',    doc_version_id: 'dv-cancel-v2', stage: 'chunk',    status: 'success', candidate_count: 0, started_at: yesterday, finished_at: yesterday, created_at: yesterday },
     { id: 'job-cancel-generate', doc_version_id: 'dv-cancel-v2', stage: 'generate', status: 'success', candidate_count: 3, started_at: yesterday, finished_at: yesterday, created_at: yesterday },
     { id: 'job-cancel-validate', doc_version_id: 'dv-cancel-v2', stage: 'validate', status: 'success', candidate_count: 0, started_at: yesterday, finished_at: yesterday, created_at: yesterday },
-    { id: 'job-complaint-parse', doc_version_id: 'dv-complaint-v1', stage: 'parse', status: 'failed', error_code: 'OCR_LANG', error_message: 'OCR语言包不匹配，请尝试切换为中文简体模式', started_at: yesterday, finished_at: yesterday, created_at: yesterday },
+    { id: 'job-complaint-parse', doc_version_id: 'dv-complaint-v2', stage: 'parse', status: 'failed', error_code: 'OCR_LANG', error_message: 'OCR语言包不匹配，请尝试切换为中文简体模式', started_at: yesterday, finished_at: yesterday, created_at: yesterday },
   ]).run();
 
   // ── 8.4 知识候选 ──────────────────────────────────────────────────
@@ -883,11 +891,11 @@ async function seed() {
 
     // 门槛通过，待入评审包
     { id: 'cand-004', source_type: 'parsing', source_ref_id: 'dv-billing-v1', normalized_q: '账单金额与实际使用不符怎么办？', draft_answer: '请先核实账单明细（App → 我的账单 → 明细），如确认异常可在线提交争议工单，客服将在3个工作日内回复处理结果。', category: '费用查询', risk_level: 'medium', gate_evidence: 'pass', gate_conflict: 'pass', gate_ownership: 'pass', status: 'gate_pass', created_by: '李四', created_at: twoDaysAgo, updated_at: twoDaysAgo },
-    { id: 'cand-005', source_type: 'manual', source_ref_id: null, normalized_q: '5G套餐升级后原套餐剩余流量如何处理？', draft_answer: '升级当月，原套餐剩余流量与新套餐流量叠加使用；次月起按新套餐标准计量。', category: '套餐变更', risk_level: 'low', gate_evidence: 'pass', gate_conflict: 'pass', gate_ownership: 'pass', status: 'gate_pass', created_by: '王五', created_at: yesterday, updated_at: yesterday },
+    { id: 'cand-005', source_type: 'parsing', source_ref_id: 'dv-5g-v1', normalized_q: '5G套餐升级后原套餐剩余流量如何处理？', draft_answer: '升级当月，原套餐剩余流量与新套餐流量叠加使用；次月起按新套餐标准计量。', category: '套餐变更', risk_level: 'low', gate_evidence: 'pass', gate_conflict: 'pass', gate_ownership: 'pass', status: 'gate_pass', created_by: '王五', created_at: yesterday, updated_at: yesterday },
 
-    // 门槛未通过（缺证据）
-    { id: 'cand-006', source_type: 'feedback', source_ref_id: null, normalized_q: '宽带网速慢有哪些可能原因？', draft_answer: '常见原因包括：光猫缓存满、WiFi信道拥堵、光纤接口松动、区域网络高峰。建议先重启光猫，仍无改善请报修。', category: '故障排查', risk_level: 'low', gate_evidence: 'fail', gate_conflict: 'pass', gate_ownership: 'pass', status: 'draft', created_by: '张三', created_at: yesterday, updated_at: yesterday },
-    { id: 'cand-007', source_type: 'feedback', source_ref_id: null, normalized_q: '投诉处理流程是怎样的？', draft_answer: '投诉受理 → 48小时内首次回复 → 问题定位 → 解决方案确认 → 执行 → 回访确认满意。', category: '投诉处理', risk_level: 'high', gate_evidence: 'fail', gate_conflict: 'pass', gate_ownership: 'pending', status: 'draft', created_by: '李四', created_at: yesterday, updated_at: yesterday },
+    // 文档来源但仍待进一步治理
+    { id: 'cand-006', source_type: 'parsing', source_ref_id: 'dv-network-v1', normalized_q: '宽带网速慢有哪些可能原因？', draft_answer: '常见原因包括：光猫缓存满、WiFi信道拥堵、光纤接口松动、区域网络高峰。建议先重启光猫，仍无改善请报修。', category: '故障排查', risk_level: 'low', gate_evidence: 'pass', gate_conflict: 'pass', gate_ownership: 'pass', status: 'gate_pass', created_by: '张三', created_at: yesterday, updated_at: yesterday },
+    { id: 'cand-007', source_type: 'parsing', source_ref_id: 'dv-complaint-v1', normalized_q: '投诉处理流程是怎样的？', draft_answer: '投诉受理 → 48小时内首次回复 → 问题定位 → 解决方案确认 → 执行 → 回访确认满意。', category: '投诉处理', risk_level: 'high', gate_evidence: 'pass', gate_conflict: 'pass', gate_ownership: 'pass', status: 'gate_pass', created_by: '李四', created_at: yesterday, updated_at: yesterday },
 
     // 存在冲突
     { id: 'cand-008', source_type: 'parsing', source_ref_id: 'dv-5g-v1', normalized_q: '5G畅享套餐月费多少？', draft_answer: '5G畅享套餐月费199元，含100GB全国通用流量、1000分钟国内通话、视频会员权益。', category: '套餐查询', risk_level: 'low', gate_evidence: 'pass', gate_conflict: 'fail', gate_ownership: 'pass', status: 'draft', created_by: '王五', created_at: yesterday, updated_at: yesterday },
@@ -900,8 +908,9 @@ async function seed() {
     { id: 'ev-003', candidate_id: 'cand-003', doc_version_id: 'dv-cancel-v2', locator: '第2章第3节「即时退订」', status: 'pass', rule_version: 'v1.0', reviewed_by: 'reviewer', reviewed_at: yesterday, created_at: twoDaysAgo },
     { id: 'ev-004', candidate_id: 'cand-004', doc_version_id: 'dv-billing-v1', locator: '第5章「争议处理」', status: 'pass', rule_version: 'v1.0', reviewed_by: 'reviewer', reviewed_at: twoDaysAgo, created_at: twoDaysAgo },
     { id: 'ev-005', candidate_id: 'cand-005', doc_version_id: 'dv-5g-v1', locator: '第4节「套餐变更」', status: 'pass', rule_version: 'v1.0', reviewed_by: 'reviewer', reviewed_at: yesterday, created_at: yesterday },
-    { id: 'ev-006', candidate_id: 'cand-008', doc_version_id: 'dv-5g-v1', locator: '第1节「套餐一览」', status: 'pass', rule_version: 'v1.0', reviewed_by: 'reviewer', reviewed_at: yesterday, created_at: yesterday },
-    // cand-006, cand-007 没有证据 → 门槛fail
+    { id: 'ev-006', candidate_id: 'cand-006', doc_version_id: 'dv-network-v1', locator: '第2章第2节「网速慢常见原因」', status: 'pass', rule_version: 'v1.0', reviewed_by: 'reviewer', reviewed_at: yesterday, created_at: yesterday },
+    { id: 'ev-007', candidate_id: 'cand-007', doc_version_id: 'dv-complaint-v1', locator: '第2章第1节「投诉受理与48小时回复」', status: 'pass', rule_version: 'v1.0', reviewed_by: 'reviewer', reviewed_at: yesterday, created_at: yesterday },
+    { id: 'ev-008', candidate_id: 'cand-008', doc_version_id: 'dv-5g-v1', locator: '第1节「套餐一览」', status: 'pass', rule_version: 'v1.0', reviewed_by: 'reviewer', reviewed_at: yesterday, created_at: yesterday },
   ]).run();
 
   // ── 8.6 冲突记录 ──────────────────────────────────────────────────
@@ -914,7 +923,7 @@ async function seed() {
     // 已发布
     { id: 'rpkg-001', title: '退订政策首批知识入库', status: 'published', risk_level: 'low', impact_summary: '覆盖增值业务退订场景的3条核心QA', candidate_ids_json: '["cand-001","cand-002","cand-003"]', approval_policy: '运营双人复核', approval_snapshot: JSON.stringify({ submitted_by: '张三', submitted_at: twoDaysAgo, approved_by: 'reviewer', approved_at: yesterday }), submitted_by: '张三', submitted_at: twoDaysAgo, approved_by: 'reviewer', approved_at: yesterday, created_by: '张三', created_at: twoDaysAgo, updated_at: yesterday },
     // 草稿（待提交）
-    { id: 'rpkg-002', title: '计费争议与套餐升级知识补充', status: 'draft', risk_level: 'medium', impact_summary: '补充计费争议处理和5G升级场景', candidate_ids_json: '["cand-004","cand-005"]', created_by: '李四', created_at: yesterday, updated_at: yesterday },
+    { id: 'rpkg-002', title: '计费争议与套餐升级知识补充', status: 'draft', risk_level: 'medium', impact_summary: '补充计费争议处理、5G升级和宽带排查场景', candidate_ids_json: '["cand-004","cand-005","cand-006"]', created_by: '李四', created_at: yesterday, updated_at: yesterday },
   ]).run();
 
   // ── 8.8 动作草案 ──────────────────────────────────────────────────
@@ -944,8 +953,8 @@ async function seed() {
 
   // ── 8.11 治理任务 ─────────────────────────────────────────────────
   db.insert(kmGovernanceTasks).values([
-    { id: 'task-001', task_type: 'evidence_gap',   source_type: 'candidate',        source_ref_id: 'cand-006', priority: 'medium', assignee: '张三', status: 'open',        due_date: nextMonth, created_at: yesterday, updated_at: yesterday },
-    { id: 'task-002', task_type: 'evidence_gap',   source_type: 'candidate',        source_ref_id: 'cand-007', priority: 'high',   assignee: '李四', status: 'open',        due_date: nextMonth, created_at: yesterday, updated_at: yesterday },
+    { id: 'task-001', task_type: 'content_gap',    source_type: 'candidate',        source_ref_id: 'cand-006', priority: 'medium', assignee: '张三', status: 'open',        due_date: nextMonth, created_at: yesterday, updated_at: yesterday },
+    { id: 'task-002', task_type: 'content_gap',    source_type: 'candidate',        source_ref_id: 'cand-007', priority: 'high',   assignee: '李四', status: 'open',        due_date: nextMonth, created_at: yesterday, updated_at: yesterday },
     { id: 'task-003', task_type: 'conflict_arb',   source_type: 'conflict_record',  source_ref_id: 'conf-001', priority: 'high',   assignee: '王五', status: 'in_progress', due_date: nextMonth, created_at: yesterday, updated_at: now },
     { id: 'task-004', task_type: 'failure_fix',    source_type: 'pipeline_job',     source_ref_id: 'job-complaint-parse', priority: 'medium', assignee: '张三', status: 'open', due_date: nextMonth, created_at: yesterday, updated_at: yesterday },
     { id: 'task-005', task_type: 'review_expiry',  source_type: 'asset',            source_ref_id: 'asset-004',           priority: 'low',    assignee: '王五', status: 'open', due_date: nextMonth, conclusion: null, created_at: now, updated_at: now },
@@ -968,7 +977,13 @@ async function seed() {
     { action: 'execute_publish',   object_type: 'action_draft',    object_id: 'adraft-001',         operator: 'admin',   risk_level: 'high', detail_json: JSON.stringify({ action_type: 'publish', review_pkg_id: 'rpkg-001' }), created_at: yesterday },
   ]).run();
 
-  console.log('[seed] 知识管理数据写入完成：5篇文档 / 8条候选 / 4条资产 / 2个评审包 / 5个治理任务');
+  const replyCopilotSeed = await seedReplyCopilotKnowledge({
+    createdBy: 'seed',
+    owner: 'reply-copilot-seed',
+    includeConsoleLogs: false,
+  });
+  console.log(`[seed] Reply Copilot 初始化数据写入完成：${replyCopilotSeed.count} 条运营商场景资产`);
+  console.log('[seed] 知识管理数据写入完成：7篇文档 / 18条候选 / 14条资产 / 3个评审包 / 5个治理任务');
 
   // ── 9. MCP Server 注册数据（upsert：已存在则跳过，保留用户修改）──────────────
   console.log('[seed] 写入 MCP Server 注册数据...');

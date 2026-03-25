@@ -6,6 +6,7 @@ const mockCandidate = {
   id: 'cand-1',
   normalized_q: '测试问题',
   draft_answer: '测试答案',
+  variants_json: JSON.stringify(['测试扩展问']),
   source_type: 'manual',
   risk_level: 'low',
   status: 'draft',

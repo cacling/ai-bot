@@ -13,6 +13,34 @@ import { nanoid, writeAudit } from './helpers';
 
 const app = new Hono();
 
+function buildPublishedStructuredSnapshot(structuredJson: string | null, variantsJson: string | null): string | null {
+  if (!structuredJson && !variantsJson) return null;
+  let structured: Record<string, unknown> = {};
+  try {
+    structured = structuredJson ? JSON.parse(structuredJson) : {};
+  } catch {
+    structured = {};
+  }
+  let expandedQuestions: string[] = [];
+  try {
+    expandedQuestions = variantsJson ? JSON.parse(variantsJson) : [];
+  } catch {
+    expandedQuestions = [];
+  }
+  if (expandedQuestions.length > 0 && !Array.isArray(structured.expanded_questions)) {
+    structured.expanded_questions = expandedQuestions;
+  }
+  return JSON.stringify(structured);
+}
+
+function parseVariantsJson(variantsJson: string | null): string[] {
+  try {
+    return variantsJson ? JSON.parse(variantsJson) : [];
+  } catch {
+    return [];
+  }
+}
+
 // GET /
 app.get('/', async (c) => {
   const { status, action_type, page = '1', size = '20' } = c.req.query();
@@ -91,10 +119,15 @@ app.post('/:id/execute', async (c) => {
             const newVer = asset.current_version + 1;
             // 回滚点 = 当前版本快照
             const rollbackId = nanoid();
+            const publishedStructured = buildPublishedStructuredSnapshot(cand.structured_json, cand.variants_json);
             await db.insert(kmAssetVersions).values({
               id: rollbackId, asset_id: assetId, version_no: newVer,
-              content_snapshot: JSON.stringify({ q: cand.normalized_q, a: cand.draft_answer }),
-              structured_snapshot_json: cand.structured_json,
+              content_snapshot: JSON.stringify({
+                q: cand.normalized_q,
+                variants: parseVariantsJson(cand.variants_json),
+                a: cand.draft_answer,
+              }),
+              structured_snapshot_json: publishedStructured,
               scope_snapshot: asset.scope_json, action_draft_id: id,
               rollback_point_id: `v${asset.current_version}`,
               effective_from: now, created_at: now,
@@ -103,6 +136,7 @@ app.post('/:id/execute', async (c) => {
           }
         } else {
           assetId = nanoid();
+          const publishedStructured = buildPublishedStructuredSnapshot(cand.structured_json, cand.variants_json);
           await db.insert(kmAssets).values({
             id: assetId, title: cand.normalized_q, asset_type: 'qa',
             status: 'online', current_version: 1, owner: cand.created_by,
@@ -110,8 +144,12 @@ app.post('/:id/execute', async (c) => {
           });
           await db.insert(kmAssetVersions).values({
             id: nanoid(), asset_id: assetId, version_no: 1,
-            content_snapshot: JSON.stringify({ q: cand.normalized_q, a: cand.draft_answer }),
-            structured_snapshot_json: cand.structured_json,
+            content_snapshot: JSON.stringify({
+              q: cand.normalized_q,
+              variants: parseVariantsJson(cand.variants_json),
+              a: cand.draft_answer,
+            }),
+            structured_snapshot_json: publishedStructured,
             action_draft_id: id, effective_from: now, created_at: now,
           });
         }

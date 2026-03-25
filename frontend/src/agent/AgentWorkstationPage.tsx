@@ -53,6 +53,7 @@ export function AgentWorkstationPage() {
   const langRef         = useRef<Lang>(lang); // 用 ref 让 WS 建立时读取最新 lang，而不把 lang 加入 deps
   langRef.current = lang;
   const pendingBotRef   = useRef<number | null>(null);
+  const pendingReplyHintRef = useRef<{ assetVersionId: string; insertedText: string } | null>(null);
   const tSendRef        = useRef<number>(0);
   const processedMsgIds = useRef(new Set<string>());
   const messagesEndRef  = useRef<HTMLDivElement>(null);
@@ -78,6 +79,7 @@ export function AgentWorkstationPage() {
     botModeRef.current = 'bot';
     setCardStates(buildInitialCardStates());
     setIsConnected(false);
+    pendingReplyHintRef.current = null;
 
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const url = `${wsProto}//${location.host}/ws/agent?phone=${userPhone}&lang=${langRef.current}`;
@@ -262,7 +264,15 @@ export function AgentWorkstationPage() {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail?.type === 'insert_text') {
-        setInputValue(prev => prev + detail.text);
+        setInputValue(prev => {
+          const nextText = String(detail.text ?? '');
+          const assetVersionId = String(detail.assetVersionId ?? '');
+          pendingReplyHintRef.current = assetVersionId
+            ? { assetVersionId, insertedText: nextText }
+            : null;
+          if (!prev.trim()) return nextText;
+          return `${prev.replace(/\s+$/, '')}\n${nextText}`;
+        });
       }
       if (detail?.type === 'reply_feedback') {
         fetch('/api/km/reply-copilot/feedback', {
@@ -305,6 +315,21 @@ export function AgentWorkstationPage() {
   const handleSend = (text = inputValue) => {
     const trimmed = text.trim();
     if (!trimmed || isTyping || !agentWsRef.current) return;
+
+    const pendingHint = pendingReplyHintRef.current;
+    if (pendingHint?.assetVersionId && trimmed.includes(pendingHint.insertedText.trim())) {
+      const eventType = trimmed === pendingHint.insertedText.trim() ? 'use' : 'edit';
+      fetch('/api/km/reply-copilot/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: userPhone,
+          asset_version_id: pendingHint.assetVersionId,
+          event_type: eventType,
+        }),
+      }).catch(() => {});
+    }
+    pendingReplyHintRef.current = null;
 
     setMessages(prev => [
       ...prev,

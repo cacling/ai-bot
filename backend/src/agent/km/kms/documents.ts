@@ -2,13 +2,30 @@
  * documents.ts — 文档管理 CRUD + 触发作业
  */
 import { Hono } from 'hono';
-import { eq, desc, like, and, SQL } from 'drizzle-orm';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { isAbsolute, resolve } from 'node:path';
+import { eq, desc, like, and, SQL, inArray } from 'drizzle-orm';
 import { db } from '../../../db';
-import { kmDocuments, kmDocVersions, kmPipelineJobs } from '../../../db/schema';
+import { kmDocuments, kmDocVersions, kmPipelineJobs, kmCandidates } from '../../../db/schema';
 import { logger } from '../../../services/logger';
 import { nanoid, writeAudit } from './helpers';
 
 const app = new Hono();
+const BACKEND_ROOT = resolve(import.meta.dir, '../../../../');
+
+function resolveDocContentPath(filePath: string | null): string | null {
+  if (!filePath) return null;
+  if (isAbsolute(filePath)) return filePath;
+
+  const cwdResolved = resolve(process.cwd(), filePath);
+  if (existsSync(cwdResolved)) return cwdResolved;
+
+  const backendResolved = resolve(BACKEND_ROOT, filePath);
+  if (existsSync(backendResolved)) return backendResolved;
+
+  return cwdResolved;
+}
 
 // GET / — 文档列表
 app.get('/', async (c) => {
@@ -29,6 +46,30 @@ app.get('/', async (c) => {
   return c.json({ items: rows, total: count, page: Number(page), size: limit });
 });
 
+// GET /versions/:vid/content — 获取文档版本正文（Markdown）
+app.get('/versions/:vid/content', async (c) => {
+  const vid = c.req.param('vid');
+  const [version] = await db.select().from(kmDocVersions).where(eq(kmDocVersions.id, vid)).limit(1);
+  if (!version) return c.json({ error: '文档版本不存在' }, 404);
+  if (!version.file_path) return c.json({ error: '当前版本未关联文档文件' }, 404);
+
+  const resolvedPath = resolveDocContentPath(version.file_path);
+  if (!resolvedPath || !existsSync(resolvedPath)) {
+    return c.json({ error: '文档文件不存在' }, 404);
+  }
+
+  const content = await readFile(resolvedPath, 'utf-8');
+  return c.json({
+    id: version.id,
+    document_id: version.document_id,
+    version_no: version.version_no,
+    file_path: version.file_path,
+    resolved_path: resolvedPath,
+    format: 'markdown',
+    content,
+  });
+});
+
 // GET /:id — 文档详情
 app.get('/:id', async (c) => {
   const id = c.req.param('id');
@@ -37,7 +78,24 @@ app.get('/:id', async (c) => {
 
   const versions = await db.select().from(kmDocVersions)
     .where(eq(kmDocVersions.document_id, id)).orderBy(desc(kmDocVersions.version_no));
-  return c.json({ ...doc, versions });
+  const versionIds = versions.map((version) => version.id);
+  const linkedCandidates = versionIds.length === 0
+    ? []
+    : await db.select({
+      id: kmCandidates.id,
+      normalized_q: kmCandidates.normalized_q,
+      category: kmCandidates.category,
+      source_type: kmCandidates.source_type,
+      source_ref_id: kmCandidates.source_ref_id,
+      status: kmCandidates.status,
+      risk_level: kmCandidates.risk_level,
+      scene_code: kmCandidates.scene_code,
+      updated_at: kmCandidates.updated_at,
+    }).from(kmCandidates)
+      .where(inArray(kmCandidates.source_ref_id, versionIds))
+      .orderBy(desc(kmCandidates.updated_at));
+
+  return c.json({ ...doc, versions, linked_candidates: linkedCandidates });
 });
 
 // POST / — 创建文档

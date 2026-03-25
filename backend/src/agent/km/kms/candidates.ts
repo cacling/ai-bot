@@ -2,7 +2,7 @@
  * candidates.ts — 知识候选 CRUD + 门槛校验
  */
 import { Hono } from 'hono';
-import { eq, desc, and, like, SQL } from 'drizzle-orm';
+import { eq, desc, and, like, or, SQL } from 'drizzle-orm';
 import { db } from '../../../db';
 import { kmCandidates, kmEvidenceRefs, kmConflictRecords } from '../../../db/schema';
 import { logger } from '../../../services/logger';
@@ -17,7 +17,12 @@ app.get('/', async (c) => {
   if (status) conditions.push(eq(kmCandidates.status, status));
   if (source_type) conditions.push(eq(kmCandidates.source_type, source_type));
   if (gate_evidence) conditions.push(eq(kmCandidates.gate_evidence, gate_evidence));
-  if (keyword) conditions.push(like(kmCandidates.normalized_q, `%${keyword}%`));
+  if (keyword) {
+    conditions.push(or(
+      like(kmCandidates.normalized_q, `%${keyword}%`),
+      like(kmCandidates.variants_json, `%${keyword}%`),
+    )!);
+  }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   const limit = Math.min(Number(size) || 20, 100);

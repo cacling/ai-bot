@@ -10,14 +10,19 @@ describe('buildReplyHints', () => {
 
   test('setup test data', async () => {
     await db.insert(kmAssets).values({
-      id: assetId, title: '充值后为什么还是停机',
+      id: assetId, title: '充值后仍未复机如何处理',
       asset_type: 'qa', status: 'online', current_version: 1,
     });
     await db.insert(kmAssetVersions).values({
       id: versionId, asset_id: assetId, version_no: 1,
-      content_snapshot: JSON.stringify({ q: '充值后为什么还是停机', a: '核实充值到账状态...' }),
+      content_snapshot: JSON.stringify({
+        q: '充值后仍未复机如何处理',
+        variants: ['我昨天充了100还是停机，电话打不出去'],
+        a: '核实充值到账状态...',
+      }),
       structured_snapshot_json: JSON.stringify({
-        scene: { code: 'recharge_no_restore', label: '充值到账/停复机异常', risk: 'medium' },
+        scene: { code: 'recharge_restore_delay', label: '充值到账/停复机异常', risk: 'medium' },
+        expanded_questions: ['我昨天充了100还是停机，电话打不出去'],
         required_slots: ['手机号', '充值时间', '充值渠道', '停机提示'],
         recommended_terms: ['到账状态核查中', '复机存在处理时延', '以系统恢复结果为准'],
         forbidden_terms: ['充值失败了吧', '马上恢复'],
@@ -40,7 +45,7 @@ describe('buildReplyHints', () => {
     });
     expect(hints).not.toBeNull();
     if (hints) {
-      expect(hints.scene.code).toBe('recharge_no_restore');
+      expect(hints.scene.code).toBe('recharge_restore_delay');
       expect(hints.required_slots.length).toBeGreaterThan(0);
       expect(hints.recommended_terms.length).toBeGreaterThan(0);
       expect(hints.forbidden_terms.length).toBeGreaterThan(0);

@@ -67,6 +67,9 @@ export async function buildReplyHints(params: BuildParams): Promise<ReplyHints |
 
     const scored: ScoredCandidate[] = withStructured.map(a => {
       const structured = JSON.parse(a.structuredSnapshot!);
+      const expandedQuestions = Array.isArray(structured.expanded_questions)
+        ? structured.expanded_questions.map(v => String(v).toLowerCase())
+        : [];
       let score = 0;
 
       // Match against scene label
@@ -80,12 +83,23 @@ export async function buildReplyHints(params: BuildParams): Promise<ReplyHints |
       try {
         const content = JSON.parse(a.contentSnapshot ?? '{}');
         score += overlapScore(queryText, (content.q ?? '').toLowerCase()) * 2;
+        const contentVariants = Array.isArray(content.variants)
+          ? content.variants.map((v: unknown) => String(v).toLowerCase())
+          : [];
+        score += bestOverlapScore(queryText, contentVariants.length > 0 ? contentVariants : expandedQuestions) * 3;
       } catch { /* ignore */ }
 
       // Match against retrieval tags
       const tags: string[] = structured.retrieval_tags ?? [];
       for (const tag of tags) {
         if (queryText.includes(tag.toLowerCase())) score += 2;
+      }
+
+      for (const variant of expandedQuestions) {
+        if (queryText.includes(variant) || variant.includes(queryText)) {
+          score += 2;
+          break;
+        }
       }
 
       // Match against scene code keywords
@@ -140,6 +154,14 @@ function overlapScore(query: string, target: string): number {
     if (targetBigrams.has(b)) overlap++;
   }
   return overlap / Math.max(queryBigrams.size, 1);
+}
+
+function bestOverlapScore(query: string, targets: string[]): number {
+  let best = 0;
+  for (const target of targets) {
+    best = Math.max(best, overlapScore(query, target));
+  }
+  return best;
 }
 
 function bigrams(s: string): Set<string> {

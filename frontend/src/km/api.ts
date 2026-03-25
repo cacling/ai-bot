@@ -18,7 +18,9 @@ export const kmApi = {
   // 文档
   listDocuments: (params?: Record<string, string>) =>
     request<{ items: KMDocument[]; total: number }>(`/documents?${new URLSearchParams(params)}`),
-  getDocument: (id: string) => request<KMDocument & { versions: KMDocVersion[] }>(`/documents/${id}`),
+  getDocument: (id: string) => request<KMDocumentDetail>(`/documents/${id}`),
+  getDocumentVersionContent: (versionId: string) =>
+    request<KMDocVersionContent>(`/documents/versions/${versionId}/content`),
   createDocument: (body: { title: string; source?: string; classification?: string; owner?: string }) =>
     request<{ id: string; version_id: string }>('/documents', { method: 'POST', body: JSON.stringify(body) }),
   createVersion: (docId: string, body: Record<string, unknown>) =>
@@ -103,9 +105,34 @@ export interface KMDocVersion {
   scope_json: string | null; effective_from: string | null; effective_to: string | null;
   diff_summary: string | null; status: string; created_at: string;
 }
+export interface KMDocumentLinkedCandidate {
+  id: string;
+  normalized_q: string;
+  category: string | null;
+  source_type: string;
+  source_ref_id: string | null;
+  status: string;
+  risk_level: string;
+  scene_code: string | null;
+  updated_at: string;
+}
+export interface KMDocumentDetail extends KMDocument {
+  versions: KMDocVersion[];
+  linked_candidates: KMDocumentLinkedCandidate[];
+}
+export interface KMDocVersionContent {
+  id: string;
+  document_id: string;
+  version_no: number;
+  file_path: string;
+  resolved_path: string;
+  format: 'markdown';
+  content: string;
+}
 export interface KMCandidate {
   id: string; source_type: string; source_ref_id: string | null;
   normalized_q: string; draft_answer: string | null; category: string | null;
+  variants_json: string | null;
   risk_level: string; gate_evidence: string; gate_conflict: string; gate_ownership: string;
   target_asset_id: string | null; status: string; review_pkg_id: string | null;
   created_by: string | null; created_at: string; updated_at: string;

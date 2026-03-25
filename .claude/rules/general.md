@@ -1,4 +1,4 @@
-<!-- auto-generated on 2026-03-24 from standards.md -->
+<!-- auto-generated on 2026-03-25 from standards.md -->
 
 # 通用编码规则
 

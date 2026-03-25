@@ -50,6 +50,13 @@ export function CandidateDetailPage({ id, navigate }: { id: string; navigate: (p
   if (!data) return <div className="p-4 text-xs text-destructive">候选不存在</div>;
 
   const allPass = data.gate_evidence === 'pass' && data.gate_conflict === 'pass' && data.gate_ownership === 'pass';
+  const expandedQuestionCount = (() => {
+    try {
+      return data.variants_json ? JSON.parse(data.variants_json).length : 0;
+    } catch {
+      return 0;
+    }
+  })();
 
   return (
     <div className="p-4">
@@ -62,11 +69,13 @@ export function CandidateDetailPage({ id, navigate }: { id: string; navigate: (p
         <CardContent className="pt-4">
           <div className="flex items-start justify-between">
             <div>
+              <div className="text-[10px] text-muted-foreground mb-1">标准问</div>
               <h2 className="text-sm font-semibold mb-1">{data.normalized_q}</h2>
               <div className="flex gap-3 text-xs text-muted-foreground">
                 <span>来源: {data.source_type}</span>
                 <span>风险: {data.risk_level}</span>
                 <span>状态: {data.status}</span>
+                <span>扩展问: {expandedQuestionCount} 条</span>
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={handleGateCheck}>
@@ -177,8 +186,23 @@ function StructuredHintEditor({ candidateId, initialData, onSaved }: {
   onSaved: () => void;
 }) {
   const existing = initialData.structured_json ? JSON.parse(initialData.structured_json) : null;
+  const existingExpandedQuestions = (() => {
+    try {
+      return initialData.variants_json ? JSON.parse(initialData.variants_json) : [];
+    } catch {
+      return [];
+    }
+  })();
 
   const [sceneCode, setSceneCode] = useState(initialData.scene_code ?? '');
+  const [sceneLabel, setSceneLabel] = useState(existing?.scene?.label ?? initialData.category ?? '');
+  const [expandedQuestions, setExpandedQuestions] = useState(
+    existingExpandedQuestions.length > 0
+      ? existingExpandedQuestions.join('\n')
+      : Array.isArray(existing?.expanded_questions)
+        ? existing.expanded_questions.join('\n')
+        : '',
+  );
   const [tags, setTags] = useState(initialData.retrieval_tags_json ? JSON.parse(initialData.retrieval_tags_json).join(', ') : '');
   const [requiredSlots, setRequiredSlots] = useState(existing?.required_slots?.join(', ') ?? '');
   const [recommendedTerms, setRecommendedTerms] = useState(existing?.recommended_terms?.join(', ') ?? '');
@@ -191,12 +215,19 @@ function StructuredHintEditor({ candidateId, initialData, onSaved }: {
   const [saving, setSaving] = useState(false);
 
   const splitComma = (s: string) => s.split(/[,，]/).map(t => t.trim()).filter(Boolean);
+  const splitLines = (s: string) => s.split(/\n+/).map(t => t.trim()).filter(Boolean);
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const expandedQuestionList = splitLines(expandedQuestions);
       const structured = {
-        scene: { code: sceneCode, label: sceneCode.replace(/_/g, ' '), risk: riskLevel },
+        scene: {
+          code: sceneCode,
+          label: sceneLabel.trim() || existing?.scene?.label || sceneCode.replace(/_/g, ' '),
+          risk: riskLevel,
+        },
+        expanded_questions: expandedQuestionList,
         required_slots: splitComma(requiredSlots),
         recommended_terms: splitComma(recommendedTerms),
         forbidden_terms: splitComma(forbiddenTerms),
@@ -210,6 +241,7 @@ function StructuredHintEditor({ candidateId, initialData, onSaved }: {
       };
       await kmApi.updateCandidate(candidateId, {
         scene_code: sceneCode,
+        variants_json: JSON.stringify(expandedQuestionList),
         retrieval_tags_json: JSON.stringify(splitComma(tags)),
         structured_json: JSON.stringify(structured),
       });
@@ -236,6 +268,10 @@ function StructuredHintEditor({ candidateId, initialData, onSaved }: {
             <Input value={sceneCode} onChange={e => setSceneCode(e.target.value)} className="text-xs font-mono" placeholder="billing_abnormal" />
           </div>
           <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">场景名称</label>
+            <Input value={sceneLabel} onChange={e => setSceneLabel(e.target.value)} className="text-xs" placeholder="资费争议 / 流量异常" />
+          </div>
+          <div>
             <label className="text-[10px] text-muted-foreground mb-1 block">风险级别</label>
             <Select value={riskLevel} onValueChange={setRiskLevel}>
               <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
@@ -246,10 +282,21 @@ function StructuredHintEditor({ candidateId, initialData, onSaved }: {
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <label className="text-[10px] text-muted-foreground mb-1 block">检索标签（逗号分隔）</label>
-            <Input value={tags} onChange={e => setTags(e.target.value)} className="text-xs" placeholder="计费, 扣费, 争议" />
-          </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-1 block">扩展问（每行一条）</label>
+          <Textarea
+            value={expandedQuestions}
+            onChange={e => setExpandedQuestions(e.target.value)}
+            className="text-xs min-h-[88px]"
+            placeholder={'用户昨天办了5G套餐怎么还没生效？\n刚充话费怎么还是停机？'}
+          />
+        </div>
+
+        <div>
+          <label className="text-[10px] text-muted-foreground mb-1 block">检索标签（逗号分隔）</label>
+          <Input value={tags} onChange={e => setTags(e.target.value)} className="text-xs" placeholder="计费, 扣费, 争议" />
         </div>
 
         <div>

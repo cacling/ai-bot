@@ -4,18 +4,20 @@ import { kmCandidates, kmAssetVersions, kmReplyFeedback } from '../../src/db/sch
 import { eq } from 'drizzle-orm';
 
 describe('reply-copilot schema fields', () => {
-  test('km_candidates has scene_code, retrieval_tags_json, structured_json', async () => {
+  test('km_candidates has scene_code, retrieval_tags_json, structured_json, variants_json', async () => {
     const id = `test_rc_${Date.now()}`;
     await db.insert(kmCandidates).values({
       id,
       source_type: 'manual',
       normalized_q: 'test question',
+      variants_json: JSON.stringify(['用户怎么问1', '用户怎么问2']),
       scene_code: 'billing_abnormal',
       retrieval_tags_json: JSON.stringify(['计费', '扣费']),
       structured_json: JSON.stringify({ scene: { code: 'billing_abnormal', label: '资费争议', risk: 'medium' } }),
     });
     const [row] = await db.select().from(kmCandidates).where(eq(kmCandidates.id, id));
     expect(row.scene_code).toBe('billing_abnormal');
+    expect(JSON.parse(row.variants_json!)).toEqual(['用户怎么问1', '用户怎么问2']);
     expect(JSON.parse(row.retrieval_tags_json!)).toEqual(['计费', '扣费']);
     expect(JSON.parse(row.structured_json!).scene.code).toBe('billing_abnormal');
     await db.delete(kmCandidates).where(eq(kmCandidates.id, id));

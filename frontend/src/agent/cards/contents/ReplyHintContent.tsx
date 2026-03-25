@@ -65,8 +65,7 @@ export const ReplyHintContent = memo(function ReplyHintContent({
   };
 
   const handleInsert = (text: string) => {
-    dispatchAction('insert_text', { text });
-    dispatchAction('reply_feedback', { event: 'use', assetVersionId: d.asset_version_id });
+    dispatchAction('insert_text', { text, assetVersionId: d.asset_version_id });
   };
 
   const handleDismiss = () => {

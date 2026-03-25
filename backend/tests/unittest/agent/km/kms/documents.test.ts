@@ -2,8 +2,11 @@
  * documents.test.ts — Hono route tests for KM documents
  */
 import { describe, test, expect } from 'bun:test';
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import documents from '../../../../../src/agent/km/kms/documents';
+import { db } from '../../../../../src/db';
+import { kmDocVersions, kmCandidates } from '../../../../../src/db/schema';
 
 const app = new Hono();
 app.route('/documents', documents);
@@ -18,6 +21,7 @@ async function req(method: string, path: string, body?: Record<string, unknown>)
 describe('documents route', () => {
   let docId: string;
   let versionId: string;
+  const tempDocPath = `/tmp/km-documents-${Date.now()}.md`;
 
   test('POST / — create document', async () => {
     const { status, data } = await req('POST', '/documents', {
@@ -28,6 +32,17 @@ describe('documents route', () => {
     expect(data.version_id).toBeDefined();
     docId = data.id as string;
     versionId = data.version_id as string;
+
+    await Bun.write(tempDocPath, '# Test Document\n\n## Source\n\nThis is a markdown document.');
+    await db.update(kmDocVersions).set({ file_path: tempDocPath }).where(eq(kmDocVersions.id, versionId));
+    await db.insert(kmCandidates).values({
+      id: `cand-doc-test-${Date.now()}`,
+      source_type: 'parsing',
+      source_ref_id: versionId,
+      normalized_q: '测试文档关联候选',
+      draft_answer: '测试答案',
+      status: 'gate_pass',
+    });
   });
 
   test('POST / — empty title returns 400', async () => {
@@ -71,6 +86,17 @@ describe('documents route', () => {
     expect(data.title).toBe('Test Document');
     expect(data.versions).toBeDefined();
     expect(Array.isArray(data.versions)).toBe(true);
+    expect(data.linked_candidates).toBeDefined();
+    expect(Array.isArray(data.linked_candidates)).toBe(true);
+    expect((data.linked_candidates as Array<{ normalized_q: string }>)[0]?.normalized_q).toBe('测试文档关联候选');
+  });
+
+  test('GET /versions/:vid/content — returns markdown content', async () => {
+    const { status, data } = await req('GET', `/documents/versions/${versionId}/content`);
+    expect(status).toBe(200);
+    expect(data.format).toBe('markdown');
+    expect(data.file_path).toBe(tempDocPath);
+    expect((data.content as string)).toContain('# Test Document');
   });
 
   test('GET /:id — nonexistent returns 404', async () => {
