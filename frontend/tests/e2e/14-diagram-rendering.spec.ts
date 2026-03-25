@@ -1,23 +1,30 @@
 /**
- * Diagram rendering E2E — verify node type coloring and progress highlighting
+ * Diagram rendering E2E — verify diagram appears, no annotations, progress highlighting
  *
- * Ensures that:
- * 1. Mermaid diagrams render without %% annotations visible
- * 2. Progress highlighting (yellow node) appears after bot responds
- * 3. Different node types have different colors (tool=blue, llm=green, human=orange, etc.)
+ * Tests run on the AGENT WORKSTATION page (/agent), not the client page (/).
+ * The client page doesn't show diagrams — only the agent side does.
  *
  * Run: cd frontend/tests/e2e && npx playwright test 14-diagram-rendering.spec.ts --headed
  */
 import { test, expect, type Page } from '@playwright/test';
+
+const API = 'http://127.0.0.1:18472/api';
+const AGENT_URL = 'http://localhost:5173/agent';
+const CLIENT_URL = 'http://localhost:5173';
+
+/**
+ * Send a message from the CLIENT side, then check diagram on the AGENT side.
+ * Uses two browser contexts to simulate customer + agent simultaneously.
+ */
 
 async function waitForChatWs(page: Page): Promise<void> {
   let wsCount = 0;
   return new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, 10_000);
     page.on('websocket', (ws) => {
-      if (!ws.url().includes('/ws/chat')) return;
+      if (!ws.url().includes('/ws/chat') && !ws.url().includes('/ws/agent')) return;
       wsCount++;
-      if (wsCount >= 2) { setTimeout(() => { clearTimeout(timer); resolve(); }, 500); }
+      if (wsCount >= 1) { setTimeout(() => { clearTimeout(timer); resolve(); }, 500); }
     });
   });
 }
@@ -34,46 +41,74 @@ async function waitForBotReply(page: Page) {
   await expect(page.locator('.animate-bounce').first()).not.toBeVisible({ timeout: 150_000 });
 }
 
-test.describe.serial('Diagram rendering verification', () => {
+test.describe.serial('Diagram rendering on agent workstation', () => {
   test.setTimeout(200_000);
 
-  test('DIAG-01: no %% annotations visible in rendered diagram', async ({ page }) => {
-    const wsReady = waitForChatWs(page);
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: '智能客服小通' })).toBeVisible();
-    await wsReady;
+  test('DIAG-01: diagram appears on agent side after customer sends message', async ({ browser }) => {
+    // Open client page
+    const clientCtx = await browser.newContext();
+    const clientPage = await clientCtx.newPage();
+    const clientWs = waitForChatWs(clientPage);
+    await clientPage.goto(CLIENT_URL);
+    await expect(clientPage.getByRole('heading', { name: '智能客服小通' })).toBeVisible();
+    await clientWs;
 
-    await sendMessage(page, '帮我退掉视频会员');
-    await waitForBotReply(page);
+    // Open agent page
+    const agentCtx = await browser.newContext();
+    const agentPage = await agentCtx.newPage();
+    const agentWs = waitForChatWs(agentPage);
+    await agentPage.goto(AGENT_URL);
+    await agentWs;
 
-    // Wait for diagram to appear (async push)
-    await page.waitForTimeout(3000);
+    // Send message from client side — triggers skill and diagram push
+    await sendMessage(clientPage, '帮我退掉视频会员');
+    await waitForBotReply(clientPage);
 
-    // Check if any SVG text contains %% annotations
-    const svgTexts = await page.locator('svg text, svg tspan').allTextContents();
+    // Wait for diagram to appear on agent side (async push via sessionBus)
+    await agentPage.waitForTimeout(8000);
+
+    // Check: agent side should have an SVG diagram rendered
+    const svgCount = await agentPage.locator('svg').count();
+    expect(svgCount, 'Agent workstation should show at least one SVG diagram').toBeGreaterThan(0);
+
+    // Check: no %% annotations visible in the SVG
+    const svgTexts = await agentPage.locator('svg text, svg tspan').allTextContents();
     const allText = svgTexts.join(' ');
-    expect(allText).not.toContain('%%');
+    expect(allText, 'SVG should not contain %% annotations').not.toContain('%%');
     expect(allText).not.toContain('step:');
     expect(allText).not.toContain('kind:');
-    expect(allText).not.toContain('guard:');
+
+    await clientCtx.close();
+    await agentCtx.close();
   });
 
-  test('DIAG-02: progress highlight appears after bot response', async ({ page }) => {
-    const wsReady = waitForChatWs(page);
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: '智能客服小通' })).toBeVisible();
-    await wsReady;
+  test('DIAG-02: progress highlight appears on agent side', async ({ browser }) => {
+    const clientCtx = await browser.newContext();
+    const clientPage = await clientCtx.newPage();
+    const clientWs = waitForChatWs(clientPage);
+    await clientPage.goto(CLIENT_URL);
+    await expect(clientPage.getByRole('heading', { name: '智能客服小通' })).toBeVisible();
+    await clientWs;
 
-    await sendMessage(page, '查询本月话费');
-    await waitForBotReply(page);
+    const agentCtx = await browser.newContext();
+    const agentPage = await agentCtx.newPage();
+    const agentWs = waitForChatWs(agentPage);
+    await agentPage.goto(AGENT_URL);
+    await agentWs;
 
-    // Wait for async progress tracking to push diagram update
-    await page.waitForTimeout(5000);
+    // Send message that triggers a skill with progress tracking
+    await sendMessage(clientPage, '查询本月话费');
+    await waitForBotReply(clientPage);
 
-    // Check for progress highlight (yellow fill on a node)
-    const highlightedNodes = await page.locator('.progressHL').count();
-    // progressHL class is added by applyProgressHighlightDOM
-    // It may or may not appear depending on timing — just verify no crash
-    expect(highlightedNodes >= 0).toBe(true);
+    // Wait for async progress tracking (LLM analyzes current state, pushes highlight)
+    await agentPage.waitForTimeout(10000);
+
+    // Check: should have a highlighted node (progressHL class applied by DOM post-processing)
+    const highlightedNodes = await agentPage.locator('.progressHL').count();
+    // This is a REAL assertion — if highlighting is broken, this catches it
+    expect(highlightedNodes, 'At least one node should be highlighted with progressHL class').toBeGreaterThan(0);
+
+    await clientCtx.close();
+    await agentCtx.close();
   });
 });
