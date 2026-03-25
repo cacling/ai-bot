@@ -210,6 +210,7 @@ export const MermaidRenderer = memo(function MermaidRenderer({
   useEffect(() => {
     progressRef.current = progressStateProp ?? null;
     const wrap = wrapRef.current;
+    if (progressStateProp) console.log('[MermaidRenderer] progressState changed:', progressStateProp, 'svgHtml:', !!svgHtml, 'wrap:', !!wrap);
     if (!wrap || !svgHtml || !progressStateProp) return;
     // Clear previous progress highlight
     wrap.querySelectorAll('.progressHL').forEach(el => {
@@ -222,7 +223,8 @@ export const MermaidRenderer = memo(function MermaidRenderer({
       applyNodeTypeColors(wrap, nodeTypeMapRef.current);
     }
     // Apply progress highlight on top
-    applyProgressHighlightDOM(wrap, progressStateProp);
+    const hlResult = applyProgressHighlightDOM(wrap, progressStateProp);
+    console.log('[MermaidRenderer] applyProgressHighlightDOM:', progressStateProp, 'result:', hlResult);
   }, [progressStateProp, svgHtml]);
 
   /* ── after SVG mounts: highlight + measure + auto-focus ── */

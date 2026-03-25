@@ -126,9 +126,10 @@ registerCard({
   defaultCollapsed: false,
   wsEvents: ['skill_diagram_update'],
   dataExtractor: (msg) => ({
-    skill_name:  msg.skill_name,
-    mermaid:     msg.mermaid,
-    nodeTypeMap: msg.node_type_map,
+    skill_name:    msg.skill_name,
+    mermaid:       msg.mermaid,
+    nodeTypeMap:   msg.node_type_map,
+    progressState: msg.progress_state,
   }),
   component: DiagramContent,
 });

@@ -13,6 +13,7 @@ interface DiagramData {
   skill_name: string;
   mermaid: string;
   nodeTypeMap?: Record<string, string>;
+  progressState?: string;
 }
 
 export const DiagramContent = memo(function DiagramContent({ data, lang }: { data: unknown; lang: Lang }) {
@@ -38,6 +39,7 @@ export const DiagramContent = memo(function DiagramContent({ data, lang }: { dat
       <MermaidRenderer
         mermaid={diagram.mermaid}
         nodeTypeMap={diagram.nodeTypeMap}
+        progressState={diagram.progressState}
         height="60vh"
         emptyText={t.diagram_empty_title}
         loadingText={t.diagram_loading}
