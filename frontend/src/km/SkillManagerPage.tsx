@@ -1076,7 +1076,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
         {centerMode === 'edit' && (() => {
           // Extract mermaid from editor content
           const rawMermaid = editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1] ?? null;
-          const staticMermaid = rawMermaid?.replace(/%%.*/gm, '').trim() ?? null;
+          const staticMermaid = rawMermaid?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null;
 
           // Build nodeTypeMap from annotations
           const staticNodeTypeMap: Record<string, string> = {};
