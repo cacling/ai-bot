@@ -328,6 +328,11 @@ cd frontend/tests/e2e && npx playwright test 12-sop-ui-verification.spec.ts --he
 # SOP API 级验证（不打开浏览器，直接调 test 端点）
 cd frontend/tests/e2e && npx playwright test 11-sop-enforcement.spec.ts
 
+# Workflow Engine 验证（runtime 驱动，流程控制权在 runtime 而非 LLM）
+# 需要设置环境变量指定哪些 skill 使用 workflow engine（空则所有有 spec 的 skill 启用）
+RUNTIME_ORCHESTRATED_SKILLS=service-cancel ./start.sh --reset
+cd frontend/tests/e2e && npx playwright test 13-workflow-engine.spec.ts --headed
+
 # 查看 E2E HTML 报告
 cd frontend/tests/e2e && npx playwright show-report
 ```
