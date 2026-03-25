@@ -262,11 +262,11 @@ export const MermaidRenderer = memo(function MermaidRenderer({
     // Apply progress highlight on top
     const hlResult = applyProgressHighlightDOM(wrap, progressStateProp);
     if (!hlResult) {
-      // Debug: show what texts are in the SVG so we can see why matching failed
-      const svgTexts = Array.from(wrap.querySelectorAll<Element>('.nodeLabel, text, tspan, foreignObject span, foreignObject div'))
-        .map(el => el.textContent?.trim() ?? '')
-        .filter(t => t.length > 0 && t.length < 50);
-      console.warn('[MermaidRenderer] highlight FAILED for:', progressStateProp, 'Available texts:', svgTexts.slice(0, 20));
+      // Debug: show element IDs and texts to diagnose matching failure
+      const ids = Array.from(wrap.querySelectorAll<Element>('[id]'))
+        .map(el => el.id)
+        .filter(id => id.length > 0 && id.length < 100);
+      console.warn('[MermaidRenderer] highlight FAILED for:', progressStateProp, 'Element IDs (sample):', ids.slice(0, 30));
     } else {
       console.log('[MermaidRenderer] highlight OK:', progressStateProp);
     }
