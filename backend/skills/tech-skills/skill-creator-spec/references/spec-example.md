@@ -49,9 +49,9 @@ metadata:
 
 ​```mermaid
 stateDiagram-v2
-    [*] --> 接收请求: 用户咨询账单、欠费、发票相关问题 %% step:receive-request %% kind:message
+    [*] --> 接收请求: 用户咨询账单、欠费、发票相关问题 %% step:receive-request %% kind:llm
 
-    state 问题分类 <<choice>> %% kind:choice
+    state 问题分类 <<choice>>
     接收请求 --> 问题分类
     问题分类 --> 账单查询: 查话费、费用疑问 %% branch:bill_query %% guard:always
     问题分类 --> 欠费处理: 欠费停机、需要充值 %% branch:arrears %% guard:always
@@ -61,31 +61,31 @@ stateDiagram-v2
     state 账单查询流程 {
         账单查询 --> 确认身份: query_subscriber(phone) %% tool:query_subscriber %% step:bill-query-subscriber %% kind:tool
         确认身份 --> 获取账单: query_bill(phone, month) %% tool:query_bill %% step:bill-query-bill %% kind:tool
-        获取账单 --> 解读费用: 逐项解释费用 %% ref:billing-rules.md#费用解读指引 %% step:bill-explain-fees %% kind:message
+        获取账单 --> 解读费用: 逐项解释费用 %% ref:billing-rules.md#费用解读指引 %% step:bill-explain-fees %% kind:llm
         解读费用 --> [*]: 解答完毕 %% step:bill-done %% kind:end
     }
 
     state 欠费处理流程 {
         欠费处理 --> 查询状态: query_subscriber(phone) %% tool:query_subscriber %% step:arrears-query-subscriber %% kind:tool
-        查询状态 --> 说明欠费: 告知欠费金额和月份 %% ref:billing-rules.md#欠费处理指引 %% step:arrears-explain %% kind:message
-        说明欠费 --> 引导充值: 告知充值方式（APP/官网/营业厅） %% step:arrears-guide-recharge %% kind:message
+        查询状态 --> 说明欠费: 告知欠费金额和月份 %% ref:billing-rules.md#欠费处理指引 %% step:arrears-explain %% kind:llm
+        说明欠费 --> 引导充值: 告知充值方式（APP/官网/营业厅） %% step:arrears-guide-recharge %% kind:llm
         引导充值 --> [*]: 说明充值后30分钟内自动恢复 %% step:arrears-done %% kind:end
     }
 
     state 发票申请流程 {
-        发票申请 --> 确认缴清: 确认已缴清账单 %% ref:billing-rules.md#发票申请指引 %% step:invoice-check-paid %% kind:message
-        state 是否缴清 <<choice>> %% kind:choice
+        发票申请 --> 确认缴清: 确认已缴清账单 %% ref:billing-rules.md#发票申请指引 %% step:invoice-check-paid %% kind:human
+        state 是否缴清 <<choice>>
         确认缴清 --> 是否缴清
         是否缴清 --> 引导开票: 已缴清 %% guard:user.confirm
         是否缴清 --> 引导先缴费: 未缴清 %% guard:user.cancel
-        引导先缴费 --> 引导开票: 缴费完成 %% step:invoice-after-pay %% kind:message
+        引导先缴费 --> 引导开票: 缴费完成 %% step:invoice-after-pay %% kind:llm
         引导开票 --> [*]: 说明发票类型和开具时效 %% step:invoice-done %% kind:end
     }
 
     state 异常费用分析流程 {
         异常分析 --> 拉取账单: query_bill(phone, month) %% tool:query_bill %% step:anomaly-query-bill %% kind:tool
-        拉取账单 --> 对比分析: 与上月对比，定位差异项 %% ref:billing-rules.md#异常费用分析 %% step:anomaly-compare %% kind:message
-        state 异常原因 <<choice>> %% kind:choice
+        拉取账单 --> 对比分析: 与上月对比，定位差异项 %% ref:billing-rules.md#异常费用分析 %% step:anomaly-compare %% kind:llm
+        state 异常原因 <<choice>>
         对比分析 --> 异常原因
         异常原因 --> 解释超额: 流量/通话超出套餐 %% guard:always
         异常原因 --> 定位增值扣费: 增值业务产生费用 %% guard:always
