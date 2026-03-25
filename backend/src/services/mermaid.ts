@@ -25,8 +25,8 @@ export function highlightMermaidBranch(rawMermaid: string, branchName: string): 
  * Call AFTER highlighting (which needs the markers) and BEFORE sending to the frontend.
  */
 export function stripMermaidMarkers(mermaid: string): string {
-  // Remove ALL %% annotations (tool, branch, step, kind, guard, ref, output, progress, etc.)
-  return mermaid.replace(/\s*%%[^\n]*/g, '');
+  // Remove all %% annotations EXCEPT %% progress: (needed for frontend highlighting)
+  return mermaid.replace(/\s*%%\s*(?!progress:)[^\n]*/g, '');
 }
 
 /**
