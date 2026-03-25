@@ -1130,26 +1130,38 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
           </div>
         )}
 
-        {/* ── 底部流程图卡片（测试中始终保留，固定高度避免跳动） ── */}
-        {testingVersion !== null && (
-          <div className="border-t border-border shrink-0">
-            <Button variant="ghost" size="sm" onClick={() => setDiagramCollapsed(prev => !prev)} className="w-full justify-start rounded-none text-xs">
-              {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-              <GitBranch size={12} /> 流程图{testDiagram ? ` — ${testDiagram.skill_name}` : ''}
-            </Button>
-            {!diagramCollapsed && (
-              <div className="px-3 pb-3 h-[30vh] overflow-auto">
-                {testDiagram ? (
-                  <MermaidRenderer mermaid={testDiagram.mermaid} height="28vh" zoom={true} autoFocus={true} emptyText="暂无流程图" />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                    发送测试消息后展示流程图
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        {/* ── 底部流程图卡片（有 mermaid 时常驻，测试时高亮覆盖） ── */}
+        {(() => {
+          // Extract mermaid from editor content (static diagram)
+          const staticMermaid = editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1]?.replace(/%%.*/gm, '').trim() ?? null;
+          // Test diagram takes priority (has progress highlighting)
+          const activeMermaid = testDiagram?.mermaid ?? staticMermaid;
+          const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedFile?.name === 'SKILL.md' ? activeSkill : null);
+          const isTestMode = testingVersion !== null;
+
+          if (!activeMermaid && !isTestMode) return null;
+
+          return (
+            <div className="border-t border-border shrink-0">
+              <Button variant="ghost" size="sm" onClick={() => setDiagramCollapsed(prev => !prev)} className="w-full justify-start rounded-none text-xs">
+                {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                <GitBranch size={12} /> 流程图{diagramLabel ? ` — ${diagramLabel}` : ''}
+                {testDiagram && <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0">测试中</Badge>}
+              </Button>
+              {!diagramCollapsed && (
+                <div className="px-3 pb-3 h-[30vh] overflow-auto">
+                  {activeMermaid ? (
+                    <MermaidRenderer mermaid={activeMermaid} height="28vh" zoom={true} autoFocus={!!testDiagram} emptyText="暂无流程图" />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                      {isTestMode ? '发送测试消息后展示流程图' : '当前文件无 mermaid 状态图'}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
       </div>
       </ResizablePanel>
