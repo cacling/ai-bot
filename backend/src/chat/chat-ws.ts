@@ -23,6 +23,7 @@ import { type CoreMessage } from 'ai';
 import { db } from '../db';
 import { messages, sessions, subscribers, plans } from '../db/schema';
 import { runAgent, getMcpToolsForRuntime } from '../engine/runner';
+import { buildNodeTypeMap } from '../services/mermaid';
 import { routeSkill, shouldUseRuntime } from '../engine/skill-router';
 import { runSkillTurn } from '../engine/skill-runtime';
 import { createInstance, findActiveInstance } from '../engine/skill-instance-store';
@@ -252,9 +253,11 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           const rawMermaid = getSkillMermaid(route.spec.skillId);
           if (rawMermaid) {
             const mermaid = await translateMermaid(rawMermaid, langParam);
+            const nodeTypeMap = buildNodeTypeMap(route.spec);
             const diagramEv = {
               source: 'user' as const, type: 'skill_diagram_update' as const,
               skill_name: route.spec.skillId, mermaid,
+              nodeTypeMap,
               active_step_id: turnResult.currentStepId,
               msg_id,
             };
@@ -333,13 +336,13 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           history,
           phone,
           agentLang,
-          (skillName, rawMermaid) => {
+          (skillName: string, rawMermaid: string, nodeTypeMap?: Record<string, string>) => {
             translateMermaid(rawMermaid, langParam).then(mermaid => {
-              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid, msg_id: crypto.randomUUID() };
+              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid, nodeTypeMap, msg_id: crypto.randomUUID() };
               try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
               sessionBus.publish(phone, ev);
             }).catch(() => {
-              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid: rawMermaid, msg_id: crypto.randomUUID() };
+              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid: rawMermaid, nodeTypeMap, msg_id: crypto.randomUUID() };
               try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
               sessionBus.publish(phone, ev);
             });

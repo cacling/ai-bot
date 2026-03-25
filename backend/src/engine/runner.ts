@@ -10,7 +10,7 @@ import { type TurnRecord, type ToolRecord, type HandoffAnalysis } from '../agent
 import { t } from '../services/i18n';
 import { translateText } from '../services/translate-lang';
 import { isNoDataResult, isErrorResult } from '../services/tool-result';
-import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress } from '../services/mermaid';
+import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress, buildNodeTypeMap } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
 import { matchMockRule, getMockedToolNames, getMockedToolDefinitions } from '../services/mock-engine';
 import { mcpTools as mcpToolsTable, skillWorkflowSpecs } from '../db/schema';
@@ -230,7 +230,7 @@ export interface AnomalyCardData {
   recommendation: string;
 }
 
-export type DiagramUpdateCallback = (skillName: string, mermaid: string) => void;
+export type DiagramUpdateCallback = (skillName: string, mermaid: string, nodeTypeMap?: Record<string, string>) => void;
 export type TextDeltaCallback = (delta: string) => void;
 
 export interface RunAgentOptions {
@@ -593,13 +593,21 @@ export async function runAgent(
               const skillName = args.skill_name;
               if (skillName) {
                 const rawMermaid = getSkillMermaid(skillName);
-                if (rawMermaid) onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid));
+                if (rawMermaid) {
+                  const specRow = findPublishedSpec(skillName);
+                  const nodeTypeMap = specRow ? buildNodeTypeMap(JSON.parse(specRow.spec_json)) : undefined;
+                  onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid), nodeTypeMap);
+                }
               }
             }
             const skillName = getSkillToolMap()[tc.toolName] ?? lastActiveSkill;
             if (skillName) {
               const rawMermaid = getSkillMermaid(skillName);
-              if (rawMermaid) onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid));
+              if (rawMermaid) {
+                const specRow = findPublishedSpec(skillName);
+                const nodeTypeMap = specRow ? buildNodeTypeMap(JSON.parse(specRow.spec_json)) : undefined;
+                onDiagramUpdate(skillName, stripMermaidMarkers(rawMermaid), nodeTypeMap);
+              }
             }
           }
         }
@@ -819,7 +827,9 @@ export async function runAgent(
             const result = await runProgressTracking();
             if (!result) return;
             const highlighted = highlightMermaidProgress(result.rawMermaid, result.stateName);
-            progressCallback(progressSkill, stripMermaidMarkers(highlighted));
+            const specRow = findPublishedSpec(progressSkill);
+            const nodeTypeMap = specRow ? buildNodeTypeMap(JSON.parse(specRow.spec_json)) : undefined;
+            progressCallback(progressSkill, stripMermaidMarkers(highlighted), nodeTypeMap);
           } catch (err) { logger.warn('agent', 'progress_tracking_error', { skill: progressSkill, error: String(err) }); }
         })();
       } else {

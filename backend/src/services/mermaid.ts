@@ -110,6 +110,20 @@ export function determineBranch(
   return 'all_ok';
 }
 
+import type { WorkflowSpec } from '../engine/skill-workflow-types';
+
+/**
+ * Build a map of node label → node type (kind) from a compiled WorkflowSpec.
+ * Used by frontend to color-code diagram nodes by type.
+ */
+export function buildNodeTypeMap(spec: WorkflowSpec): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const step of Object.values(spec.steps)) {
+    if (step.label) map[step.label] = step.kind;
+  }
+  return map;
+}
+
 // ── 内部函数 ──────────────────────────────────────────────────────────────────
 
 /**
