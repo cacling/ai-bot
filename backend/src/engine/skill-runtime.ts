@@ -119,7 +119,8 @@ export async function runSkillTurn(
       }
 
       case 'message':
-      case 'ref': {
+      case 'ref':
+      case 'llm': {
         store.appendEvent(instanceId, { eventType: 'state_enter', stepId: currentStepId });
         const refContent = step.ref ? loadReference(spec.skillId, step.ref) : undefined;
         const toolFacts = lastToolResult ? summarizeToolResult(lastToolResult) : undefined;
@@ -141,7 +142,7 @@ export async function runSkillTurn(
 
         // Pause if next step needs user input or is another message
         const nextStep = spec.steps[currentStepId];
-        if (!nextStep || nextStep.kind === 'confirm' || nextStep.kind === 'message' || nextStep.kind === 'ref') break;
+        if (!nextStep || nextStep.kind === 'confirm' || nextStep.kind === 'human' || nextStep.kind === 'message' || nextStep.kind === 'ref' || nextStep.kind === 'llm') break;
         continue; // next is tool/choice -> keep going
       }
 
@@ -175,7 +176,8 @@ export async function runSkillTurn(
         break;
       }
 
-      case 'choice': {
+      case 'choice':
+      case 'switch': {
         // Should have been handled by advanceToActionable, but handle edge case
         const target = resolveBranch(step.transitions, { toolResult: lastToolResult ?? undefined });
         if (target) {
@@ -203,7 +205,7 @@ export async function runSkillTurn(
     text: replyParts.join('\n\n'),
     currentStepId: finished ? null : currentStepId,
     instanceId,
-    pendingConfirm: !finished && spec.steps[currentStepId]?.kind === 'confirm',
+    pendingConfirm: !finished && (spec.steps[currentStepId]?.kind === 'confirm' || spec.steps[currentStepId]?.kind === 'human'),
     finished,
     toolRecords,
     transferRequested,
@@ -216,7 +218,7 @@ function advanceToActionable(instanceId: string, spec: WorkflowSpec, stepId: str
   while (safety-- > 0) {
     const step = spec.steps[current];
     if (!step) break;
-    if (step.kind === 'choice') {
+    if (step.kind === 'choice' || step.kind === 'switch') {
       const target = resolveBranch(step.transitions, { toolResult: lastToolResult ?? undefined });
       if (target) {
         store.appendEvent(instanceId, { eventType: 'branch_taken', stepId: current, payload: { target } });
@@ -225,7 +227,7 @@ function advanceToActionable(instanceId: string, spec: WorkflowSpec, stepId: str
       }
       break;
     }
-    if ((step.kind === 'message' || step.kind === 'ref') &&
+    if ((step.kind === 'message' || step.kind === 'ref' || step.kind === 'llm') &&
         step.transitions.length === 1 && step.transitions[0].guard === 'always') {
       current = step.transitions[0].target;
       continue;

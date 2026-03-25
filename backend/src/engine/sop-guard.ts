@@ -12,6 +12,11 @@ import { getToolsOverview } from '../agent/km/mcp/tools-overview';
 import { getAvailableSkills, getSkillMermaid } from './skills';
 import { type WorkflowSpec, type GuardType } from './skill-workflow-types';
 
+// Migration helpers: accept both old and new NodeType kind values
+function isLlmKind(kind: string): boolean { return kind === 'llm' || kind === 'message' || kind === 'ref'; }
+function isConfirmKind(kind: string): boolean { return kind === 'human' || kind === 'confirm'; }
+function isSwitchKind(kind: string): boolean { return kind === 'switch' || kind === 'choice'; }
+
 // 操作类工具集合：从 SKILL.md 的 %% tool:xxx 依赖关系中动态生成
 // 任何有前置依赖的工具就是操作类工具，其余为查询类
 // 在 buildGlobalDependencies() 中构建
@@ -332,7 +337,7 @@ export class SOPGuard {
         return `当前在 [${step?.label}] 状态，应该调用 ${step?.tool}，不能调用 ${toolName}。`;
       }
 
-      // Current step is NOT a tool step (message/ref/choice) →
+      // Current step is NOT a tool step (message/ref/llm/choice/switch) →
       // BFS to find the NEXT actionable frontier only.
       // Stop at tool/confirm/human/end — don't look past them.
       if (step?.kind !== 'tool') {
@@ -350,10 +355,10 @@ export class SOPGuard {
             reachableTools.add(s.tool);
             continue; // don't look past this tool
           }
-          if (s.kind === 'confirm' || s.kind === 'human' || s.kind === 'end') {
-            continue; // don't look past blocking nodes
+          if (isConfirmKind(s.kind) || s.kind === 'end') {
+            continue; // don't look past blocking nodes (confirm, human, switch)
           }
-          // message/ref/choice — expand to find the frontier
+          // message/ref/llm/choice/switch — expand to find the frontier
           for (const t of s.transitions) queue.push(t.target);
         }
 
@@ -430,7 +435,7 @@ export class SOPGuard {
       const step = this.activePlan.steps[this.currentStepId];
       if (!step) break;
 
-      if (step.kind === 'choice') {
+      if (isSwitchKind(step.kind)) {
         // Single 'always' exit → auto-advance unconditionally
         if (step.transitions.length === 1 && step.transitions[0].guard === 'always') {
           this.currentStepId = step.transitions[0].target;
@@ -471,8 +476,8 @@ export class SOPGuard {
         break;
       }
 
-      // message/ref with single 'always' exit → auto-advance to next actionable step
-      if ((step.kind === 'message' || step.kind === 'ref') &&
+      // message/ref/llm with single 'always' exit → auto-advance to next actionable step
+      if (isLlmKind(step.kind) &&
           step.transitions.length === 1 && step.transitions[0].guard === 'always') {
         this.currentStepId = step.transitions[0].target;
         continue;
