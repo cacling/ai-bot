@@ -66,7 +66,7 @@ stateDiagram-v2
     请求分类 --> 标准退订入口: 标准退订请求 %% branch:standard_cancel %% guard:always
     请求分类 --> 未知扣费入口: 未知扣费投诉 %% branch:unknown_charge %% guard:always
     请求分类 --> 误订退款入口: 误订退款请求 %% branch:accidental_sub %% guard:always
-    请求分类 --> 告知主套餐办理方式: 主套餐退订 %% branch:store_visit %% step:notify-main-plan %% kind:llm %% guard:always
+    请求分类 --> 告知主套餐办理方式: 主套餐退订 %% branch:store_visit %% step:notify-main-plan %% kind:human %% guard:always
 
     %% S7 — 全局升级出口
     用户要求转人工 --> 转接10086: 引导拨打10086 %% step:user-request-human %% kind:human

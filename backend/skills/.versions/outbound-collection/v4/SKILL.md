@@ -69,7 +69,7 @@ stateDiagram-v2
     %% OC2 — 呼叫结果分支
     state 呼叫结果 <<choice>>
     呼叫中 --> 呼叫结果
-    呼叫结果 --> 开场说明: 客户接听 %% step:col-opening %% kind:llm %% guard:always
+    呼叫结果 --> 开场说明: 客户接听 %% step:col-opening %% kind:human %% guard:always
     呼叫结果 --> 记录未接: 未接通 %% tool:record_call_result %% step:col-record-no-answer %% kind:tool %% guard:always
     呼叫结果 --> 记录忙线: 忙线 %% tool:record_call_result %% step:col-record-busy %% kind:tool %% guard:always
     呼叫结果 --> 记录关机: 关机/停机 %% tool:record_call_result %% step:col-record-power-off %% kind:tool %% guard:always
@@ -93,11 +93,11 @@ stateDiagram-v2
 
     state 意向判断 <<choice>>
     客户回复意向 --> 意向判断
-    意向判断 --> 承诺还款: 表示会还、说出日期 %% step:col-promise-pay %% kind:llm %% guard:always
-    意向判断 --> 预约回呼: 现在不方便、要求晚点再打 %% step:col-callback-request %% kind:llm %% guard:always
+    意向判断 --> 承诺还款: 表示会还、说出日期 %% step:col-promise-pay %% kind:human %% guard:always
+    意向判断 --> 预约回呼: 现在不方便、要求晚点再打 %% step:col-callback-request %% kind:human %% guard:always
     意向判断 --> 明确拒绝: 拒绝还款、不配合 %% step:col-refusal %% kind:llm %% guard:always
     意向判断 --> 提出异议: 已还款、金额有误、非本人欠款 %% step:col-dispute %% kind:llm %% guard:always
-    意向判断 --> 转人工: 要求转人工 %% step:col-transfer-human %% kind:llm %% guard:always
+    意向判断 --> 转人工: 要求转人工 %% step:col-transfer-human %% kind:human %% guard:always
     意向判断 --> 声称已付: 客户称刚刚付款/正在付款 %% step:col-claim-paid %% kind:llm %% guard:always
 
     %% OC4 — PTP 日期超限
@@ -105,7 +105,7 @@ stateDiagram-v2
     state 日期是否合规 <<choice>>
     检查还款日期 --> 日期是否合规
     日期是否合规 --> 发送还款短信: 日期在max_ptp_days内 %% tool:send_followup_sms %% step:col-send-payment-sms %% kind:tool %% guard:always
-    日期是否合规 --> 协商更近日期: 日期超出max_ptp_days，引导提前 %% step:col-negotiate-date %% kind:llm %% guard:always
+    日期是否合规 --> 协商更近日期: 日期超出max_ptp_days，引导提前 %% step:col-negotiate-date %% kind:human %% guard:always
     协商更近日期 --> 发送还款短信: 客户同意新日期 %% guard:user.confirm
     协商更近日期 --> 转人工: 无法达成一致 %% guard:user.cancel
     发送还款短信 --> 记录承诺: record_call_result(ptp) %% tool:record_call_result %% step:col-record-ptp %% kind:tool

@@ -195,21 +195,21 @@ stateDiagram-v2
         异常原因判定 --> 漫游费用说明: primary_cause=roaming %% ref:billing-rules.md#通话计费规则 %% guard:always
         异常原因判定 --> 无法定位: primary_cause=unknown %% guard:always
 
-        解释超额 --> 超额反馈: 建议升级套餐或购买加油包 %% step:bill-anomaly-overage %% kind:llm
+        解释超额 --> 超额反馈: 建议升级套餐或购买加油包 %% step:bill-anomaly-overage %% kind:human
         state 超额反馈 <<choice>>
         超额反馈 --> 超额用户认可: 用户认可 %% step:bill-anomaly-overage-ok %% kind:end %% guard:user.confirm
         超额反馈 --> 升级投诉1: 用户不认可 %% guard:user.cancel
         超额用户认可 --> [*]
         升级投诉1 --> [*]: 升级投诉hotline %% step:bill-anomaly-overage-escalate %% kind:end
 
-        定位增值扣费 --> 增值反馈: 引导退订或说明业务来源 %% step:bill-anomaly-vas %% kind:llm
+        定位增值扣费 --> 增值反馈: 引导退订或说明业务来源 %% step:bill-anomaly-vas %% kind:human
         state 增值反馈 <<choice>>
         增值反馈 --> 增值用户认可: 用户认可 %% step:bill-anomaly-vas-ok %% kind:end %% guard:user.confirm
         增值反馈 --> 升级投诉2: 用户不认可 %% guard:user.cancel
         增值用户认可 --> [*]
         升级投诉2 --> [*]: 升级投诉hotline %% step:bill-anomaly-vas-escalate %% kind:end
 
-        漫游费用说明 --> 漫游反馈: 解释漫游规则，建议升级含漫游套餐 %% step:bill-anomaly-roaming %% kind:llm
+        漫游费用说明 --> 漫游反馈: 解释漫游规则，建议升级含漫游套餐 %% step:bill-anomaly-roaming %% kind:human
         state 漫游反馈 <<choice>>
         漫游反馈 --> 漫游用户认可: 用户认可 %% step:bill-anomaly-roaming-ok %% kind:end %% guard:user.confirm
         漫游反馈 --> 升级投诉3: 用户不认可 %% guard:user.cancel

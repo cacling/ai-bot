@@ -173,7 +173,7 @@ stateDiagram-v2
         state 风险等级 <<choice>>
         风险等级 --> 升级security_team: 高风险（屏幕共享、flagged、异地登录否认），反诈提醒 %% step:app-tc5-escalate-security %% kind:human %% guard:always
         风险等级 --> 告知硬性限制: 设备问题（Root或模拟器），须使用正常设备 %% step:app-tc5-hard-limit %% kind:llm %% guard:always
-        风险等级 --> 逐项引导修复: 可修复，删除应用、关闭VPN、更新版本 %% step:app-tc5-guide-fix %% kind:llm %% guard:always
+        风险等级 --> 逐项引导修复: 可修复，删除应用、关闭VPN、更新版本 %% step:app-tc5-guide-fix %% kind:human %% guard:always
         升级security_team --> [*] %% kind:end
         state 硬性限制反馈 <<choice>>
         告知硬性限制 --> 硬性限制反馈

@@ -156,7 +156,7 @@ stateDiagram-v2
     分析诊断结果 --> APN异常: warning — APN 配置问题 %% branch:apn_warning %% step:diag-apn-issue %% kind:llm %% guard:always
     分析诊断结果 --> 基站异常: warning或error — 基站信号问题 %% branch:signal_weak %% step:diag-signal-weak %% kind:llm %% guard:always
     分析诊断结果 --> 网络拥塞: warning — 高峰期拥塞 %% branch:congestion %% step:diag-congestion %% kind:llm %% guard:always
-    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok %% step:diag-self-check %% kind:llm %% guard:always
+    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok %% step:diag-self-check %% kind:human %% guard:always
 
     账号停机 --> 确认恢复: 告知充值方式及恢复时间
     流量耗尽 --> 确认恢复: 推荐加油包或升级套餐
@@ -167,7 +167,7 @@ stateDiagram-v2
     等待APN操作结果 --> 确认恢复: 问题解决 %% guard:user.confirm
     等待APN操作结果 --> 升级处理: APN重置后问题仍未解决 %% guard:user.cancel
 
-    基站异常 --> 建议转人工登记: 告知信号弱可能与基站覆盖有关，建议更换位置尝试 %% step:diag-suggest-human %% kind:llm
+    基站异常 --> 建议转人工登记: 告知信号弱可能与基站覆盖有关，建议更换位置尝试 %% step:diag-suggest-human %% kind:human
     建议转人工登记 --> 升级处理: 说明需人工提交网络覆盖工单，建议转人工处理
 
     确认恢复 --> 确认恢复结果: 请问问题现在解决了吗？ %% step:diag-confirm-recovery %% kind:human

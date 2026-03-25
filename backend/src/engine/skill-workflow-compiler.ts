@@ -399,6 +399,35 @@ export function compileWorkflow(
     };
   }
 
+  // Post-processing: infer kind from transitions and labels when not explicitly annotated
+  for (const step of Object.values(steps)) {
+    // Skip if kind was explicitly annotated (not inferred as default 'llm')
+    const node = nodes.get(step.label);
+    const hasExplicitKind = node?.annotations.some(a => a.type === 'kind');
+    if (hasExplicitKind) continue;
+    if (step.kind !== 'llm') continue; // only fix default-inferred llm nodes
+
+    const guards = step.transitions.map(t => t.guard);
+
+    // Rule 1: has user.confirm/user.cancel guard → human (confirm node)
+    if (guards.includes('user.confirm') || guards.includes('user.cancel')) {
+      step.kind = 'human';
+      continue;
+    }
+
+    // Rule 2: label contains escalation keywords → human
+    if (/转人工|紧急转人工|紧急转|升级处理/.test(step.label)) {
+      step.kind = 'human';
+      continue;
+    }
+
+    // Rule 3: label contains "确认/确定" + has >= 2 transitions → human
+    if (/确认|确定/.test(step.label) && step.transitions.length >= 2) {
+      step.kind = 'human';
+      continue;
+    }
+  }
+
   // Validation: choice nodes must have >= 2 exits
   for (const [nodeName, node] of nodes) {
     if (node.isChoice) {

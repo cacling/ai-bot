@@ -83,7 +83,7 @@ stateDiagram-v2
     记录非本人 --> [*]: record_marketing_result(wrong_number)，礼貌结束 %% kind:end
 
     state 初始意愿 <<choice>>
-    意愿探测 --> 初始意愿 %% step:mkt-willingness-probe %% kind:llm
+    意愿探测 --> 初始意愿 %% step:mkt-willingness-probe %% kind:human
     初始意愿 --> 待回访: 客户没时间，询问回访时间 %% guard:always
     初始意愿 --> 拒绝: 明确拒绝（一次拒绝即收口，不再多轮异议处理） %% guard:user.cancel
     初始意愿 --> 方案介绍: 同意继续听 %% guard:user.confirm
@@ -106,7 +106,7 @@ stateDiagram-v2
     %% OM3 — 异议→犹豫 第三分支
     %% ref:marketing-guide.md#异议处理要点
     state 异议结果 <<choice>>
-    异议处理 --> 异议结果: 针对性回应后客户再次表态 %% step:mkt-handle-objection %% kind:llm
+    异议处理 --> 异议结果: 针对性回应后客户再次表态 %% step:mkt-handle-objection %% kind:human
     异议结果 --> 拒绝: 仍拒绝 %% guard:user.cancel
     异议结果 --> 同意办理: 转为感兴趣，引导确认办理方式 %% guard:user.confirm
     异议结果 --> 仍在犹豫: 客户未明确表态，需要再考虑 %% guard:always
