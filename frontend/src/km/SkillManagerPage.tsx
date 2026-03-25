@@ -504,6 +504,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
 
   // Fetch diagram data from backend when skill changes
   useEffect(() => {
+    console.log('[SkillManager] diagram fetch effect, activeSkill:', activeSkill?.id);
     if (!activeSkill?.id || activeSkill.id.startsWith('new-')) { setBackendDiagram(null); return; }
     fetch(`/api/skill-versions/${encodeURIComponent(activeSkill.id)}/diagram-data`)
       .then(r => r.ok ? r.json() : null)
@@ -1085,14 +1086,10 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
 
         {/* ── 编辑区 + 流程图（可拖动分隔） ── */}
         {centerMode === 'edit' && (() => {
-          // Use backend-sourced diagram data (same source as agent workstation)
-          // Fallback: extract mermaid from editor content if backend data not available
+          // Diagram data computed from backend API (same source as agent workstation)
           const fallbackMermaid = editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1]?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null;
-          const staticMermaid = backendDiagram?.mermaid ?? fallbackMermaid;
-          const staticNodeTypeMap = backendDiagram?.nodeTypeMap ?? undefined;
-
-          const activeMermaid = testDiagram?.mermaid ?? staticMermaid;
-          const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? (staticNodeTypeMap && Object.keys(staticNodeTypeMap).length > 0 ? staticNodeTypeMap : undefined);
+          const activeMermaid = testDiagram?.mermaid ?? backendDiagram?.mermaid ?? fallbackMermaid;
+          const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? backendDiagram?.nodeTypeMap ?? undefined;
           const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedFile?.name === 'SKILL.md' ? activeSkill?.id : null);
           const isTestMode = testingVersion !== null;
           const showDiagram = !!activeMermaid || isTestMode;
