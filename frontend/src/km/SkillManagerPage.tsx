@@ -1105,7 +1105,6 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
 
           const activeMermaid = testDiagram?.mermaid ?? staticMermaid;
           const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? (Object.keys(staticNodeTypeMap).length > 0 ? staticNodeTypeMap : undefined);
-          if (rawMermaid) console.log('[SkillEditor] nodeTypeMap:', Object.keys(staticNodeTypeMap).length, 'entries', staticNodeTypeMap, 'mermaid lines:', rawMermaid.split('\n').length);
           const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedFile?.name === 'SKILL.md' ? activeSkill?.id : null);
           const isTestMode = testingVersion !== null;
           const showDiagram = !!activeMermaid || isTestMode;

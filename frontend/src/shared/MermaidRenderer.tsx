@@ -40,6 +40,9 @@ const NODE_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
 export function applyNodeTypeColors(container: HTMLElement, nodeTypeMap: Record<string, string>): void {
   const allEls = container.querySelectorAll<Element>('[id]');
 
+  let matchedCount = 0;
+  let missedLabels: string[] = [];
+
   for (const [label, nodeType] of Object.entries(nodeTypeMap)) {
     const colors = NODE_TYPE_COLORS[nodeType];
     if (!colors) continue;
@@ -54,6 +57,7 @@ export function applyNodeTypeColors(container: HTMLElement, nodeTypeMap: Record<
         (rect as SVGElement).style.stroke = colors.stroke;
         (rect as SVGElement).style.strokeWidth = '2px';
         found = true;
+        matchedCount++;
         break;
       }
     }
@@ -82,7 +86,9 @@ export function applyNodeTypeColors(container: HTMLElement, nodeTypeMap: Record<
       }
       break;
     }
+    if (!found) missedLabels.push(label);
   }
+  console.log('[applyNodeTypeColors] matched:', matchedCount, '/', Object.keys(nodeTypeMap).length, 'missed:', missedLabels.slice(0, 5));
 }
 
 // ── Progress marker helpers ──────────────────────────────────────────────────
@@ -283,6 +289,8 @@ export const MermaidRenderer = memo(function MermaidRenderer({
       requestAnimationFrame(() => {
         // Apply node-type color-coding (before progress highlight so current step overrides)
         if (nodeTypeMapRef.current && Object.keys(nodeTypeMapRef.current).length > 0) {
+          const idEls = wrap.querySelectorAll('[id]').length;
+          console.log('[MermaidRenderer] applyNodeTypeColors called, entries:', Object.keys(nodeTypeMapRef.current).length, 'SVG [id] elements:', idEls);
           applyNodeTypeColors(wrap, nodeTypeMapRef.current);
         }
 
