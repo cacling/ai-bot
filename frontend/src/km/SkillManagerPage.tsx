@@ -501,15 +501,18 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
   const [diagramCollapsed, setDiagramCollapsed] = useState(false);
   // Backend-sourced diagram data (mermaid + nodeTypeMap from compiled WorkflowSpec)
   const [backendDiagram, setBackendDiagram] = useState<{ mermaid: string; nodeTypeMap: Record<string, string> | null } | null>(null);
+  const [backendDiagramLoading, setBackendDiagramLoading] = useState(false);
 
   // Fetch diagram data from backend when skill changes
   useEffect(() => {
-    console.log('[SkillManager] diagram fetch effect, activeSkill:', activeSkill?.id);
-    if (!activeSkill?.id || activeSkill.id.startsWith('new-')) { setBackendDiagram(null); return; }
+    if (!activeSkill?.id || activeSkill.id.startsWith('new-')) { setBackendDiagram(null); setBackendDiagramLoading(false); return; }
+    setBackendDiagram(null);
+    setBackendDiagramLoading(true);
     fetch(`/api/skill-versions/${encodeURIComponent(activeSkill.id)}/diagram-data`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.mermaid) setBackendDiagram(data); else setBackendDiagram(null); })
-      .catch(() => setBackendDiagram(null));
+      .catch(() => setBackendDiagram(null))
+      .finally(() => setBackendDiagramLoading(false));
   }, [activeSkill?.id]);
   const [testPersonaId, setTestPersonaId] = useState('');
   const [testPersonaList, setTestPersonaList] = useState<Array<{ id: string; label: string; context: Record<string, unknown> }>>([]);
@@ -1087,7 +1090,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
         {/* ── 编辑区 + 流程图（可拖动分隔） ── */}
         {centerMode === 'edit' && (() => {
           // Diagram data computed from backend API (same source as agent workstation)
-          const fallbackMermaid = editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1]?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null;
+          const fallbackMermaid = backendDiagramLoading ? null : (editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1]?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null);
           const activeMermaid = testDiagram?.mermaid ?? backendDiagram?.mermaid ?? fallbackMermaid;
           const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? backendDiagram?.nodeTypeMap ?? undefined;
           const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedFile?.name === 'SKILL.md' ? activeSkill?.id : null);

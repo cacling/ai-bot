@@ -36,6 +36,17 @@ const NODE_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
   choice:     { fill: '#f3e8ff', stroke: '#a855f7' },
 };
 
+// Legend items — only primary types, ordered logically (skip legacy aliases)
+const NODE_TYPE_LEGEND: Array<{ kind: string; label: string }> = [
+  { kind: 'start',  label: '入口' },
+  { kind: 'tool',   label: '工具调用' },
+  { kind: 'llm',    label: 'AI 生成' },
+  { kind: 'switch', label: '分支' },
+  { kind: 'human',  label: '人工确认' },
+  { kind: 'guard',  label: '合规检查' },
+  { kind: 'end',    label: '结束' },
+];
+
 /** Apply color-coding to diagram nodes based on their semantic type */
 export function applyNodeTypeColors(container: HTMLElement, nodeTypeMap: Record<string, string>): void {
   const allEls = container.querySelectorAll<Element>('[id]');
@@ -223,7 +234,6 @@ export const MermaidRenderer = memo(function MermaidRenderer({
     nodeTypeMapRef.current = nodeTypeMap;
     const wrap = wrapRef.current;
     const keys = nodeTypeMap ? Object.keys(nodeTypeMap).length : 0;
-    console.log('[MermaidRenderer] nodeTypeMap effect:', keys, 'keys, svgHtml:', svgHtml.length, 'wrap:', !!wrap);
     if (!wrap || !svgHtml || !nodeTypeMap || keys === 0) return;
     applyNodeTypeColors(wrap, nodeTypeMap);
     if (progressRef.current) applyProgressHighlightDOM(wrap, progressRef.current);
@@ -396,35 +406,58 @@ export const MermaidRenderer = memo(function MermaidRenderer({
 
   const { w: svgW, h: svgH } = svgSizeRef.current;
 
-  return (
-    <div className="relative">
-      <div
-        ref={viewportRef}
-        className="w-full overflow-auto border border-border rounded-lg bg-background"
-        style={{ height }}
-      >
-        <div
-          ref={wrapRef}
-          style={{
-            width:  svgW > 0 ? `${svgW * zoomLevel}px` : undefined,
-            height: svgH > 0 ? `${svgH * zoomLevel}px` : undefined,
-          }}
-        >
-          <div
-            style={{ transform: `scale(${zoomLevel})`, transformOrigin: '0 0' }}
-            className="[&_svg]:max-w-none [&_svg]:h-auto"
-            dangerouslySetInnerHTML={{ __html: svgHtml }}
-          />
-        </div>
-      </div>
+  const hasNodeTypes = nodeTypeMap && Object.keys(nodeTypeMap).length > 0;
 
-      {zoomEnabled && (
-        <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
-          <Button variant="outline" size="icon-sm" onClick={zoomInFn}    className="bg-background/90 shadow" title="放大"><ZoomIn   size={14} className="text-muted-foreground" /></Button>
-          <Button variant="outline" size="icon-sm" onClick={zoomOutFn}   className="bg-background/90 shadow" title="缩小"><ZoomOut  size={14} className="text-muted-foreground" /></Button>
-          <Button variant="outline" size="icon-sm" onClick={resetZoomFn} className="bg-background/90 shadow" title="适应窗口"><Maximize size={14} className="text-muted-foreground" /></Button>
+  return (
+    <div>
+      {hasNodeTypes && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1 mb-1 text-[10px] text-muted-foreground">
+          {NODE_TYPE_LEGEND.map(({ kind, label }) => {
+            const c = NODE_TYPE_COLORS[kind];
+            if (!c) return null;
+            return (
+              <span key={kind} className="inline-flex items-center gap-1">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: c.fill, border: `1.5px solid ${c.stroke}` }} />
+                {label}
+              </span>
+            );
+          })}
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#fef08a', border: '1.5px solid #f59e0b' }} />
+            当前步骤
+          </span>
         </div>
       )}
+
+      <div className="relative">
+        <div
+          ref={viewportRef}
+          className="w-full overflow-auto border border-border rounded-lg bg-background"
+          style={{ height }}
+        >
+          <div
+            ref={wrapRef}
+            style={{
+              width:  svgW > 0 ? `${svgW * zoomLevel}px` : undefined,
+              height: svgH > 0 ? `${svgH * zoomLevel}px` : undefined,
+            }}
+          >
+            <div
+              style={{ transform: `scale(${zoomLevel})`, transformOrigin: '0 0' }}
+              className="[&_svg]:max-w-none [&_svg]:h-auto"
+              dangerouslySetInnerHTML={{ __html: svgHtml }}
+            />
+          </div>
+        </div>
+
+        {zoomEnabled && (
+          <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
+            <Button variant="outline" size="icon-sm" onClick={zoomInFn}    className="bg-background/90 shadow" title="放大"><ZoomIn   size={14} className="text-muted-foreground" /></Button>
+            <Button variant="outline" size="icon-sm" onClick={zoomOutFn}   className="bg-background/90 shadow" title="缩小"><ZoomOut  size={14} className="text-muted-foreground" /></Button>
+            <Button variant="outline" size="icon-sm" onClick={resetZoomFn} className="bg-background/90 shadow" title="适应窗口"><Maximize size={14} className="text-muted-foreground" /></Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 });

@@ -521,133 +521,193 @@ sessionBus.setSession(phone: string, sessionId: string): void
 
 ---
 
-## 11. 实时流程图高亮（Mermaid Diagram Live Highlighting）
+## 11. 流程图渲染系统（Mermaid Diagram Rendering）
 
-### 31.1 设计目标
+### 11.1 设计目标
 
-Agent 执行每个业务步骤时，右侧 `DiagramPanel` 实时高亮 mermaid 时序图中**正在发生的节点**，让操作人员直观看到 Agent 正在走哪条处理路径。
+流程图系统为 SKILL.md 中的 mermaid **stateDiagram-v2** 提供三层可视化能力：
 
-两类高亮叠加在同一张图上：
+1. **基础渲染**：将 mermaid 源码渲染为 SVG，支持缩放、滚动
+2. **节点类型染色**：根据 WorkflowSpec 编译结果，按语义类型（tool / llm / human / switch / guard / …）为每个节点着色
+3. **进度高亮**：实时对话时，高亮当前正在执行的步骤（黄色）
 
-| 颜色 | 标记类型 | 语义 |
-|------|---------|------|
-| 黄色 `rgba(255, 200, 0, 0.35)` | `%% tool:<name>` | Agent 正在调用该 MCP 工具 |
-| 绿色 `rgba(100, 220, 120, 0.4)` | `%% branch:<name>` | 诊断结果走向该响应分支 |
+三层能力在两个场景中使用：
 
----
+| 场景 | 入口组件 | 数据来源 | 进度高亮 |
+|------|---------|---------|---------|
+| 坐席工作台 | `DiagramContent` 卡片（CardPanel） | WS 事件 `skill_diagram_update` / `response` | ✓ 实时 |
+| 技能管理 | `SkillManagerPage` 内嵌面板 | REST `GET /api/skill-versions/:skill/diagram-data`（静态）；测试模式时由测试 WS 推送 | 仅测试模式 |
 
-### 31.2 第一层：SKILL.md 注解标记
-
-在 mermaid 时序图的关键行末尾用 `%%` 注释打标记（mermaid 将 `%%` 后的内容视为注释，不影响渲染）：
-
-```mermaid
-sequenceDiagram
-    A->>S: diagnose_network(phone, issue_type) %% tool:diagnose_network
-    S-->>A: 返回诊断结果
-
-    alt 账号停机（error）
-        A->>C: 告知账号欠费停机 %% branch:account_error
-    else 流量耗尽（error）
-        A->>C: 告知流量已用尽 %% branch:data_exhausted
-    else APN 配置异常（warning）
-        A->>C: 引导重置 APN %% branch:apn_warning
-    else 基站信号异常（warning/error）
-        A->>C: 建议换到户外 %% branch:signal_weak
-    else 网络拥塞（warning）
-        A->>C: 说明高峰期等待 %% branch:congestion
-    else 所有项均正常（ok）
-        A->>C: 引导用户自查 %% branch:all_ok
-    end
-```
-
-同一 SKILL.md 可以包含中英文两个 mermaid 块（用 `<!-- lang:en -->` 分隔），两个块分别打标记。
+共享渲染核心：`frontend/src/shared/MermaidRenderer.tsx`。
 
 ---
 
-### 31.3 第二层：runner.ts 高亮函数（backend/src/engine/runner.ts）
-
-**`highlightMermaidTool(rawMermaid, toolName)`**
-
-扫描每一行，找到含 `%% tool:<toolName>` 的行，用 mermaid `rect` 块包裹（黄色背景）：
+### 11.2 数据流总览
 
 ```
-原始行：    A->>S: diagnose_network(...) %% tool:diagnose_network
-高亮后：    rect rgba(255, 200, 0, 0.35)
-              A->>S: diagnose_network(...) %% tool:diagnose_network
-            end
-```
-
-**`highlightMermaidBranch(rawMermaid, branchName)`**
-
-同理，找到含 `%% branch:<branchName>` 的行，用绿色 `rect` 块包裹。
-
-**`determineBranch(diagnosticSteps)`**
-
-将 `diagnose_network` 返回的 `diagnostic_steps` 数组映射到分支名称：
-
-| 优先级 | 步骤名（中/英） | 条件 | 分支名 |
-|--------|--------------|------|-------|
-| 1 | `账号状态检查` / `Account Status` | status=error | `account_error` |
-| 2 | `流量余额检查` / `Data Balance` | status=error | `data_exhausted` |
-| 3 | `APN 配置检查` / `APN Configuration` | status=warning/error | `apn_warning` |
-| 4 | `基站信号检测` / `Base Station Signal` | status=warning/error | `signal_weak` |
-| 5 | `网络拥塞检测` / `Network Congestion` | status=warning/error | `congestion` |
-| 6 | （无任何 error/warning） | — | `all_ok` |
-
-**`extractMermaidFromContent(markdown, lang)`**
-
-从 SKILL.md 中提取对应语言的 mermaid 块：
-- `lang='zh'`：取第一个 ` ```mermaid ``` ` 块
-- `lang='en'`：优先取 `<!-- lang:en -->` 后的块，不存在则回退到第一块
-
----
-
-### 31.4 第三层：onStepFinish 触发 + WebSocket 推送
-
-Vercel AI SDK 每个步骤完成时调用 `onStepFinish`，此时 `toolCalls` 与 `toolResults` 均已就绪：
-
-```
-Step N 完成（onStepFinish 回调）
+SKILL.md（mermaid stateDiagram-v2 + %% tool/branch/ref 注解）
     │
-    ├─ toolCalls 含 "get_skill_instructions"
-    │       → 读 SKILL.md，extractMermaidFromContent()
-    │       → onDiagramUpdate(skillName, rawMermaid)        ← 无高亮，面板提前出现
+    ├─ 编译时：skill-workflow-compiler.ts
+    │       → 解析注解 → 生成 WorkflowSpec JSON（存入 skillWorkflowSpecs 表）
+    │       → 每个 step 带有 kind 字段（tool / llm / human / switch / guard / start / end）
     │
-    └─ toolCalls 含 SKILL_TOOL_MAP 中的工具（如 "diagnose_network"）
-            → 在 toolResults 中找对应结果
-            → 解析 diagnostic_steps → determineBranch()
-            → highlightMermaidTool(raw, toolName)
-            → highlightMermaidBranch(above, branchName)
-            → onDiagramUpdate(skillName, 双重高亮图)
+    ├─ 后端推送（实时对话）：
+    │   ├─ runner.ts onStepFinish / progress-tracker
+    │   │       → extractMermaidFromContent() 提取 mermaid 源码
+    │   │       → stripMermaidMarkers() 移除 %% 注解
+    │   │       → buildNodeTypeMap(spec) 构建 label→kind 映射
+    │   │       → highlightMermaidProgress() 附加 %% progress:stateName
+    │   │       → DiagramUpdateCallback(skillName, mermaid, nodeTypeMap, progressState)
+    │   │
+    │   └─ chat-ws.ts
+    │           → translateMermaid()（翻译状态名）
+    │           → ws.send({ type: 'skill_diagram_update', mermaid, node_type_map, progress_state })
+    │           → sessionBus.publish()（坐席侧同步）
+    │
+    └─ REST API（技能管理静态预览）：
+        └─ GET /api/skill-versions/:skill/diagram-data
+                → 返回 { mermaid, nodeTypeMap }（无 progressState）
 ```
 
-`onDiagramUpdate` 是 `runAgent()` 的可选回调参数，由 `chat/chat-ws.ts` 注入：
+---
+
+### 11.3 节点类型染色
+
+#### 11.3.1 数据来源：WorkflowSpec 编译
+
+`skill-workflow-compiler.ts` 解析 SKILL.md 中的 mermaid stateDiagram-v2，将 `%% tool:xxx`、`%% branch:xxx` 等注解编译为 `WorkflowStep`，每个 step 的 `kind` 字段标注语义类型。
+
+`buildNodeTypeMap(spec)` (`backend/src/services/mermaid.ts`) 遍历 `spec.steps`，构建 `{ label → kind }` 映射：
 
 ```typescript
-await runAgent(message, history, userPhone, lang,
-  (skillName, mermaid) =>
-    ws.send(JSON.stringify({ type: 'skill_diagram_update', skill_name: skillName, mermaid }))
-);
+export function buildNodeTypeMap(spec: WorkflowSpec): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const step of Object.values(spec.steps)) {
+    if (!step.label) continue;
+    map[step.label] = step.kind;
+    // 嵌套状态：同时添加短名（"账单查询流程.确认身份" → "确认身份"）
+    const dotIdx = step.label.lastIndexOf('.');
+    if (dotIdx !== -1) {
+      const shortName = step.label.substring(dotIdx + 1);
+      if (!map[shortName]) map[shortName] = step.kind;
+    }
+  }
+  return map;
+}
 ```
 
-前端收到 `skill_diagram_update` 事件后，通过卡片系统路由到 DiagramContent 卡片重新渲染（旧 DiagramPanel 已被卡片系统取代）。
+#### 11.3.2 前端着色：DOM 后处理
 
-最终 `response` 事件中的 `skill_diagram` 也使用高亮版（`diagnose_network` 完成后在后处理循环中覆盖），确保最终结果不降级回无高亮版本。
+`applyNodeTypeColors(container, nodeTypeMap)` (`MermaidRenderer.tsx`) 在 SVG 渲染完成后通过 DOM 操作着色：
+
+| kind | 填充色 | 描边色 | 语义 |
+|------|--------|--------|------|
+| `tool` | `#dbeafe` | `#3b82f6` | MCP 工具调用（蓝） |
+| `llm` | `#dcfce7` | `#22c55e` | AI 文本生成（绿） |
+| `human` | `#ffedd5` | `#f97316` | 确认/转人工（橙） |
+| `switch` | `#f3e8ff` | `#a855f7` | 分支/决策（紫） |
+| `guard` | `#fef2f2` | `#ef4444` | 合规检查（红） |
+| `start` | `#ccfbf1` | `#14b8a6` | 入口（青） |
+| `end` | `#f1f5f9` | `#94a3b8` | 终态（灰） |
+
+匹配策略（两级回退）：
+1. **ID 匹配**：遍历容器内所有 `[id]` 元素，找到 `id` 包含 label 的节点，修改其 `rect/path/polygon` 的 fill/stroke
+2. **文本匹配**：若 ID 未命中，扫描 `span/div/text/tspan`，按 `textContent` 匹配，向上遍历 DOM 树找到 `.node`/`.statediagram`/`[id*=state-]` 父级
 
 ---
 
-### 31.5 SKILL_TOOL_MAP（工具 → Skill 名称映射）
+### 11.4 进度高亮
+
+#### 11.4.1 后端标记
+
+`highlightMermaidProgress(rawMermaid, stateName)` (`backend/src/services/mermaid.ts`)：
+
+由于 CJK 状态名与 Mermaid 的 `:::` / `class` 语法不兼容，采用**注释标记**方式——在 mermaid 源码末尾追加 `%% progress:stateName`，由前端 DOM 后处理实现高亮。
 
 ```typescript
-const SKILL_TOOL_MAP: Record<string, string> = {
-  diagnose_network: 'fault-diagnosis',
-  diagnose_app:     'telecom-app',
-};
+// 输出示例
+return `${rawMermaid}\n%% progress:获取账单`;
 ```
 
-扩展高亮支持：在 `SKILL_TOOL_MAP` 添加映射 + 在对应 SKILL.md 的 mermaid 中打 `%% tool:` 和 `%% branch:` 标记即可，无需改动 runner.ts 核心逻辑。
+#### 11.4.2 后端触发时机
+
+两条路径将 progressState 推送到前端：
+
+| 路径 | 触发点 | 说明 |
+|------|--------|------|
+| Legacy（runner.ts） | `onStepFinish` 回调 | `progress-tracker.analyzeProgress()` 解析工具调用结果，确定当前状态名 |
+| Runtime（skill-runtime.ts） | 每个 step 执行后 | SOPGuard V2 按 WorkflowSpec plan 驱动，直接知道 currentStepId |
+
+两条路径最终都通过 `DiagramUpdateCallback` → `chat-ws.ts` → WS 推送 `skill_diagram_update` 事件（含 `progress_state` 字段）。
+
+#### 11.4.3 前端高亮
+
+`MermaidRenderer` 组件收到 `progressState` prop 后：
+
+1. `extractProgressMarker(mermaid)` 从源码中提取 `%% progress:xxx`（向后兼容）
+2. `stripProgressMarker(mermaid)` 移除标记后再渲染 SVG
+3. SVG 渲染完成后，`applyProgressHighlightDOM(container, stateName)` 通过 DOM 操作高亮：
+   - 黄色填充 `#fef08a`，描边 `#f59e0b`，3px 描边宽度
+   - 匹配策略同节点类型染色（ID 优先，文本回退）
+   - 高亮节点标记 CSS class `progressHL`
+
+**着色顺序**：先 `applyNodeTypeColors`（语义底色），再 `applyProgressHighlightDOM`（当前步骤覆盖为黄色）。
+
+4. `autoFocus`：高亮完成后自动缩放并滚动到高亮节点居中位置
 
 ---
+
+### 11.5 MermaidRenderer 共享组件
+
+`frontend/src/shared/MermaidRenderer.tsx`，`memo` 包裹，Props：
+
+| Prop | 类型 | 说明 |
+|------|------|------|
+| `mermaid` | `string \| null` | 清洁 mermaid 源码（无 %% 注解） |
+| `nodeTypeMap` | `Record<string, string>` | label → kind 映射，驱动节点类型染色 |
+| `progressState` | `string` | 当前进度状态名，驱动黄色高亮 |
+| `zoom` | `boolean` | 是否显示缩放控件（默认 true） |
+| `autoFocus` | `boolean` | 是否自动聚焦到高亮节点（默认 true） |
+| `height` | `string` | 容器高度（默认 '60vh'） |
+
+内部 4 个 `useEffect` 职责分离：
+
+| Effect | 依赖 | 职责 |
+|--------|------|------|
+| nodeTypeMap effect | `[nodeTypeMap, svgHtml]` | nodeTypeMap 变化时重新着色（无需重新渲染 SVG） |
+| mermaid render effect | `[mermaidSrc]` | mermaid 源码变化时异步渲染 SVG |
+| progressState effect | `[progressStateProp, svgHtml]` | progressState 变化时清除旧高亮、重新着色、重新高亮 |
+| SVG mount effect | `[svgHtml]` | SVG 首次挂载后：着色 → 高亮 → 测量尺寸 → 自动缩放/聚焦 |
+
+---
+
+### 11.6 两个展示场景
+
+#### 11.6.1 坐席工作台（DiagramContent 卡片）
+
+- 注册为 CardPanel 卡片，`wsEvents: ['skill_diagram_update']`，col-span-2
+- 数据来源：WS 事件中的 `mermaid` + `node_type_map` + `progress_state`（或 `active_step_id`）
+- 实时更新：每次 `skill_diagram_update` 事件到达时，`MermaidRenderer` 的 `mermaid`/`nodeTypeMap`/`progressState` props 更新，触发重新渲染或 DOM 重着色
+
+#### 11.6.2 技能管理（SkillManagerPage 内嵌面板）
+
+- 数据来源优先级：`testDiagram`（测试模式 WS 推送） > `backendDiagram`（REST API） > `fallbackMermaid`（编辑器中正则提取）
+- 静态预览：`GET /api/skill-versions/:skill/diagram-data` 返回 `{ mermaid, nodeTypeMap }`，无 progressState
+- 测试模式：测试消息返回时带 `skill_diagram` 字段，包含 progressState，实现实时高亮
+- 防双渲染：`backendDiagramLoading` 状态在 fetch 期间抑制 fallback mermaid，避免 fallback → backend 切换导致的重复 SVG 渲染
+
+---
+
+### 11.7 Legacy 高亮（sequenceDiagram 兼容，仅 runner.ts 旧路径）
+
+对于仍使用 `sequenceDiagram` 的旧 Skill，后端保留 mermaid `rect` 块注入高亮：
+
+- `highlightMermaidTool(rawMermaid, toolName)`：找到 `%% tool:<name>` 行，用黄色 `rect` 块包裹
+- `highlightMermaidBranch(rawMermaid, branchName)`：找到 `%% branch:<name>` 行，用绿色 `rect` 块包裹
+- `determineBranch(diagnosticSteps)`：将诊断结果映射到分支名称
+- `SKILL_TOOL_MAP`：工具名 → Skill 名映射，决定哪些工具调用触发高亮
+
+这些函数仍在 `runner.ts` 的 legacy 路径中使用，新的 stateDiagram-v2 Skill 不再需要。
 
 ---
 

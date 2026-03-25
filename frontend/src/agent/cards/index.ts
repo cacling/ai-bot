@@ -125,14 +125,11 @@ registerCard({
   defaultOpen: true,
   defaultCollapsed: false,
   wsEvents: ['skill_diagram_update'],
-  dataExtractor: (msg) => {
-    console.log('[DiagramCard] extracted:', { hasNodeTypeMap: !!msg.node_type_map, hasProgressState: !!msg.progress_state, keys: msg.node_type_map ? Object.keys(msg.node_type_map).length : 0 });
-    return {
-      skill_name:    msg.skill_name,
-      mermaid:       msg.mermaid,
-      nodeTypeMap:   msg.node_type_map,
-      progressState: msg.progress_state,
-    };
-  },
+  dataExtractor: (msg) => ({
+    skill_name:    msg.skill_name,
+    mermaid:       msg.mermaid,
+    nodeTypeMap:   msg.node_type_map,
+    progressState: msg.progress_state,
+  }),
   component: DiagramContent,
 });
