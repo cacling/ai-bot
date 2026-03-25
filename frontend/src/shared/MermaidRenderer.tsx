@@ -137,10 +137,12 @@ function getSvgNaturalSize(svgEl: SVGSVGElement): { w: number; h: number } {
 // ── Props ────────────────────────────────────────────────────────────────────
 
 export interface MermaidRendererProps {
-  /** Mermaid source code (may contain %% progress: marker) */
+  /** Mermaid source code (clean — no %% annotations) */
   mermaid: string | null;
   /** Label → nodeType mapping for semantic color-coding */
   nodeTypeMap?: Record<string, string>;
+  /** Current progress state name for highlighting (replaces %% progress: marker) */
+  progressState?: string;
   /** Enable zoom controls (default: true) */
   zoom?: boolean;
   /** Auto-focus on highlighted node (default: true) */
@@ -160,6 +162,7 @@ export interface MermaidRendererProps {
 export const MermaidRenderer = memo(function MermaidRenderer({
   mermaid: mermaidSrc,
   nodeTypeMap,
+  progressState: progressStateProp,
   zoom: zoomEnabled = true,
   autoFocus = true,
   height = '60vh',
@@ -190,9 +193,10 @@ export const MermaidRenderer = memo(function MermaidRenderer({
     let cancelled = false;
     setSvgHtml(''); setError(''); setLoading(true);
 
-    const progressState = extractProgressMarker(mermaidSrc);
-    progressRef.current = progressState;
-    const mermaidClean = progressState ? stripProgressMarker(mermaidSrc) : mermaidSrc;
+    // progressState from prop takes priority; fallback to embedded %% progress: marker (backward compat)
+    const embeddedProgress = extractProgressMarker(mermaidSrc);
+    progressRef.current = progressStateProp ?? embeddedProgress;
+    const mermaidClean = embeddedProgress ? stripProgressMarker(mermaidSrc) : mermaidSrc;
 
     renderMermaid(mermaidClean)
       .then(result => { if (!cancelled) setSvgHtml(result); })

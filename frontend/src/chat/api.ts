@@ -18,7 +18,7 @@ export function sendChatMessageWS(
   sessionId: string,
   lang: 'zh' | 'en' = 'zh',
   userPhone: string = DEFAULT_USER_PHONE,
-  onDiagramUpdate?: (skillName: string, mermaid: string, nodeTypeMap?: Record<string, string>) => void,
+  onDiagramUpdate?: (skillName: string, mermaid: string, nodeTypeMap?: Record<string, string>, progressState?: string) => void,
   onTextDelta?: (delta: string) => void,
 ): Promise<ChatResponse & { _fetchMs: number }> {
   return new Promise((resolve, reject) => {
@@ -35,7 +35,7 @@ export function sendChatMessageWS(
       const msg = JSON.parse(evt.data as string) as { type: string; [k: string]: unknown };
       console.log('[ws] received:', msg.type, msg.type === 'text_delta' ? (msg.delta as string).slice(0, 10) : '');
       if (msg.type === 'skill_diagram_update') {
-        onDiagramUpdate?.(msg.skill_name as string, msg.mermaid as string, msg.node_type_map as Record<string, string> | undefined);
+        onDiagramUpdate?.(msg.skill_name as string, msg.mermaid as string, msg.node_type_map as Record<string, string> | undefined, msg.progress_state as string | undefined);
       } else if (msg.type === 'text_delta') {
         onTextDelta?.(msg.delta as string);
       } else if (msg.type === 'step_text') {

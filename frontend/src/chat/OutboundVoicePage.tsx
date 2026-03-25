@@ -188,7 +188,7 @@ export function OutboundVoicePage({ onDiagramUpdate, lang = 'zh', taskType = 'co
     }
 
     if (type === 'skill_diagram_update') {
-      onDiagramUpdate?.({ skill_name: msg.skill_name as string, mermaid: msg.mermaid as string, nodeTypeMap: msg.node_type_map as Record<string, string> | undefined });
+      onDiagramUpdate?.({ skill_name: msg.skill_name as string, mermaid: msg.mermaid as string, nodeTypeMap: msg.node_type_map as Record<string, string> | undefined, progressState: msg.progress_state as string | undefined });
       return;
     }
 

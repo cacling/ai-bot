@@ -13,6 +13,7 @@ export interface ActiveDiagram {
   skill_name: string;
   mermaid: string;
   nodeTypeMap?: Record<string, string>;
+  progressState?: string;
 }
 
 interface Props {
@@ -69,6 +70,7 @@ export function DiagramPanel({ diagram, onClose, lang = 'zh' }: Props) {
           <MermaidRenderer
             mermaid={diagram.mermaid}
             nodeTypeMap={diagram.nodeTypeMap}
+            progressState={diagram.progressState}
             height="100%"
             emptyText={t.diagram_empty_title}
             loadingText={t.diagram_loading}

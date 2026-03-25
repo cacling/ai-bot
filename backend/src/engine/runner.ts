@@ -154,6 +154,7 @@ async function getMCPTools() {
 export interface SkillDiagram {
   skill_name: string;
   mermaid: string;
+  progressState?: string;
 }
 
 export interface TransferData {
@@ -230,7 +231,7 @@ export interface AnomalyCardData {
   recommendation: string;
 }
 
-export type DiagramUpdateCallback = (skillName: string, mermaid: string, nodeTypeMap?: Record<string, string>) => void;
+export type DiagramUpdateCallback = (skillName: string, mermaid: string, nodeTypeMap?: Record<string, string>, progressState?: string) => void;
 export type TextDeltaCallback = (delta: string) => void;
 
 export interface RunAgentOptions {
@@ -826,10 +827,9 @@ export async function runAgent(
           try {
             const result = await runProgressTracking();
             if (!result) return;
-            const highlighted = highlightMermaidProgress(result.rawMermaid, result.stateName);
             const specRow = findPublishedSpec(progressSkill);
             const nodeTypeMap = specRow ? buildNodeTypeMap(JSON.parse(specRow.spec_json)) : undefined;
-            progressCallback(progressSkill, stripMermaidMarkers(highlighted), nodeTypeMap);
+            progressCallback(progressSkill, stripMermaidMarkers(result.rawMermaid), nodeTypeMap, result.stateName);
           } catch (err) { logger.warn('agent', 'progress_tracking_error', { skill: progressSkill, error: String(err) }); }
         })();
       } else {
@@ -837,8 +837,7 @@ export async function runAgent(
         try {
           const result = await runProgressTracking();
           if (result) {
-            const highlighted = highlightMermaidProgress(result.rawMermaid, result.stateName);
-            skillDiagram = { skill_name: progressSkill, mermaid: stripMermaidMarkers(highlighted) };
+            skillDiagram = { skill_name: progressSkill, mermaid: stripMermaidMarkers(result.rawMermaid), progressState: result.stateName };
           }
         } catch (err) { logger.warn('agent', 'progress_tracking_error', { skill: progressSkill, error: String(err) }); }
       }

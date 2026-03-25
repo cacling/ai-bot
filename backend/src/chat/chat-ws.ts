@@ -336,13 +336,13 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           history,
           phone,
           agentLang,
-          (skillName: string, rawMermaid: string, nodeTypeMap?: Record<string, string>) => {
+          (skillName: string, rawMermaid: string, nodeTypeMap?: Record<string, string>, progressState?: string) => {
             translateMermaid(rawMermaid, langParam).then(mermaid => {
-              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid, nodeTypeMap, msg_id: crypto.randomUUID() };
+              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid, nodeTypeMap, progress_state: progressState, msg_id: crypto.randomUUID() };
               try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
               sessionBus.publish(phone, ev);
             }).catch(() => {
-              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid: rawMermaid, nodeTypeMap, msg_id: crypto.randomUUID() };
+              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid: rawMermaid, nodeTypeMap, progress_state: progressState, msg_id: crypto.randomUUID() };
               try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
               sessionBus.publish(phone, ev);
             });
