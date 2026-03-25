@@ -255,21 +255,76 @@ function parseMermaid(mermaid: string): ParseResult {
     // Standalone annotation lines — attach to nothing (could be general comments)
   }
 
-  // Rewrite transitions that target a composite state to target its first child
+  // Build a map of un-prefixed names to their prefixed equivalents
+  // This resolves cross-boundary references: top-level "标准退订入口" → "标准退订流程.标准退订入口"
+  const unprefixedToPrefix = new Map<string, string>();
+  for (const name of nodes.keys()) {
+    const dotIdx = name.lastIndexOf('.');
+    if (dotIdx !== -1) {
+      const shortName = name.substring(dotIdx + 1);
+      // Only map if the short name also exists as a standalone node (cross-boundary ref)
+      if (nodes.has(shortName)) {
+        unprefixedToPrefix.set(shortName, name);
+      }
+    }
+  }
+
+  // Rewrite transitions:
+  // 1. Composite state targets → first child
+  // 2. Un-prefixed cross-boundary refs → prefixed internal node
   for (const trans of transitions) {
     if (nestedFirstChild.has(trans.to)) {
       trans.to = nestedFirstChild.get(trans.to)!;
+    } else if (unprefixedToPrefix.has(trans.to)) {
+      trans.to = unprefixedToPrefix.get(trans.to)!;
     }
     if (nestedFirstChild.has(trans.from)) {
-      // If a composite state has outgoing transitions, rewrite from its last internal state
-      // Actually, for simplicity, we leave from as-is since composite states
-      // should have internal [*] --> X transitions
+      // Composite state as source — leave as-is (internal transitions handle this)
+    } else if (unprefixedToPrefix.has(trans.from)) {
+      trans.from = unprefixedToPrefix.get(trans.from)!;
+    }
+  }
+
+  // Remove standalone un-prefixed nodes that were resolved to prefixed versions
+  // (they're duplicates created by the cross-boundary reference)
+  for (const [shortName, prefixedName] of unprefixedToPrefix) {
+    if (nodes.has(shortName) && nodes.has(prefixedName)) {
+      // Merge annotations from the un-prefixed to the prefixed node
+      const shortNode = nodes.get(shortName)!;
+      const prefixedNode = nodes.get(prefixedName)!;
+      for (const ann of shortNode.annotations) {
+        if (!prefixedNode.annotations.some(a => a.type === ann.type && a.value === ann.value)) {
+          prefixedNode.annotations.push(ann);
+        }
+      }
+      nodes.delete(shortName);
+    }
+  }
+
+  // Also remove composite shell nodes (they're just grouping, not real steps)
+  for (const parent of nestedFirstChild.keys()) {
+    const node = nodes.get(parent);
+    if (node && !node.isChoice) {
+      // Check if any transitions reference this shell as source/target
+      const isReferenced = transitions.some(t => t.from === parent || t.to === parent);
+      if (!isReferenced) {
+        nodes.delete(parent);
+      }
     }
   }
 
   // Update startTarget if it was rewritten
   if (startTarget && nestedFirstChild.has(startTarget)) {
     startTarget = nestedFirstChild.get(startTarget)!;
+  } else if (startTarget && unprefixedToPrefix.has(startTarget)) {
+    startTarget = unprefixedToPrefix.get(startTarget)!;
+  }
+
+  // Also resolve terminal sources
+  for (let i = 0; i < terminalSources.length; i++) {
+    if (unprefixedToPrefix.has(terminalSources[i])) {
+      terminalSources[i] = unprefixedToPrefix.get(terminalSources[i])!;
+    }
   }
 
   return { nodes, transitions, startTarget, terminalSources };
