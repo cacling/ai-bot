@@ -222,9 +222,10 @@ export const MermaidRenderer = memo(function MermaidRenderer({
   useEffect(() => {
     nodeTypeMapRef.current = nodeTypeMap;
     const wrap = wrapRef.current;
-    if (!wrap || !svgHtml || !nodeTypeMap || Object.keys(nodeTypeMap).length === 0) return;
+    const keys = nodeTypeMap ? Object.keys(nodeTypeMap).length : 0;
+    console.log('[MermaidRenderer] nodeTypeMap effect:', keys, 'keys, svgHtml:', svgHtml.length, 'wrap:', !!wrap);
+    if (!wrap || !svgHtml || !nodeTypeMap || keys === 0) return;
     applyNodeTypeColors(wrap, nodeTypeMap);
-    // Re-apply progress highlight on top (so it overrides node color)
     if (progressRef.current) applyProgressHighlightDOM(wrap, progressRef.current);
   }, [nodeTypeMap, svgHtml]);
 
