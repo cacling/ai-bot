@@ -88,7 +88,7 @@ stateDiagram-v2
         了解需求 --> 推荐套餐: 询问预算偏好和更看重流量还是月费，根据需求匹配最优套餐 %% ref:plan-details.md#套餐推荐指引 %% step:plan-browse-needs %% kind:human
         推荐套餐 --> 展示详情: 说明月费、流量、通话时长、特色权益 %% step:plan-browse-recommend %% kind:llm
         state 浏览后意愿 <<choice>>
-        展示详情 --> 浏览后意愿 %% step:plan-browse-detail %% kind:llm
+        展示详情 --> 浏览后意愿 %% step:plan-browse-detail %% kind:human
         浏览后意愿 --> 浏览结束: 用户仅了解 %% guard:user.cancel
         浏览后意愿 --> 查询当前套餐: 用户想办理 %% guard:user.confirm
     }
@@ -116,7 +116,7 @@ stateDiagram-v2
         已是最低套餐 --> [*]: 告知已是最低档，无法继续降级 %% step:plan-change-min-plan %% kind:end
         建议升级 --> 对比展示: 对比当前vs推荐套餐差异 %% step:plan-change-suggest-up %% kind:llm
         建议降级 --> 对比展示 %% step:plan-change-suggest-down %% kind:llm
-        对比展示 --> 说明生效规则: 告知变更规则 %% ref:plan-details.md#套餐变更指引 %% step:plan-change-compare %% kind:llm
+        对比展示 --> 说明生效规则: 告知变更规则 %% ref:plan-details.md#套餐变更指引 %% step:plan-change-compare %% kind:human
         说明生效规则 --> 确认用户意愿: 用户是否同意变更 %% step:plan-change-rules %% kind:llm
         state 用户意愿 <<choice>>
         确认用户意愿 --> 用户意愿 %% step:plan-change-confirm %% kind:human
@@ -132,7 +132,7 @@ stateDiagram-v2
         获取对比数据结果 --> 输出对比: 成功 %% guard:tool.success
         获取对比数据结果 --> 对比查询异常: 系统异常 %% guard:tool.error
         对比查询异常 --> [*]: 提示稍后重试或拨打10086 %% step:plan-compare-error %% kind:end
-        输出对比 --> 对比后意愿: 按月费/流量/通话/权益四维对比 %% ref:plan-details.md#套餐对比指引 %% step:plan-compare-output %% kind:llm
+        输出对比 --> 对比后意愿: 按月费/流量/通话/权益四维对比 %% ref:plan-details.md#套餐对比指引 %% step:plan-compare-output %% kind:human
         state 对比后意愿 <<choice>>
         对比后意愿 --> 对比结束: 用户仅了解 %% guard:user.cancel
         对比后意愿 --> 套餐变更: 用户想办理 %% guard:user.confirm
@@ -150,12 +150,12 @@ stateDiagram-v2
         剩余量判断 --> 推荐加油包: 剩余流量接近零，急需用网 %% guard:always
         剩余量判断 --> 分析使用习惯: 尚有余量但经常不够用 %% guard:always
         state 加油包确认 <<choice>>
-        推荐加油包 --> 加油包确认 %% step:plan-data-recommend-booster %% kind:llm
+        推荐加油包 --> 加油包确认 %% step:plan-data-recommend-booster %% kind:human
         加油包确认 --> 引导购买加油包: 用户确认购买 %% guard:user.confirm
         引导购买加油包 --> [*]: 引导用户在APP→流量加油包自助购买，告知生效时间 %% step:plan-data-buy-booster %% kind:end
         加油包确认 --> 分析使用习惯: 用户不需要 %% guard:user.cancel
         分析使用习惯 --> 建议套餐升级: 根据用量匹配更大套餐 %% ref:plan-details.md#套餐推荐指引 %% step:plan-data-analyze-usage %% kind:llm
-        建议套餐升级 --> 对比当前与推荐: 展示升级前后差异 %% ref:plan-details.md#套餐对比指引 %% step:plan-data-suggest-upgrade %% kind:llm
+        建议套餐升级 --> 对比当前与推荐: 展示升级前后差异 %% ref:plan-details.md#套餐对比指引 %% step:plan-data-suggest-upgrade %% kind:human
         对比当前与推荐 --> 确认升级意愿: 用户是否同意升级 %% step:plan-data-compare-upgrade %% kind:llm
         state 升级意愿 <<choice>>
         确认升级意愿 --> 升级意愿 %% step:plan-data-confirm-upgrade %% kind:human
