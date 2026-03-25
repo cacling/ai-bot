@@ -449,6 +449,19 @@ export const skillsTools = {
         content = getSkillContent(alt);
         if (content) resolvedName = alt;
       }
+      // Fallback: LLM may pass Chinese description instead of kebab-case id
+      // Try matching against skill descriptions
+      if (!content) {
+        const skills = getAvailableSkills();
+        const match = skills.find(s =>
+          s.description.includes(skill_name) || skill_name.includes(s.name) ||
+          s.triggerKeywords.some(kw => skill_name.includes(kw) || kw.includes(skill_name))
+        );
+        if (match) {
+          content = getSkillContent(match.name);
+          if (content) resolvedName = match.name;
+        }
+      }
       if (!content) {
         const desc = buildSkillDescription();
         return `Error: Skill "${skill_name}" not found. Available skills: ${desc}`;
