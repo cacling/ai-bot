@@ -257,7 +257,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
             const diagramEv = {
               source: 'user' as const, type: 'skill_diagram_update' as const,
               skill_name: route.spec.skillId, mermaid,
-              nodeTypeMap,
+              node_type_map: nodeTypeMap,
               active_step_id: turnResult.currentStepId,
               msg_id,
             };
@@ -342,7 +342,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
               try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
               sessionBus.publish(phone, ev);
             }).catch(() => {
-              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid: rawMermaid, nodeTypeMap, progress_state: progressState, msg_id: crypto.randomUUID() };
+              const ev = { source: 'user' as const, type: 'skill_diagram_update' as const, skill_name: skillName, mermaid: rawMermaid, node_type_map: nodeTypeMap, progress_state: progressState, msg_id: crypto.randomUUID() };
               try { ws.send(JSON.stringify(ev)); } catch { /* ws closed */ }
               sessionBus.publish(phone, ev);
             });
