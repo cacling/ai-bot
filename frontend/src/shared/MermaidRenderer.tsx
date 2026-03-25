@@ -86,8 +86,11 @@ export function applyProgressHighlightDOM(container: HTMLElement, stateName: str
   const candidates = container.querySelectorAll<Element>('.nodeLabel, text, tspan, foreignObject span, foreignObject div');
   const allTexts = Array.from(candidates).map(el => ({ el, text: el.textContent?.trim() ?? '' }));
 
+  // Try exact match first, then startsWith, then includes
   for (const { el, text } of allTexts) {
-    if (text !== stateName) continue;
+    if (text !== stateName && !text.startsWith(stateName) && !text.includes(stateName)) continue;
+    // Prefer shorter matches (more likely to be the node label, not a container)
+    if (text.length > stateName.length * 3) continue;
     // Walk up to find the outer state node group (skip inner "label" groups)
     let node: Element | null = el;
     for (let depth = 0; depth < 8; depth++) {
@@ -224,7 +227,15 @@ export const MermaidRenderer = memo(function MermaidRenderer({
     }
     // Apply progress highlight on top
     const hlResult = applyProgressHighlightDOM(wrap, progressStateProp);
-    console.log('[MermaidRenderer] applyProgressHighlightDOM:', progressStateProp, 'result:', hlResult);
+    if (!hlResult) {
+      // Debug: show what texts are in the SVG so we can see why matching failed
+      const svgTexts = Array.from(wrap.querySelectorAll<Element>('.nodeLabel, text, tspan, foreignObject span, foreignObject div'))
+        .map(el => el.textContent?.trim() ?? '')
+        .filter(t => t.length > 0 && t.length < 50);
+      console.warn('[MermaidRenderer] highlight FAILED for:', progressStateProp, 'Available texts:', svgTexts.slice(0, 20));
+    } else {
+      console.log('[MermaidRenderer] highlight OK:', progressStateProp);
+    }
   }, [progressStateProp, svgHtml]);
 
   /* ── after SVG mounts: highlight + measure + auto-focus ── */
