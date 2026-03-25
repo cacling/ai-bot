@@ -38,8 +38,13 @@ const NODE_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
 
 /** Apply color-coding to diagram nodes based on their semantic type */
 export function applyNodeTypeColors(container: HTMLElement, nodeTypeMap: Record<string, string>): void {
-  const candidates = container.querySelectorAll<Element>('.nodeLabel, text, tspan, foreignObject span, foreignObject div');
-  const allTexts = Array.from(candidates).map(el => ({ el, text: el.textContent?.trim() ?? '' }));
+  const candidates = container.querySelectorAll<Element>('*');
+  const allTexts: Array<{ el: Element; text: string }> = [];
+  for (const el of candidates) {
+    const text = el.textContent?.trim() ?? '';
+    if (!text || text.length > 200) continue;
+    allTexts.push({ el, text });
+  }
 
   for (const [label, nodeType] of Object.entries(nodeTypeMap)) {
     const colors = NODE_TYPE_COLORS[nodeType];
@@ -83,8 +88,15 @@ export function stripProgressMarker(mermaid: string): string {
 
 /** Apply DOM-based highlighting to a state node by matching its text content */
 export function applyProgressHighlightDOM(container: HTMLElement, stateName: string): boolean {
-  const candidates = container.querySelectorAll<Element>('.nodeLabel, text, tspan, foreignObject span, foreignObject div');
-  const allTexts = Array.from(candidates).map(el => ({ el, text: el.textContent?.trim() ?? '' }));
+  // Search ALL text-bearing elements in the SVG — mermaid nests deeply in stateDiagram-v2
+  const candidates = container.querySelectorAll<Element>('*');
+  const allTexts: Array<{ el: Element; text: string }> = [];
+  for (const el of candidates) {
+    // Only leaf-ish elements with direct text content
+    const text = el.textContent?.trim() ?? '';
+    if (!text || text.length > 200) continue;
+    allTexts.push({ el, text });
+  }
 
   // Try exact match first, then startsWith, then includes
   for (const { el, text } of allTexts) {
