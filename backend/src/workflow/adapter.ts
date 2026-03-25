@@ -49,6 +49,7 @@ function convertStep(step: OldStep): WorkflowNode {
         config: { toolRef: step.tool!, outputKey: step.output ?? 'toolResult' },
       };
     case 'message':
+    case 'llm':    // New normalized value (message → llm)
       return {
         id: step.id, type: NodeType.LLM, name: step.label,
         inputs: [{ id: 'in' }],
@@ -64,6 +65,7 @@ function convertStep(step: OldStep): WorkflowNode {
         metadata: { ref: step.ref },
       };
     case 'confirm':
+    case 'human':  // New normalized value (confirm → human); without transitions = escalation
       return {
         id: step.id, type: NodeType.Human, name: step.label,
         inputs: [{ id: 'in' }],
@@ -74,6 +76,7 @@ function convertStep(step: OldStep): WorkflowNode {
         config: { mode: 'approve' as const },
       };
     case 'choice':
+    case 'switch': // New normalized value (choice → switch)
       return {
         id: step.id, type: NodeType.Switch, name: step.label,
         inputs: [{ id: 'in' }],
@@ -89,13 +92,6 @@ function convertStep(step: OldStep): WorkflowNode {
             match: t.guard,
           })),
         },
-      };
-    case 'human':
-      return {
-        id: step.id, type: NodeType.Human, name: step.label,
-        inputs: [{ id: 'in' }],
-        outputs: [],
-        config: { mode: 'review' as const },
       };
     case 'end':
       return {
