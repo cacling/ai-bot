@@ -45,6 +45,34 @@ app.get('/', async (c) => {
   return c.json({ skill: skillId, versions, total: versions.length });
 });
 
+// GET /api/skill-versions/:skill/diagram-data — 流程图渲染数据（mermaid + nodeTypeMap）
+// Must be BEFORE /:skill/:versionNo to avoid being caught by that pattern
+app.get('/:skill/diagram-data', async (c) => {
+  const skillId = c.req.param('skill');
+  try {
+    const { getSkillMermaid } = await import('../../../engine/skills');
+    const { stripMermaidMarkers, buildNodeTypeMap } = await import('../../../services/mermaid');
+    const { skillWorkflowSpecs } = await import('../../../db/schema');
+
+    const rawMermaid = getSkillMermaid(skillId);
+    if (!rawMermaid) return c.json({ error: 'Skill not found or has no mermaid' }, 404);
+
+    const mermaid = stripMermaidMarkers(rawMermaid);
+
+    let nodeTypeMap: Record<string, string> | null = null;
+    const specRow = db.select().from(skillWorkflowSpecs)
+      .where(and(eq(skillWorkflowSpecs.skill_id, skillId), eq(skillWorkflowSpecs.status, 'published')))
+      .get();
+    if (specRow) {
+      nodeTypeMap = buildNodeTypeMap(JSON.parse(specRow.spec_json));
+    }
+
+    return c.json({ mermaid, nodeTypeMap });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
 // GET /api/skill-versions/:skill/:versionNo — 版本快照文件树
 app.get('/:skill/:versionNo', async (c) => {
   const skillId = c.req.param('skill');
@@ -248,34 +276,6 @@ app.post('/test', async (c) => {
     }
   } catch (err) {
     return c.json({ error: `测试失败: ${String(err)}` }, 500);
-  }
-});
-
-// GET /api/skill-versions/:skill/diagram-data — 获取流程图渲染所需数据（mermaid + nodeTypeMap）
-app.get('/:skill/diagram-data', async (c) => {
-  const skillId = c.req.param('skill');
-  try {
-    const { getSkillMermaid } = await import('../../../engine/skills');
-    const { stripMermaidMarkers, buildNodeTypeMap } = await import('../../../services/mermaid');
-    const { skillWorkflowSpecs } = await import('../../../db/schema');
-
-    const rawMermaid = getSkillMermaid(skillId);
-    if (!rawMermaid) return c.json({ error: 'Skill not found or has no mermaid' }, 404);
-
-    const mermaid = stripMermaidMarkers(rawMermaid);
-
-    // Get nodeTypeMap from compiled spec
-    let nodeTypeMap: Record<string, string> | null = null;
-    const specRow = db.select().from(skillWorkflowSpecs)
-      .where(and(eq(skillWorkflowSpecs.skill_id, skillId), eq(skillWorkflowSpecs.status, 'published')))
-      .get();
-    if (specRow) {
-      nodeTypeMap = buildNodeTypeMap(JSON.parse(specRow.spec_json));
-    }
-
-    return c.json({ mermaid, nodeTypeMap });
-  } catch (err) {
-    return c.json({ error: String(err) }, 500);
   }
 });
 
