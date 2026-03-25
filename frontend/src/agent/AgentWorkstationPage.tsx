@@ -235,13 +235,14 @@ export function AgentWorkstationPage() {
             }
             // Skip update if data is identical (avoids unnecessary re-renders)
             if (c.isOpen && JSON.stringify(c.data) === JSON.stringify(extracted)) return c;
-            // For diagram card: merge progressState from previous data if new event doesn't have it
+            // For diagram card: merge progressState and nodeTypeMap from previous data if new event doesn't have them
             if (c.id === 'diagram' && c.data && extracted && typeof c.data === 'object' && typeof extracted === 'object') {
               const prev = c.data as Record<string, unknown>;
               const next = extracted as Record<string, unknown>;
-              if (!next.progressState && prev.progressState) {
-                return { ...c, data: { ...next, progressState: prev.progressState }, isOpen: true };
-              }
+              const merged = { ...next };
+              if (!next.progressState && prev.progressState) merged.progressState = prev.progressState;
+              if (!next.nodeTypeMap && prev.nodeTypeMap) merged.nodeTypeMap = prev.nodeTypeMap;
+              if (merged !== next) return { ...c, data: merged, isOpen: true };
             }
             return { ...c, data: extracted, isOpen: true };
           }));
