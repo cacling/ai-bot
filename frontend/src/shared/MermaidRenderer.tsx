@@ -54,7 +54,6 @@ export function applyNodeTypeColors(container: HTMLElement, nodeTypeMap: Record<
         (rect as SVGElement).style.stroke = colors.stroke;
         (rect as SVGElement).style.strokeWidth = '2px';
         found = true;
-        matchedCount++;
         break;
       }
     }
