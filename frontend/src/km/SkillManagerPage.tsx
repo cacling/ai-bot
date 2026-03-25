@@ -1133,10 +1133,32 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
         {/* ── 底部流程图卡片（有 mermaid 时常驻，测试时高亮覆盖） ── */}
         {(() => {
           // Extract mermaid from editor content (static diagram)
-          const staticMermaid = editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1]?.replace(/%%.*/gm, '').trim() ?? null;
+          const rawMermaid = editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1] ?? null;
+          // Strip %% annotations for rendering but keep for nodeTypeMap extraction
+          const staticMermaid = rawMermaid?.replace(/%%.*/gm, '').trim() ?? null;
+
+          // Build nodeTypeMap from mermaid annotations for color-coding
+          // Parse %% kind:<type> and node labels from the raw mermaid
+          const staticNodeTypeMap: Record<string, string> = {};
+          if (rawMermaid) {
+            const lines = rawMermaid.split('\n');
+            for (const line of lines) {
+              const kindMatch = line.match(/%%\s*kind:(\w+)/);
+              if (!kindMatch) continue;
+              // Extract the target node label from the transition line
+              const transMatch = line.match(/-->\s*([^:\s%]+)/);
+              const stateMatch = line.match(/^\s*(\S+)\s*-->/);
+              const label = transMatch?.[1]?.replace(/^["']|["']$/g, '') ?? stateMatch?.[1]?.replace(/^["']|["']$/g, '');
+              if (label && label !== '[*]') {
+                staticNodeTypeMap[label] = kindMatch[1];
+              }
+            }
+          }
+
           // Test diagram takes priority (has progress highlighting)
           const activeMermaid = testDiagram?.mermaid ?? staticMermaid;
-          const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedFile?.name === 'SKILL.md' ? activeSkill : null);
+          const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? (Object.keys(staticNodeTypeMap).length > 0 ? staticNodeTypeMap : undefined);
+          const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedFile?.name === 'SKILL.md' ? activeSkill?.id : null);
           const isTestMode = testingVersion !== null;
 
           if (!activeMermaid && !isTestMode) return null;
@@ -1151,7 +1173,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
               {!diagramCollapsed && (
                 <div className="px-3 pb-3 h-[30vh] overflow-auto">
                   {activeMermaid ? (
-                    <MermaidRenderer mermaid={activeMermaid} height="28vh" zoom={true} autoFocus={!!testDiagram} emptyText="暂无流程图" />
+                    <MermaidRenderer mermaid={activeMermaid} nodeTypeMap={activeNodeTypeMap} height="28vh" zoom={true} autoFocus={!!testDiagram} emptyText="暂无流程图" />
                   ) : (
                     <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
                       {isTestMode ? '发送测试消息后展示流程图' : '当前文件无 mermaid 状态图'}
