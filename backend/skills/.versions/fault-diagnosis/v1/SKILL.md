@@ -133,11 +133,11 @@ metadata:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 接收并诊断: 客户反映网络问题（无信号/网速慢/掉线/上不了网） %% step:diag-receive %% kind:message
+    [*] --> 接收并诊断: 客户反映网络问题（无信号/网速慢/掉线/上不了网） %% step:diag-receive %% kind:llm
 
     state 描述是否清晰 <<choice>>
     接收并诊断 --> 描述是否清晰: 判断能否确定 issue_type
-    描述是否清晰 --> 补充采集: 描述过于模糊，需确认具体故障现象 %% step:diag-clarify %% kind:message %% guard:always
+    描述是否清晰 --> 补充采集: 描述过于模糊，需确认具体故障现象 %% step:diag-clarify %% kind:llm %% guard:always
     描述是否清晰 --> 系统诊断: 描述清晰，直接诊断 %% guard:always
 
     补充采集 --> 系统诊断: 用户补充后确定 issue_type
@@ -151,12 +151,12 @@ stateDiagram-v2
     转接人工 --> [*] %% kind:end
 
     state 分析诊断结果 <<choice>>
-    分析诊断结果 --> 账号停机: error — 账号欠费 %% branch:account_error %% step:diag-account-suspend %% kind:message %% guard:always
-    分析诊断结果 --> 流量耗尽: error — 流量用完 %% branch:data_exhausted %% step:diag-data-exhausted %% kind:message %% guard:always
-    分析诊断结果 --> APN异常: warning — APN 配置问题 %% branch:apn_warning %% step:diag-apn-issue %% kind:message %% guard:always
-    分析诊断结果 --> 基站异常: warning或error — 基站信号问题 %% branch:signal_weak %% step:diag-signal-weak %% kind:message %% guard:always
-    分析诊断结果 --> 网络拥塞: warning — 高峰期拥塞 %% branch:congestion %% step:diag-congestion %% kind:message %% guard:always
-    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok %% step:diag-self-check %% kind:message %% guard:always
+    分析诊断结果 --> 账号停机: error — 账号欠费 %% branch:account_error %% step:diag-account-suspend %% kind:llm %% guard:always
+    分析诊断结果 --> 流量耗尽: error — 流量用完 %% branch:data_exhausted %% step:diag-data-exhausted %% kind:llm %% guard:always
+    分析诊断结果 --> APN异常: warning — APN 配置问题 %% branch:apn_warning %% step:diag-apn-issue %% kind:llm %% guard:always
+    分析诊断结果 --> 基站异常: warning或error — 基站信号问题 %% branch:signal_weak %% step:diag-signal-weak %% kind:llm %% guard:always
+    分析诊断结果 --> 网络拥塞: warning — 高峰期拥塞 %% branch:congestion %% step:diag-congestion %% kind:llm %% guard:always
+    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok %% step:diag-self-check %% kind:llm %% guard:always
 
     账号停机 --> 确认恢复: 告知充值方式及恢复时间
     流量耗尽 --> 确认恢复: 推荐加油包或升级套餐
@@ -167,12 +167,12 @@ stateDiagram-v2
     等待APN操作结果 --> 确认恢复: 问题解决 %% guard:user.confirm
     等待APN操作结果 --> 升级处理: APN重置后问题仍未解决 %% guard:user.cancel
 
-    基站异常 --> 建议转人工登记: 告知信号弱可能与基站覆盖有关，建议更换位置尝试 %% step:diag-suggest-human %% kind:message
+    基站异常 --> 建议转人工登记: 告知信号弱可能与基站覆盖有关，建议更换位置尝试 %% step:diag-suggest-human %% kind:llm
     建议转人工登记 --> 升级处理: 说明需人工提交网络覆盖工单，建议转人工处理
 
-    确认恢复 --> 确认恢复结果: 请问问题现在解决了吗？ %% step:diag-confirm-recovery %% kind:confirm
+    确认恢复 --> 确认恢复结果: 请问问题现在解决了吗？ %% step:diag-confirm-recovery %% kind:human
     state 确认恢复结果 <<choice>>
-    确认恢复结果 --> 已解决: 用户确认已恢复 %% step:diag-resolved %% kind:message %% guard:user.confirm
+    确认恢复结果 --> 已解决: 用户确认已恢复 %% step:diag-resolved %% kind:llm %% guard:user.confirm
     确认恢复结果 --> 升级处理: 用户确认仍未恢复 %% guard:user.cancel
 
     用户自查 --> 等待自查结果: 逐步引导（每轮一个动作）：确认飞行模式→插拔SIM卡→重启手机

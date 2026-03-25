@@ -59,21 +59,21 @@ metadata:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 接收请求: 用户要求退订业务、发现不明扣费或声称误订 %% step:receive-request %% kind:message
+    [*] --> 接收请求: 用户要求退订业务、发现不明扣费或声称误订 %% step:receive-request %% kind:llm
 
     state 请求分类 <<choice>>
     接收请求 --> 请求分类
     请求分类 --> 标准退订入口: 标准退订请求 %% branch:standard_cancel %% guard:always
     请求分类 --> 未知扣费入口: 未知扣费投诉 %% branch:unknown_charge %% guard:always
     请求分类 --> 误订退款入口: 误订退款请求 %% branch:accidental_sub %% guard:always
-    请求分类 --> 告知主套餐办理方式: 主套餐退订 %% branch:store_visit %% step:notify-main-plan %% kind:message %% guard:always
+    请求分类 --> 告知主套餐办理方式: 主套餐退订 %% branch:store_visit %% step:notify-main-plan %% kind:llm %% guard:always
 
     %% S7 — 全局升级出口
     用户要求转人工 --> 转接10086: 引导拨打10086 %% step:user-request-human %% kind:human
     转接10086 --> [*]
 
     %% S3 — 主套餐退订请求（更友好地解释）
-    告知主套餐办理方式 --> 判断用户真实意图: 告知"主套餐涉及实名与号码状态核验，需要线下办理" %% step:clarify-intent %% kind:message
+    告知主套餐办理方式 --> 判断用户真实意图: 告知"主套餐涉及实名与号码状态核验，需要线下办理" %% step:clarify-intent %% kind:llm
     state 主套餐意图 <<choice>>
     判断用户真实意图 --> 主套餐意图
     主套餐意图 --> 引导前往营业厅: 确实要销户/退订主套餐 → 引导携带身份证前往营业厅 %% step:guide-store-visit %% kind:end %% guard:always
@@ -90,8 +90,8 @@ stateDiagram-v2
         提示查询稍后重试 --> [*]: 提示稍后重试或拨打10086
 
         state 目标是否明确 <<choice>>
-        目标是否明确 --> 说明退订影响: 用户已明确 service_id（括号标注或直接说出） %% step:std-explain-impact %% kind:confirm %% guard:always
-        目标是否明确 --> 列出业务供选择: 未明确，列出已订业务供用户选择 %% step:std-list-services %% kind:message %% guard:always
+        目标是否明确 --> 说明退订影响: 用户已明确 service_id（括号标注或直接说出） %% step:std-explain-impact %% kind:human %% guard:always
+        目标是否明确 --> 列出业务供选择: 未明确，列出已订业务供用户选择 %% step:std-list-services %% kind:llm %% guard:always
         目标是否明确 --> 告知无可退订业务: 无增值业务 %% step:std-no-service %% kind:end %% guard:tool.no_data
         告知无可退订业务 --> [*]: 告知当前无可退订的增值业务
 
@@ -101,7 +101,7 @@ stateDiagram-v2
         用户选择 --> 升级核查: 用户否认订购（"我没订过这个"） %% step:std-escalate-check %% kind:end %% guard:always
         升级核查 --> [*]: 升级 hotline/security 核查
 
-        说明退订影响 --> 执行退订: 告知本月仍收费，次月1日生效 %% ref:cancellation-policy.md#标准退订指引 %% step:std-confirm-cancel %% kind:confirm
+        说明退订影响 --> 执行退订: 告知本月仍收费，次月1日生效 %% ref:cancellation-policy.md#标准退订指引 %% step:std-confirm-cancel %% kind:human
         执行退订 --> 反馈退订结果: cancel_service(phone, service_id) %% tool:cancel_service %% step:std-cancel-service %% kind:tool
         state 执行退订结果 <<choice>>
         反馈退订结果 --> 执行退订结果
@@ -110,12 +110,12 @@ stateDiagram-v2
         提示退订稍后重试 --> [*]: 提示稍后重试或拨打10086
 
         state 退订结果 <<choice>>
-        退订结果 --> 退订成功: 告知业务名 + 生效时间 %% ref:assets/cancel-result.md %% step:std-cancel-success %% kind:message %% guard:tool.success
+        退订结果 --> 退订成功: 告知业务名 + 生效时间 %% ref:assets/cancel-result.md %% step:std-cancel-success %% kind:llm %% guard:tool.success
         退订结果 --> 退订失败: 说明失败原因，引导升级 %% step:std-cancel-failed %% kind:end %% guard:tool.error
 
         state 是否还有待退订业务 <<choice>>
         退订成功 --> 是否还有待退订业务
-        是否还有待退订业务 --> 列出剩余业务供选择: 用户还有其他待退订业务 %% ref:assets/cancel-result.md#还有待退订业务时（追加） %% step:std-list-remaining %% kind:message %% guard:always
+        是否还有待退订业务 --> 列出剩余业务供选择: 用户还有其他待退订业务 %% ref:assets/cancel-result.md#还有待退订业务时（追加） %% step:std-list-remaining %% kind:llm %% guard:always
         是否还有待退订业务 --> 全部退订完成: 没有更多待退订业务或用户不再需要 %% ref:assets/cancel-result.md#全部退订完成 %% step:std-all-done %% kind:end %% guard:always
 
         state 用户选择下一个 <<choice>>
@@ -128,15 +128,15 @@ stateDiagram-v2
         未知扣费入口 --> 查询账单明细: query_bill(phone, month) %% tool:query_bill %% ref:cancellation-policy.md#未知扣费处理指引 %% step:unk-query-bill %% kind:tool
         state 查询账单结果 <<choice>>
         查询账单明细 --> 查询账单结果
-        查询账单结果 --> 定位异常项: 成功 %% step:unk-locate-charge %% kind:message %% guard:tool.success
+        查询账单结果 --> 定位异常项: 成功 %% step:unk-locate-charge %% kind:llm %% guard:tool.success
         查询账单结果 --> 提示账单查询稍后重试: 系统异常 %% step:unk-query-retry %% kind:end %% guard:tool.error
         提示账单查询稍后重试 --> [*]: 提示稍后重试或拨打10086
 
-        定位异常项 --> 先解释费用来源: 逐项解释每笔费用的来源和用途，帮助用户理解 %% step:unk-explain-charge %% kind:message
-        先解释费用来源 --> 判断是否增值业务: 解释完毕后，询问用户是否仍需退订 %% step:unk-check-vas %% kind:message
+        定位异常项 --> 先解释费用来源: 逐项解释每笔费用的来源和用途，帮助用户理解 %% step:unk-explain-charge %% kind:llm
+        先解释费用来源 --> 判断是否增值业务: 解释完毕后，询问用户是否仍需退订 %% step:unk-check-vas %% kind:llm
         判断是否增值业务 --> 是否可退: 确认异常项是否为增值业务
         state 是否可退 <<choice>>
-        是否可退 --> 说明扣费退订影响: 可退订 %% ref:cancellation-policy.md#未知扣费处理指引 %% step:unk-explain-impact %% kind:confirm %% guard:always
+        是否可退 --> 说明扣费退订影响: 可退订 %% ref:cancellation-policy.md#未知扣费处理指引 %% step:unk-explain-impact %% kind:human %% guard:always
         是否可退 --> 引导升级渠道: 不可退订，引导拨打10086或前往营业厅 %% step:unk-escalate %% kind:end %% guard:always
 
         state 用户确认扣费退订 <<choice>>
@@ -147,7 +147,7 @@ stateDiagram-v2
 
         state 执行扣费退订结果 <<choice>>
         执行退订_扣费 --> 执行扣费退订结果
-        执行扣费退订结果 --> 反馈扣费结果: 成功 %% step:unk-cancel-result %% kind:message %% guard:tool.success
+        执行扣费退订结果 --> 反馈扣费结果: 成功 %% step:unk-cancel-result %% kind:llm %% guard:tool.success
         执行扣费退订结果 --> 提示扣费退订稍后重试: 系统异常 %% step:unk-cancel-retry %% kind:end %% guard:tool.error
         提示扣费退订稍后重试 --> [*]: 提示稍后重试或拨打10086
 
@@ -163,17 +163,17 @@ stateDiagram-v2
         提示误订查询稍后重试 --> [*]: 提示稍后重试或拨打10086
 
         state 是否24小时内 <<choice>>
-        是否24小时内 --> 符合退款条件: 订购24小时内，符合误订退款规则 %% ref:cancellation-policy.md#误订退款指引 %% step:acc-refund-eligible %% kind:message %% guard:always
-        是否24小时内 --> 次月生效处理: 订购超过24小时 %% step:acc-next-month %% kind:message %% guard:always
+        是否24小时内 --> 符合退款条件: 订购24小时内，符合误订退款规则 %% ref:cancellation-policy.md#误订退款指引 %% step:acc-refund-eligible %% kind:llm %% guard:always
+        是否24小时内 --> 次月生效处理: 订购超过24小时 %% step:acc-next-month %% kind:llm %% guard:always
         符合退款条件 --> 执行退订_误订: cancel_service(phone, service_id) 退订并按规则申请退款 %% tool:cancel_service %% step:acc-cancel-refund %% kind:tool
         state 执行误订退订结果 <<choice>>
         执行退订_误订 --> 执行误订退订结果
-        执行误订退订结果 --> 反馈误订结果: 成功 %% step:acc-refund-result %% kind:message %% guard:tool.success
+        执行误订退订结果 --> 反馈误订结果: 成功 %% step:acc-refund-result %% kind:llm %% guard:tool.success
         执行误订退订结果 --> 提示误订退订稍后重试: 系统异常 %% step:acc-cancel-retry %% kind:end %% guard:tool.error
         提示误订退订稍后重试 --> [*]: 提示稍后重试或拨打10086
 
         反馈误订结果 --> 反馈误订完成: 已退订成功，退款按规则处理（符合条件时原路退回，预计1-3个工作日到账，需人工审核确认） %% step:acc-refund-done %% kind:end
-        次月生效处理 --> 说明无法退款: 本月费用不退，退订次月生效 %% step:acc-no-refund %% kind:message
+        次月生效处理 --> 说明无法退款: 本月费用不退，退订次月生效 %% step:acc-no-refund %% kind:llm
         state 用户是否接受 <<choice>>
         说明无法退款 --> 用户是否接受
         用户是否接受 --> 执行次月退订: 接受，cancel_service(phone, service_id) %% tool:cancel_service %% step:acc-cancel-next-month %% kind:tool %% guard:user.confirm
@@ -181,7 +181,7 @@ stateDiagram-v2
 
         state 执行次月退订结果 <<choice>>
         执行次月退订 --> 执行次月退订结果
-        执行次月退订结果 --> 反馈次月结果: 成功 %% step:acc-next-month-result %% kind:message %% guard:tool.success
+        执行次月退订结果 --> 反馈次月结果: 成功 %% step:acc-next-month-result %% kind:llm %% guard:tool.success
         执行次月退订结果 --> 提示次月退订稍后重试: 系统异常 %% step:acc-next-month-retry %% kind:end %% guard:tool.error
         提示次月退订稍后重试 --> [*]: 提示稍后重试或拨打10086
 

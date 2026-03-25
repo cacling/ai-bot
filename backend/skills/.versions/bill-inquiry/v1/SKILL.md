@@ -111,7 +111,7 @@ metadata:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 接收请求: 用户咨询账单、欠费、发票相关问题 %% step:bill-receive-request %% kind:message
+    [*] --> 接收请求: 用户咨询账单、欠费、发票相关问题 %% step:bill-receive-request %% kind:llm
 
     state 问题分类 <<choice>>
     接收请求 --> 问题分类
@@ -155,7 +155,7 @@ stateDiagram-v2
         欠费类型判断 --> 预销号提示: 预销号（90-180天） %% branch:store_visit %% guard:always
         欠费类型判断 --> 号码已回收提示: 号码已回收（>180天） %% guard:always
 
-        说明欠费 --> 引导充值: 告知欠费金额和月份 %% ref:billing-rules.md#欠费处理指引 %% step:bill-arrears-explain %% kind:message
+        说明欠费 --> 引导充值: 告知欠费金额和月份 %% ref:billing-rules.md#欠费处理指引 %% step:bill-arrears-explain %% kind:llm
         引导充值 --> [*]: 告知充值方式（APP/官网/营业厅），说明充值后30分钟内自动恢复 %% step:bill-arrears-recharge %% kind:end
 
         预销号提示 --> [*]: 告知需前往营业厅恢复 %% step:bill-arrears-precancel %% kind:end
@@ -163,19 +163,19 @@ stateDiagram-v2
     }
 
     state 发票申请流程 {
-        发票申请 --> 确认缴清: 确认已缴清账单 %% ref:billing-rules.md#发票申请指引 %% step:bill-invoice-check-paid %% kind:confirm
+        发票申请 --> 确认缴清: 确认已缴清账单 %% ref:billing-rules.md#发票申请指引 %% step:bill-invoice-check-paid %% kind:human
         state 是否缴清 <<choice>>
         确认缴清 --> 是否缴清
         是否缴清 --> 引导开票: 已缴清 %% guard:user.confirm
-        是否缴清 --> 引导先缴费: 未缴清 %% step:bill-invoice-pay-first %% kind:message %% guard:user.cancel
+        是否缴清 --> 引导先缴费: 未缴清 %% step:bill-invoice-pay-first %% kind:llm %% guard:user.cancel
         引导先缴费 --> 引导开票: 缴费完成
 
         state 发票类型 <<choice>>
-        引导开票 --> 发票类型 %% step:bill-invoice-guide %% kind:message
+        引导开票 --> 发票类型 %% step:bill-invoice-guide %% kind:llm
         发票类型 --> 个人发票: 个人用户 %% guard:always
         发票类型 --> 企业发票: 企业用户 %% guard:always
-        个人发票 --> 说明时效: 普通发票，APP自助申请 %% step:bill-invoice-personal %% kind:message
-        企业发票 --> 说明时效: 收集税号等信息后申请专票 %% step:bill-invoice-enterprise %% kind:message
+        个人发票 --> 说明时效: 普通发票，APP自助申请 %% step:bill-invoice-personal %% kind:llm
+        企业发票 --> 说明时效: 收集税号等信息后申请专票 %% step:bill-invoice-enterprise %% kind:llm
         说明时效 --> [*]: 说明发票开具时效 %% step:bill-invoice-done %% kind:end
     }
 
@@ -195,21 +195,21 @@ stateDiagram-v2
         异常原因判定 --> 漫游费用说明: primary_cause=roaming %% ref:billing-rules.md#通话计费规则 %% guard:always
         异常原因判定 --> 无法定位: primary_cause=unknown %% guard:always
 
-        解释超额 --> 超额反馈: 建议升级套餐或购买加油包 %% step:bill-anomaly-overage %% kind:message
+        解释超额 --> 超额反馈: 建议升级套餐或购买加油包 %% step:bill-anomaly-overage %% kind:llm
         state 超额反馈 <<choice>>
         超额反馈 --> 超额用户认可: 用户认可 %% step:bill-anomaly-overage-ok %% kind:end %% guard:user.confirm
         超额反馈 --> 升级投诉1: 用户不认可 %% guard:user.cancel
         超额用户认可 --> [*]
         升级投诉1 --> [*]: 升级投诉hotline %% step:bill-anomaly-overage-escalate %% kind:end
 
-        定位增值扣费 --> 增值反馈: 引导退订或说明业务来源 %% step:bill-anomaly-vas %% kind:message
+        定位增值扣费 --> 增值反馈: 引导退订或说明业务来源 %% step:bill-anomaly-vas %% kind:llm
         state 增值反馈 <<choice>>
         增值反馈 --> 增值用户认可: 用户认可 %% step:bill-anomaly-vas-ok %% kind:end %% guard:user.confirm
         增值反馈 --> 升级投诉2: 用户不认可 %% guard:user.cancel
         增值用户认可 --> [*]
         升级投诉2 --> [*]: 升级投诉hotline %% step:bill-anomaly-vas-escalate %% kind:end
 
-        漫游费用说明 --> 漫游反馈: 解释漫游规则，建议升级含漫游套餐 %% step:bill-anomaly-roaming %% kind:message
+        漫游费用说明 --> 漫游反馈: 解释漫游规则，建议升级含漫游套餐 %% step:bill-anomaly-roaming %% kind:llm
         state 漫游反馈 <<choice>>
         漫游反馈 --> 漫游用户认可: 用户认可 %% step:bill-anomaly-roaming-ok %% kind:end %% guard:user.confirm
         漫游反馈 --> 升级投诉3: 用户不认可 %% guard:user.cancel

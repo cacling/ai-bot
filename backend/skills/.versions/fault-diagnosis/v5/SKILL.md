@@ -122,12 +122,12 @@ metadata:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 接收问题: 客户反映网络问题（无信号/网速慢/掉线/上不了网） %% step:diag-receive %% kind:message
-    接收问题 --> 安抚与采集: 安抚客户，询问具体故障现象 %% step:diag-comfort %% kind:message
+    [*] --> 接收问题: 客户反映网络问题（无信号/网速慢/掉线/上不了网） %% step:diag-receive %% kind:llm
+    接收问题 --> 安抚与采集: 安抚客户，询问具体故障现象 %% step:diag-comfort %% kind:llm
 
     state 已尝试自查 <<choice>>
     安抚与采集 --> 已尝试自查: 确认用户是否已做过基本自查
-    已尝试自查 --> 判断故障类型: 用户未尝试自查，继续正常流程 %% step:diag-determine-type %% kind:message %% guard:always
+    已尝试自查 --> 判断故障类型: 用户未尝试自查，继续正常流程 %% step:diag-determine-type %% kind:llm %% guard:always
     已尝试自查 --> 系统诊断: 用户声明已完成自查，直接进入系统诊断 %% guard:always
 
     判断故障类型 --> 系统诊断: 确定 issue_type（no_signal/slow_data/call_drop/no_network）
@@ -141,12 +141,12 @@ stateDiagram-v2
     转接人工 --> [*] %% kind:end
 
     state 分析诊断结果 <<choice>>
-    分析诊断结果 --> 账号停机: error — 账号欠费 %% branch:account_error %% step:diag-account-suspend %% kind:message %% guard:always
-    分析诊断结果 --> 流量耗尽: error — 流量用完 %% branch:data_exhausted %% step:diag-data-exhausted %% kind:message %% guard:always
-    分析诊断结果 --> APN异常: warning — APN 配置问题 %% branch:apn_warning %% step:diag-apn-issue %% kind:message %% guard:always
-    分析诊断结果 --> 基站异常: warning或error — 基站信号问题 %% branch:signal_weak %% step:diag-signal-weak %% kind:message %% guard:always
-    分析诊断结果 --> 网络拥塞: warning — 高峰期拥塞 %% branch:congestion %% step:diag-congestion %% kind:message %% guard:always
-    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok %% step:diag-self-check %% kind:message %% guard:always
+    分析诊断结果 --> 账号停机: error — 账号欠费 %% branch:account_error %% step:diag-account-suspend %% kind:llm %% guard:always
+    分析诊断结果 --> 流量耗尽: error — 流量用完 %% branch:data_exhausted %% step:diag-data-exhausted %% kind:llm %% guard:always
+    分析诊断结果 --> APN异常: warning — APN 配置问题 %% branch:apn_warning %% step:diag-apn-issue %% kind:llm %% guard:always
+    分析诊断结果 --> 基站异常: warning或error — 基站信号问题 %% branch:signal_weak %% step:diag-signal-weak %% kind:llm %% guard:always
+    分析诊断结果 --> 网络拥塞: warning — 高峰期拥塞 %% branch:congestion %% step:diag-congestion %% kind:llm %% guard:always
+    分析诊断结果 --> 用户自查: ok — 所有项正常 %% branch:all_ok %% step:diag-self-check %% kind:llm %% guard:always
 
     账号停机 --> 确认恢复: 告知充值方式及恢复时间
     流量耗尽 --> 确认恢复: 推荐加油包或升级套餐
@@ -157,10 +157,10 @@ stateDiagram-v2
     等待APN操作结果 --> 确认恢复: 问题解决 %% guard:user.confirm
     等待APN操作结果 --> 升级处理: APN重置后问题仍未解决 %% guard:user.cancel
 
-    基站异常 --> 工单已提交: 告知信号弱，建议换位置；提交基站覆盖投诉工单 %% step:diag-ticket-submitted %% kind:message
-    工单已提交 --> 已解决: 告知工单号及预计处理时效 %% step:diag-resolved %% kind:message
+    基站异常 --> 工单已提交: 告知信号弱，建议换位置；提交基站覆盖投诉工单 %% step:diag-ticket-submitted %% kind:llm
+    工单已提交 --> 已解决: 告知工单号及预计处理时效 %% step:diag-resolved %% kind:llm
 
-    确认恢复 --> 确认恢复结果: 请问问题现在解决了吗？ %% step:diag-confirm-recovery %% kind:confirm
+    确认恢复 --> 确认恢复结果: 请问问题现在解决了吗？ %% step:diag-confirm-recovery %% kind:human
     state 确认恢复结果 <<choice>>
     确认恢复结果 --> 已解决: 用户确认已恢复 %% guard:user.confirm
     确认恢复结果 --> 升级处理: 用户确认仍未恢复 %% guard:user.cancel

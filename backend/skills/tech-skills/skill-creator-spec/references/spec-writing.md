@@ -100,7 +100,7 @@ stateDiagram-v2
 | 注释 | 语义 | 示例 |
 |------|------|------|
 | `%% step:<id>` | 节点稳定标识（kebab-case） | `%% step:query-subscriber` |
-| `%% kind:<type>` | 节点类型 | `%% kind:tool` / `kind:confirm` / `kind:ref` / `kind:human` / `kind:message` / `kind:end` |
+| `%% kind:<type>` | 节点类型 | `%% kind:tool` / `kind:llm` / `kind:human` / `kind:switch` / `kind:guard` / `kind:end` / `kind:if` / `kind:start` |
 | `%% guard:<condition>` | 转移条件（结构化） | `%% guard:tool.success` / `guard:tool.error` / `guard:user.confirm` / `guard:user.cancel` / `guard:always` |
 | `%% output:<key>` | 工具返回值引用键名 | `%% output:subscriber_info` |
 
@@ -108,7 +108,13 @@ stateDiagram-v2
 - 注释写在转移行或状态行末尾，和 `%% tool:` 一样
 - 转移行上的注释关联到**目标**节点（如 `A --> B %% tool:xxx` 表示 B 执行查询）
 - `guard` 只写在转移行（`-->`）上
-- `kind:confirm` 的节点必须有 `user.confirm` 和 `user.cancel` 两条出边
+- `kind:llm` — LLM 文本生成（替代旧的 `kind:message` 和 `kind:ref`）
+- `kind:human` — 人工确认或转人工（替代旧的 `kind:confirm`）
+- `kind:switch` — 多分支选择（由 `<<choice>>` 自动推断，通常不需要显式标注）
+- `kind:guard` — 合规/风控校验节点（新增）
+- `kind:if` — 二分支条件节点（新增）
+- `kind:start` — 显式起始节点（新增，当前大多由 `[*]` 隐含）
+- `kind:human` 的节点必须有 `user.confirm` 和 `user.cancel` 两条出边
 - 编译器会从中文标签推断 guard（如"成功"→`tool.success`），但显式标注更可靠
 
 **其他约定：**

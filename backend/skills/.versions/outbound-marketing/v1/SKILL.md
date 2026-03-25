@@ -54,18 +54,18 @@ metadata:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 任务下发: 营销任务平台下发客户信息、目标套餐、话术模板 %% step:mkt-task-dispatch %% kind:message
+    [*] --> 任务下发: 营销任务平台下发客户信息、目标套餐、话术模板 %% step:mkt-task-dispatch %% kind:llm
 
     %% OM0 — 拨前门控（PRE-DIAL GATE）
     任务下发 --> 合规检查: 检查allowed_hours、重试次数、DND名单 %% step:mkt-compliance-check %% kind:tool
-    state 合规结果 <<choice>> %% kind:choice
+    state 合规结果 <<choice>>
     合规检查 --> 合规结果
     合规结果 --> 呼叫中: 时段合规、未超max_retry、非DND客户 %% guard:tool.success
     合规结果 --> 任务延后: 当前时段不允许、已达最大重试次数或DND客户 %% step:mkt-task-defer %% kind:end %% guard:tool.error
     任务延后 --> [*]: 任务入队等待下次窗口或终止 %% kind:end
 
     %% OM1 — 呼叫结果加语音信箱分支
-    state 呼叫结果 <<choice>> %% kind:choice
+    state 呼叫结果 <<choice>>
     呼叫中 --> 呼叫结果 %% step:mkt-dial %% kind:tool
     呼叫结果 --> 开场白: 客户接听 %% guard:tool.success
     呼叫结果 --> 记录未接: 未接通/忙线 %% tool:record_marketing_result %% step:mkt-record-noanswer %% kind:tool %% guard:tool.error
@@ -75,15 +75,15 @@ stateDiagram-v2
 
     %% OM2 — 身份确认失败分支
     %% ref:marketing-guide.md#开场话术要点
-    开场白 --> 确认身份: 自我介绍 + 告知录音 + 用已知姓名确认"请问您是XX先生/女士吗？"（客户信息已在任务中注入，不需要客户提供姓名/证件号） %% step:mkt-opening %% kind:message
-    state 身份结果 <<choice>> %% kind:choice
-    确认身份 --> 身份结果 %% step:mkt-confirm-identity %% kind:confirm
+    开场白 --> 确认身份: 自我介绍 + 告知录音 + 用已知姓名确认"请问您是XX先生/女士吗？"（客户信息已在任务中注入，不需要客户提供姓名/证件号） %% step:mkt-opening %% kind:llm
+    state 身份结果 <<choice>>
+    确认身份 --> 身份结果 %% step:mkt-confirm-identity %% kind:human
     身份结果 --> 意愿探测: 确认是本人，简述来电目的，询问"方便占用您30秒了解一下吗？" %% guard:user.confirm
     身份结果 --> 记录非本人: 非本人接听 %% step:mkt-record-wrongnumber %% kind:tool %% guard:user.cancel
     记录非本人 --> [*]: record_marketing_result(wrong_number)，礼貌结束 %% kind:end
 
-    state 初始意愿 <<choice>> %% kind:choice
-    意愿探测 --> 初始意愿 %% step:mkt-willingness-probe %% kind:message
+    state 初始意愿 <<choice>>
+    意愿探测 --> 初始意愿 %% step:mkt-willingness-probe %% kind:llm
     初始意愿 --> 待回访: 客户没时间，询问回访时间 %% guard:always
     初始意愿 --> 拒绝: 明确拒绝（一次拒绝即收口，不再多轮异议处理） %% guard:user.cancel
     初始意愿 --> 方案介绍: 同意继续听 %% guard:user.confirm
@@ -91,9 +91,9 @@ stateDiagram-v2
     初始意愿 --> DND请求: 客户明确要求停止拨打/删除营销名单 %% guard:always
 
     %% ref:marketing-guide.md#当前可推介套餐
-    方案介绍 --> 客户反馈意向: 了解痛点 + 介绍目标套餐核心卖点（≤2个） %% step:mkt-plan-intro %% kind:message
+    方案介绍 --> 客户反馈意向: 了解痛点 + 介绍目标套餐核心卖点（≤2个） %% step:mkt-plan-intro %% kind:llm
 
-    state 意向判断 <<choice>> %% kind:choice
+    state 意向判断 <<choice>>
     客户反馈意向 --> 意向判断
     意向判断 --> 异议处理: 客户有异议（价格、合约、够用等） %% guard:always
     意向判断 --> 同意办理: 客户同意 %% guard:user.confirm
@@ -101,42 +101,42 @@ stateDiagram-v2
     意向判断 --> 转人工: 客户要求转人工 %% guard:always
     %% OM4 — 客户要换推方案
     意向判断 --> 感兴趣其他套餐: 客户对其他套餐感兴趣 %% guard:always
-    感兴趣其他套餐 --> 方案介绍: 切换target_plan，重新介绍 %% ref:marketing-guide.md#当前可推介套餐 %% step:mkt-switch-plan %% kind:message
+    感兴趣其他套餐 --> 方案介绍: 切换target_plan，重新介绍 %% ref:marketing-guide.md#当前可推介套餐 %% step:mkt-switch-plan %% kind:llm
 
     %% OM3 — 异议→犹豫 第三分支
     %% ref:marketing-guide.md#异议处理要点
-    state 异议结果 <<choice>> %% kind:choice
-    异议处理 --> 异议结果: 针对性回应后客户再次表态 %% step:mkt-handle-objection %% kind:message
+    state 异议结果 <<choice>>
+    异议处理 --> 异议结果: 针对性回应后客户再次表态 %% step:mkt-handle-objection %% kind:llm
     异议结果 --> 拒绝: 仍拒绝 %% guard:user.cancel
     异议结果 --> 同意办理: 转为感兴趣，引导确认办理方式 %% guard:user.confirm
     异议结果 --> 仍在犹豫: 客户未明确表态，需要再考虑 %% guard:always
-    仍在犹豫 --> 待回访 %% step:mkt-still-hesitant %% kind:message
+    仍在犹豫 --> 待回访 %% step:mkt-still-hesitant %% kind:llm
 
     %% OM7 — 用户同意后确认（注意：系统无直接开通工具，只能引导办理）
     %% ref:marketing-guide.md#促成要点
-    同意办理 --> 确认办理意愿: 再次确认是否办理 %% ref:marketing-guide.md#促成要点 %% step:mkt-confirm-order %% kind:confirm
-    state 最终确认 <<choice>> %% kind:choice
+    同意办理 --> 确认办理意愿: 再次确认是否办理 %% ref:marketing-guide.md#促成要点 %% step:mkt-confirm-order %% kind:human
+    state 最终确认 <<choice>>
     确认办理意愿 --> 最终确认
     最终确认 --> 发送套餐短信: 确认办理，发送套餐详情供用户自助开通 %% guard:user.confirm
     最终确认 --> 记录拒绝: 用户反悔，改为不办理 %% tool:record_marketing_result %% step:mkt-record-regret %% kind:tool %% guard:user.cancel
 
     %% OM6 — SMS 发送失败（套餐短信）
     发送套餐短信 --> SMS结果_1: send_followup_sms(plan_detail) %% tool:send_followup_sms %% step:mkt-send-plan-sms %% kind:tool
-    state SMS结果_1 <<choice>> %% kind:choice
+    state SMS结果_1 <<choice>>
     SMS结果_1 --> 引导办理方式: 发送成功 %% guard:tool.success
-    SMS结果_1 --> 告知替代方式_1: 发送失败，告知可通过APP自助查看 %% step:mkt-sms1-fallback %% kind:message %% guard:tool.error
+    SMS结果_1 --> 告知替代方式_1: 发送失败，告知可通过APP自助查看 %% step:mkt-sms1-fallback %% kind:llm %% guard:tool.error
     告知替代方式_1 --> 引导办理方式 %% guard:always
-    引导办理方式 --> 记录成交: 引导用户通过APP自助办理或联系人工坐席完成开通 %% step:mkt-guide-selfservice %% kind:message
+    引导办理方式 --> 记录成交: 引导用户通过APP自助办理或联系人工坐席完成开通 %% step:mkt-guide-selfservice %% kind:llm
     记录成交 --> [*]: record_marketing_result(converted)，感谢结束 %% tool:record_marketing_result %% step:mkt-record-converted %% kind:end
 
-    需要考虑 --> 待回访: 确认回访时间 %% step:mkt-ask-callback-time %% kind:message
+    需要考虑 --> 待回访: 确认回访时间 %% step:mkt-ask-callback-time %% kind:llm
 
     %% OM6 — SMS 发送失败（回访短信）
     待回访 --> 发送回访短信: send_followup_sms(plan_detail) %% tool:send_followup_sms %% step:mkt-send-callback-sms %% kind:tool
     发送回访短信 --> SMS结果_2
-    state SMS结果_2 <<choice>> %% kind:choice
+    state SMS结果_2 <<choice>>
     SMS结果_2 --> 记录待回访: 发送成功 %% guard:tool.success
-    SMS结果_2 --> 告知替代方式_2: 发送失败，告知可致电10086查询 %% step:mkt-sms2-fallback %% kind:message %% guard:tool.error
+    SMS结果_2 --> 告知替代方式_2: 发送失败，告知可致电10086查询 %% step:mkt-sms2-fallback %% kind:llm %% guard:tool.error
     告知替代方式_2 --> 记录待回访 %% guard:always
     记录待回访 --> [*]: record_marketing_result(callback)，礼貌结束 %% tool:record_marketing_result %% step:mkt-record-callback %% kind:end
 
