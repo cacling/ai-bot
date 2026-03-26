@@ -58,6 +58,18 @@
     "overdue_days": {
       "type": "integer"
     },
+    "plan_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "plan_type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "plan_fee": {
       "type": "number"
     },
