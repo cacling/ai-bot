@@ -9,7 +9,6 @@
 
 import { db, sqlite } from './index';
 import { eq } from 'drizzle-orm';
-import { seededE2ECases } from '../../tests/apitest/usecase';
 import { seedReplyCopilotKnowledge } from './seed-reply-copilot';
 import {
   bills,
@@ -736,9 +735,8 @@ async function seed() {
     { id: 'M003', label_zh: 'M003 · 赵强 · 国际漫游出行季活动 · ¥98/月', label_en: 'M003 · Zhao Qiang · Roaming Season Campaign · ¥98/mo', category: 'outbound_marketing', tag_zh: '商务漫游', tag_en: 'Business Roaming', tag_color: 'bg-violet-100 text-violet-600', sort_order: 2, context: JSON.stringify({ phone: '13900000006', name: '赵强', gender: 'male', plan: '5G商务套餐 159元', status: 'active', task_type: 'marketing', household_id: 'HH-003', outbound_task_id: 'M003' }) },
   ]).run();
 
-  console.log('[seed] 写入 E2E 测试用例数据...');
+  console.log('[seed] 跳过 E2E 测试用例数据（usecase 模块已移除）');
   db.delete(testCases).run();
-  db.insert(testCases).values(seededE2ECases).run();
 
   // ── 7a. callback_tasks ─────────────────────────────────────────────────────
   console.log('[seed] 写入 callback_tasks 历史数据...');
