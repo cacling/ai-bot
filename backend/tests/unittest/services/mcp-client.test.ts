@@ -29,4 +29,19 @@ describe('mcp-client — callMcpTool', () => {
     const result = await callMcpTool('test-session-3', 'test', {});
     expect(result.success).toBe(false);
   });
+
+  test('accepts optional channel parameter', async () => {
+    const voiceResult = await callMcpTool('test-session-4', 'test', {}, 'voice');
+    expect(typeof voiceResult.success).toBe('boolean');
+
+    const outboundResult = await callMcpTool('test-session-5', 'test', {}, 'outbound');
+    expect(typeof outboundResult.success).toBe('boolean');
+  });
+
+  test('routes mocked tool through runtime', async () => {
+    // apply_service_suspension is mocked in DB
+    const result = await callMcpTool('test-session-6', 'apply_service_suspension', { phone: '13800000001' });
+    expect(result.success).toBe(true);
+    expect(result.text).toContain('success');
+  });
 });

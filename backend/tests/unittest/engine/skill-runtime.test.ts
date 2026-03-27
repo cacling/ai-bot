@@ -3,6 +3,8 @@ import { db } from '../../../src/db';
 import { skillInstances, skillInstanceEvents, sessions } from '../../../src/db/schema';
 import * as instanceStore from '../../../src/engine/skill-instance-store';
 import type { WorkflowSpec } from '../../../src/engine/skill-workflow-types';
+import { runSkillTurn } from '../../../src/engine/skill-runtime';
+import { ToolRuntime } from '../../../src/tool-runtime';
 
 const TEST_SESSION = 'runtime-test-session';
 
@@ -75,5 +77,55 @@ describe('SkillRuntime', () => {
     expect(events[4].event_type).toBe('user_confirm');
     expect(events[0].seq).toBe(1);
     expect(events[4].seq).toBe(5);
+  });
+});
+
+describe('runSkillTurn with optional ToolRuntime', () => {
+  const RUNTIME_SPEC: WorkflowSpec = {
+    skillId: 'runtime-test', version: 1,
+    startStepId: 'query',
+    steps: {
+      query: { id: 'query', label: 'Query', kind: 'tool', tool: 'apply_service_suspension', transitions: [{ target: 'done', guard: 'always' }] },
+      done: { id: 'done', label: 'Done', kind: 'end', transitions: [] },
+    },
+    terminalSteps: ['done'],
+  };
+
+  beforeEach(() => {
+    // Clean up instances for runtime test session
+    try {
+      const inst = instanceStore.findActiveInstance('runtime-test-session', 'runtime-test');
+      if (inst) instanceStore.finishInstance(inst.id, 'done');
+    } catch { /* no active instance */ }
+  });
+
+  test('accepts optional runtime parameter without breaking', async () => {
+    const runtime = new ToolRuntime();
+    // apply_service_suspension is mocked — runtime should handle it
+    const result = await runSkillTurn(
+      'runtime-test-session', '帮我停机',
+      RUNTIME_SPEC, {}, // empty mcpTools — runtime takes over
+      { phone: '13800000001', lang: 'zh', history: [] },
+      runtime,
+    );
+    expect(typeof result.text).toBe('string');
+    expect(typeof result.instanceId).toBe('string');
+    expect(result.toolRecords.length).toBeGreaterThanOrEqual(0);
+  });
+
+  test('works without runtime (backward compat)', async () => {
+    const mockTools = {
+      apply_service_suspension: {
+        execute: async () => ({ content: [{ type: 'text', text: '{"success":true}' }] }),
+      },
+    };
+    const result = await runSkillTurn(
+      'runtime-test-session-2', '帮我停机',
+      RUNTIME_SPEC, mockTools,
+      { phone: '13800000001', lang: 'zh', history: [] },
+      // no runtime parameter
+    );
+    expect(typeof result.text).toBe('string');
+    expect(result.toolRecords.length).toBeGreaterThanOrEqual(0);
   });
 });

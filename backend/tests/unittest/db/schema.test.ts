@@ -90,4 +90,17 @@ describe('schema — 表定义完整性', () => {
   test('kmAuditLogs 表已定义', () => {
     expect(schema.kmAuditLogs).toBeDefined();
   });
+
+  // Tool Runtime 表
+  test('executionRecords 表已定义', () => {
+    expect(schema.executionRecords).toBeDefined();
+  });
+
+  test('connectors 表已定义', () => {
+    expect(schema.connectors).toBeDefined();
+  });
+
+  test('toolImplementations 表已定义', () => {
+    expect(schema.toolImplementations).toBeDefined();
+  });
 });
