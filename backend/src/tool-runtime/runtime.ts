@@ -4,6 +4,8 @@ import { Pipeline } from './pipeline';
 import { RemoteMcpAdapter } from './adapters/remote-mcp-adapter';
 import { MockAdapter } from './adapters/mock-adapter';
 import { ApiAdapter } from './adapters/api-adapter';
+import { DbAdapter } from './adapters/db-adapter';
+import { ScriptAdapter } from './adapters/script-adapter';
 
 export class ToolRuntime {
   private registry: ToolRegistry;
@@ -20,6 +22,8 @@ export class ToolRuntime {
       remote_mcp: this.remoteMcpAdapter,
       mock: new MockAdapter(),
       api: new ApiAdapter(),
+      db: new DbAdapter(),
+      script: new ScriptAdapter(),
     };
     this.pipeline = new Pipeline(this.registry, this.adapters, this.policies);
   }

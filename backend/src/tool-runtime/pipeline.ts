@@ -176,5 +176,35 @@ export class Pipeline {
       latencyMs: result.latencyMs,
       trace: traceId,
     });
+
+    // Async fire-and-forget: persist execution record
+    this.persistRecord(request, result, traceId).catch(() => {});
+  }
+
+  private async persistRecord(request: ToolRuntimeRequest, result: ToolRuntimeResult, traceId: string): Promise<void> {
+    try {
+      const { db } = await import('../db');
+      const { executionRecords } = await import('../db/schema');
+      const { randomUUID } = await import('crypto');
+
+      await db.insert(executionRecords).values({
+        id: randomUUID(),
+        trace_id: traceId,
+        tool_name: request.toolName,
+        channel: request.channel,
+        adapter_type: result.source,
+        session_id: request.sessionId,
+        user_phone: request.userPhone ?? null,
+        skill_name: request.activeSkillName ?? null,
+        success: result.success,
+        has_data: result.hasData,
+        error_code: result.errorCode ?? null,
+        latency_ms: result.latencyMs,
+        input_json: JSON.stringify(request.args).slice(0, 2000),
+        output_preview: result.rawText.slice(0, 1000),
+      });
+    } catch {
+      // Non-critical: don't let audit failure break tool execution
+    }
   }
 }

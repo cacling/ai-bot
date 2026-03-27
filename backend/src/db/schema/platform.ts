@@ -37,4 +37,5 @@ export {
   skillWorkflowSpecs,
   skillInstances,
   skillInstanceEvents,
+  executionRecords,
 } from '../../../../packages/shared-db/src/schema/platform';
