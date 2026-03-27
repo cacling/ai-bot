@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeExecutionResult } from '../types/execution';
 import type { ToolNodeConfig } from '../types/node-configs';
-import { executeTool, buildToolArgs } from '../../engine/skill-tool-executor';
+import { executeTool, executeToolViaRuntime, buildToolArgs } from '../../engine/skill-tool-executor';
+import type { ToolRuntime } from '../../tool-runtime';
 
 export const toolExecutor: NodeExecutor<ToolNodeConfig> = {
   async execute({ node, context }): Promise<NodeExecutionResult> {
@@ -17,9 +18,13 @@ export const toolExecutor: NodeExecutor<ToolNodeConfig> = {
     }
     const args = buildToolArgs(config.toolRef, { phone, sessionId }, mappedArgs);
 
-    // Get MCP tools from context (injected by runtime)
+    // Prefer runtime if available, fall back to legacy _mcpTools
+    const runtime = (context as any)._toolRuntime as ToolRuntime | undefined;
     const mcpTools = (context as any)._mcpTools ?? {};
-    const result = await executeTool(config.toolRef, args, mcpTools);
+
+    const result = runtime
+      ? await executeToolViaRuntime(config.toolRef, args, runtime, { sessionId, phone, channel: 'workflow' })
+      : await executeTool(config.toolRef, args, mcpTools);
 
     const outputKey = config.outputKey ?? 'toolResult';
     context.vars[outputKey] = result.parsed;

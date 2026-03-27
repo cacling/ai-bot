@@ -1,6 +1,6 @@
 import type { WorkflowSpec, WorkflowStep } from './skill-workflow-types';
 import * as store from './skill-instance-store';
-import { executeTool, buildToolArgs } from './skill-tool-executor';
+import { executeTool, executeToolViaRuntime, buildToolArgs } from './skill-tool-executor';
 import { renderStep } from './skill-step-renderer';
 import { resolveBranch, classifyUserIntent } from './skill-branch-resolver';
 import { logger } from '../services/logger';
@@ -26,6 +26,7 @@ export async function runSkillTurn(
     lang: 'zh' | 'en';
     history: Array<{ role: string; content: string }>;
   },
+  runtime?: import('../tool-runtime').ToolRuntime,
 ): Promise<SkillTurnResult> {
   // 1. Load or create instance
   let instance = store.findActiveInstance(sessionId);
@@ -95,7 +96,12 @@ export async function runSkillTurn(
         const args = buildToolArgs(step.tool!, { phone: context.phone, sessionId });
         store.appendEvent(instanceId, { eventType: 'tool_call', stepId: currentStepId, toolName: step.tool, payload: args });
 
-        const result = await executeTool(step.tool!, args, mcpTools);
+        const result = runtime
+          ? await executeToolViaRuntime(step.tool!, args, runtime, {
+              sessionId, phone: context.phone, channel: 'online',
+              activeSkillName: spec.name,
+            })
+          : await executeTool(step.tool!, args, mcpTools);
         lastToolResult = { success: result.success, hasData: result.hasData, payload: result.parsed };
         store.updateLastToolResult(instanceId, lastToolResult);
         store.appendEvent(instanceId, {
