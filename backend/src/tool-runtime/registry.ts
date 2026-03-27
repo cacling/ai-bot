@@ -80,6 +80,11 @@ export class ToolRegistry {
     } catch { /* DB not ready */ }
   }
 
+  private safeJsonParse(text: string | null | undefined): Record<string, unknown> | undefined {
+    if (!text) return undefined;
+    try { return JSON.parse(text); } catch { return undefined; }
+  }
+
   private loadContracts(): void {
     try {
       for (const row of db.select().from(mcpTools).all()) {
@@ -87,15 +92,15 @@ export class ToolRegistry {
           id: row.id,
           name: row.name,
           description: row.description,
-          inputSchema: row.input_schema ? JSON.parse(row.input_schema) : undefined,
-          outputSchema: row.output_schema ? JSON.parse(row.output_schema) : undefined,
+          inputSchema: this.safeJsonParse(row.input_schema),
+          outputSchema: this.safeJsonParse(row.output_schema),
           errorSchema: undefined,
           resultSemantics: undefined,
           mocked: row.mocked,
           disabled: row.disabled,
           mockRules: row.mock_rules ?? undefined,
           serverId: row.server_id ?? undefined,
-          annotations: row.annotations ? JSON.parse(row.annotations) : undefined,
+          annotations: this.safeJsonParse(row.annotations),
         };
         this.contracts.set(row.name, contract);
         this.contractIdToName.set(row.id, row.name);
