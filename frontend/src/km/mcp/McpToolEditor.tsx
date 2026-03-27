@@ -630,6 +630,21 @@ function ImplStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
   const [scriptContent, setScriptContent] = useState<string | null>(null);
   const [scriptLoading, setScriptLoading] = useState(false);
 
+  // Runtime Binding
+  const [runtimeBinding, setRuntimeBinding] = useState<{ adapter_type: string | null; connector_id: string | null; connector_name: string | null; status: string; config: string | null; source: string } | null>(null);
+  useEffect(() => {
+    mcpApi.getToolImplementation(tool.id).then(impl => {
+      setRuntimeBinding({
+        adapter_type: impl.adapter_type,
+        connector_id: impl.connector_id,
+        connector_name: impl.connector?.name ?? null,
+        status: impl.status,
+        config: impl.config,
+        source: impl._source,
+      });
+    }).catch(() => setRuntimeBinding(null));
+  }, [tool.id]);
+
   useEffect(() => { mcpApi.listHandlers().then(r => setHandlers(r.handlers)).catch(() => {}); }, []);
 
   const selectedHandler = handlers.find(h => h.key === handlerKey);
@@ -751,6 +766,24 @@ function ImplStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
 
         {/* API 配置 */}
         {implType === 'api' && <ApiPanel toolId={tool.id} config={tool.execution_config} outputSchema={(tool.output_schema_content ?? null) as Record<string, unknown> | null} onUpdated={onUpdated} />}
+
+        {/* Runtime Binding 信息 */}
+        {runtimeBinding && (
+          <div className="mt-2 rounded-lg border bg-muted/30 px-3 py-2">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Runtime Binding</span>
+              <Badge variant={runtimeBinding.source === 'tool_implementations' ? 'default' : 'outline'} className="text-[8px]">
+                {runtimeBinding.source === 'tool_implementations' ? 'Bound' : runtimeBinding.source === 'legacy' ? 'Legacy' : 'Unbound'}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-4 gap-x-4 gap-y-1 text-xs">
+              <div><span className="text-muted-foreground">Adapter:</span> <span className="font-mono">{runtimeBinding.adapter_type ?? 'remote_mcp'}</span></div>
+              <div><span className="text-muted-foreground">Connector:</span> <span className="font-mono">{runtimeBinding.connector_name ?? '-'}</span></div>
+              <div><span className="text-muted-foreground">Status:</span> <Badge variant={runtimeBinding.status === 'active' ? 'default' : 'secondary'} className="text-[8px]">{runtimeBinding.status}</Badge></div>
+              <div><span className="text-muted-foreground">Pipeline:</span> <span className="font-mono text-muted-foreground">resolve → validate → inject → govern → dispatch → normalize → observe</span></div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── 下半区：脚本源码预览 ── */}
