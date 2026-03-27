@@ -1,17 +1,11 @@
 /**
- * Tests for runner.ts runtime path (Phase 4)
- * Verifies isRuntimeEnabled() feature flag and that the runtime path
- * produces correct tool surface.
+ * Tests for runner.ts runtime path
+ * Verifies that the runtime produces correct tool surface.
  */
 import { describe, test, expect } from 'bun:test';
-import { ToolRuntime, isRuntimeEnabled } from '../../../src/tool-runtime';
+import { ToolRuntime } from '../../../src/tool-runtime';
 
 describe('runner.ts runtime path', () => {
-  test('isRuntimeEnabled defaults to false', () => {
-    // TOOL_RUNTIME_ENABLED is not set in test env
-    expect(isRuntimeEnabled()).toBe(false);
-  });
-
   test('ToolRuntime produces tool surface compatible with AI SDK', () => {
     const runtime = new ToolRuntime();
     const surface = runtime.getToolSurface();

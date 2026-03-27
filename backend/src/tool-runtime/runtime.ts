@@ -59,7 +59,3 @@ export class ToolRuntime {
   }
 }
 
-/** Feature flag: controls whether runner.ts uses runtime or legacy path */
-export function isRuntimeEnabled(): boolean {
-  return process.env.TOOL_RUNTIME_ENABLED === 'true';
-}

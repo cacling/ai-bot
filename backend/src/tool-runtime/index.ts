@@ -1,4 +1,4 @@
-export { ToolRuntime, isRuntimeEnabled } from './runtime';
+export { ToolRuntime } from './runtime';
 export type {
   ToolRuntimeRequest,
   ToolRuntimeResult,
