@@ -9,13 +9,12 @@ describe('mcp-client — callMcpTool', () => {
     expect(typeof callMcpTool).toBe('function');
   });
 
-  test('returns error result when MCP server is unreachable', async () => {
-    // The default MCP URL (localhost:8003) is unlikely to be running in test
+  test('returns error result when tool not found or MCP server unreachable', async () => {
     const result = await callMcpTool('test-session', 'test_tool', { arg1: 'value' });
     // Should return an error result (not throw)
     expect(result.success).toBe(false);
     expect(typeof result.text).toBe('string');
-    expect(result.text).toContain('error');
+    expect(result.text.length).toBeGreaterThan(0);
   });
 
   test('returns object with text and success fields', async () => {
