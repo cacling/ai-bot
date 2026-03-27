@@ -19,6 +19,8 @@ import { SOPGuard } from './sop-guard';
 import { randomUUID } from 'crypto';
 import { type NormalizedQuery } from '../services/query-normalizer';
 import { formatNormalizedContext } from '../services/query-normalizer';
+import { ToolRuntime, isRuntimeEnabled, type RuntimeChannel, type GovernPolicy } from '../tool-runtime';
+import { SopPolicy } from '../tool-runtime/policies/sop-policy';
 
 /**
  * 重构2 工具路由模式
@@ -35,6 +37,13 @@ import { db } from '../db';
 import { mcpServers } from '../db/schema';
 
 const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://127.0.0.1:18003/mcp';
+
+// ── Tool Runtime singleton (Phase 4) ──
+let onlineRuntime: ToolRuntime | null = null;
+function getToolRuntime(): ToolRuntime {
+  if (!onlineRuntime) onlineRuntime = new ToolRuntime();
+  return onlineRuntime;
+}
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 
@@ -259,6 +268,93 @@ export async function runAgent(
 ): Promise<AgentResult> {
   const effectiveSkillsDir = overrideSkillsDir ?? SKILLS_DIR;
   const t_run_start = Date.now();
+
+  // ── Tool Runtime path (Phase 4): unified pipeline replaces mock/API/SOP/translation wrapping ──
+  let sopWrappedTools: Record<string, any>;
+  let sopGuard: SOPGuard;
+  let lastActiveSkill: string | undefined = options?.skillName;
+
+  if (isRuntimeEnabled()) {
+    const runtime = getToolRuntime();
+    sopGuard = new SOPGuard();
+
+    // Activate plan FIRST so history replay runs in plan-aware mode
+    if (options?.workflowPlan && options?.skillName) {
+      sopGuard.activatePlan(options.skillName, options.workflowPlan);
+    }
+
+    // Replay history for SOP state continuity
+    const toolResultMap = new Map<string, { success: boolean; hasData: boolean }>();
+    for (const msg of history) {
+      if (msg.role === 'tool' && Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          if (part.type === 'tool-result' && part.toolCallId) {
+            const text = typeof part.result === 'string' ? part.result : JSON.stringify(part.result ?? '');
+            toolResultMap.set(part.toolCallId, { success: !isErrorResult(text), hasData: !isNoDataResult(text) });
+          }
+        }
+      }
+    }
+    for (const msg of history) {
+      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          if (part.type === 'tool-call' && part.toolName) {
+            const result = toolResultMap.get(part.toolCallId) ?? { success: true, hasData: true };
+            sopGuard.recordToolCall(part.toolName, result);
+          }
+        }
+      }
+    }
+    sopGuard.onUserMessage(userMessage);
+
+    // Load MCP tools into the runtime adapter
+    const { tools: mcpPoolTools } = await getMCPTools();
+    runtime.setMcpTools(mcpPoolTools as Record<string, any>);
+
+    // Create request-scoped SOP policy
+    const sopPolicy = new SopPolicy(sopGuard);
+
+    // Build tool surface from registry
+    const surface = runtime.getToolSurface();
+    sopWrappedTools = {};
+    for (const contract of surface) {
+      const schema = contract.inputSchema ?? { type: 'object', properties: {} };
+      sopWrappedTools[contract.name] = {
+        description: contract.description,
+        parameters: jsonSchema(schema as any),
+        execute: async (args: Record<string, unknown>) => {
+          // Fix MCP client arguments serialization
+          if (typeof args === 'string') { try { args = JSON.parse(args); } catch { /* keep as-is */ } }
+
+          const result = await runtime.callWithPolicies({
+            toolName: contract.name,
+            args,
+            channel: 'online' as RuntimeChannel,
+            sessionId: `sess_${Date.now()}`,
+            userPhone,
+            lang,
+            activeSkillName: lastActiveSkill ?? null,
+          }, [sopPolicy]);
+
+          // Record in SOP guard for state tracking
+          sopGuard.recordToolCall(contract.name, { success: result.success, hasData: result.hasData });
+          if (result.success) sopGuard.resetViolations();
+
+          // Translate if needed
+          let rawText = result.rawText;
+          if (lang !== 'zh' && result.success) {
+            try { rawText = await translateText(rawText, lang); } catch { /* keep original */ }
+          }
+
+          return { content: [{ type: 'text', text: rawText }] };
+        },
+      };
+    }
+
+    logger.info('agent', 'runtime_tools_ready', { toolCount: surface.length, ms: Date.now() - t_run_start });
+  } else {
+  // ── Legacy path: existing mock/API/SOP/translation wrapping ──
+
   const { tools: rawMcpToolsRaw } = await getMCPTools();
 
   // 修复 MCP client 的 arguments 序列化问题：
@@ -389,7 +485,7 @@ export async function runAgent(
     ]),
   );
   // SOP Guard: wrap operation tools with precondition checks
-  const sopGuard = new SOPGuard();
+  sopGuard = new SOPGuard();
   // Activate plan FIRST so history replay runs in plan-aware mode
   if (options?.workflowPlan && options?.skillName) {
     sopGuard.activatePlan(options.skillName, options.workflowPlan);
@@ -421,7 +517,7 @@ export async function runAgent(
     }
   }
   sopGuard.onUserMessage(userMessage);
-  const sopWrappedTools = Object.fromEntries(
+  sopWrappedTools = Object.fromEntries(
     Object.entries(mcpTools as Record<string, any>).map(([name, tool]) => [
       name,
       {
@@ -474,7 +570,7 @@ export async function runAgent(
   const t_mcp_ready = Date.now();
   logger.info('agent', 'mcp_ready', { mcp_init_ms: t_mcp_ready - t_run_start });
 
-  let lastActiveSkill: string | undefined = options?.skillName;
+  } // end of legacy else block
 
   // Create plan-aware skills tools wrapper (activates SOPGuard V2 plan on skill load)
   const planAwareSkillsTools = { ...skillsTools };
