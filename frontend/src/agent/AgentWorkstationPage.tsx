@@ -470,7 +470,7 @@ export function AgentWorkstationPage() {
               }`}
             >
               <Server size={13} />
-              MCP管理
+              Tool Runtime
             </Button>
           </div>
           <div className="flex-1 overflow-hidden relative">

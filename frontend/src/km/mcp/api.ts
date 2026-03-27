@@ -282,3 +282,50 @@ export interface Connector {
   created_at: string;
   updated_at: string;
 }
+
+// ── Execution Records ──
+
+export interface ExecutionRecord {
+  id: string;
+  trace_id: string;
+  tool_name: string;
+  channel: string;
+  adapter_type: string;
+  session_id: string | null;
+  user_phone: string | null;
+  skill_name: string | null;
+  success: boolean;
+  has_data: boolean;
+  error_code: string | null;
+  latency_ms: number;
+  input_json: string | null;
+  output_preview: string | null;
+  created_at: string;
+}
+
+export interface RuntimeStats {
+  totalCalls: number;
+  successRate: number;
+  avgLatencyMs: number;
+  adapterDistribution: Array<{ adapter_type: string; count: number }>;
+  channelDistribution: Array<{ channel: string; count: number }>;
+  topTools: Array<{ tool_name: string; count: number; success_count: number; avg_latency: number }>;
+}
+
+export async function fetchExecutionRecords(params?: {
+  limit?: number; offset?: number; tool_name?: string;
+  channel?: string; success?: string; start_date?: string; end_date?: string;
+}): Promise<{ items: ExecutionRecord[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== '') qs.set(k, String(v));
+    }
+  }
+  const query = qs.toString();
+  return request(`/execution-records${query ? `?${query}` : ''}`);
+}
+
+export async function fetchRuntimeStats(): Promise<RuntimeStats> {
+  return request('/execution-records/stats');
+}
