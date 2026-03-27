@@ -104,6 +104,7 @@ import {
   mcpServers,
   mcpTools,
   connectors,
+  toolImplementations,
   skillRegistry,
   skillVersions,
 } from './schema';
@@ -1407,6 +1408,60 @@ async function seed() {
     }).onConflictDoNothing().run();
   }
   console.log(`[seed] Connectors: ${connectorDefs.length} 个连接器已写入`);
+
+  // ── 9d. Tool Implementations（Tool Runtime：声明工具→适配器→连接器绑定）──
+  console.log('[seed] 写入 Tool Implementations...');
+  db.delete(toolImplementations).run();
+
+  // tool_id → connector mapping: 每个工具绑定到其 MCP Server 对应的 connector
+  const implDefs: Array<{
+    tool_name: string; adapter_type: string; connector_id: string; host_server_id: string; handler_key?: string;
+  }> = [
+    // user-info-service (:18003)
+    { tool_name: 'query_subscriber',     adapter_type: 'script', connector_id: 'conn-customer',  host_server_id: 'mcp-user-info',  handler_key: 'user_info.query_subscriber' },
+    { tool_name: 'query_bill',           adapter_type: 'script', connector_id: 'conn-billing',   host_server_id: 'mcp-user-info',  handler_key: 'user_info.query_bill' },
+    { tool_name: 'query_plans',          adapter_type: 'script', connector_id: 'conn-catalog',   host_server_id: 'mcp-user-info',  handler_key: 'user_info.query_plans' },
+    { tool_name: 'analyze_bill_anomaly', adapter_type: 'script', connector_id: 'conn-billing',   host_server_id: 'mcp-user-info',  handler_key: 'user_info.analyze_bill_anomaly' },
+    // business-service (:18004)
+    { tool_name: 'cancel_service',       adapter_type: 'script', connector_id: 'conn-orders',    host_server_id: 'mcp-business',   handler_key: 'business.cancel_service' },
+    { tool_name: 'issue_invoice',        adapter_type: 'api_proxy', connector_id: 'conn-invoice', host_server_id: 'mcp-business' },
+    // diagnosis-service (:18005)
+    { tool_name: 'diagnose_network',     adapter_type: 'script', connector_id: 'conn-diagnosis', host_server_id: 'mcp-diagnosis',  handler_key: 'diagnosis.diagnose_network' },
+    { tool_name: 'diagnose_app',         adapter_type: 'script', connector_id: 'conn-diagnosis', host_server_id: 'mcp-diagnosis',  handler_key: 'diagnosis.diagnose_app' },
+    // outbound-service (:18006)
+    { tool_name: 'record_call_result',   adapter_type: 'script', connector_id: 'conn-outreach',  host_server_id: 'mcp-outbound',   handler_key: 'outbound.record_call_result' },
+    { tool_name: 'send_followup_sms',    adapter_type: 'script', connector_id: 'conn-outreach',  host_server_id: 'mcp-outbound',   handler_key: 'outbound.send_followup_sms' },
+    { tool_name: 'create_callback_task', adapter_type: 'api_proxy', connector_id: 'conn-callback', host_server_id: 'mcp-outbound' },
+    { tool_name: 'record_marketing_result', adapter_type: 'script', connector_id: 'conn-outreach', host_server_id: 'mcp-outbound', handler_key: 'outbound.record_marketing_result' },
+    // account-service (:18007)
+    { tool_name: 'verify_identity',      adapter_type: 'api_proxy', connector_id: 'conn-identity', host_server_id: 'mcp-account' },
+    { tool_name: 'check_account_balance', adapter_type: 'script', connector_id: 'conn-billing',  host_server_id: 'mcp-account',   handler_key: 'account.check_account_balance' },
+    { tool_name: 'check_contracts',      adapter_type: 'script', connector_id: 'conn-customer',  host_server_id: 'mcp-account',   handler_key: 'account.check_contracts' },
+    { tool_name: 'apply_service_suspension', adapter_type: 'script', connector_id: 'conn-orders', host_server_id: 'mcp-account', handler_key: 'account.apply_service_suspension' },
+  ];
+
+  // Resolve tool_name → tool_id
+  const allTools = db.select().from(mcpTools).all();
+  const toolNameToId = new Map(allTools.map(t => [t.name, t.id]));
+
+  let implCount = 0;
+  for (const impl of implDefs) {
+    const toolId = toolNameToId.get(impl.tool_name);
+    if (!toolId) continue;
+    db.insert(toolImplementations).values({
+      id: `impl-${impl.tool_name}`,
+      tool_id: toolId,
+      host_server_id: impl.host_server_id,
+      adapter_type: impl.adapter_type,
+      connector_id: impl.connector_id,
+      handler_key: impl.handler_key ?? null,
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    }).onConflictDoNothing().run();
+    implCount++;
+  }
+  console.log(`[seed] Tool Implementations: ${implCount} 个绑定已写入`);
 
   // ── 10. 技能注册 + v1 版本快照（upsert：已存在则跳过）─────────────────────
   console.log('[seed] 初始化技能注册表和版本快照...');
