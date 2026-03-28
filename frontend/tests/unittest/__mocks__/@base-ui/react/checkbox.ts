@@ -1,6 +1,13 @@
 import React from 'react';
+
+const FILTERED_PROPS = new Set(['onCheckedChange', 'checked', 'indeterminate']);
+
 const mock = (tag: string) => React.forwardRef(function Mock(props: any, ref: any) {
-  return React.createElement(tag, { ...props, ref }, props.children);
+  const nextProps = { ...props, ref };
+  for (const key of FILTERED_PROPS) {
+    delete nextProps[key];
+  }
+  return React.createElement(tag, nextProps, props.children);
 });
 const comp = Object.assign(mock('div'), {
   Root: mock('div'), Trigger: mock('button'), Indicator: mock('span'),

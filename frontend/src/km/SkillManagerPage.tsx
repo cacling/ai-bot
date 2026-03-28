@@ -33,6 +33,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { MermaidRenderer } from '../shared/MermaidRenderer';
+import { NLEditPanel, type NLEditStatusSnapshot } from './components/NLEditPanel';
 import { ToolCallPlanPanel } from './components/ToolCallPlanPanel';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
@@ -411,6 +412,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
     setTestMessages([]);
     setTestInput('');
     setTestDiagram(null);
+    setNlEditState(null);
     setRightTab('chat');
   }, [activeSkill, reloadVersions]);
 
@@ -490,8 +492,9 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
   }, [activeSkill, reloadVersions]);
 
   // ── 右侧 Tab 切换 + 测试对话 ─────────────────────────────────────────────────
-  type RightTab = 'chat' | 'test';
+  type RightTab = 'chat' | 'nl-edit' | 'test';
   const [rightTab, setRightTab] = useState<RightTab>('chat');
+  const [nlEditState, setNlEditState] = useState<NLEditStatusSnapshot | null>(null);
   const [testingVersion, setTestingVersion] = useState<number | null>(null);
   const [testMessages, setTestMessages] = useState<Array<{ id: number; role: 'user' | 'assistant'; text: string }>>([]);
   const [testInput, setTestInput] = useState('');
@@ -640,6 +643,37 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
     reloadVersions();
   }, [selectedFile, handleSelectFile, reloadVersions]);
 
+  const handleSwitchToWorkingCopy = useCallback(() => {
+    setViewingVersion(null);
+    const skillMd = findSkillMd(fileTree);
+    if (skillMd) {
+      handleSelectFile(skillMd);
+      setCenterMode('edit');
+    }
+  }, [fileTree, handleSelectFile]);
+
+  const handleNLEditApplyDone = useCallback(() => {
+    const skillMd = findSkillMd(fileTree);
+    const fileToReload = selectedFile?.type === 'file' ? selectedFile : skillMd;
+    if (fileToReload) {
+      handleSelectFile(fileToReload);
+    }
+    if (selectedFile?.path) {
+      setFileDirtyMap(prev => new Map(prev).set(selectedFile.path!, false));
+    }
+    setCenterMode('edit');
+    reloadVersions();
+    setNlEditState(null);
+  }, [fileTree, selectedFile, handleSelectFile, reloadVersions]);
+
+  const nlEditStatusBadge = nlEditState?.status === 'blocked'
+    ? { label: '需升级', variant: 'destructive' as const }
+    : nlEditState?.status === 'ready'
+      ? { label: '可编辑', variant: 'default' as const }
+      : nlEditState?.status === 'need_clarify'
+        ? { label: '待澄清', variant: 'secondary' as const }
+        : null;
+
   // ── 列表视图 ────────────────────────────────────────────────────────────────
   interface SkillRegEntry { id: string; published_version: number | null; latest_version: number; channels: string | null; mode: string | null; tool_names: string | null; tags: string | null; updated_at: string | null }
   const [registry, setRegistry] = useState<SkillRegEntry[]>([]);
@@ -728,7 +762,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input value={listSearch} onChange={e => setListSearch(e.target.value)} placeholder="搜索技能名 / 描述 / 标签" className="pl-8 text-xs h-8" />
               </div>
-              <Select value={listModeFilter} onValueChange={v => setListModeFilter(v)}>
+              <Select value={listModeFilter} onValueChange={v => setListModeFilter(v ?? 'all')}>
                 <SelectTrigger className="w-28 text-xs h-8"><SelectValue placeholder="模式" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部模式</SelectItem>
@@ -1203,6 +1237,22 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => setRightTab('nl-edit')}
+            className={`flex items-center gap-1 px-3 h-full rounded-none text-xs font-medium border-b-2 transition-colors ${
+              rightTab === 'nl-edit' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <FileCode className="w-3 h-3" />
+            NL 编辑
+            {nlEditStatusBadge && (
+              <Badge variant={nlEditStatusBadge.variant} className="ml-1 px-1 py-0 text-[9px]">
+                {nlEditStatusBadge.label}
+              </Badge>
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => {
               if (selectedVersion && (testingVersion !== selectedVersion.version_no)) {
                 handleStartTest(selectedVersion.version_no);
@@ -1325,6 +1375,49 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
                 </div>
               </form>
             </div>
+          </>
+        )}
+
+        {/* ── NL 编辑 Tab ── */}
+        {rightTab === 'nl-edit' && (
+          <>
+            {!activeSkill ? (
+              <div className="flex-1 flex items-center justify-center text-xs text-muted-foreground">
+                请选择一个技能后再使用 NL 编辑。
+              </div>
+            ) : viewingVersion !== null ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                <div className="max-w-xs rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-foreground dark:border-amber-800 dark:bg-amber-950/20">
+                  当前正在查看历史版本快照。NL 编辑会修改当前工作副本，不会直接改历史版本。
+                </div>
+                <Button size="sm" onClick={handleSwitchToWorkingCopy}>切回当前工作副本</Button>
+              </div>
+            ) : isDirty ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                <div className="max-w-xs rounded-xl border border-border bg-muted px-4 py-3 text-xs text-muted-foreground">
+                  当前文件有未保存修改。为避免和 NL 编辑的外部改写互相覆盖，请先保存当前文件。
+                </div>
+                <Button size="sm" onClick={handleManualSave}>先保存当前文件</Button>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="border-b border-border bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
+                  当前技能：<span className="font-mono text-foreground">{activeSkill.id}</span>
+                  <span className="mx-1.5">·</span>
+                  作用范围：当前工作副本
+                  {nlEditState?.phase && (
+                    <>
+                      <span className="mx-1.5">·</span>
+                      当前阶段：{nlEditState.phase}
+                    </>
+                  )}
+                </div>
+                <NLEditPanel
+                  onApplyDone={handleNLEditApplyDone}
+                  onStatusChange={setNlEditState}
+                />
+              </div>
+            )}
           </>
         )}
 

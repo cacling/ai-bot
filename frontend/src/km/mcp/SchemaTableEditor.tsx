@@ -275,9 +275,10 @@ function FieldRow({ field, readonly, onChange, onRemove }: {
           />
         </div>
         <Select value={field.type} onValueChange={v => {
-          const patch: Partial<SchemaField> = { type: v };
-          if (v === 'object' || v === 'array') patch.children = field.children ?? [];
-          if (v === 'array') patch.itemType = field.itemType ?? 'string';
+          const nextType = v ?? 'string';
+          const patch: Partial<SchemaField> = { type: nextType };
+          if (nextType === 'object' || nextType === 'array') patch.children = field.children ?? [];
+          if (nextType === 'array') patch.itemType = field.itemType ?? 'string';
           onChange(patch);
         }}>
           <SelectTrigger className="text-[11px] h-7"><SelectValue /></SelectTrigger>

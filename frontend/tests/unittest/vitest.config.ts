@@ -41,6 +41,7 @@ export default defineConfig({
       '@base-ui/react/separator': path.resolve(__dirname, '__mocks__/@base-ui/react/separator.ts'),
       '@base-ui/react/tabs': path.resolve(__dirname, '__mocks__/@base-ui/react/tabs.ts'),
       'react-resizable-panels': path.resolve(__dirname, '__mocks__/react-resizable-panels.ts'),
+      'lucide-react': path.resolve(__dirname, '__mocks__/lucide-react.tsx'),
     },
   },
 });

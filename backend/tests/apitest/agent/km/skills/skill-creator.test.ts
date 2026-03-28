@@ -16,8 +16,11 @@ let mockGenerateTextResult = {
     draft: null,
   }),
 };
+let mockGenerateTextQueue: Array<{ text: string }> = [];
+let generateTextCallCount = 0;
 
-let mockValidationResult = { valid: true, errors: [], warnings: [] };
+let mockValidationResult = { valid: true, errors: [], warnings: [], infos: [] };
+let mockValidationQueue: Array<{ valid: boolean; errors: unknown[]; warnings: unknown[]; infos?: unknown[] }> = [];
 let mockToolsOverview: Array<{ name: string; description: string; source: string; status: string; skills: string[] }> = [];
 let mockSkillRegistry: Record<string, unknown> | undefined = undefined;
 let createNewSkillVersionCalled = false;
@@ -28,7 +31,10 @@ let mockInserted: Array<Record<string, unknown>> = [];
 // ── Mock AI SDK ─────────────────────────────────────────────────────────────
 
 mock.module('ai', () => ({
-  generateText: async () => mockGenerateTextResult,
+  generateText: async () => {
+    generateTextCallCount += 1;
+    return mockGenerateTextQueue.shift() ?? mockGenerateTextResult;
+  },
   streamText: () => ({ fullStream: { [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true }) }) }, text: Promise.resolve(''), reasoning: Promise.resolve(null) }),
   tool: (opts: unknown) => opts,
 }));
@@ -54,8 +60,8 @@ mock.module('../../../../../src/agent/km/skills/version-manager', () => ({
 
 // ── Mock validation ─────────────────────────────────────────────────────────
 
-mock.module('../../../../../../skills/tech-skills/skill-creator-spec/scripts/run_validation.ts', () => ({
-  runValidation: () => mockValidationResult,
+mock.module('../../../../../skills/tech-skills/skill-creator-spec/scripts/run_validation.ts', () => ({
+  runValidation: () => mockValidationQueue.shift() ?? mockValidationResult,
 }));
 
 // ── Mock tools-overview ─────────────────────────────────────────────────────
@@ -163,7 +169,10 @@ describe('POST /api/skill-creator/chat', () => {
         draft: null,
       }),
     };
-    mockValidationResult = { valid: true, errors: [], warnings: [] };
+    mockGenerateTextQueue = [];
+    generateTextCallCount = 0;
+    mockValidationResult = { valid: true, errors: [], warnings: [], infos: [] };
+    mockValidationQueue = [];
     await setupApp();
   });
 
@@ -229,6 +238,70 @@ describe('POST /api/skill-creator/chat', () => {
     expect(body.draft.skill_md).toContain('broadband-repair');
   });
 
+  test('auto-reviews and repairs invalid draft in the same round', async () => {
+    mockGenerateTextQueue = [
+      {
+        text: JSON.stringify({
+          reply: 'Here is the first draft for your skill.',
+          phase: 'draft',
+          draft: {
+            skill_name: 'broadband-repair',
+            skill_md: '---\nname: broadband-repair\ndescription: Handle broadband repairs\nmetadata:\n  version: "1.0.0"\n  tags: [broadband]\n  mode: inbound\n  trigger: user_intent\n  channels: ["online"]\n---\n\n# Invalid Draft',
+            references: [],
+            assets: [],
+            description: 'Broadband repair skill',
+            test_cases: [],
+          },
+        }),
+      },
+      {
+        text: JSON.stringify({
+          reply: '正在生成技能草稿，内容较多，请耐心等待……\n\n我已经修正了结构问题，这版可以继续评审。',
+          phase: 'draft',
+          draft: {
+            skill_name: 'broadband-repair',
+            skill_md: '---\nname: broadband-repair\ndescription: Handle broadband repairs\nmetadata:\n  version: "1.0.1"\n  tags: [broadband]\n  mode: inbound\n  trigger: user_intent\n  channels: ["online"]\n---\n\n# Repaired Draft',
+            references: [{ filename: 'repair-guide.md', content: '# Repair Guide' }],
+            assets: [],
+            description: 'Broadband repair skill',
+            test_cases: [],
+          },
+        }),
+      },
+    ];
+    mockValidationQueue = [
+      {
+        valid: false,
+        errors: [{ rule: 'missing_state_diagram', message: 'Missing state diagram', severity: 'error', location: 'SKILL.md:8' }],
+        warnings: [],
+        infos: [],
+      },
+      {
+        valid: true,
+        errors: [],
+        warnings: [],
+        infos: [],
+      },
+      {
+        valid: true,
+        errors: [],
+        warnings: [],
+        infos: [],
+      },
+    ];
+
+    const { status, body } = await postJSON(app, '/api/skill-creator/chat', {
+      message: 'Generate the skill now',
+    });
+
+    expect(status).toBe(200);
+    expect(generateTextCallCount).toBe(2);
+    expect(body.phase).toBe('draft');
+    expect(body.reply).toContain('修正');
+    expect(body.draft.skill_md).toContain('Repaired Draft');
+    expect(body.validation.valid).toBe(true);
+  });
+
   test('returns 400 when message is empty/whitespace', async () => {
     const { status, body } = await postJSON(app, '/api/skill-creator/chat', {
       message: '   ',
@@ -243,7 +316,10 @@ describe('POST /api/skill-creator/chat', () => {
 describe('POST /api/skill-creator/save', () => {
   beforeEach(async () => {
     mockSkillRegistry = undefined; // new skill
-    mockValidationResult = { valid: true, errors: [], warnings: [] };
+    mockGenerateTextQueue = [];
+    generateTextCallCount = 0;
+    mockValidationResult = { valid: true, errors: [], warnings: [], infos: [] };
+    mockValidationQueue = [];
     mockToolsOverview = [];
     createNewSkillVersionCalled = false;
     createVersionFromCalled = false;
@@ -266,6 +342,7 @@ describe('POST /api/skill-creator/save', () => {
       valid: false,
       errors: [{ rule: 'frontmatter_required', message: 'Missing frontmatter', severity: 'error', location: 'SKILL.md:1' }],
       warnings: [],
+      infos: [],
     };
     const { status, body } = await postJSON(app, '/api/skill-creator/save', {
       skill_name: 'test-skill',

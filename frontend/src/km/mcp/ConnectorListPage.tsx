@@ -17,12 +17,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 
 type View = 'list' | 'edit';
+type ConnectorFilterType = 'all' | Connector['type'];
+type ConnectorEditorType = Connector['type'];
 
 export function ConnectorListPage() {
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState('all');
+  const [filterType, setFilterType] = useState<ConnectorFilterType>('all');
   const [view, setView] = useState<View>('list');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Map<string, { ok: boolean; error?: string; elapsed_ms?: number }>>(new Map());
@@ -95,7 +97,7 @@ export function ConnectorListPage() {
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="搜索连接器" className="pl-8 text-xs h-8" />
         </div>
-        <Select value={filterType} onValueChange={v => setFilterType(v)}>
+        <Select value={filterType} onValueChange={v => setFilterType((v as ConnectorFilterType | null) ?? 'all')}>
           <SelectTrigger className="w-32 text-xs h-8"><SelectValue placeholder="类型" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部类型</SelectItem>
@@ -182,7 +184,7 @@ export function ConnectorListPage() {
 function ConnectorEditor({ connectorId, onBack, onSaved }: { connectorId: string | null; onBack: () => void; onSaved: () => void }) {
   const isEdit = !!connectorId;
   const [name, setName] = useState('');
-  const [type, setType] = useState<'api' | 'remote_mcp'>('api');
+  const [type, setType] = useState<ConnectorEditorType>('api');
   const [status, setStatus] = useState('active');
   const [description, setDescription] = useState('');
   const [configJson, setConfigJson] = useState('{}');
@@ -249,7 +251,7 @@ function ConnectorEditor({ connectorId, onBack, onSaved }: { connectorId: string
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">状态</label>
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status} onValueChange={value => setStatus(value ?? 'active')}>
               <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="active">Active</SelectItem>

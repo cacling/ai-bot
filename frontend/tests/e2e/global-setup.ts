@@ -11,6 +11,11 @@ export default function globalSetup() {
   // (proxy may be dead but env vars remain, causing connection timeouts)
   process.env.NO_PROXY = (process.env.NO_PROXY ?? '') + ',127.0.0.1,localhost';
 
+  if (process.env.PLAYWRIGHT_SKIP_GLOBAL_SEED === '1') {
+    console.log('[global-setup] Skipping DB seed because PLAYWRIGHT_SKIP_GLOBAL_SEED=1');
+    return;
+  }
+
   const backendDir = path.resolve(__dirname, '../../../backend');
   console.log('[global-setup] Re-seeding database...');
   try {
