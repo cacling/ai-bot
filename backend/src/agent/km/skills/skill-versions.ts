@@ -182,7 +182,17 @@ app.post('/create-from', async (c) => {
 
 // POST /api/skill-versions/test — 直接用版本快照测试（不创建沙箱）
 app.post('/test', async (c) => {
-  const body = await c.req.json<{ skill: string; version_no: number; message: string; history?: Array<{ role: string; content: string }>; phone?: string; lang?: 'zh' | 'en'; useMock?: boolean; persona?: Record<string, unknown> }>();
+  const body = await c.req.json<{
+    skill: string;
+    version_no: number;
+    message: string;
+    history?: Array<{ role: string; content: string }>;
+    phone?: string;
+    lang?: 'zh' | 'en';
+    useMock?: boolean;
+    persona?: Record<string, unknown>;
+    session_id?: string;
+  }>();
   if (!body.skill || !body.version_no || !body.message) {
     return c.json({ error: 'skill, version_no, message 必填' }, 400);
   }
@@ -230,6 +240,7 @@ app.post('/test', async (c) => {
       // Build persona context to inject into prompt
       const persona = body.persona ?? {};
       const phone = (persona.phone as string) ?? body.phone ?? '13800000001';
+      const sessionId = body.session_id?.trim() || `skilltest_${body.skill}_v${body.version_no}_${phone}`;
       const subscriberName = (persona.name as string) ?? undefined;
       const planName = (persona.plan as string) ?? undefined;
 
@@ -268,9 +279,15 @@ app.post('/test', async (c) => {
         planName,         // planName
         undefined,        // subscriberGender
         tempParent,       // overrideSkillsDir
-        { useMock: body.useMock !== false, skillContent, skillName: body.skill, workflowPlan },
+        { useMock: body.useMock !== false, skillContent, skillName: body.skill, workflowPlan, sessionId },
       );
-      return c.json({ text: result.text, card: result.card ?? null, skill_diagram: result.skill_diagram ?? null, mock: body.useMock !== false });
+      return c.json({
+        text: result.text,
+        card: result.card ?? null,
+        skill_diagram: result.skill_diagram ?? null,
+        mock: body.useMock !== false,
+        session_id: sessionId,
+      });
     } finally {
       rmSync(tempParent, { recursive: true, force: true });
     }

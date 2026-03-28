@@ -135,4 +135,25 @@ describe('candidates route', () => {
     const { status } = await req('POST', '/candidates/nonexistent/gate-check');
     expect(status).toBe(404);
   });
+
+  test('PUT /:id — updates scene_code, structured_json, variants_json', async () => {
+    const { data: cand } = await req('POST', '/candidates', {
+      source_type: 'manual', normalized_q: 'structured fields test',
+    });
+    const { status } = await req('PUT', `/candidates/${cand.id}`, {
+      scene_code: 'billing_abnormal',
+      variants_json: JSON.stringify(['这个月没怎么用怎么扣了很多费']),
+      retrieval_tags_json: JSON.stringify(['计费', '扣费']),
+      structured_json: JSON.stringify({
+        scene: { code: 'billing_abnormal', label: '资费争议', risk: 'medium' },
+        required_slots: ['手机号', '账期'],
+      }),
+    });
+    expect(status).toBe(200);
+
+    const { data: updated } = await req('GET', `/candidates/${cand.id}`);
+    expect(updated.scene_code).toBe('billing_abnormal');
+    expect(updated.variants_json).toBeTruthy();
+    expect(updated.structured_json).toBeTruthy();
+  });
 });

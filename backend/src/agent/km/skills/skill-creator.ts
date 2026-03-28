@@ -29,7 +29,7 @@ import { db } from '../../../db';
 import { testCases } from '../../../db/schema';
 import { getToolsOverview, getToolDetail } from '../mcp/tools-overview';
 import { runValidation } from '../../../../skills/tech-skills/skill-creator-spec/scripts/run_validation.ts';
-import type { ValidationResult } from '../../../../skills/tech-skills/skill-creator-spec/scripts/types.ts';
+import type { ValidationCheck, ValidationResult } from '../../../../skills/tech-skills/skill-creator-spec/scripts/types.ts';
 
 // ── 类型定义 ──────────────────────────────────────────────────────────────────
 
@@ -153,6 +153,10 @@ function readSkillReference(skillName: string, refName: string): string | null {
 interface CacheEntry { content: string; ts: number }
 const _cache = new Map<string, CacheEntry>();
 const CACHE_TTL = 300_000;
+const AUTO_REVIEW_MAX_ATTEMPTS = 2;
+const AUTO_REVIEW_HISTORY_WINDOW = 8;
+const AUTO_REVIEW_MESSAGE_LIMIT = 1200;
+const AUTO_REVIEW_ISSUE_LIMIT = 12;
 
 function readCached(path: string): string {
   const now = Date.now();
@@ -401,6 +405,8 @@ function parseSkillCreatorResponse(rawText: string, session: Session): { reply: 
   };
 }
 
+type ParsedSkillCreatorResponse = ReturnType<typeof parseSkillCreatorResponse>;
+
 // ── Draft 自动校验 ──────────────────────────────────────────────────────────
 
 function validateDraft(draft: Draft): ValidationResult {
@@ -411,6 +417,153 @@ function validateDraft(draft: Draft): ValidationResult {
     assets: draft.assets.map(a => ({ filename: a.filename })),
     registered_tools: getToolsOverview().map(t => t.name),
   });
+}
+
+function shouldReviewDraft(parsed: ParsedSkillCreatorResponse): parsed is ParsedSkillCreatorResponse & { draft: Draft } {
+  return !!parsed.draft && (parsed.phase === 'draft' || parsed.phase === 'confirm');
+}
+
+function collectValidationIssues(validation: ValidationResult | null): ValidationCheck[] {
+  if (!validation) return [];
+  return [...validation.errors, ...validation.warnings];
+}
+
+function truncateForInternalReview(text: string, limit = AUTO_REVIEW_MESSAGE_LIMIT): string {
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}\n...(truncated)`;
+}
+
+function formatConversationForInternalReview(history: Session['history']): string {
+  const recent = history.slice(-AUTO_REVIEW_HISTORY_WINDOW);
+  if (recent.length === 0) return '（无历史对话）';
+  return recent.map(item => `${item.role === 'user' ? '用户' : '助手'}:\n${truncateForInternalReview(item.content)}`).join('\n\n---\n\n');
+}
+
+function formatValidationForInternalReview(validation: ValidationResult): string {
+  const issues = collectValidationIssues(validation).slice(0, AUTO_REVIEW_ISSUE_LIMIT);
+  if (issues.length === 0) return '（无结构化校验问题）';
+  return issues.map((issue, index) => {
+    const location = issue.location ? ` @ ${issue.location}` : '';
+    return `${index + 1}. [${issue.severity}] ${issue.rule}${location}: ${issue.message}`;
+  }).join('\n');
+}
+
+function buildInternalReviewMessage(session: Session, parsed: ParsedSkillCreatorResponse, validation: ValidationResult, attempt: number): string {
+  const candidate = JSON.stringify({
+    reply: parsed.reply,
+    phase: parsed.phase,
+    draft: parsed.draft,
+  }, null, 2);
+
+  return `你现在执行一次内部 reviewer gate（第 ${attempt} 次修正尝试）。
+
+目标：
+1. 审查候选草稿是否完整覆盖已确认需求，且做到“不多做也不少做”
+2. 检查工具语义是否真实匹配，避免把“引导 / 人工 / 解释”写成“系统执行”
+3. 修复下方结构化校验中列出的问题，并尽量一并消化 warning
+4. 编辑模式下，遵守最小改动原则，不要无故重写未受影响部分
+
+输出要求：
+- 只返回一个合法 JSON 对象，不要输出审查笔记、步骤说明或代码围栏
+- 如果你能修好，就直接返回修正后的最终 JSON
+- 如果问题根源是关键信息缺失且无法安全假设，不要硬写草稿；改为提出 1 个最关键的澄清问题，phase 设为 "interview"，draft 设为 null
+- 不要把“问题清单”直接暴露给用户；用户只应看到修正版，或一个明确的问题
+
+【运行时模式】
+${session.skill_id ? 'edit' : 'create'}
+
+【最近对话摘要】
+${formatConversationForInternalReview(session.history)}
+
+【候选输出 JSON】
+${candidate}
+
+【结构化校验结果】
+${formatValidationForInternalReview(validation)}`;
+}
+
+async function autoReviewAndRepairDraft(params: {
+  session: Session;
+  parsed: ParsedSkillCreatorResponse;
+  model: typeof skillCreatorModel;
+  skillIndex: Array<{ name: string; description: string }>;
+  tools: Record<string, unknown>;
+}): Promise<{ parsed: ParsedSkillCreatorResponse; validation: ValidationResult | null; attempts: number }> {
+  let current = params.parsed;
+
+  if (!shouldReviewDraft(current)) {
+    return { parsed: current, validation: null, attempts: 0 };
+  }
+
+  let attempts = 0;
+  let validation = validateDraft(current.draft);
+
+  while (collectValidationIssues(validation).length > 0 && attempts < AUTO_REVIEW_MAX_ATTEMPTS) {
+    attempts += 1;
+    logger.info('skill-creator', 'auto_review_attempt_start', {
+      session_id: params.session.id,
+      attempt: attempts,
+      phase: current.phase,
+      errors: validation.errors.length,
+      warnings: validation.warnings.length,
+    });
+
+    const reviewSession: Session = {
+      ...params.session,
+      phase: 'draft',
+    };
+    const reviewSystemPrompt = buildSystemPrompt(reviewSession, params.skillIndex);
+    const { text } = await generateText({
+      model: params.model,
+      system: reviewSystemPrompt,
+      messages: [{ role: 'user', content: buildInternalReviewMessage(params.session, current, validation, attempts) }],
+      tools: params.tools,
+      maxSteps: 5,
+      maxTokens: 16384,
+      temperature: 0.15,
+    });
+
+    const repaired = parseSkillCreatorResponse(truncateRepetition(text), params.session);
+    const needsDraftButMissingDraft = (repaired.phase === 'draft' || repaired.phase === 'confirm') && !repaired.draft;
+    if (needsDraftButMissingDraft) {
+      logger.warn('skill-creator', 'auto_review_invalid_response', {
+        session_id: params.session.id,
+        attempt: attempts,
+        phase: repaired.phase,
+      });
+      break;
+    }
+
+    current = repaired;
+    if (!shouldReviewDraft(current)) {
+      logger.info('skill-creator', 'auto_review_exit_without_draft', {
+        session_id: params.session.id,
+        attempt: attempts,
+        phase: current.phase,
+      });
+      return { parsed: current, validation: null, attempts };
+    }
+
+    validation = validateDraft(current.draft);
+    logger.info('skill-creator', 'auto_review_attempt_done', {
+      session_id: params.session.id,
+      attempt: attempts,
+      phase: current.phase,
+      valid: validation.valid,
+      errors: validation.errors.length,
+      warnings: validation.warnings.length,
+    });
+  }
+
+  if (shouldReviewDraft(current)) {
+    validation = validateDraft(current.draft);
+    if (!validation.valid) {
+      current = { ...current, phase: 'draft' };
+    }
+    return { parsed: current, validation, attempts };
+  }
+
+  return { parsed: current, validation: null, attempts };
 }
 
 // ── 图片解析（调用视觉模型）─────────────────────────────────────────────────
@@ -685,7 +838,7 @@ skillCreator.post('/chat', async (c) => {
               if (part.type === 'reasoning') {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'thinking', text: part.textDelta })}\n\n`));
               } else if (part.type === 'text-delta') {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', text: part.textDelta })}\n\n`));
+                // Hold back raw draft text until internal review/repair completes.
               } else if (part.type === 'tool-call') {
                 logger.info('skill-creator', 'llm_tool_call_request', {
                   session_id: session.id,
@@ -722,27 +875,31 @@ skillCreator.post('/chat', async (c) => {
             text = truncateRepetition(text);
 
             const parsed = parseSkillCreatorResponse(text, session);
+            const reviewed = await autoReviewAndRepairDraft({
+              session,
+              parsed,
+              model,
+              skillIndex,
+              tools: skillTools,
+            });
+            const finalParsed = reviewed.parsed;
+            const validation = reviewed.validation;
 
             logger.info('skill-creator', 'chat_stream_parsed', {
               session_id: session.id,
               text_length: text.length,
-              parsed_phase: parsed.phase,
-              has_draft: !!parsed.draft,
-              draft_keys: parsed.draft ? Object.keys(parsed.draft) : [],
-              reply_preview: parsed.reply?.substring(0, 100),
+              parsed_phase: finalParsed.phase,
+              has_draft: !!finalParsed.draft,
+              draft_keys: finalParsed.draft ? Object.keys(finalParsed.draft) : [],
+              reply_preview: finalParsed.reply?.substring(0, 100),
+              auto_review_attempts: reviewed.attempts,
             });
 
-            session.phase = parsed.phase ?? session.phase;
-            if (parsed.draft) session.draft = parsed.draft;
-            session.history.push({ role: 'assistant', content: parsed.reply });
+            session.phase = finalParsed.phase ?? session.phase;
+            if (finalParsed.draft) session.draft = finalParsed.draft;
+            session.history.push({ role: 'assistant', content: finalParsed.reply });
 
-            // ── Draft 自动校验 ──
-            let validation: ValidationResult | null = null;
-            if (session.draft && (session.phase === 'draft' || session.phase === 'confirm')) {
-              validation = validateDraft(session.draft);
-              if (!validation.valid) {
-                session.phase = 'draft'; // 有 error 时打回 draft 阶段
-              }
+            if (validation) {
               logger.info('skill-creator', 'draft_validation', {
                 session_id: session.id,
                 valid: validation.valid,
@@ -753,7 +910,7 @@ skillCreator.post('/chat', async (c) => {
               });
 
               // 将校验结果注入会话历史，LLM 下一轮可自修复
-              const issues = [...validation.errors, ...validation.warnings];
+              const issues = collectValidationIssues(validation);
               if (issues.length > 0) {
                 const feedback = '【系统自动校验反馈】草稿存在以下问题，请在下一轮修复：\n'
                   + issues.map(i => `- [${i.severity}] ${i.message}`).join('\n');
@@ -765,7 +922,7 @@ skillCreator.post('/chat', async (c) => {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
               type: 'done',
               session_id: session.id,
-              reply: parsed.reply,
+              reply: finalParsed.reply,
               phase: session.phase,
               draft: session.draft,
               thinking: reasoning || null,
@@ -834,18 +991,21 @@ skillCreator.post('/chat', async (c) => {
 
     const cleanedText = truncateRepetition(text);
     const parsed = parseSkillCreatorResponse(cleanedText, session);
+    const reviewed = await autoReviewAndRepairDraft({
+      session,
+      parsed,
+      model,
+      skillIndex,
+      tools: skillTools,
+    });
+    const finalParsed = reviewed.parsed;
+    const validation = reviewed.validation;
 
-    session.phase = parsed.phase ?? session.phase;
-    if (parsed.draft) session.draft = parsed.draft;
-    session.history.push({ role: 'assistant', content: parsed.reply });
+    session.phase = finalParsed.phase ?? session.phase;
+    if (finalParsed.draft) session.draft = finalParsed.draft;
+    session.history.push({ role: 'assistant', content: finalParsed.reply });
 
-    // ── Draft 自动校验 ──
-    let validation: ValidationResult | null = null;
-    if (session.draft && (session.phase === 'draft' || session.phase === 'confirm')) {
-      validation = validateDraft(session.draft);
-      if (!validation.valid) {
-        session.phase = 'draft';
-      }
+    if (validation) {
       logger.info('skill-creator', 'draft_validation', {
         session_id: session.id,
         valid: validation.valid,
@@ -856,7 +1016,7 @@ skillCreator.post('/chat', async (c) => {
       });
 
       // 将校验结果注入会话历史，LLM 下一轮可自修复
-      const issues = [...validation.errors, ...validation.warnings];
+      const issues = collectValidationIssues(validation);
       if (issues.length > 0) {
         const feedback = '【系统自动校验反馈】草稿存在以下问题，请在下一轮修复：\n'
           + issues.map(i => `- [${i.severity}] ${i.message}`).join('\n');
@@ -868,10 +1028,11 @@ skillCreator.post('/chat', async (c) => {
       session_id: session.id,
       phase: session.phase,
       has_draft: !!session.draft,
+      auto_review_attempts: reviewed.attempts,
       total_duration_ms: Date.now() - reqStartTs,
     });
 
-    return c.json({ session_id: session.id, reply: parsed.reply, phase: session.phase, draft: session.draft, thinking: null, vision_result: imageDescription ?? null, validation: validation ?? undefined });
+    return c.json({ session_id: session.id, reply: finalParsed.reply, phase: session.phase, draft: session.draft, thinking: null, vision_result: imageDescription ?? null, validation: validation ?? undefined });
   } catch (err) {
     logger.error('skill-creator', 'chat_error', {
       error: String(err),

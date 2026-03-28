@@ -1,21 +1,26 @@
 /**
- * McpManagementPage.tsx — MCP 管理主容器
+ * McpManagementPage.tsx — Tool Runtime 管理主容器
  *
- * Tool Contracts / MCP Servers / Connectors
+ * Overview / Tool Contracts / Remote Endpoints / Connectors / Execution Records
  */
-import { useState, useEffect } from 'react';
-import { Wrench, Server, Plug } from 'lucide-react';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { Wrench, Server, Plug, Activity, ScrollText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { McpServerList } from './McpServerList';
 import { McpToolListPage } from './McpToolListPage';
 import { ConnectorListPage } from './ConnectorListPage';
 
-type McpTab = 'tools' | 'servers' | 'connectors';
+const RuntimeOverviewPage = lazy(() => import('./RuntimeOverviewPage').then(m => ({ default: m.RuntimeOverviewPage })));
+const ExecutionRecordsPage = lazy(() => import('./ExecutionRecordsPage').then(m => ({ default: m.ExecutionRecordsPage })));
+
+type McpTab = 'overview' | 'tools' | 'servers' | 'connectors' | 'records';
 
 const TABS: Array<{ id: McpTab; label: string; icon: React.ReactNode }> = [
+  { id: 'overview', label: 'Overview', icon: <Activity size={13} /> },
   { id: 'tools', label: 'Tool Contracts', icon: <Wrench size={13} /> },
-  { id: 'servers', label: 'MCP Servers', icon: <Server size={13} /> },
+  { id: 'servers', label: 'Remote Endpoints', icon: <Server size={13} /> },
   { id: 'connectors', label: 'Connectors', icon: <Plug size={13} /> },
+  { id: 'records', label: 'Execution Records', icon: <ScrollText size={13} /> },
 ];
 
 interface McpManagementProps {
@@ -85,9 +90,19 @@ export function McpManagementPage({ externalNavigateToTool, onExternalNavigateHa
 
       {/* 内容区 */}
       <div className="flex-1 overflow-auto relative">
+        <div className={`absolute inset-0 ${tab !== 'overview' ? 'hidden' : ''}`}>
+          <Suspense fallback={<div className="p-6 text-xs text-muted-foreground">Loading...</div>}>
+            <RuntimeOverviewPage />
+          </Suspense>
+        </div>
         <div className={`absolute inset-0 ${tab !== 'tools' ? 'hidden' : ''}`}><McpToolListPage navigateToTool={navigateToTool} onNavigateHandled={() => setNavigateToTool(null)} onBackToServers={handleBackToServers} /></div>
         <div className={`absolute inset-0 ${tab !== 'servers' ? 'hidden' : ''}`}><McpServerList onOpenTool={handleOpenTool} onOpenConnectors={() => setTab('connectors')} /></div>
         <div className={`absolute inset-0 ${tab !== 'connectors' ? 'hidden' : ''}`}><ConnectorListPage /></div>
+        <div className={`absolute inset-0 ${tab !== 'records' ? 'hidden' : ''}`}>
+          <Suspense fallback={<div className="p-6 text-xs text-muted-foreground">Loading...</div>}>
+            <ExecutionRecordsPage />
+          </Suspense>
+        </div>
       </div>
     </div>
   );

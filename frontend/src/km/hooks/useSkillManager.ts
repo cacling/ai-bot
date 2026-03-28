@@ -493,9 +493,9 @@ export function useSkillManager() {
       setMessages((prev) => [...prev, userMsg]);
       setIsTyping(true);
 
+      const fetchStartTs = performance.now();
       try {
         const isNew = activeSkillId?.startsWith('new-');
-        const fetchStartTs = performance.now();
         console.log('[skill-creator] sending chat request', {
           session_id: sessionId,
           enable_thinking: showThinking,

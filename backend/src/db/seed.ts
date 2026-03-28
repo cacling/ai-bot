@@ -9,6 +9,54 @@
 
 import { db, sqlite } from './index';
 import { eq } from 'drizzle-orm';
+// E2E test cases (originally from tests/apitest/usecase/, inlined after directory removal)
+const seededE2ECases = [
+  // bill-inquiry
+  { skill_name: 'bill-inquiry', input_message: '帮我查一下这个月账单总额和费用明细。', expected_keywords: JSON.stringify(['账单', '费用']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'bill-inquiry' }, { type: 'tool_called', value: 'query_bill' }]), persona_id: 'U001' },
+  { skill_name: 'bill-inquiry', input_message: '这个月话费怎么突然高了这么多？帮我分析一下原因。', expected_keywords: JSON.stringify(['异常', '费用']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'bill-inquiry' }, { type: 'tool_called_any_of', value: 'analyze_bill_anomaly,query_bill' }]), persona_id: 'U001' },
+  { skill_name: 'bill-inquiry', input_message: '我欠费停机了，帮我看看还欠多少，为什么会停机？', expected_keywords: JSON.stringify(['欠费', '停机']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'bill-inquiry' }, { type: 'tool_called_any_of', value: 'query_subscriber,query_bill,check_account_balance' }, { type: 'response_has_next_step', value: '' }]), persona_id: 'U003' },
+  { skill_name: 'bill-inquiry', input_message: '帮我看一下上个月账单，顺便告诉我哪些费用可以开发票。', expected_keywords: JSON.stringify(['上个月', '发票']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'bill-inquiry' }, { type: 'tool_called', value: 'query_bill' }, { type: 'response_mentions_all', value: '账单,发票' }]), persona_id: 'U001' },
+  { skill_name: 'bill-inquiry', input_message: '上个月国际漫游怎么会多扣这么多，帮我看看是不是异常。', expected_keywords: JSON.stringify(['漫游', '异常']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'bill-inquiry' }, { type: 'tool_called_any_of', value: 'query_bill,analyze_bill_anomaly' }, { type: 'response_mentions_any', value: '漫游包,漫游费,国际漫游,漫游' }]), persona_id: 'M003' },
+  // plan-inquiry
+  { skill_name: 'plan-inquiry', input_message: '帮我看看我现在适合什么套餐，顺便对比一下热门套餐。', expected_keywords: JSON.stringify(['套餐', '对比']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'plan-inquiry' }, { type: 'tool_called_any_of', value: 'query_plans,query_subscriber' }]), persona_id: 'U002' },
+  { skill_name: 'plan-inquiry', input_message: '我每个月流量都不够用，按我现在的用量有没有更大的套餐推荐？', expected_keywords: JSON.stringify(['流量', '推荐']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'plan-inquiry' }, { type: 'tool_called_any_of', value: 'query_subscriber,query_plans' }, { type: 'response_has_next_step', value: '' }]), persona_id: 'M001' },
+  { skill_name: 'plan-inquiry', input_message: '家庭融合套餐和我现在的个人套餐有什么区别？', expected_keywords: JSON.stringify(['家庭融合', '区别']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'plan-inquiry' }, { type: 'tool_called', value: 'query_plans' }]), persona_id: 'M002' },
+  { skill_name: 'plan-inquiry', input_message: '先帮我看一下我现在套餐和流量用了多少，再推荐要不要升级。', expected_keywords: JSON.stringify(['流量', '升级']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'plan-inquiry' }, { type: 'tool_called', value: 'query_subscriber' }, { type: 'response_has_next_step', value: '' }]), persona_id: 'U001' },
+  { skill_name: 'plan-inquiry', input_message: '我最近准备出国，有没有适合商务客户的漫游包或更合适的套餐？', expected_keywords: JSON.stringify(['出国', '漫游']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'plan-inquiry' }, { type: 'tool_called_any_of', value: 'query_plans,query_subscriber' }, { type: 'response_mentions_any', value: '漫游,出国,国际' }]), persona_id: 'M003' },
+  // service-cancel
+  { skill_name: 'service-cancel', input_message: '帮我把短信百条包退掉，我不需要了。', expected_keywords: JSON.stringify(['退订', '短信包']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'service-cancel' }, { type: 'tool_called_any_of', value: 'cancel_service,query_subscriber' }]), persona_id: 'U001' },
+  { skill_name: 'service-cancel', input_message: '这个月多扣了一个视频会员费，你先帮我查清楚是什么，再决定要不要退。', expected_keywords: JSON.stringify(['视频会员', '多扣']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'service-cancel' }, { type: 'tool_called_any_of', value: 'query_bill,query_subscriber' }, { type: 'tool_not_called', value: 'cancel_service' }]), persona_id: 'U001' },
+  { skill_name: 'service-cancel', input_message: '这个游戏加速包像是我误订的，帮我先看一下订购时间和能不能退款。', expected_keywords: JSON.stringify(['误订', '退款']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'service-cancel' }, { type: 'tool_called', value: 'query_subscriber' }, { type: 'response_mentions_any', value: '订购,退款,游戏加速' }]), persona_id: 'U003' },
+  { skill_name: 'service-cancel', input_message: '国际漫游包我下个月不需要了，帮我按规则退掉。', expected_keywords: JSON.stringify(['漫游包', '下个月']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'service-cancel' }, { type: 'tool_called_any_of', value: 'cancel_service,query_subscriber' }]), persona_id: 'U002' },
+  { skill_name: 'service-cancel', input_message: '先告诉我我现在订了哪些增值业务，再决定取消哪个。', expected_keywords: JSON.stringify(['增值业务', '取消']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'service-cancel' }, { type: 'tool_called', value: 'query_subscriber' }]), persona_id: 'U001' },
+  { skill_name: 'service-cancel', input_message: '帮我把彩铃退掉', expected_keywords: JSON.stringify(['退订', '彩铃']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'service-cancel' }, { type: 'tool_called', before: 'query_subscriber' }, { type: 'tool_called_before', value: 'query_subscriber,cancel_service' }]), persona_id: 'U001' },
+  { skill_name: 'service-cancel', input_message: '我这个月不知道为什么多扣了20块钱，查一下什么情况', expected_keywords: JSON.stringify(['扣费', '查询']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'service-cancel' }, { type: 'tool_called', value: 'query_bill' }, { type: 'tool_not_called', value: 'cancel_service' }]), persona_id: 'U001' },
+  // fault-diagnosis
+  { skill_name: 'fault-diagnosis', input_message: '我这边最近上网特别慢，帮我排查一下是不是网络有问题。', expected_keywords: JSON.stringify(['网络', '排查']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'fault-diagnosis' }, { type: 'tool_called', value: 'diagnose_network' }, { type: 'response_has_next_step', value: '' }]), persona_id: 'U001' },
+  { skill_name: 'fault-diagnosis', input_message: '今天突然没信号，也打不了电话，能帮我看看吗？', expected_keywords: JSON.stringify(['没信号', '电话']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'fault-diagnosis' }, { type: 'tool_called', value: 'diagnose_network' }, { type: 'response_has_next_step', value: '' }]), persona_id: 'U003' },
+  { skill_name: 'fault-diagnosis', input_message: '我突然上不了网了，像是区域故障，帮我查一下。', expected_keywords: JSON.stringify(['上不了网', '故障']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'fault-diagnosis' }, { type: 'tool_called', value: 'diagnose_network' }, { type: 'response_has_next_step', value: '' }]), persona_id: 'U002' },
+  { skill_name: 'fault-diagnosis', input_message: '这两天打电话老是突然断线，你帮我查一下是手机问题还是网络问题。', expected_keywords: JSON.stringify(['断线', '网络']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'fault-diagnosis' }, { type: 'tool_called', value: 'diagnose_network' }, { type: 'response_has_next_step', value: '' }]), persona_id: 'M002' },
+  { skill_name: 'fault-diagnosis', input_message: '我在境外漫游时一直上不了网，帮我看看是不是网络侧的问题。', expected_keywords: JSON.stringify(['漫游', '上不了网']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'fault-diagnosis' }, { type: 'tool_called', value: 'diagnose_network' }, { type: 'response_mentions_any', value: '漫游包,漫游,覆盖,网络' }]), persona_id: 'M003' },
+  // telecom-app
+  { skill_name: 'telecom-app', input_message: '我今天一直登录不上 APP，而且验证码来得特别慢。', expected_keywords: JSON.stringify(['登录', '验证码']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'telecom-app' }, { type: 'tool_called', value: 'diagnose_app' }]), persona_id: 'U003' },
+  { skill_name: 'telecom-app', input_message: 'APP 提示我的账号被锁了，怎么处理？', expected_keywords: JSON.stringify(['账号', '锁定']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'telecom-app' }, { type: 'tool_called', value: 'diagnose_app' }]), persona_id: 'U003' },
+  { skill_name: 'telecom-app', input_message: '系统提示我的登录环境异常，麻烦帮我看看是什么问题。', expected_keywords: JSON.stringify(['环境异常', '登录']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'telecom-app' }, { type: 'tool_called', value: 'diagnose_app' }]), persona_id: 'M003' },
+  { skill_name: 'telecom-app', input_message: '我是不是因为欠费停机了，所以 APP 一直登不上？', expected_keywords: JSON.stringify(['欠费', '停机']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'telecom-app' }, { type: 'tool_called', value: 'query_subscriber' }]), persona_id: 'U003' },
+  { skill_name: 'telecom-app', input_message: 'APP 版本是不是太旧了？我打开后老是报错闪退。', expected_keywords: JSON.stringify(['版本', '报错']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'telecom-app' }, { type: 'tool_called', value: 'diagnose_app' }]), persona_id: 'U001' },
+  // outbound-collection
+  { skill_name: 'outbound-collection', input_message: '我这周五之前会还，你把链接发我一下。', expected_keywords: JSON.stringify(['还款', '链接']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-collection' }, { type: 'tool_called', value: 'record_call_result' }, { type: 'tool_called', value: 'send_followup_sms' }, { type: 'not_contains', value: '法律后果' }, { type: 'not_contains', value: '起诉' }]), persona_id: 'C001' },
+  { skill_name: 'outbound-collection', input_message: '金额太高了，我要人工和你们协商处理。', expected_keywords: JSON.stringify(['人工', '协商']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-collection' }, { type: 'tool_called', value: 'record_call_result' }, { type: 'tool_called', value: 'transfer_to_human' }, { type: 'not_contains', value: '信用记录' }]), persona_id: 'C002' },
+  { skill_name: 'outbound-collection', input_message: '我现在不方便，明天下午三点你们再打给我。', expected_keywords: JSON.stringify(['回拨', '明天下午']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-collection' }, { type: 'tool_called', value: 'create_callback_task' }, { type: 'tool_called', value: 'record_call_result' }]), persona_id: 'C003' },
+  { skill_name: 'outbound-collection', input_message: '我其实昨天已经交过费了，你们先去核实一下，不要一直催。', expected_keywords: JSON.stringify(['已经交过费', '核实']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-collection' }, { type: 'tool_called', value: 'record_call_result' }, { type: 'not_contains', value: '起诉' }, { type: 'not_contains', value: '法律后果' }]), persona_id: 'C001' },
+  { skill_name: 'outbound-collection', input_message: '你打错了，这个号码不是本人。', expected_keywords: JSON.stringify(['不是本人']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-collection' }, { type: 'tool_called', value: 'record_call_result' }, { type: 'tool_not_called', value: 'send_followup_sms' }]), persona_id: 'C003' },
+  { skill_name: 'outbound-collection', input_message: '好吧，我下周一还，发个还款链接给我。', expected_keywords: JSON.stringify(['还款', '链接']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-collection' }, { type: 'tool_called', value: 'record_call_result' }, { type: 'tool_called', value: 'send_followup_sms' }, { type: 'tool_called_before', value: 'record_call_result,send_followup_sms' }]), persona_id: 'C001' },
+  // outbound-marketing
+  { skill_name: 'outbound-marketing', input_message: '听起来可以，你把套餐详情发我，我自己去办。', expected_keywords: JSON.stringify(['套餐详情', '办理']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'send_followup_sms' }, { type: 'tool_called', value: 'record_marketing_result' }]), persona_id: 'M001' },
+  { skill_name: 'outbound-marketing', input_message: '我先跟家里人商量一下，明天再联系我吧。', expected_keywords: JSON.stringify(['商量', '联系']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'send_followup_sms' }, { type: 'tool_called', value: 'record_marketing_result' }]), persona_id: 'M002' },
+  { skill_name: 'outbound-marketing', input_message: '这个漫游套餐我有兴趣，但你帮我转人工确认一下细节。', expected_keywords: JSON.stringify(['漫游', '人工']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'transfer_to_human' }]), persona_id: 'M003' },
+  { skill_name: 'outbound-marketing', input_message: '我对这个活动没兴趣，你帮我记录一下，别再推了。', expected_keywords: JSON.stringify(['没兴趣', '记录']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'record_marketing_result' }, { type: 'tool_not_called', value: 'send_followup_sms' }]), persona_id: 'M001' },
+  { skill_name: 'outbound-marketing', input_message: '不要再给我打营销电话了，把我标成免打扰。', expected_keywords: JSON.stringify(['免打扰', '营销电话']), assertions: JSON.stringify([{ type: 'skill_loaded', value: 'outbound-marketing' }, { type: 'tool_called', value: 'record_marketing_result' }, { type: 'tool_not_called', value: 'send_followup_sms' }, { type: 'response_mentions_any', value: '免打扰,不再打扰,不再拨打' }]), persona_id: 'U002' },
+];
 import { seedReplyCopilotKnowledge } from './seed-reply-copilot';
 import {
   bills,
@@ -56,6 +104,7 @@ import {
   mcpServers,
   mcpTools,
   connectors,
+  toolImplementations,
   skillRegistry,
   skillVersions,
 } from './schema';
@@ -735,8 +784,9 @@ async function seed() {
     { id: 'M003', label_zh: 'M003 · 赵强 · 国际漫游出行季活动 · ¥98/月', label_en: 'M003 · Zhao Qiang · Roaming Season Campaign · ¥98/mo', category: 'outbound_marketing', tag_zh: '商务漫游', tag_en: 'Business Roaming', tag_color: 'bg-violet-100 text-violet-600', sort_order: 2, context: JSON.stringify({ phone: '13900000006', name: '赵强', gender: 'male', plan: '5G商务套餐 159元', status: 'active', task_type: 'marketing', household_id: 'HH-003', outbound_task_id: 'M003' }) },
   ]).run();
 
-  console.log('[seed] 跳过 E2E 测试用例数据（usecase 模块已移除）');
+  console.log('[seed] 写入 E2E 测试用例数据...');
   db.delete(testCases).run();
+  db.insert(testCases).values(seededE2ECases).run();
 
   // ── 7a. callback_tasks ─────────────────────────────────────────────────────
   console.log('[seed] 写入 callback_tasks 历史数据...');
@@ -1358,6 +1408,60 @@ async function seed() {
     }).onConflictDoNothing().run();
   }
   console.log(`[seed] Connectors: ${connectorDefs.length} 个连接器已写入`);
+
+  // ── 9d. Tool Implementations（Tool Runtime：声明工具→适配器→连接器绑定）──
+  console.log('[seed] 写入 Tool Implementations...');
+  db.delete(toolImplementations).run();
+
+  // tool_id → connector mapping: 每个工具绑定到其 MCP Server 对应的 connector
+  const implDefs: Array<{
+    tool_name: string; adapter_type: string; connector_id: string; host_server_id: string; handler_key?: string;
+  }> = [
+    // user-info-service (:18003)
+    { tool_name: 'query_subscriber',     adapter_type: 'script', connector_id: 'conn-customer',  host_server_id: 'mcp-user-info',  handler_key: 'user_info.query_subscriber' },
+    { tool_name: 'query_bill',           adapter_type: 'script', connector_id: 'conn-billing',   host_server_id: 'mcp-user-info',  handler_key: 'user_info.query_bill' },
+    { tool_name: 'query_plans',          adapter_type: 'script', connector_id: 'conn-catalog',   host_server_id: 'mcp-user-info',  handler_key: 'user_info.query_plans' },
+    { tool_name: 'analyze_bill_anomaly', adapter_type: 'script', connector_id: 'conn-billing',   host_server_id: 'mcp-user-info',  handler_key: 'user_info.analyze_bill_anomaly' },
+    // business-service (:18004)
+    { tool_name: 'cancel_service',       adapter_type: 'script', connector_id: 'conn-orders',    host_server_id: 'mcp-business',   handler_key: 'business.cancel_service' },
+    { tool_name: 'issue_invoice',        adapter_type: 'api_proxy', connector_id: 'conn-invoice', host_server_id: 'mcp-business' },
+    // diagnosis-service (:18005)
+    { tool_name: 'diagnose_network',     adapter_type: 'script', connector_id: 'conn-diagnosis', host_server_id: 'mcp-diagnosis',  handler_key: 'diagnosis.diagnose_network' },
+    { tool_name: 'diagnose_app',         adapter_type: 'script', connector_id: 'conn-diagnosis', host_server_id: 'mcp-diagnosis',  handler_key: 'diagnosis.diagnose_app' },
+    // outbound-service (:18006)
+    { tool_name: 'record_call_result',   adapter_type: 'script', connector_id: 'conn-outreach',  host_server_id: 'mcp-outbound',   handler_key: 'outbound.record_call_result' },
+    { tool_name: 'send_followup_sms',    adapter_type: 'script', connector_id: 'conn-outreach',  host_server_id: 'mcp-outbound',   handler_key: 'outbound.send_followup_sms' },
+    { tool_name: 'create_callback_task', adapter_type: 'api_proxy', connector_id: 'conn-callback', host_server_id: 'mcp-outbound' },
+    { tool_name: 'record_marketing_result', adapter_type: 'script', connector_id: 'conn-outreach', host_server_id: 'mcp-outbound', handler_key: 'outbound.record_marketing_result' },
+    // account-service (:18007)
+    { tool_name: 'verify_identity',      adapter_type: 'api_proxy', connector_id: 'conn-identity', host_server_id: 'mcp-account' },
+    { tool_name: 'check_account_balance', adapter_type: 'script', connector_id: 'conn-billing',  host_server_id: 'mcp-account',   handler_key: 'account.check_account_balance' },
+    { tool_name: 'check_contracts',      adapter_type: 'script', connector_id: 'conn-customer',  host_server_id: 'mcp-account',   handler_key: 'account.check_contracts' },
+    { tool_name: 'apply_service_suspension', adapter_type: 'script', connector_id: 'conn-orders', host_server_id: 'mcp-account', handler_key: 'account.apply_service_suspension' },
+  ];
+
+  // Resolve tool_name → tool_id
+  const allTools = db.select().from(mcpTools).all();
+  const toolNameToId = new Map(allTools.map(t => [t.name, t.id]));
+
+  let implCount = 0;
+  for (const impl of implDefs) {
+    const toolId = toolNameToId.get(impl.tool_name);
+    if (!toolId) continue;
+    db.insert(toolImplementations).values({
+      id: `impl-${impl.tool_name}`,
+      tool_id: toolId,
+      host_server_id: impl.host_server_id,
+      adapter_type: impl.adapter_type,
+      connector_id: impl.connector_id,
+      handler_key: impl.handler_key ?? null,
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    }).onConflictDoNothing().run();
+    implCount++;
+  }
+  console.log(`[seed] Tool Implementations: ${implCount} 个绑定已写入`);
 
   // ── 10. 技能注册 + v1 版本快照（upsert：已存在则跳过）─────────────────────
   console.log('[seed] 初始化技能注册表和版本快照...');

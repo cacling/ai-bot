@@ -48,3 +48,30 @@ export function buildToolArgs(
     ...existingArgs,
   };
 }
+
+/**
+ * Execute a tool via the unified runtime. Returns the same ToolExecResult shape
+ * for backward compatibility with skill-runtime.ts and workflow executors.
+ */
+export async function executeToolViaRuntime(
+  toolName: string,
+  args: Record<string, unknown>,
+  runtime: import('../tool-runtime').ToolRuntime,
+  context: { sessionId: string; phone: string; channel?: 'online' | 'voice' | 'outbound' | 'workflow'; activeSkillName?: string | null },
+): Promise<ToolExecResult> {
+  const result = await runtime.call({
+    toolName,
+    args,
+    channel: context.channel ?? 'workflow',
+    sessionId: context.sessionId,
+    userPhone: context.phone,
+    activeSkillName: context.activeSkillName,
+  });
+
+  return {
+    success: result.success,
+    hasData: result.hasData,
+    rawText: result.rawText,
+    parsed: result.parsed,
+  };
+}

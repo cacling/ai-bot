@@ -257,7 +257,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
               className="pl-8 text-xs h-8"
             />
           </div>
-          <Select value={filterImpl} onValueChange={v => setFilterImpl(v)}>
+          <Select value={filterImpl} onValueChange={v => setFilterImpl(v ?? 'all')}>
             <SelectTrigger className="w-32 text-xs h-8"><SelectValue placeholder="Adapter 类型" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部 Adapter</SelectItem>
@@ -266,7 +266,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
               <SelectItem value="none">未配置</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={filterServer} onValueChange={v => setFilterServer(v)}>
+          <Select value={filterServer} onValueChange={v => setFilterServer(v ?? 'all')}>
             <SelectTrigger className="w-36 text-xs h-8"><SelectValue placeholder="Server" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部 Server</SelectItem>

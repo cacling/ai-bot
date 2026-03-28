@@ -559,3 +559,23 @@ export const skillInstanceEvents = sqliteTable('skill_instance_events', {
   payload_json: text('payload_json'),
   created_at: text('created_at').default(sql`(datetime('now'))`),
 });
+
+// ── Tool Runtime：执行记录（统一审计链路）──────────────────────────────────
+
+export const executionRecords = sqliteTable('execution_records', {
+  id: text('id').primaryKey(),
+  trace_id: text('trace_id').notNull(),
+  tool_name: text('tool_name').notNull(),
+  channel: text('channel').notNull(),
+  adapter_type: text('adapter_type').notNull(),
+  session_id: text('session_id'),
+  user_phone: text('user_phone'),
+  skill_name: text('skill_name'),
+  success: integer('success', { mode: 'boolean' }).notNull(),
+  has_data: integer('has_data', { mode: 'boolean' }).notNull(),
+  error_code: text('error_code'),
+  latency_ms: integer('latency_ms').notNull(),
+  input_json: text('input_json'),
+  output_preview: text('output_preview'),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
