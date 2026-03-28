@@ -826,12 +826,13 @@ LLM 生成修改 Diff。
 
 ### `GET /ws/outbound`（WebSocket 升级）
 
-外呼语音 GLM-Realtime 代理端点，连接后机器人自动发起开场白。
+外呼 LLM 代理端点，支持语音模式（GLM-Realtime）和文本模式（SiliconFlow generateText）。连接后机器人自动发起开场白。
 
 **连接 URL：**
 
 ```
-ws://localhost:18472/ws/outbound?task=collection&id=C001&lang=zh&phone=13800000001
+ws://localhost:18472/ws/outbound?task=collection&id=C001&lang=zh&phone=13800000001&mode=voice
+ws://localhost:18472/ws/outbound?task=collection&id=C001&lang=zh&phone=13800000001&mode=text
 ```
 
 | 查询参数 | 必填 | 说明 |
@@ -840,6 +841,7 @@ ws://localhost:18472/ws/outbound?task=collection&id=C001&lang=zh&phone=138000000
 | `id` | 否 | 任务 ID，默认按 task 类型取 `C001` / `M001` |
 | `lang` | 否 | `zh` / `en`，默认 `zh` |
 | `phone` | 否 | 客户手机号，默认 `13800000001` |
+| `mode` | 否 | `voice`（默认）/ `text`；voice 走 GlmRealtimeController + GLM-Realtime，text 走 OutboundTextSession + SiliconFlow |
 
 #### 外呼专用工具（本地 mock，不走 MCP）
 
@@ -852,13 +854,22 @@ ws://localhost:18472/ws/outbound?task=collection&id=C001&lang=zh&phone=138000000
 
 #### 后端 → 前端事件
 
-GLM 透传事件与 `/ws/voice` 相同，另增：
+**mode=voice**：GLM 透传事件与 `/ws/voice` 相同，另增：
 
 | type | 说明 |
 |------|------|
 | `transfer_to_human` | 转人工上下文（同 `/ws/voice`） |
 | `emotion_update` | 情感分析结果 |
 | `skill_diagram_update` | 外呼流程图（含工具高亮） |
+
+**mode=text**：无音频相关事件，仅文本交互：
+
+| type | source | 说明 |
+|------|--------|------|
+| `response` | `bot` | Bot 回复，含 `text` 和 `msg_id` |
+| `error` | `system` | 错误消息 |
+
+客户端发送格式：`{ "type": "chat_message", "message": "..." }`
 
 ---
 

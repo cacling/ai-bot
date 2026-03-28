@@ -51,6 +51,7 @@ flowchart TD
         ENGINE["engine/runner.ts<br/>ReAct 循环"]
         SKILLS["engine/skills.ts<br/>Skills 加载"]
         SB["Session Bus<br/>内存 pub/sub"]
+        CTRL["GlmRealtimeController<br/>统一 GLM 事件循环"]
         SVC["services/<br/>合规·翻译·TTS·日志"]
     end
 
@@ -81,8 +82,10 @@ flowchart TD
     FE -->|"HTTP /api/*"| REST
 
     CHAT --> ENGINE
-    VOICE -->|"代理"| GLM
-    OB -->|"代理"| GLM
+    VOICE --> CTRL
+    OB -->|"voice"| CTRL
+    OB -->|"text"| SF
+    CTRL -->|"代理"| GLM
     AGT --> ENGINE
     REST --> ENGINE
 
@@ -247,11 +250,18 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 
 ```
 坐席选择催收任务 C001
-  → WS /ws/outbound?task=collection&id=C001
-    → outbound.ts: 加载任务数据 → 构建 system prompt → 连接 GLM-Realtime
+  → WS /ws/outbound?task=collection&id=C001&mode=voice（默认）
+    → outbound.ts: 加载任务数据 → 构建 system prompt
+    → GlmRealtimeController: 连接 GLM-Realtime + session.update
     → response.create → 机器人说开场白
-    → 用户语音 → GLM → 工具调用 → 本地 mock 处理
+    → 用户语音 → GLM → 工具调用 → MCP outbound-service 处理
     → record_call_result / send_followup_sms → 记录结果
+
+  → WS /ws/outbound?task=collection&id=C001&mode=text（E2E 测试）
+    → outbound.ts: 加载任务数据 → 构建 system prompt
+    → OutboundTextSession: generateText → 机器人发送开场白
+    → 用户文本 → generateText + maxSteps=10 工具循环
+    → 工具执行走 MCP outbound-service（与 voice 相同管道）
 ```
 
 ### 3.6 知识审核发布（KMS 全流程）
@@ -377,6 +387,8 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 | KMS 13 张 km_ 表 | 端到端知识生命周期需要完整工作流状态 | 3 张表 — 无法支持三门验证和审核包工作流 |
 | 版本完整目录快照 | 确保回滚时 SKILL.md + references + scripts 一致性 | Git-based — 业务人员不熟悉 Git，且需要 Web UI 在线编辑 |
 | 双通道语音架构 | GLM-Realtime 英文输出不可靠，必须翻译替换 | 强制英文 prompt — GLM 仍高频回退中文 |
+| GlmRealtimeController 提取 | voice.ts 与 outbound.ts 共享 ~60% GLM 代码，改动需双写 | 各自内联 — fork/join 等新特性需改两处，容易遗漏 |
+| outbound mode=text | E2E 测试无法稳定模拟 GLM 语音流，需文本通道覆盖外呼 SOP | 仅 voice 测试 — 外呼流程无自动化回归 |
 | AC 自动机合规引擎 | O(n) 多模式匹配，18+ 关键词 <1ms | 正则逐条匹配 — O(n×m) 随词库增长退化 |
 
 ---

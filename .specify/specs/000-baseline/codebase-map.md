@@ -76,10 +76,10 @@ backend/src/chat/
 ├── chat-ws.ts                   # WebSocket /ws/chat：持久连接、流式 text_delta、Session Bus 集成
 │                                #   合规拦截、i18n 问候、session_summary 指标采集
 ├── chat.ts                      # HTTP POST /api/chat：同步请求-响应（历史/简单集成模式）
-├── voice.ts                     # WebSocket /ws/voice：GLM-Realtime 有状态代理
-│                                #   音频透传、工具拦截、转人工双路径、多语言 TTS override
-├── outbound.ts                  # WebSocket /ws/outbound：外呼语音 GLM-Realtime 代理
-│                                #   自动开场白、OUTBOUND_TOOLS、麦克风门控、灰度路由
+├── voice.ts                     # WebSocket /ws/voice：通过 GlmRealtimeController 代理 GLM-Realtime
+│                                #   hook 注入：SOP Guard、Mock 引擎、合规检查、进度追踪、agent 订阅
+├── outbound.ts                  # WebSocket /ws/outbound：外呼语音/文本双模式
+│                                #   mode=voice → GlmRealtimeController；mode=text → OutboundTextSession
 ├── outbound-types.ts            # 外呼类型定义（CollectionCase、MarketingTask、CallbackTask）
 ├── outbound-mock.ts             # 外呼 mock 数据（CALLBACK_TASKS 运行时列表）
 └── mock-data.ts                 # GET /api/mock-users、GET /api/outbound-tasks
@@ -164,6 +164,10 @@ backend/src/services/
 ├── tts.ts                       # TTS 语音合成：SiliconFlow CosyVoice2，zh/en 双语音色，输出 base64 MP3
 ├── voice-session.ts             # VoiceSessionState：对话轮次/工具调用/槽位/指标（首包时延/打断/冷场/时长）
 ├── voice-common.ts              # 语音共享函数：sendSkillDiagram / runEmotionAnalysis / runProgressTracking / triggerHandoff
+├── glm-realtime-controller.ts   # GlmRealtimeController：统一 GLM 事件循环（voice.ts + outbound.ts 共享）
+│                                #   GlmSessionHooks 接口注入 handler 特有行为（~10 个 hook）
+├── tts-override.ts              # TtsOverride：非中文 TTS 覆盖（翻译 + 生成目标语言语音，按句分割队列）
+├── outbound-text-session.ts     # OutboundTextSession：文本模式外呼（Vercel AI SDK generateText + maxSteps=10）
 └── mock-engine.ts               # Mock 引擎：匹配 mock 规则并返回模拟响应
 ```
 
