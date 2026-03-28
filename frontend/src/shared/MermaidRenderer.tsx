@@ -29,6 +29,8 @@ const NODE_TYPE_COLORS: Record<string, { fill: string; stroke: string }> = {
   guard:      { fill: '#fef2f2', stroke: '#ef4444' },   // Red — compliance check
   end:        { fill: '#f1f5f9', stroke: '#94a3b8' },   // Gray — terminal
   start:      { fill: '#ccfbf1', stroke: '#14b8a6' },   // Teal — entry
+  fork:       { fill: '#e0f2fe', stroke: '#0284c7' },   // Sky — parallel fork
+  join:       { fill: '#e0f2fe', stroke: '#0284c7' },   // Sky — parallel join
   // Legacy aliases
   message:    { fill: '#dcfce7', stroke: '#22c55e' },
   ref:        { fill: '#dcfce7', stroke: '#22c55e' },
@@ -44,6 +46,7 @@ const NODE_TYPE_LEGEND: Array<{ kind: string; label: string }> = [
   { kind: 'switch', label: '分支' },
   { kind: 'human',  label: '人工确认' },
   { kind: 'guard',  label: '合规检查' },
+  { kind: 'fork',   label: '并行' },
   { kind: 'end',    label: '结束' },
 ];
 

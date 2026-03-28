@@ -21,6 +21,9 @@ export interface WorkflowStep {
   ref?: string;
   output?: string;
   transitions: WorkflowTransition[];
+  /** fork: number of parallel branches; join: id of corresponding fork step */
+  forkBranches?: number;
+  joinForkId?: string;
 }
 
 export type StepKind =
@@ -30,6 +33,7 @@ export type StepKind =
   | 'if' | 'switch' | 'foreach' | 'loop' | 'subflow'
   | 'tool' | 'http' | 'db'
   | 'human' | 'guard'
+  | 'fork' | 'join'
   // Legacy aliases (backward compat — compiler normalizes)
   | 'message' | 'ref' | 'confirm' | 'choice';
 

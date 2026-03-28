@@ -414,6 +414,19 @@ export async function runAgent(
     if (msg.role === 'assistant' && Array.isArray(msg.content)) {
       for (const part of msg.content) {
         if (part.type === 'tool-call' && part.toolName) {
+          // Activate plan when get_skill_instructions is found in history
+          // This ensures SOP state tracking works for subsequent tool replays
+          if (part.toolName === 'get_skill_instructions') {
+            const skillName = (part.args as any)?.skill_name?.replace(/_/g, '-') ?? '';
+            if (skillName) {
+              try {
+                const planRow = findPublishedSpec(skillName);
+                if (planRow) {
+                  sopGuard.activatePlan(skillName, JSON.parse(planRow.spec_json));
+                }
+              } catch { /* ignore */ }
+            }
+          }
           const result = toolResultMap.get(part.toolCallId) ?? { success: true, hasData: true };
           sopGuard.recordToolCall(part.toolName, result);
         }

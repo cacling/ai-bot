@@ -26,7 +26,8 @@ export function routeSkill(sessionId: string): RouteResult {
 }
 
 export function shouldUseRuntime(skillName: string): { use: boolean; spec?: WorkflowSpec } {
-  if (RUNTIME_ENABLED.size > 0 && !RUNTIME_ENABLED.has(skillName)) {
+  // Only enable runtime for explicitly listed skills (opt-in)
+  if (RUNTIME_ENABLED.size === 0 || !RUNTIME_ENABLED.has(skillName)) {
     return { use: false };
   }
   const spec = loadSpec(skillName);
