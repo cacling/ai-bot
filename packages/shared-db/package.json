@@ -9,6 +9,7 @@
     "./schema/business": "./src/schema/business.ts",
     "./schema/platform": "./src/schema/platform.ts",
     "./schema/workorder": "./src/schema/workorder.ts",
+    "./schema/km": "./src/schema/km.ts",
     "./env": "./src/env.ts"
   },
   "scripts": {

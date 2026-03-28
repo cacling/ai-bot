@@ -3,7 +3,7 @@
  *
  * 对齐设计文档 §5.2-§5.5
  */
-import type { WorkItemStatus, WorkOrderAction, AppointmentAction, BookingStatus } from "../types.js";
+import type { WorkItemStatus, WorkOrderAction, AppointmentAction, BookingStatus, TicketAction, TaskAction } from "../types.js";
 
 // ── Work Order 状态机（§5.3）──────────────────────────────────────────────────
 
@@ -46,6 +46,30 @@ export const BOOKING_TO_ITEM_STATUS: Record<BookingStatus, WorkItemStatus> = {
   completed:   'resolved',
   no_show:     'waiting_customer',
   cancelled:   'cancelled',
+};
+
+// ── Ticket 状态机（§5.2）────────────────────────────────────────────────────
+
+const TICKET_TRANSITIONS: Record<TicketAction, { from: WorkItemStatus[]; to: WorkItemStatus }> = {
+  triage:                { from: ['new'],                                          to: 'open' },
+  mark_waiting_customer: { from: ['open'],                                         to: 'waiting_customer' },
+  mark_waiting_internal: { from: ['open'],                                         to: 'waiting_internal' },
+  customer_replied:      { from: ['waiting_customer'],                             to: 'open' },
+  internal_update:       { from: ['waiting_internal'],                             to: 'open' },
+  resolve:               { from: ['open', 'waiting_customer', 'waiting_internal'], to: 'resolved' },
+  close:                 { from: ['resolved'],                                     to: 'closed' },
+  reopen:                { from: ['resolved'],                                     to: 'open' },
+  cancel:                { from: ['open', 'waiting_customer'],                     to: 'cancelled' },
+};
+
+// ── Task 状态机（§5.5）──────────────────────────────────────────────────────
+
+const TASK_TRANSITIONS: Record<TaskAction, { from: WorkItemStatus[]; to: WorkItemStatus }> = {
+  start:   { from: ['new'],                                  to: 'in_progress' },
+  complete: { from: ['new', 'in_progress'],                   to: 'resolved' },
+  block:   { from: ['new', 'in_progress'],                   to: 'waiting_internal' },
+  unblock: { from: ['waiting_internal'],                      to: 'in_progress' },
+  cancel:  { from: ['new', 'in_progress', 'waiting_internal'], to: 'cancelled' },
 };
 
 // ── 公共 API ────────────────────────────────────────────────────────────────
@@ -120,6 +144,72 @@ export function getAvailableAppointmentActions(currentBookingStatus: BookingStat
   for (const [action, rule] of Object.entries(APPOINTMENT_TRANSITIONS)) {
     if (rule.from.includes(currentBookingStatus)) {
       actions.push(action as AppointmentAction);
+    }
+  }
+  return actions;
+}
+
+/**
+ * 验证 Ticket 状态流转
+ */
+export function validateTicketTransition(
+  currentStatus: WorkItemStatus,
+  action: TicketAction,
+): TransitionResult {
+  const rule = TICKET_TRANSITIONS[action];
+  if (!rule) {
+    return { valid: false, error: `未知动作: ${action}` };
+  }
+  if (!rule.from.includes(currentStatus)) {
+    return {
+      valid: false,
+      error: `当前状态 "${currentStatus}" 不允许执行 "${action}"（需要: ${rule.from.join(' | ')})`,
+    };
+  }
+  return { valid: true, toStatus: rule.to };
+}
+
+/**
+ * 获取 Ticket 当前可用动作
+ */
+export function getAvailableTicketActions(currentStatus: WorkItemStatus): TicketAction[] {
+  const actions: TicketAction[] = [];
+  for (const [action, rule] of Object.entries(TICKET_TRANSITIONS)) {
+    if (rule.from.includes(currentStatus)) {
+      actions.push(action as TicketAction);
+    }
+  }
+  return actions;
+}
+
+/**
+ * 验证 Task 状态流转
+ */
+export function validateTaskTransition(
+  currentStatus: WorkItemStatus,
+  action: TaskAction,
+): TransitionResult {
+  const rule = TASK_TRANSITIONS[action];
+  if (!rule) {
+    return { valid: false, error: `未知动作: ${action}` };
+  }
+  if (!rule.from.includes(currentStatus)) {
+    return {
+      valid: false,
+      error: `当前状态 "${currentStatus}" 不允许执行 "${action}"（需要: ${rule.from.join(' | ')})`,
+    };
+  }
+  return { valid: true, toStatus: rule.to };
+}
+
+/**
+ * 获取 Task 当前可用动作
+ */
+export function getAvailableTaskActions(currentStatus: WorkItemStatus): TaskAction[] {
+  const actions: TaskAction[] = [];
+  for (const [action, rule] of Object.entries(TASK_TRANSITIONS)) {
+    if (rule.from.includes(currentStatus)) {
+      actions.push(action as TaskAction);
     }
   }
   return actions;

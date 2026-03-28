@@ -1,7 +1,7 @@
 /**
  * item-service.ts — work_items 通用 CRUD
  */
-import { db, workItems, workOrders, appointments, workItemEvents, workItemRelations, eq, and, desc } from "../db.js";
+import { db, workItems, workOrders, appointments, tickets, tasks, workItemEvents, workItemRelations, eq, and, desc } from "../db.js";
 import type { WorkItemStatus, WorkItemType } from "../types.js";
 
 function generateId(prefix: string): string {
@@ -14,6 +14,7 @@ export interface ListFilters {
   queue_code?: string;
   owner_id?: string;
   customer_phone?: string;
+  category_code?: string;
   root_id?: string;
   parent_id?: string;
   source_session_id?: string;
@@ -37,6 +38,7 @@ export async function listWorkItems(filters: ListFilters) {
   if (filters.customer_phone) conditions.push(eq(workItems.customer_phone, filters.customer_phone));
   if (filters.root_id) conditions.push(eq(workItems.root_id, filters.root_id));
   if (filters.parent_id) conditions.push(eq(workItems.parent_id, filters.parent_id));
+  if (filters.category_code) conditions.push(eq(workItems.category_code, filters.category_code));
   if (filters.source_session_id) conditions.push(eq(workItems.source_session_id, filters.source_session_id));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -61,15 +63,20 @@ export async function getWorkItemDetail(id: string) {
   const item = await db.select().from(workItems).where(eq(workItems.id, id)).get();
   if (!item) return null;
 
-  const detail = item.type === 'work_order'
-    ? await db.select().from(workOrders).where(eq(workOrders.item_id, id)).get()
-    : item.type === 'appointment'
-      ? await db.select().from(appointments).where(eq(appointments.item_id, id)).get()
-      : null;
+  let detail = null;
+  if (item.type === 'work_order') {
+    detail = await db.select().from(workOrders).where(eq(workOrders.item_id, id)).get();
+  } else if (item.type === 'appointment') {
+    detail = await db.select().from(appointments).where(eq(appointments.item_id, id)).get();
+  } else if (item.type === 'ticket') {
+    detail = await db.select().from(tickets).where(eq(tickets.item_id, id)).get();
+  } else if (item.type === 'task') {
+    detail = await db.select().from(tasks).where(eq(tasks.item_id, id)).get();
+  }
 
   const children = await db.select().from(workItems).where(eq(workItems.parent_id, id)).all();
 
-  // 子预约：join appointments 详情表，前端需要 booking_status / scheduled_start_at 等字段
+  // 子预约：join appointments 详情表
   const childAppointmentRows = await db.select()
     .from(workItems)
     .leftJoin(appointments, eq(workItems.id, appointments.item_id))
@@ -78,6 +85,28 @@ export async function getWorkItemDetail(id: string) {
   const childAppointments = childAppointmentRows.map(r => ({
     ...r.work_items,
     detail: r.appointments,
+  }));
+
+  // 子工单：join work_orders 详情表
+  const childWorkOrderRows = await db.select()
+    .from(workItems)
+    .leftJoin(workOrders, eq(workItems.id, workOrders.item_id))
+    .where(and(eq(workItems.parent_id, id), eq(workItems.type, 'work_order')))
+    .all();
+  const childWorkOrders = childWorkOrderRows.map(r => ({
+    ...r.work_items,
+    detail: r.work_orders,
+  }));
+
+  // 子任务：join tasks 详情表
+  const childTaskRows = await db.select()
+    .from(workItems)
+    .leftJoin(tasks, eq(workItems.id, tasks.item_id))
+    .where(and(eq(workItems.parent_id, id), eq(workItems.type, 'task')))
+    .all();
+  const childTasks = childTaskRows.map(r => ({
+    ...r.work_items,
+    detail: r.tasks,
   }));
 
   const events = await db.select().from(workItemEvents)
@@ -89,7 +118,13 @@ export async function getWorkItemDetail(id: string) {
     .where(eq(workItemRelations.item_id, id))
     .all();
 
-  return { item, detail, children, appointments: childAppointments, events, relations };
+  return {
+    item, detail, children,
+    appointments: childAppointments,
+    child_work_orders: childWorkOrders,
+    child_tasks: childTasks,
+    events, relations,
+  };
 }
 
 /**
@@ -98,6 +133,7 @@ export async function getWorkItemDetail(id: string) {
 export async function createWorkItem(data: {
   type: WorkItemType;
   subtype?: string;
+  category_code?: string;
   title: string;
   summary?: string;
   description?: string;
@@ -132,6 +168,7 @@ export async function createWorkItem(data: {
     parent_id: data.parent_id ?? null,
     type: data.type,
     subtype: data.subtype ?? null,
+    category_code: data.category_code ?? null,
     title: data.title,
     summary: data.summary ?? '',
     description: data.description ?? null,

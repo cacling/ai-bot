@@ -7,6 +7,7 @@ import { createWorkItem } from "../services/item-service.js";
 import { transitionWorkOrder } from "../services/transition-service.js";
 import { createAppointment } from "../services/appointment-service.js";
 import { getAvailableWorkOrderActions } from "../policies/transition-policy.js";
+import { resolveCategoryDefaults, validateParentChildRelation } from "../services/category-service.js";
 import type { WorkItemStatus, WorkOrderAction } from "../types.js";
 
 const app = new Hono();
@@ -44,6 +45,7 @@ app.get("/", async (c) => {
 app.post("/", async (c) => {
   const body = await c.req.json<{
     template_id?: string;
+    category_code?: string;
     title: string;
     summary?: string;
     description?: string;
@@ -71,10 +73,26 @@ app.post("/", async (c) => {
   if (!body.title) return c.json({ error: "title 不能为空" }, 400);
   if (!body.work_type) return c.json({ error: "work_type 不能为空" }, 400);
 
-  // 创建 work_item
+  // 分类默认值解析
+  let catDefaults: Awaited<ReturnType<typeof resolveCategoryDefaults>> = null;
+  if (body.category_code) {
+    catDefaults = await resolveCategoryDefaults(body.category_code);
+    if (!catDefaults) return c.json({ error: `分类 "${body.category_code}" 不存在或未激活` }, 400);
+    if (catDefaults.type !== 'work_order') return c.json({ error: `分类 "${body.category_code}" 不是 work_order 类型` }, 400);
+
+    // 父子关系校验
+    if (body.parent_id) {
+      const parent = await db.select({ category_code: workItems.category_code }).from(workItems).where(eq(workItems.id, body.parent_id)).get();
+      const check = await validateParentChildRelation(parent?.category_code, 'work_order', body.category_code);
+      if (!check.valid) return c.json({ error: check.error }, 400);
+    }
+  }
+
+  // 创建 work_item（显式值优先于分类默认值）
   const { id } = await createWorkItem({
     type: 'work_order',
     subtype: body.work_type,
+    category_code: body.category_code,
     title: body.title,
     summary: body.summary,
     description: body.description,
@@ -85,9 +103,9 @@ app.post("/", async (c) => {
     customer_phone: body.customer_phone,
     customer_name: body.customer_name,
     parent_id: body.parent_id,
-    priority: body.priority,
+    priority: body.priority ?? catDefaults?.default_priority ?? undefined,
     severity: body.severity,
-    queue_code: body.queue_code,
+    queue_code: body.queue_code ?? catDefaults?.default_queue_code ?? undefined,
     owner_id: body.owner_id,
     next_action_at: body.next_action_at,
     due_at: body.due_at,
@@ -103,6 +121,12 @@ app.post("/", async (c) => {
     required_role: body.required_role ?? null,
     location_text: body.location_text ?? null,
   }).run();
+
+  // 分类绑定的 workflow 自动启动
+  if (catDefaults?.default_workflow_key) {
+    const { startWorkflowRun } = await import('../services/workflow-service.js');
+    await startWorkflowRun(catDefaults.default_workflow_key, id);
+  }
 
   return c.json({ success: true, id }, 201);
 });

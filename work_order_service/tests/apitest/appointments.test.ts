@@ -89,11 +89,11 @@ describe('Appointment full lifecycle: confirm → check_in → start → complet
     const { status: s3 } = await post(`/api/appointments/${aptId}/start`, {});
     expect(s3).toBe(200);
 
-    // Complete → parent goes to waiting_verification
+    // Complete → parent goes to resolved (verification_mode='none' is the default)
     const { status: s4 } = await post(`/api/appointments/${aptId}/complete`, {});
     expect(s4).toBe(200);
     const { data: p4 } = await get(`/api/work-orders/${parentId}`);
-    expect(p4.status).toBe('waiting_verification');
+    expect(p4.status).toBe('resolved');
   });
 });
 
@@ -161,6 +161,61 @@ describe('Appointment cancel drives parent back to open', () => {
 
     const { data: parentDetail } = await get(`/api/work-orders/${parentId}`);
     expect(parentDetail.status).toBe('open');
+  });
+});
+
+describe('Appointment complete with verification_mode=customer_confirm', () => {
+  test('complete → parent waiting_verification', async () => {
+    // Create work order WITH verification_mode
+    const { data } = await post('/api/work-orders', {
+      title: '需验证的工单',
+      customer_phone: '13800000099',
+      work_type: 'followup',
+      execution_mode: 'manual',
+      verification_mode: 'customer_confirm',
+    });
+    const parentId = data.id as string;
+    await post(`/api/work-orders/${parentId}/transition`, { action: 'accept' });
+
+    const { data: apt } = await post(`/api/work-orders/${parentId}/appointments`, {
+      appointment_type: 'callback',
+      scheduled_start_at: '2026-03-29T15:00:00+08:00',
+    });
+    const aptId = apt.id as string;
+
+    await post(`/api/appointments/${aptId}/confirm`, {});
+    await post(`/api/appointments/${aptId}/check-in`, {});
+    await post(`/api/appointments/${aptId}/start`, {});
+    const { status } = await post(`/api/appointments/${aptId}/complete`, {});
+    expect(status).toBe(200);
+
+    const { data: parentDetail } = await get(`/api/work-orders/${parentId}`);
+    expect(parentDetail.status).toBe('waiting_verification');
+  });
+});
+
+describe('Cancel with active sibling does not revert parent', () => {
+  test('cancel one of two appointments → parent stays scheduled', async () => {
+    const parentId = await createWorkOrder();
+    await post(`/api/work-orders/${parentId}/transition`, { action: 'accept' });
+
+    // Create two appointments
+    const { data: apt1 } = await post(`/api/work-orders/${parentId}/appointments`, {
+      appointment_type: 'callback',
+      scheduled_start_at: '2026-03-29T15:00:00+08:00',
+    });
+    const { data: apt2 } = await post(`/api/work-orders/${parentId}/appointments`, {
+      appointment_type: 'store_visit',
+      scheduled_start_at: '2026-03-30T10:00:00+08:00',
+    });
+
+    // Cancel only the first one
+    const { status } = await post(`/api/appointments/${apt1.id}/cancel`, {});
+    expect(status).toBe(200);
+
+    // Parent should still be scheduled because apt2 is still proposed (active)
+    const { data: parentDetail } = await get(`/api/work-orders/${parentId}`);
+    expect(parentDetail.status).toBe('scheduled');
   });
 });
 

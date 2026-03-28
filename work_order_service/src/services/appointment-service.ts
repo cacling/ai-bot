@@ -1,16 +1,18 @@
 /**
  * appointment-service.ts — 预约生命周期管理
  */
-import { db, workItems, appointments, workItemEvents, eq } from "../db.js";
+import { db, workItems, workOrders, appointments, workItemEvents, eq, and } from "../db.js";
 import { validateAppointmentTransition, BOOKING_TO_ITEM_STATUS } from "../policies/transition-policy.js";
+import { deriveParentStatusFromAppointment, shouldRevertParentOnCancel } from "../policies/parent-sync-policy.js";
 import { createWorkItem } from "./item-service.js";
-import type { AppointmentAction, BookingStatus } from "../types.js";
+import type { AppointmentAction, BookingStatus, VerificationMode } from "../types.js";
 
 /**
  * 为 Work Order 创建预约（§7.3 POST /:id/appointments）
  */
 export async function createAppointment(parentId: string, data: {
   appointment_type: string;
+  category_code?: string;
   scheduled_start_at?: string;
   scheduled_end_at?: string;
   location_text?: string;
@@ -21,10 +23,18 @@ export async function createAppointment(parentId: string, data: {
   const parent = await db.select().from(workItems).where(eq(workItems.id, parentId)).get();
   if (!parent) return { success: false, error: `父工单 ${parentId} 不存在` };
 
+  // 父子分类校验
+  if (parent.category_code) {
+    const { validateParentChildRelation } = await import('./category-service.js');
+    const check = await validateParentChildRelation(parent.category_code, 'appointment', data.category_code);
+    if (!check.valid) return { success: false, error: check.error };
+  }
+
   // 创建 work_item
   const { id } = await createWorkItem({
     type: 'appointment',
     subtype: data.appointment_type,
+    category_code: data.category_code,
     title: `预约: ${data.appointment_type}`,
     customer_phone: parent.customer_phone ?? undefined,
     customer_name: parent.customer_name ?? undefined,
@@ -126,7 +136,34 @@ async function transitionAppointment(
   // 预约状态变更驱动父工单状态
   const item = await db.select().from(workItems).where(eq(workItems.id, itemId)).get();
   if (item?.parent_id) {
-    const parentStatusUpdate = deriveParentStatusFromAppointment(action, result.toBookingStatus!);
+    let parentStatusUpdate: string | null;
+
+    if (action === 'cancel') {
+      // cancel 时检查兄弟预约
+      const siblings = await db.select({ booking_status: appointments.booking_status })
+        .from(appointments)
+        .innerJoin(workItems, eq(appointments.item_id, workItems.id))
+        .where(and(eq(workItems.parent_id, item.parent_id), eq(workItems.type, 'appointment')))
+        .all();
+      const siblingStatuses = siblings
+        .filter(s => s.booking_status !== null)
+        .map(s => s.booking_status as BookingStatus);
+      parentStatusUpdate = shouldRevertParentOnCancel(siblingStatuses);
+    } else if (action === 'complete') {
+      // complete 时读父单 verification_mode
+      const parentDetail = await db.select().from(workOrders).where(eq(workOrders.item_id, item.parent_id)).get();
+      const vMode = (parentDetail?.verification_mode ?? 'none') as VerificationMode;
+      parentStatusUpdate = deriveParentStatusFromAppointment(action, result.toBookingStatus!, vMode);
+    } else {
+      parentStatusUpdate = deriveParentStatusFromAppointment(action, result.toBookingStatus!);
+    }
+
+    // 通知 workflow 引擎子项状态变更（完成/取消/爽约均视为"子项终结"）
+    if (['complete', 'cancel', 'no_show'].includes(action)) {
+      const { onChildCompleted } = await import('./workflow-service.js');
+      await onChildCompleted(item.parent_id);
+    }
+
     if (parentStatusUpdate) {
       await db.update(workItems).set({
         status: parentStatusUpdate,
@@ -153,33 +190,6 @@ async function transitionAppointment(
   }
 
   return { success: true };
-}
-
-/**
- * 根据预约动作推导父工单应进入的状态
- * 返回 null 表示不需要更新父工单
- */
-function deriveParentStatusFromAppointment(
-  action: AppointmentAction,
-  _toBookingStatus: string,
-): string | null {
-  switch (action) {
-    case 'confirm':
-      return 'scheduled';       // 预约确认 → 父工单排期
-    case 'check_in':
-    case 'start':
-      return 'in_progress';     // 预约开始 → 父工单进行中
-    case 'complete':
-      return 'waiting_verification'; // 预约完成 → 父工单待验证
-    case 'no_show':
-      return 'waiting_customer'; // 客户爽约 → 父工单等客户
-    case 'cancel':
-      return 'open';            // 预约取消 → 父工单回到待处理
-    case 'reschedule':
-      return 'scheduled';       // 改约 → 父工单仍排期
-    default:
-      return null;
-  }
 }
 
 export async function confirmAppointment(id: string, data?: { resource_id?: string; actor?: string }) {

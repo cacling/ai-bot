@@ -5,8 +5,12 @@ import { describe, test, expect } from 'bun:test';
 import {
   validateWorkOrderTransition,
   validateAppointmentTransition,
+  validateTicketTransition,
+  validateTaskTransition,
   getAvailableWorkOrderActions,
   getAvailableAppointmentActions,
+  getAvailableTicketActions,
+  getAvailableTaskActions,
   BOOKING_TO_ITEM_STATUS,
 } from '../../src/policies/transition-policy';
 
@@ -197,5 +201,190 @@ describe('BOOKING_TO_ITEM_STATUS 映射', () => {
 
   test('cancelled → cancelled', () => {
     expect(BOOKING_TO_ITEM_STATUS['cancelled']).toBe('cancelled');
+  });
+});
+
+// ── Ticket 状态机 ──────────────────────────────────────────────────────────
+
+describe('Ticket 状态机', () => {
+  test('triage: new → open', () => {
+    const r = validateTicketTransition('new', 'triage');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('open');
+  });
+
+  test('mark_waiting_customer: open → waiting_customer', () => {
+    const r = validateTicketTransition('open', 'mark_waiting_customer');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('waiting_customer');
+  });
+
+  test('customer_replied: waiting_customer → open', () => {
+    const r = validateTicketTransition('waiting_customer', 'customer_replied');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('open');
+  });
+
+  test('mark_waiting_internal: open → waiting_internal', () => {
+    const r = validateTicketTransition('open', 'mark_waiting_internal');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('waiting_internal');
+  });
+
+  test('internal_update: waiting_internal → open', () => {
+    const r = validateTicketTransition('waiting_internal', 'internal_update');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('open');
+  });
+
+  test('resolve: open → resolved', () => {
+    const r = validateTicketTransition('open', 'resolve');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('resolved');
+  });
+
+  test('resolve from waiting_customer', () => {
+    const r = validateTicketTransition('waiting_customer', 'resolve');
+    expect(r.valid).toBe(true);
+  });
+
+  test('close: resolved → closed', () => {
+    const r = validateTicketTransition('resolved', 'close');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('closed');
+  });
+
+  test('reopen: resolved → open', () => {
+    const r = validateTicketTransition('resolved', 'reopen');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('open');
+  });
+
+  test('cancel: open → cancelled', () => {
+    const r = validateTicketTransition('open', 'cancel');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('cancelled');
+  });
+
+  test('invalid: triage from open', () => {
+    const r = validateTicketTransition('open', 'triage');
+    expect(r.valid).toBe(false);
+  });
+
+  test('invalid: close from open', () => {
+    const r = validateTicketTransition('open', 'close');
+    expect(r.valid).toBe(false);
+  });
+
+  test('available actions for new', () => {
+    const actions = getAvailableTicketActions('new');
+    expect(actions).toContain('triage');
+    expect(actions).not.toContain('resolve');
+  });
+
+  test('available actions for open', () => {
+    const actions = getAvailableTicketActions('open');
+    expect(actions).toContain('mark_waiting_customer');
+    expect(actions).toContain('resolve');
+    expect(actions).toContain('cancel');
+  });
+
+  test('available actions for resolved', () => {
+    const actions = getAvailableTicketActions('resolved');
+    expect(actions).toContain('close');
+    expect(actions).toContain('reopen');
+  });
+});
+
+// ── Task 状态机 ────────────────────────────────────────────────────────────
+
+describe('Task 状态机', () => {
+  test('start: new → in_progress', () => {
+    const r = validateTaskTransition('new', 'start');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('in_progress');
+  });
+
+  test('complete: new → resolved (direct)', () => {
+    const r = validateTaskTransition('new', 'complete');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('resolved');
+  });
+
+  test('complete: in_progress → resolved', () => {
+    const r = validateTaskTransition('in_progress', 'complete');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('resolved');
+  });
+
+  test('block: new → waiting_internal', () => {
+    const r = validateTaskTransition('new', 'block');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('waiting_internal');
+  });
+
+  test('block: in_progress → waiting_internal', () => {
+    const r = validateTaskTransition('in_progress', 'block');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('waiting_internal');
+  });
+
+  test('unblock: waiting_internal → in_progress', () => {
+    const r = validateTaskTransition('waiting_internal', 'unblock');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('in_progress');
+  });
+
+  test('cancel: new → cancelled', () => {
+    const r = validateTaskTransition('new', 'cancel');
+    expect(r.valid).toBe(true);
+    expect(r.toStatus).toBe('cancelled');
+  });
+
+  test('cancel: in_progress → cancelled', () => {
+    const r = validateTaskTransition('in_progress', 'cancel');
+    expect(r.valid).toBe(true);
+  });
+
+  test('cancel: waiting_internal → cancelled', () => {
+    const r = validateTaskTransition('waiting_internal', 'cancel');
+    expect(r.valid).toBe(true);
+  });
+
+  test('invalid: start from resolved', () => {
+    const r = validateTaskTransition('resolved', 'start');
+    expect(r.valid).toBe(false);
+  });
+
+  test('invalid: unblock from new', () => {
+    const r = validateTaskTransition('new', 'unblock');
+    expect(r.valid).toBe(false);
+  });
+
+  test('available actions for new', () => {
+    const actions = getAvailableTaskActions('new');
+    expect(actions).toContain('start');
+    expect(actions).toContain('complete');
+    expect(actions).toContain('block');
+    expect(actions).toContain('cancel');
+  });
+
+  test('available actions for in_progress', () => {
+    const actions = getAvailableTaskActions('in_progress');
+    expect(actions).toContain('complete');
+    expect(actions).toContain('block');
+    expect(actions).not.toContain('start');
+  });
+
+  test('available actions for waiting_internal', () => {
+    const actions = getAvailableTaskActions('waiting_internal');
+    expect(actions).toContain('unblock');
+    expect(actions).toContain('cancel');
+    expect(actions).not.toContain('complete');
+  });
+
+  test('available actions for resolved', () => {
+    const actions = getAvailableTaskActions('resolved');
+    expect(actions.length).toBe(0);
   });
 });

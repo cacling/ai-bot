@@ -9,6 +9,10 @@ import workItemRoutes from "./routes/work-items.js";
 import workOrderRoutes from "./routes/work-orders.js";
 import appointmentRoutes from "./routes/appointments.js";
 import templateRoutes from "./routes/templates.js";
+import ticketRoutes from "./routes/tickets.js";
+import taskRoutes from "./routes/tasks.js";
+import workflowRoutes from "./routes/workflows.js";
+import categoryRoutes from "./routes/categories.js";
 
 export function createApp() {
   const app = new Hono();
@@ -21,6 +25,10 @@ export function createApp() {
       "work-orders",
       "appointments",
       "templates",
+      "tickets",
+      "tasks",
+      "workflows",
+      "categories",
     ],
   }));
 
@@ -28,6 +36,10 @@ export function createApp() {
   app.route("/api/work-orders", workOrderRoutes);
   app.route("/api/appointments", appointmentRoutes);
   app.route("/api/templates", templateRoutes);
+  app.route("/api/tickets", ticketRoutes);
+  app.route("/api/tasks", taskRoutes);
+  app.route("/api/workflows", workflowRoutes);
+  app.route("/api/categories", categoryRoutes);
 
   return app;
 }

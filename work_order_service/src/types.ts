@@ -17,7 +17,7 @@ export type WorkItemStatus =
   | 'closed'
   | 'cancelled';
 
-export type WorkItemType = 'case' | 'work_order' | 'appointment' | 'task';
+export type WorkItemType = 'ticket' | 'work_order' | 'appointment' | 'task';
 
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 export type Severity = 'low' | 'medium' | 'high' | 'critical';
@@ -72,6 +72,45 @@ export type AppointmentAction =
   | 'no_show'
   | 'cancel';
 
+// ── Ticket ──────────────────────────────────────────────────────────────────
+
+export type TicketCategory = 'inquiry' | 'complaint' | 'incident' | 'request';
+
+export type TicketAction =
+  | 'triage'
+  | 'mark_waiting_customer'
+  | 'mark_waiting_internal'
+  | 'customer_replied'
+  | 'internal_update'
+  | 'resolve'
+  | 'close'
+  | 'reopen'
+  | 'cancel';
+
+// ── Task ────────────────────────────────────────────────────────────────────
+
+export type TaskAction = 'start' | 'complete' | 'block' | 'unblock' | 'cancel';
+
+// ── Workflow ────────────────────────────────────────────────────────────────
+
+export type WorkflowRunStatus =
+  | 'running'
+  | 'waiting_signal'
+  | 'waiting_child'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export type WorkflowNodeType =
+  | 'start'
+  | 'create_item'
+  | 'create_appointment'
+  | 'transition_item'
+  | 'wait_signal'
+  | 'wait_children'
+  | 'if'
+  | 'end';
+
 // ── 事件 ────────────────────────────────────────────────────────────────────
 
 export type ActorType = 'user' | 'agent' | 'system' | 'workflow' | 'customer';
@@ -101,3 +140,13 @@ export type RelationKind = 'source' | 'context' | 'child' | 'blocking' | 'derive
 // ── 队列 ────────────────────────────────────────────────────────────────────
 
 export type QueueType = 'frontline' | 'specialist' | 'store' | 'field' | 'system';
+
+// ── 分类 ────────────────────────────────────────────────────────────────────
+
+export type CategoryStatus = 'active' | 'inactive' | 'retired';
+
+export interface AllowedChildRule {
+  relation_type: string;         // 'derived_work_order' | 'sub_ticket' | 'sub_work_order' | 'task' | 'appointment'
+  child_type: WorkItemType;
+  child_categories: string[];
+}

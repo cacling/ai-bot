@@ -1,6 +1,6 @@
 # Work Order 实现设计
 
-> 面向当前工程栈的一版可实施设计：以 `Work Order` 为模块名和核心执行对象，同时完整支持 `Ticket`、`Appointment/Booking`、`Task/Sub-ticket`，并由 `Workflow` 驱动其创建、拆分、预约、升级与闭环。
+> 面向当前工程栈的一版可实施设计：以 `Work Order` 为模块名和核心执行对象，同时完整支持 `Ticket`、`Appointment/Booking`、`Task`、`Sub-ticket`、`Sub-work_order`，并由 `Workflow` 驱动其创建、拆分、预约、升级与闭环。
 
 **Date**: 2026-03-28  
 **Status**: Draft  
@@ -25,7 +25,7 @@
 本设计要同时满足四个目标：
 
 1. `Work Order` 作为外显主模块，承载“执行、跟进、履约”。
-2. 同一底座支持 `Ticket`、`Appointment/Booking`、`Task/Sub-ticket`。
+2. 同一底座支持 `Ticket`、`Appointment/Booking`、`Task`、`Sub-ticket`、`Sub-work_order`。
 3. 对象之间支持父子关系、并行子单、预约、阻塞依赖。
 4. `Workflow` 能驱动对象流转，而不是只做静态记录。
 
@@ -44,8 +44,12 @@
   - 表示客户诉求主单
 
 - `Sub-ticket`
-  - 统一替代此前混用的 `Child Work Order`、`Child Case`、`子工单`
-  - 表示任何需要独立责任人、队列、SLA 的子单
+  - 仅表示 `Ticket` 的同类子单
+  - 即“父是 `ticket`、子也是 `ticket`”的拆分语义
+
+- `Sub-work_order`
+  - 仅表示 `Work Order` 的同类子单
+  - 即“父是 `work_order`、子也是 `work_order`”的拆分语义
 
 - `Workflow`
   - 统一表示流程能力
@@ -72,9 +76,33 @@
   - 面向轻量内部动作
   - 负责承载 checklist、核实、回填、提醒
 
-- `Sub-ticket`
-  - 本质上不是独立对象类型，而是 `work_item` 的父子关系语义
-  - 当子项需要独立责任人、队列、SLA 时，使用 `Sub-ticket` 而非 `Task`
+- `Sub-ticket / Sub-work_order`
+  - 本质上都不是独立对象类型，而是 `work_item` 的父子关系语义
+  - `ticket -> ticket` 叫 `Sub-ticket`
+  - `work_order -> work_order` 叫 `Sub-work_order`
+  - 当子项需要独立责任人、队列、SLA 时，使用同类子单而非 `Task`
+
+### 2.1.1 父子关系与命名矩阵
+
+| 父对象 | 子对象 | 是否推荐 | 产品命名 | 关系语义 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `ticket` | `ticket` | 是 | `sub-ticket` | 同类拆分 | 适合投诉拆分、跨部门核查、多责任链并行 |
+| `ticket` | `work_order` | 是 | `derived work_order` / `关联执行工单` | 异类派生 | 诉求单派生执行单，最常见主路径 |
+| `ticket` | `task` | 是 | `task` | 异类派生 | 轻量内部动作，不独立排队 |
+| `ticket` | `appointment` | 否 | 不建议 | 跳层派生 | 预约通常应挂在 `work_order` 下 |
+| `work_order` | `work_order` | 是 | `sub-work_order` | 同类拆分 | 适合执行拆分、转二线、转门店、转审核 |
+| `work_order` | `appointment` | 是 | `appointment` | 异类派生 | 执行工单下的预约、改约、上门、回访 |
+| `work_order` | `task` | 是 | `task` | 异类派生 | 轻量补充动作，如核对、发短信、补录 |
+| `work_order` | `ticket` | 否 | 不建议 | 逆向派生 | 容易把执行问题重新建成诉求主单，语义会乱 |
+| `appointment` | 任意 | 否 | 不建议 | 叶子对象 | 预约应保持轻量，不再向下拆单 |
+| `task` | 任意 | 否 | 不建议 | 叶子对象 | Task 只承载轻量动作，不做父单 |
+
+补充约束：
+
+- `sub-ticket` 和 `sub-work_order` 都不是新的 `type`
+- 底层仍统一使用 `work_items.parent_id` 和 `work_items.root_id`
+- 只有“同类拆分”才使用 `sub-*` 命名
+- “异类派生”直接使用目标对象名称，不加 `sub-`
 
 ### 2.2 流程对象
 
@@ -418,7 +446,7 @@ workflow_run_events
 - `Ticket -> Sub-ticket`
   - 例：投诉主单拆为“账务核查子单”“门店核查子单”
 
-- `Work Order -> Sub-ticket`
+- `Work Order -> Sub-work_order`
   - 例：主执行单拆为“安全审核子单”“营业厅办理子单”
 
 ---
@@ -598,7 +626,7 @@ Ticket 创建
 -> 若用户反馈“已完成” -> 创建 callback Appointment
 -> Appointment 完成后回填结果
 -> 若验证成功 -> Work Order resolved -> Ticket resolved
--> 若失败 -> 创建 Sub-ticket(subtype=manual_unlock)
+-> 若失败 -> 创建 Sub-work_order(subtype=manual_unlock)
 ```
 
 ## 6.3 与现有 skill-runtime 的关系
@@ -1008,14 +1036,14 @@ Workflow 才能表达：
 
 推荐的最终实现方式是：
 
-> **用 `work_items` 做统一基座，用 `tickets` 承载客户诉求，用 `work_orders` 做业务执行核心，用 `appointments` 承载承诺时间，用 `tasks/sub-ticket` 承载拆解动作，用 `workflow_runs` 承载自动推进。**
+> **用 `work_items` 做统一基座，用 `tickets` 承载客户诉求，用 `work_orders` 做业务执行核心，用 `appointments` 承载承诺时间，用 `tasks`、`sub-ticket`、`sub-work_order` 承载拆解动作，用 `workflow_runs` 承载自动推进。**
 
 这样一来：
 
 - 模块命名上满足“我要的是 Work Order”
 - 能力边界上支持 Ticket
 - 调度层面支持 Appointment/Booking
-- 执行层面支持 Task/Sub-ticket
+- 执行层面支持 `Task`、`Sub-ticket`、`Sub-work_order`
 - 运行机制上支持 Workflow
 
 并且和你们当前 `shared-db + Hono + Agent Workstation + skill-runtime` 的结构是兼容的，可以分阶段接入，而不需要一次性重构全站。

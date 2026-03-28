@@ -62,5 +62,5 @@ registerScriptHandler('aggregated.get_cancel_context', async (args, callTool) =>
 
   if (results[0].status === 'rejected') logger.warn('aggregated', 'sub_tool_failed', { handler: 'get_cancel_context', sub: 'query_subscriber', error: String(results[0].reason) });
 
-  return { subscriber, plans, bill };
+  return { subscriber, plans, bill, _cardType: 'bill_card' };
 });

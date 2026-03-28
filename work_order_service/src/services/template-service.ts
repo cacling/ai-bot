@@ -1,7 +1,7 @@
 /**
  * template-service.ts — 工单模板操作
  */
-import { db, workItemTemplates, workOrders, appointments, eq } from "../db.js";
+import { db, workItemTemplates, workOrders, appointments, tickets, tasks, eq } from "../db.js";
 import { createWorkItem } from "./item-service.js";
 import type { WorkItemType } from "../types.js";
 
@@ -48,6 +48,12 @@ export async function createFromTemplate(templateId: string, overrides: {
   scheduled_start_at?: string;
   scheduled_end_at?: string;
   location_text?: string;
+  // ticket detail overrides
+  ticket_category?: string;
+  issue_type?: string;
+  intent_code?: string;
+  // task detail overrides
+  task_type?: string;
 }) {
   const tpl = await getTemplate(templateId);
   if (!tpl) return { success: false, error: `模板 ${templateId} 不存在` };
@@ -57,6 +63,7 @@ export async function createFromTemplate(templateId: string, overrides: {
   const { id, root_id } = await createWorkItem({
     type,
     subtype: tpl.subtype ?? undefined,
+    category_code: tpl.category_code ?? undefined,
     title: overrides.title ?? tpl.default_title ?? tpl.name,
     summary: overrides.summary,
     customer_phone: overrides.customer_phone,
@@ -91,6 +98,24 @@ export async function createFromTemplate(templateId: string, overrides: {
       booking_status: 'proposed',
       location_text: overrides.location_text ?? null,
     }).run();
+  } else if (type === 'ticket') {
+    await db.insert(tickets).values({
+      item_id: id,
+      ticket_category: overrides.ticket_category ?? tpl.subtype ?? 'inquiry',
+      issue_type: overrides.issue_type ?? null,
+      intent_code: overrides.intent_code ?? null,
+    }).run();
+  } else if (type === 'task') {
+    await db.insert(tasks).values({
+      item_id: id,
+      task_type: overrides.task_type ?? tpl.subtype ?? 'manual',
+    }).run();
+  }
+
+  // 如果模板关联了 workflow_key，自动启动 workflow run
+  if (tpl.workflow_key) {
+    const { startWorkflowRun } = await import('./workflow-service.js');
+    await startWorkflowRun(tpl.workflow_key, id);
   }
 
   return { success: true, id, root_id, template_name: tpl.name };

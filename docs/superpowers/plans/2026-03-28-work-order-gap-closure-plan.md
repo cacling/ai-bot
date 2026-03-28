@@ -2,7 +2,7 @@
 
 > 面向当前 `work_order_service` 的补齐方案，重点覆盖四个缺口：
 > 1. `Ticket`
-> 2. `Task/Sub-ticket`
+> 2. `Task/Sub-ticket/Sub-work_order`
 > 3. `Workflow`
 > 4. `Appointment -> Parent Work Order` 驱动闭环
 
@@ -26,7 +26,7 @@
 
 1. `Ticket` 可落库、可列表、可详情、可流转
 2. `Task` 可落库、可挂父单、可完成、可阻塞父单
-3. `Sub-ticket` 通过 `work_items.parent_id` 正式支持，且可按规则升级
+3. `Sub-ticket` 和 `Sub-work_order` 通过 `work_items.parent_id` 正式支持，且按父对象类型命名
 4. `Workflow` 可驱动：
    - 自动建子工单
    - 自动建预约
@@ -104,7 +104,7 @@ export const tickets = sqliteTable('tickets', {
 
 ---
 
-## 2.2 Task / Sub-ticket
+## 2.2 Task / Sub-ticket / Sub-work_order
 
 ### 2.2.1 Schema
 
@@ -123,15 +123,22 @@ export const tasks = sqliteTable('tasks', {
 });
 ```
 
-### 2.2.2 Sub-ticket 建模原则
+### 2.2.2 同类子单建模原则
 
 不新增独立表。
 
-`Sub-ticket` 直接使用：
+`Sub-ticket` 和 `Sub-work_order` 都直接使用：
 
-- `work_items.type = 'work_order'`
+- `Sub-ticket`: `work_items.type = 'ticket'`
+- `Sub-work_order`: `work_items.type = 'work_order'`
 - `parent_id = parent item`
 - `root_id = same root`
+
+命名规则：
+
+- 父是 `ticket`，子也是 `ticket` -> `Sub-ticket`
+- 父是 `work_order`，子也是 `work_order` -> `Sub-work_order`
+- 父子异类时，不使用 `sub-*`，直接叫目标对象名
 
 同时新增一个派生关系事件：
 
@@ -520,7 +527,7 @@ POST /api/appointments/:id/start
 1. 客户诉求先落 `Ticket`
 2. 从 `Ticket` 派生 `Work Order`
 3. 从 `Work Order` 派生 `Appointment`
-4. 从 `Ticket/Work Order` 派生 `Task` 或 `Sub-ticket`
+4. 从 `Ticket/Work Order` 派生 `Task`、`Sub-ticket` 或 `Sub-work_order`
 5. `Appointment` 状态变化能推父工单
 6. `Workflow` 能等待预约完成/子单完成后继续
 7. `skill-runtime` 能把“转人工/后续处理”正式落入工单域

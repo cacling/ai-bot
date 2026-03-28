@@ -231,6 +231,55 @@ export interface AnomalyCardData {
   recommendation: string;
 }
 
+// ── Data-driven card extraction map ──────────────────────────────────────────
+// Each extractor returns CardData | null from parsed tool result.
+// Aggregated tools emit _cardType hints which are also resolved via this map.
+
+type CardExtractor = (parsed: Record<string, unknown>) => CardData | null;
+
+const CARD_EXTRACTORS: Record<string, CardExtractor> = {
+  // L1/L3 direct tool results
+  query_bill: (p) => {
+    const d = (p.bill ?? (p.bills as unknown[])?.[0]) as BillCardData | undefined;
+    return d ? { type: 'bill_card', data: d } : null;
+  },
+  cancel_service: (p) =>
+    p.service_name ? { type: 'cancel_card', data: { service_name: p.service_name as string, monthly_fee: p.monthly_fee as number, effective_end: p.effective_end as string, phone: p.phone as string } } : null,
+  query_plans: (p) => {
+    const plan = p.plan ?? ((p.plans as unknown[])?.length === 1 ? (p.plans as unknown[])[0] : null);
+    return plan ? { type: 'plan_card', data: plan as PlanCardData } : null;
+  },
+  diagnose_network: (p) =>
+    p.diagnostic_steps ? { type: 'diagnostic_card', data: { issue_type: p.issue_type as string, diagnostic_steps: p.diagnostic_steps as DiagnosticCardData['diagnostic_steps'], conclusion: p.conclusion as string } } : null,
+  analyze_bill_anomaly: (p) =>
+    p.current_month ? { type: 'anomaly_card', data: p as unknown as AnomalyCardData } : null,
+
+  // L2 aggregated tool results (nested structure)
+  bill_card: (p) => {
+    const d = (p.bill as BillCardData | undefined);
+    return d ? { type: 'bill_card', data: d } : null;
+  },
+  anomaly_card: (p) => {
+    const a = p.anomaly as Record<string, unknown> | undefined;
+    return a?.current_month ? { type: 'anomaly_card', data: a as unknown as AnomalyCardData } : null;
+  },
+  plan_card: (p) => {
+    const plans = p.plans as unknown[] | undefined;
+    return plans?.length === 1 ? { type: 'plan_card', data: plans[0] as PlanCardData } : null;
+  },
+};
+
+/** Extract card from parsed tool result, checking tool name first, then _cardType hint */
+function extractCard(toolName: string, parsed: Record<string, unknown>): CardData | null {
+  // Direct tool name match
+  const extractor = CARD_EXTRACTORS[toolName];
+  if (extractor) return extractor(parsed);
+  // _cardType hint from aggregated tools
+  const hint = parsed._cardType as string | undefined;
+  if (hint && CARD_EXTRACTORS[hint]) return CARD_EXTRACTORS[hint](parsed);
+  return null;
+}
+
 export type DiagramUpdateCallback = (skillName: string, mermaid: string, nodeTypeMap?: Record<string, string>, progressState?: string) => void;
 export type TextDeltaCallback = (delta: string) => void;
 
@@ -568,53 +617,19 @@ export async function runAgent(
           });
 
           const parsed = JSON.parse(content);
+          const toolName = toolResult.toolName as string;
 
-          // analyze_bill_anomaly 返回不含 found/success，单独提取卡片
-          if ((toolResult.toolName as string) === 'analyze_bill_anomaly' && parsed.current_month) {
-            card = { type: 'anomaly_card', data: parsed as AnomalyCardData };
+          // transfer_to_human is control flow, not a card
+          if (toolName === 'transfer_to_human' && parsed.success) {
+            transferRequested = true;
+            const tc = (step.toolCalls ?? []).find(tc => tc.toolCallId === toolResult.toolCallId);
+            if (tc) transferArgs = tc.args as typeof transferArgs;
             continue;
           }
 
-          if (!parsed.found && !parsed.success) continue;
-
-          const toolName = toolResult.toolName as string;
-          if (toolName === 'query_bill') {
-            // 单条：{ bill: {...} }；多条：{ bills: [...] }，取最新（索引0）
-            const billData: BillCardData | undefined = parsed.bill ?? parsed.bills?.[0];
-            if (billData) card = { type: 'bill_card', data: billData };
-          } else if (toolName === 'cancel_service' && parsed.success) {
-            card = {
-              type: 'cancel_card',
-              data: {
-                service_name: parsed.service_name,
-                monthly_fee: parsed.monthly_fee,
-                effective_end: parsed.effective_end,
-                phone: parsed.phone,
-              },
-            };
-          } else if (toolName === 'query_plans' && parsed.plan) {
-            card = { type: 'plan_card', data: parsed.plan as PlanCardData };
-          } else if (toolName === 'query_plans' && parsed.plans?.length === 1) {
-            card = { type: 'plan_card', data: parsed.plans[0] as PlanCardData };
-          } else if (toolName === 'diagnose_network' && parsed.success) {
-            card = {
-              type: 'diagnostic_card',
-              data: {
-                issue_type: parsed.issue_type,
-                diagnostic_steps: parsed.diagnostic_steps,
-                conclusion: parsed.conclusion,
-              },
-            };
-            // Branch highlight is already sent during streaming (line ~272).
-            // Do NOT override skillDiagram here — progress tracking (async) will
-            // send the final progressHL version, and we don't want this branchHL
-            // to overwrite it after the fact.
-          } else if (toolName === 'transfer_to_human' && parsed.success) {
-            transferRequested = true;
-            // Capture args for fallback
-            const tc = (step.toolCalls ?? []).find(tc => tc.toolCallId === toolResult.toolCallId);
-            if (tc) transferArgs = tc.args as typeof transferArgs;
-          }
+          // Data-driven card extraction (handles direct tools, aggregated tools, _cardType hints)
+          const extracted = extractCard(toolName, parsed);
+          if (extracted) card = extracted;
         } catch {
           // ignore parse errors
         }
@@ -697,13 +712,12 @@ export async function runAgent(
         // Record in SOP guard for state tracking
         sopGuard.recordToolCall(disposition.action, { success: execResult.success, hasData: !!execResult.result });
 
-        // Extract card from disposition result (e.g., cancel_card)
+        // Extract card from disposition result via shared extractor map
         if (execResult.success && execResult.result) {
           try {
             const parsed = typeof execResult.result === 'string' ? JSON.parse(execResult.result) : execResult.result;
-            if (disposition.action === 'cancel_service' && parsed.service_name) {
-              card = { type: 'cancel_card', data: { service_name: parsed.service_name, monthly_fee: parsed.monthly_fee, effective_end: parsed.effective_end, phone: parsed.phone } };
-            }
+            const extracted = extractCard(disposition.action, parsed as Record<string, unknown>);
+            if (extracted) card = extracted;
           } catch { /* ignore parse errors */ }
         }
 

@@ -16,9 +16,15 @@ export const {
   workItems,
   workOrders,
   appointments,
+  tickets,
+  tasks,
   workItemEvents,
   workItemRelations,
   workItemTemplates,
   workQueues,
+  workItemCategories,
+  workflowDefinitions,
+  workflowRuns,
+  workflowRunEvents,
 } = workorderSchema;
 export { eq, and, desc, asc, sql } from "drizzle-orm";

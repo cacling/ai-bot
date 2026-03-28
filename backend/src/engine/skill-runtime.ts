@@ -179,6 +179,13 @@ export async function runSkillTurn(
         store.finishInstance(instanceId, 'escalated');
         transferRequested = true;
         finished = true;
+
+        // Fire-and-forget: 创建工单落单
+        createWorkOrderOnHandoff({
+          sessionId, instanceId, currentStepId, spec,
+          phone: context.phone, subscriberName: context.subscriberName,
+          step, lastToolResult,
+        });
         break;
       }
 
@@ -255,4 +262,74 @@ function loadReference(skillName: string, refPath: string): string | undefined {
 function summarizeToolResult(result: { success: boolean; hasData: boolean; payload?: unknown }): string {
   const status = result.success ? (result.hasData ? '查询成功' : '查询成功但无数据') : '查询失败';
   return `${status}：\n${JSON.stringify(result.payload ?? {}).slice(0, 500)}`;
+}
+
+/**
+ * human 步骤触发时，异步创建工单（fire-and-forget）
+ */
+function createWorkOrderOnHandoff(opts: {
+  sessionId: string;
+  instanceId: string;
+  currentStepId: string;
+  spec: WorkflowSpec;
+  phone: string;
+  subscriberName?: string;
+  step: WorkflowStep;
+  lastToolResult: any;
+}) {
+  const { sessionId, instanceId, currentStepId, spec, phone, subscriberName, step, lastToolResult } = opts;
+
+  // 从 step.config 读取工单配置（SKILL.md 中的 human 步骤可以声明 work_order 配置）
+  const woConfig = (step as any).work_order as {
+    type?: 'ticket' | 'work_order';
+    title?: string;
+    category_code?: string;
+    ticket_category?: string;
+    work_type?: string;
+    queue_code?: string;
+    priority?: string;
+  } | undefined;
+
+  import('../services/work-order-client').then(async (client) => {
+    try {
+      if (woConfig?.type === 'work_order' || woConfig?.work_type) {
+        await client.createWorkOrderFromSkill({
+          session_id: sessionId,
+          phone,
+          customer_name: subscriberName,
+          skill_id: spec.skillId,
+          skill_version: spec.version,
+          step_id: currentStepId,
+          instance_id: instanceId,
+          title: woConfig.title ?? `${spec.name} - 人工处理`,
+          work_type: woConfig.work_type ?? 'execution',
+          category_code: woConfig.category_code,
+          queue_code: woConfig.queue_code,
+          priority: woConfig.priority,
+          channel: 'online',
+        });
+      } else {
+        // 默认创建 Ticket
+        await client.createTicketFromSkill({
+          session_id: sessionId,
+          phone,
+          customer_name: subscriberName,
+          skill_id: spec.skillId,
+          skill_version: spec.version,
+          step_id: currentStepId,
+          instance_id: instanceId,
+          title: woConfig?.title ?? `${spec.name} - 转人工`,
+          ticket_category: woConfig?.ticket_category ?? 'request',
+          category_code: woConfig?.category_code,
+          queue_code: woConfig?.queue_code,
+          priority: woConfig?.priority ?? 'high',
+          channel: 'online',
+        });
+      }
+    } catch (err) {
+      logger.error('skill-runtime', 'handoff_work_order_failed', {
+        session: sessionId, skill: spec.skillId, error: String(err),
+      });
+    }
+  });
 }
