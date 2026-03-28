@@ -32,9 +32,3 @@ backend/skills/biz-skills/test-skill-*/
 # 测试产物
 **/test-results/
 **/playwright-report/
-tests/e2e/node_modules/
-tests/node_modules
-tests/scripts/.service-pids
-tests/unittest/frontend/node_modules/
-tests/unittest/frontend/coverage/
-frontend/tests/e2e/test-results/
