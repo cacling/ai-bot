@@ -94,12 +94,24 @@ stateDiagram-v2
     }
 
     state 套餐变更流程 {
-        套餐变更 --> 查询当前套餐: query_subscriber(phone) %% tool:query_subscriber %% step:plan-change-query %% kind:tool
+        套餐变更 --> 并行查询用户与套餐 %% step:plan-change-fork %% kind:fork
+
+        并行查询用户与套餐 --> 查询当前套餐: query_subscriber(phone) %% tool:query_subscriber %% step:plan-change-query-sub %% kind:tool
+        并行查询用户与套餐 --> 获取全部套餐: query_plans() %% tool:query_plans %% step:plan-change-query-plans %% kind:tool
+
         state 查询当前套餐结果 <<choice>>
         查询当前套餐 --> 查询当前套餐结果
-        查询当前套餐结果 --> 分析用量: 成功 %% guard:tool.success
+        查询当前套餐结果 --> 查询汇合: 成功 %% guard:tool.success
         查询当前套餐结果 --> 变更查询异常: 系统异常 %% guard:tool.error
         变更查询异常 --> [*]: 提示稍后重试或拨打10086 %% step:plan-change-error %% kind:end
+
+        state 获取全部套餐结果 <<choice>>
+        获取全部套餐 --> 获取全部套餐结果
+        获取全部套餐结果 --> 查询汇合: 成功 %% guard:tool.success
+        获取全部套餐结果 --> 套餐查询异常: 系统异常 %% guard:tool.error
+        套餐查询异常 --> [*]: 提示稍后重试或拨打10086 %% step:plan-change-plans-error %% kind:end
+
+        查询汇合 --> 分析用量 %% step:plan-change-join %% kind:join
         分析用量 --> 合约期检查: 评估流量、通话使用情况 %% step:plan-change-analyze %% kind:llm
         state 合约状态 <<choice>>
         合约期检查 --> 合约状态 %% step:plan-change-contract-check %% kind:llm
@@ -139,13 +151,25 @@ stateDiagram-v2
     }
 
     state 流量不够用流程 {
-        流量不够用 --> 查询用量: query_subscriber(phone) %% tool:query_subscriber %% step:plan-data-query %% kind:tool
+        流量不够用 --> 并行查询用量与套餐 %% step:plan-data-fork %% kind:fork
+
+        并行查询用量与套餐 --> 查询用量: query_subscriber(phone) %% tool:query_subscriber %% step:plan-data-query-sub %% kind:tool
+        并行查询用量与套餐 --> 获取套餐选项: query_plans() %% tool:query_plans %% step:plan-data-query-plans %% kind:tool
+
         state 查询用量结果 <<choice>>
         查询用量 --> 查询用量结果
-        查询用量结果 --> 检查剩余流量: 成功 %% guard:tool.success
+        查询用量结果 --> 用量查询汇合: 成功 %% guard:tool.success
         查询用量结果 --> 用量查询异常: 系统异常 %% guard:tool.error
         用量查询异常 --> [*]: 提示稍后重试或拨打10086 %% step:plan-data-error %% kind:end
-        检查剩余流量 --> 剩余量判断: 确认当前剩余流量和套餐 %% ref:plan-details.md#流量不足处理指引 %% step:plan-data-check %% kind:llm
+
+        state 获取套餐选项结果 <<choice>>
+        获取套餐选项 --> 获取套餐选项结果
+        获取套餐选项结果 --> 用量查询汇合: 成功 %% guard:tool.success
+        获取套餐选项结果 --> 套餐选项异常: 系统异常 %% guard:tool.error
+        套餐选项异常 --> [*]: 提示稍后重试或拨打10086 %% step:plan-data-plans-error %% kind:end
+
+        用量查询汇合 --> 检查剩余流量 %% step:plan-data-join %% kind:join %% guard:always
+        检查剩余流量 --> 剩余量判断: 分析当前剩余流量和可选套餐 %% ref:plan-details.md#流量不足处理指引 %% step:plan-data-check %% kind:llm
         state 剩余量判断 <<choice>>
         剩余量判断 --> 推荐加油包: 剩余流量接近零，急需用网 %% guard:always
         剩余量判断 --> 分析使用习惯: 尚有余量但经常不够用 %% guard:always

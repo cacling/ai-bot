@@ -20,11 +20,14 @@ export async function renderStep(
   const systemPrompt = buildStepPrompt(step, context);
 
   try {
+    // Sanitize history: only keep user/assistant text messages for text-only generation
+    const sanitizedHistory = sanitizeHistory(context.history);
+
     const result = await generateText({
       model: chatModel,
       system: systemPrompt,
       messages: [
-        ...context.history.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+        ...sanitizedHistory,
         { role: 'user' as const, content: context.userMessage },
       ],
       // NO tools — LLM can only generate text
@@ -41,6 +44,46 @@ export async function renderStep(
       ? '请问您是否确认执行该操作？（请回复"确认"或"取消"）'
       : '抱歉，系统处理中遇到问题，请稍后再试。';
   }
+}
+
+/**
+ * Convert raw DB history to plain user/assistant text messages.
+ * Strips tool-call messages and extracts text parts from structured assistant content.
+ */
+function sanitizeHistory(history: Array<{ role: string; content: string }>): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const result: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+
+  for (const m of history) {
+    if (m.role === 'tool') continue; // skip tool result messages
+
+    if (m.role === 'user') {
+      result.push({ role: 'user', content: m.content });
+      continue;
+    }
+
+    if (m.role === 'assistant') {
+      let text = m.content;
+      // If content looks like a JSON array of content parts, extract text parts
+      if (text.startsWith('[')) {
+        try {
+          const parts = JSON.parse(text);
+          if (Array.isArray(parts)) {
+            const textParts = parts
+              .filter((p: any) => p.type === 'text' && typeof p.text === 'string')
+              .map((p: any) => p.text);
+            text = textParts.join('\n');
+          }
+        } catch { /* keep original string */ }
+      }
+      if (text.trim()) {
+        result.push({ role: 'assistant', content: text });
+      }
+      continue;
+    }
+    // Skip other roles (system, etc.)
+  }
+
+  return result;
 }
 
 function buildStepPrompt(step: WorkflowStep, context: {

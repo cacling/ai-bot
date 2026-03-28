@@ -45,6 +45,7 @@ const VALID_KINDS: ReadonlySet<string> = new Set<StepKind>([
   'if', 'switch', 'foreach', 'loop', 'subflow',
   'tool', 'http', 'db',
   'human', 'guard',
+  'fork', 'join',
   // Legacy aliases
   'message', 'ref', 'confirm', 'choice',
 ]);
@@ -264,7 +265,18 @@ function parseMermaid(mermaid: string): ParseResult {
       const shortName = name.substring(dotIdx + 1);
       // Only map if the short name also exists as a standalone node (cross-boundary ref)
       if (nodes.has(shortName)) {
-        unprefixedToPrefix.set(shortName, name);
+        const existing = unprefixedToPrefix.get(shortName);
+        if (!existing) {
+          unprefixedToPrefix.set(shortName, name);
+        } else {
+          // Multiple prefixed versions exist (e.g. 套餐变更流程.套餐变更 and 套餐对比流程.套餐变更)
+          // Prefer the one that has outgoing transitions (real node vs cross-ref target)
+          const existingOutgoing = transitions.filter(t => t.from === existing && t.to !== '[*]').length;
+          const currentOutgoing = transitions.filter(t => t.from === name && t.to !== '[*]').length;
+          if (currentOutgoing > existingOutgoing) {
+            unprefixedToPrefix.set(shortName, name);
+          }
+        }
       }
     }
   }
@@ -480,6 +492,46 @@ export function compileWorkflow(
     if (/确认|确定/.test(step.label) && step.transitions.length >= 2) {
       step.kind = 'human';
       continue;
+    }
+  }
+
+  // Post-processing: link fork/join pairs and set forkBranches
+  for (const step of Object.values(steps)) {
+    if (step.kind === 'fork') {
+      step.forkBranches = step.transitions.length;
+      if (step.forkBranches < 2) {
+        errors.push(`Fork node "${step.label}" (step "${step.id}") must have >= 2 branches (found ${step.forkBranches})`);
+      }
+    }
+    if (step.kind === 'join') {
+      // Find the corresponding fork: walk backward through all steps to find a fork whose branches lead to this join
+      for (const candidate of Object.values(steps)) {
+        if (candidate.kind !== 'fork') continue;
+        // BFS from fork to see if all branches reach this join
+        const branchTargets = candidate.transitions.map(t => t.target);
+        const reachesJoin = branchTargets.every(branchStepId => {
+          // Walk forward from branch target to see if it reaches this join
+          const visited = new Set<string>();
+          const queue = [branchStepId];
+          while (queue.length > 0) {
+            const id = queue.shift()!;
+            if (id === step.id) return true;
+            if (visited.has(id)) continue;
+            visited.add(id);
+            const s = steps[id];
+            if (!s) continue;
+            for (const t of s.transitions) queue.push(t.target);
+          }
+          return false;
+        });
+        if (reachesJoin) {
+          step.joinForkId = candidate.id;
+          break;
+        }
+      }
+      if (!step.joinForkId) {
+        warnings.push(`Join node "${step.label}" (step "${step.id}") has no matching fork`);
+      }
     }
   }
 

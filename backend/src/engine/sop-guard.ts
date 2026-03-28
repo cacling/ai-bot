@@ -235,13 +235,27 @@ export class SOPGuard {
   private pendingConfirm: boolean = false;
   private lastToolResult: { success: boolean; hasData: boolean } | null = null;
 
+  // Fork/join parallel tracking
+  private forkStepId: string | null = null;           // current fork node id (when in fork state)
+  private forkCompletedBranches = new Set<string>();   // tool step ids completed in current fork
+  private forkExpectedCount = 0;                       // total branches expected
+  private forkFailed = false;                          // any branch failed?
+
   /** Activate a skill's execution plan */
   activatePlan(skillName: string, plan: WorkflowSpec): void {
+    // Don't reset an already-active plan for the same skill (e.g. LLM re-loads skill instructions)
+    if (this.activeSkill === skillName && this.activePlan) {
+      return;
+    }
     this.activeSkill = skillName;
     this.activePlan = plan;
     this.currentStepId = plan.startStepId;
     this.pendingConfirm = false;
     this.lastToolResult = null;
+    this.forkStepId = null;
+    this.forkCompletedBranches.clear();
+    this.forkExpectedCount = 0;
+    this.forkFailed = false;
     // Auto-advance through non-actionable start nodes (message/ref with single always exit)
     this.autoAdvance();
   }
@@ -278,6 +292,21 @@ export class SOPGuard {
     if (nextLabels) hint += `\n下一步是：${nextLabels}。`;
     if (this.pendingConfirm) hint += '\n在用户确认前，禁止调用任何操作类工具。';
     if (step.kind === 'tool' && step.tool) hint += `\n当前应调用工具：${step.tool}`;
+
+    // Fork state: tell LLM to call all branch tools in parallel
+    if (this.forkStepId && this.activePlan) {
+      const forkStep = this.activePlan.steps[this.forkStepId];
+      if (forkStep) {
+        const tools = forkStep.transitions
+          .map(t => this.activePlan!.steps[t.target]?.tool)
+          .filter(Boolean);
+        const remaining = tools.filter(t => !this.forkCompletedBranches.has(t!));
+        if (remaining.length > 0) {
+          hint += `\n⚡ **并行调用**：请在同一轮同时调用以下工具：${remaining.join('、')}`;
+        }
+      }
+    }
+
     return hint;
   }
 
@@ -287,12 +316,63 @@ export class SOPGuard {
 
     if (!this.activePlan || !this.currentStepId) return;
 
-    const step = this.activePlan.steps[this.currentStepId];
-    if (!step || step.tool !== toolName) return;
-
-    // Evaluate guards based on result
     const guardResult = result ?? { success: true, hasData: true };
     this.lastToolResult = guardResult;
+
+    // Fork state: track branch completion
+    if (this.forkStepId) {
+      this.forkCompletedBranches.add(toolName);
+      if (!guardResult.success) {
+        this.forkFailed = true;
+      }
+
+      // Check if all branches completed
+      if (this.forkCompletedBranches.size >= this.forkExpectedCount) {
+        this.advancePastFork();
+      }
+      return;
+    }
+
+    let step = this.activePlan.steps[this.currentStepId];
+    if (!step) return;
+
+    // If current step isn't the called tool, BFS forward to find the tool step
+    // and advance the state to it (handles choice/switch/llm nodes between current and tool)
+    if (step.tool !== toolName) {
+      const targetStepId = this.bfsToToolStep(toolName);
+      if (targetStepId) {
+        const targetStep = this.activePlan.steps[targetStepId];
+        if (targetStep?.kind === 'fork') {
+          // Tool is behind a fork → enter fork mode and track this tool as a branch completion
+          this.currentStepId = targetStepId;
+          this.forkStepId = targetStepId;
+          this.forkExpectedCount = targetStep.forkBranches ?? targetStep.transitions.length;
+          this.forkCompletedBranches.clear();
+          this.forkFailed = false;
+          logger.info('sop-guard', 'advanced_to_fork', {
+            tool: toolName, fork: targetStepId, branches: this.forkExpectedCount,
+          });
+          // Now track this tool call as a fork branch completion
+          this.forkCompletedBranches.add(toolName);
+          if (!guardResult.success) this.forkFailed = true;
+          // Check if all branches completed (unlikely on first call, but handle it)
+          if (this.forkCompletedBranches.size >= this.forkExpectedCount) {
+            this.advancePastFork();
+          }
+          return;
+        }
+        this.currentStepId = targetStepId;
+        step = this.activePlan.steps[this.currentStepId];
+        if (!step) return;
+        logger.info('sop-guard', 'advanced_to_tool', {
+          tool: toolName, step: targetStepId, label: step.label,
+        });
+      } else {
+        return; // tool not reachable — shouldn't happen if check() allowed it
+      }
+    }
+
+    // Evaluate guards based on result
     for (const t of step.transitions) {
       if (evaluateGuard(t.guard, guardResult)) {
         this.currentStepId = t.target;
@@ -321,6 +401,23 @@ export class SOPGuard {
         return null; // allow
       }
 
+      // Fork state: allow any tool that is a direct branch target of the fork node
+      if (this.forkStepId && this.activePlan) {
+        const forkStep = this.activePlan.steps[this.forkStepId];
+        if (forkStep) {
+          const branchToolNames = forkStep.transitions.map(t => {
+            const target = this.activePlan!.steps[t.target];
+            return target?.tool;
+          }).filter(Boolean);
+          if (branchToolNames.includes(toolName)) {
+            if (this.forkCompletedBranches.has(toolName)) {
+              return `工具 ${toolName} 已在当前并行步骤中调用过。`;
+            }
+            return null; // allow — tool is a branch of current fork
+          }
+        }
+      }
+
       if (this.pendingConfirm) {
         this.violations++;
         return `当前在确认节点 [${this.activePlan.steps[this.currentStepId]?.label}]，请先等待用户确认后再调用工具。`;
@@ -339,7 +436,8 @@ export class SOPGuard {
 
       // Current step is NOT a tool step (message/ref/llm/choice/switch) →
       // BFS to find the NEXT actionable frontier only.
-      // Stop at tool/confirm/human/end — don't look past them.
+      // Stop at tool/confirm/end — don't look past them.
+      // Note: 'human' nodes that are intermediate (e.g. triage questions) should NOT block BFS
       if (step?.kind !== 'tool') {
         const reachableTools = new Set<string>();
         const visited = new Set<string>();
@@ -355,12 +453,24 @@ export class SOPGuard {
             reachableTools.add(s.tool);
             continue; // don't look past this tool
           }
-          if (isConfirmKind(s.kind) || s.kind === 'end') {
-            continue; // don't look past blocking nodes (confirm, human, switch)
+          if (s.kind === 'end') {
+            continue; // don't look past end nodes
           }
-          // message/ref/llm/choice/switch — expand to find the frontier
+          // Confirm nodes block BFS only if pendingConfirm
+          if (s.kind === 'confirm') {
+            continue;
+          }
+          // All other kinds (llm, human, switch, fork, join, message, ref) — expand
           for (const t of s.transitions) queue.push(t.target);
         }
+
+        logger.info('sop-guard', 'bfs_check', {
+          tool: toolName,
+          currentStep: this.currentStepId,
+          currentKind: step?.kind,
+          reachableTools: [...reachableTools],
+          found: reachableTools.has(toolName),
+        });
 
         if (reachableTools.has(toolName)) {
           return null; // allow — tool is reachable from current position
@@ -426,7 +536,78 @@ export class SOPGuard {
     this.violations = 0;
   }
 
-  /** Auto-advance through non-actionable nodes (choice, message/ref with single always exit, end, human) */
+  /** Advance past a completed fork — find the join node and continue */
+  private advancePastFork(): void {
+    if (!this.activePlan || !this.forkStepId) return;
+    if (this.forkFailed) {
+      logger.warn('sop-guard', 'fork_branch_failed', {
+        fork: this.forkStepId,
+        completed: [...this.forkCompletedBranches],
+      });
+    }
+    const forkStep = this.activePlan.steps[this.forkStepId];
+    if (forkStep) {
+      // BFS from fork branches to find the join node
+      for (const t of forkStep.transitions) {
+        const visited = new Set<string>();
+        const queue = [t.target];
+        while (queue.length > 0) {
+          const id = queue.shift()!;
+          if (visited.has(id)) continue;
+          visited.add(id);
+          const s = this.activePlan.steps[id];
+          if (!s) continue;
+          if (s.kind === 'join') {
+            this.currentStepId = s.id;
+            this.forkStepId = null;
+            this.forkCompletedBranches.clear();
+            this.forkExpectedCount = 0;
+            this.forkFailed = false;
+            logger.info('sop-guard', 'fork_completed', { join: s.id });
+            this.autoAdvance();
+            return;
+          }
+          for (const st of s.transitions) queue.push(st.target);
+        }
+      }
+    }
+    // Fallback: clear fork state
+    this.forkStepId = null;
+    this.forkCompletedBranches.clear();
+    this.forkExpectedCount = 0;
+    this.forkFailed = false;
+  }
+
+  /**
+   * BFS forward from current step to find a tool step matching the given tool name.
+   * If the tool is behind a fork node, returns the fork node's ID instead
+   * (so the caller enters fork mode rather than jumping into one branch).
+   */
+  private bfsToToolStep(toolName: string): string | null {
+    if (!this.activePlan || !this.currentStepId) return null;
+    const visited = new Set<string>();
+    const queue: Array<{ id: string; lastFork: string | null }> = [
+      { id: this.currentStepId, lastFork: null },
+    ];
+    while (queue.length > 0) {
+      const { id, lastFork } = queue.shift()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const s = this.activePlan.steps[id];
+      if (!s) continue;
+      if (s.kind === 'tool' && s.tool === toolName) {
+        // If this tool is behind a fork, return the fork node instead
+        return lastFork ?? id;
+      }
+      // Don't expand past blocking nodes (other tools, confirm, end)
+      if (s.kind === 'tool' || isConfirmKind(s.kind) || s.kind === 'end' || s.kind === 'human') continue;
+      const newFork = s.kind === 'fork' ? id : lastFork;
+      for (const t of s.transitions) queue.push({ id: t.target, lastFork: newFork });
+    }
+    return null;
+  }
+
+  /** Auto-advance through non-actionable nodes (choice, message/ref with single always exit, end, human, fork, join) */
   private autoAdvance(): void {
     if (!this.activePlan || !this.currentStepId) return;
 
@@ -434,6 +615,28 @@ export class SOPGuard {
     while (safety-- > 0) {
       const step = this.activePlan.steps[this.currentStepId];
       if (!step) break;
+
+      // Fork node: enter fork state, stop and wait for LLM to call branch tools in parallel
+      if (step.kind === 'fork') {
+        this.forkStepId = step.id;
+        this.forkExpectedCount = step.forkBranches ?? step.transitions.length;
+        this.forkCompletedBranches.clear();
+        this.forkFailed = false;
+        logger.info('sop-guard', 'fork_entered', {
+          step: step.id, branches: this.forkExpectedCount,
+          tools: step.transitions.map(t => this.activePlan!.steps[t.target]?.tool).filter(Boolean),
+        });
+        break; // stop — LLM needs to call tools
+      }
+
+      // Join node: auto-advance past it (we arrive here after all fork branches complete)
+      if (step.kind === 'join') {
+        if (step.transitions.length === 1) {
+          this.currentStepId = step.transitions[0].target;
+          continue;
+        }
+        break; // multiple exits from join — LLM decides
+      }
 
       if (isSwitchKind(step.kind)) {
         // Single 'always' exit → auto-advance unconditionally
