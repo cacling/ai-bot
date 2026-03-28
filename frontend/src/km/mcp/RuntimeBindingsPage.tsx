@@ -48,12 +48,13 @@ function needsConnector(adapterType: string | null): boolean {
   return adapterType === 'db' || adapterType === 'api_proxy';
 }
 
-export function RuntimeBindingsPage({ onOpenTool }: Props) {
+export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateHandled }: Props) {
   const [items, setItems] = useState<RuntimeBindingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [adapterFilter, setAdapterFilter] = useState<AdapterFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -64,6 +65,18 @@ export function RuntimeBindingsPage({ onOpenTool }: Props) {
   }, []);
 
   useEffect(load, [load]);
+
+  // Handle cross-navigation: auto-open drawer when navigateToBinding is set
+  useEffect(() => {
+    if (navigateToBinding) {
+      // Delay slightly to ensure the page is mounted
+      const timer = setTimeout(() => {
+        setSelectedToolId(navigateToBinding);
+        onNavigateHandled?.();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [navigateToBinding, onNavigateHandled]);
 
   const stats = useMemo(() => {
     const active = items.filter(b => b.impl_status === 'active' && !b.disabled);
@@ -201,7 +214,7 @@ export function RuntimeBindingsPage({ onOpenTool }: Props) {
               <TableRow
                 key={b.tool_id}
                 className="cursor-pointer hover:bg-muted/50"
-                onClick={() => onOpenTool?.(b.tool_id, 'implementation')}
+                onClick={() => setSelectedToolId(b.tool_id)}
               >
                 <TableCell>
                   <div className="flex items-center gap-1">
@@ -250,6 +263,13 @@ export function RuntimeBindingsPage({ onOpenTool }: Props) {
           </TableBody>
         </Table>
       )}
+
+      <BindingDetailDrawer
+        toolId={selectedToolId}
+        onClose={() => setSelectedToolId(null)}
+        onSaved={() => { setSelectedToolId(null); load(); }}
+        onOpenContract={onOpenTool ? (id) => onOpenTool(id, 'overview') : undefined}
+      />
     </div>
   );
 }
