@@ -20,6 +20,6 @@ describe('ScriptAdapter', () => {
     };
     const result = await adapter.call(ctx);
     expect(result.success).toBe(false);
-    expect(result.rawText).toContain('No handler');
+    expect(result.rawText).toContain('no handler');
   });
 });

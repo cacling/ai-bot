@@ -20,9 +20,5 @@ mcp.route('/tool-management', toolManagement);
 mcp.route('/tools', toolsOverview);
 mcp.route('/execution-records', executionRecords);
 
-// @deprecated — 旧 /resources 路径别名，指向 connectors 路由
-// 前端 McpServerConsole、HealthModule 等仍调用 /resources 端点
-// 待前端完全切换到 /connectors API 后删除
-mcp.route('/resources', connectorRoutes);
 
 export default mcp;

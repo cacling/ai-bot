@@ -104,7 +104,7 @@ export const CardPanel = memo(function CardPanel({ cards, lang, onUpdate }: Prop
             return renderCard(seg.id);
           }
           return (
-            <div key={`seg-${i}`} className="flex gap-3">
+            <div key={`seg-${i}`} className="flex gap-3 items-start">
               <div className="flex-1 flex flex-col">{seg.left.map(id => renderCard(id))}</div>
               <div className="flex-1 flex flex-col">{seg.right.map(id => renderCard(id))}</div>
             </div>

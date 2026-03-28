@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Play, FileCode2, Eye, Columns2, Link2 } from 'lucide-react';
+import { ArrowLeft, Play, FileCode2, Eye, Columns2, Link2, Scissors } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { kmApi, type KMDocumentDetail, type KMDocVersionContent } from './api';
+import { kmApi, type KMDocumentDetail, type KMDocVersionContent, type KMDocChunk } from './api';
 import type { KMPage } from './KnowledgeManagementPage';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,23 @@ export function DocumentDetailPage({ id, navigate }: { id: string; navigate: (p:
   const [contentLoading, setContentLoading] = useState(false);
   const [contentError, setContentError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [chunks, setChunks] = useState<KMDocChunk[]>([]);
+  const [chunking, setChunking] = useState(false);
+
+  const loadChunks = (vid: string) => {
+    kmApi.listChunks(vid).then(r => setChunks(r.items)).catch(() => setChunks([]));
+  };
+
+  const handleAutoChunk = async () => {
+    if (!selectedVersionId) return;
+    setChunking(true);
+    try {
+      await kmApi.autoChunk(selectedVersionId);
+      loadChunks(selectedVersionId);
+      load();
+    } catch { /* ignore */ }
+    setChunking(false);
+  };
 
   const load = () => {
     setLoading(true);
@@ -54,6 +71,7 @@ export function DocumentDetailPage({ id, navigate }: { id: string; navigate: (p:
         setContentError(error.message);
       })
       .finally(() => setContentLoading(false));
+    loadChunks(selectedVersionId);
   }, [selectedVersionId]);
 
   const handleParse = async (vid: string) => {
@@ -80,6 +98,8 @@ export function DocumentDetailPage({ id, navigate }: { id: string; navigate: (p:
               <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                 <span>来源: {doc.source}</span>
                 <span>密级: {doc.classification}</span>
+                <span>权威: <Badge variant="outline" className="text-[10px] ml-1">{{ policy: '制度', rule: '规则', faq: 'FAQ', experience: '经验' }[doc.authority_level] ?? doc.authority_level}</Badge></span>
+                <span>可引用: {doc.citation_ready ? '是' : '否'}</span>
                 <span>负责人: {doc.owner ?? '-'}</span>
                 <span>状态: {doc.status}</span>
                 <span>版本数: {doc.versions.length}</span>
@@ -230,6 +250,41 @@ export function DocumentDetailPage({ id, navigate }: { id: string; navigate: (p:
           </CardContent>
         </Card>
       </div>
+
+      {/* Chunk preview */}
+      {selectedVersionId && (
+        <Card>
+          <CardHeader className="py-2 px-3 border-b">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xs flex items-center gap-1.5">
+                <Scissors size={12} />
+                切块预览 ({chunks.length} 块)
+              </CardTitle>
+              <Button variant="outline" size="xs" onClick={handleAutoChunk} disabled={chunking}>
+                {chunking ? '解析中...' : '自动切块'}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {chunks.length === 0 ? (
+              <div className="px-3 py-6 text-center text-xs text-muted-foreground">暂无切块，点击"自动切块"按钮解析文档</div>
+            ) : (
+              <div className="divide-y max-h-[400px] overflow-y-auto">
+                {chunks.map(chunk => (
+                  <div key={chunk.id} className="px-3 py-2.5 hover:bg-accent/30 transition-colors">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-[10px]">#{chunk.chunk_index}</Badge>
+                      {chunk.anchor_value && <Badge variant="secondary" className="text-[10px]">{chunk.anchor_value}</Badge>}
+                      {chunk.citation_label && <span className="text-[10px] text-muted-foreground">{chunk.citation_label}</span>}
+                    </div>
+                    <p className="text-xs text-foreground leading-relaxed line-clamp-3">{chunk.chunk_text}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

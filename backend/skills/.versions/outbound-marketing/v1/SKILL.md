@@ -117,28 +117,48 @@ stateDiagram-v2
     同意办理 --> 确认办理意愿: 再次确认是否办理 %% ref:marketing-guide.md#促成要点 %% step:mkt-confirm-order %% kind:human
     state 最终确认 <<choice>>
     确认办理意愿 --> 最终确认
-    最终确认 --> 发送套餐短信: 确认办理，发送套餐详情供用户自助开通 %% guard:user.confirm
+    最终确认 --> 成交并行处理: 确认办理 %% step:mkt-converted-fork %% kind:fork %% guard:user.confirm
     最终确认 --> 记录拒绝: 用户反悔，改为不办理 %% tool:record_marketing_result %% step:mkt-record-regret %% kind:tool %% guard:user.cancel
 
-    %% OM6 — SMS 发送失败（套餐短信）
-    发送套餐短信 --> SMS结果_1: send_followup_sms(plan_detail) %% tool:send_followup_sms %% step:mkt-send-plan-sms %% kind:tool
-    state SMS结果_1 <<choice>>
-    SMS结果_1 --> 引导办理方式: 发送成功 %% guard:tool.success
-    SMS结果_1 --> 告知替代方式_1: 发送失败，告知可通过APP自助查看 %% step:mkt-sms1-fallback %% kind:llm %% guard:tool.error
-    告知替代方式_1 --> 引导办理方式 %% guard:always
-    引导办理方式 --> 记录成交: 引导用户通过APP自助办理或联系人工坐席完成开通 %% step:mkt-guide-selfservice %% kind:llm
-    记录成交 --> [*]: record_marketing_result(converted)，感谢结束 %% tool:record_marketing_result %% step:mkt-record-converted %% kind:end
+    %% OM6 — 同意办理：并行发送短信 + 记录成交（fork/join）
+    成交并行处理 --> 发送套餐短信: send_followup_sms(plan_detail) %% tool:send_followup_sms %% step:mkt-send-plan-sms %% kind:tool
+    成交并行处理 --> 记录成交: record_marketing_result(converted) %% tool:record_marketing_result %% step:mkt-record-converted %% kind:tool
+
+    state 发送套餐短信结果 <<choice>>
+    发送套餐短信 --> 发送套餐短信结果
+    发送套餐短信结果 --> 成交汇合: 发送成功 %% guard:tool.success
+    发送套餐短信结果 --> 成交汇合: 发送失败，后续引导APP查看 %% guard:tool.error
+
+    state 记录成交结果 <<choice>>
+    记录成交 --> 记录成交结果
+    记录成交结果 --> 成交汇合: 成功 %% guard:tool.success
+    记录成交结果 --> 成交记录异常: 系统异常 %% guard:tool.error
+    成交记录异常 --> [*]: 记录失败 %% step:mkt-converted-record-error %% kind:end
+
+    成交汇合 --> 引导办理方式 %% step:mkt-converted-join %% kind:join
+    引导办理方式 --> [*]: 根据短信发送结果引导：成功则提醒查看短信，失败则告知通过APP自助查看。感谢结束 %% step:mkt-guide-selfservice %% kind:end
 
     需要考虑 --> 待回访: 确认回访时间 %% step:mkt-ask-callback-time %% kind:llm
 
-    %% OM6 — SMS 发送失败（回访短信）
-    待回访 --> 发送回访短信: send_followup_sms(plan_detail) %% tool:send_followup_sms %% step:mkt-send-callback-sms %% kind:tool
-    发送回访短信 --> SMS结果_2
-    state SMS结果_2 <<choice>>
-    SMS结果_2 --> 记录待回访: 发送成功 %% guard:tool.success
-    SMS结果_2 --> 告知替代方式_2: 发送失败，告知可致电10086查询 %% step:mkt-sms2-fallback %% kind:llm %% guard:tool.error
-    告知替代方式_2 --> 记录待回访 %% guard:always
-    记录待回访 --> [*]: record_marketing_result(callback)，礼貌结束 %% tool:record_marketing_result %% step:mkt-record-callback %% kind:end
+    %% OM6 — 待回访：并行发送短信 + 记录回访（fork/join）
+    待回访 --> 回访并行处理 %% step:mkt-callback-fork %% kind:fork
+
+    回访并行处理 --> 发送回访短信: send_followup_sms(plan_detail) %% tool:send_followup_sms %% step:mkt-send-callback-sms %% kind:tool
+    回访并行处理 --> 记录待回访: record_marketing_result(callback) %% tool:record_marketing_result %% step:mkt-record-callback %% kind:tool
+
+    state 发送回访短信结果 <<choice>>
+    发送回访短信 --> 发送回访短信结果
+    发送回访短信结果 --> 回访汇合: 发送成功 %% guard:tool.success
+    发送回访短信结果 --> 回访汇合: 发送失败，后续告知致电10086查询 %% guard:tool.error
+
+    state 记录待回访结果 <<choice>>
+    记录待回访 --> 记录待回访结果
+    记录待回访结果 --> 回访汇合: 成功 %% guard:tool.success
+    记录待回访结果 --> 回访记录异常: 系统异常 %% guard:tool.error
+    回访记录异常 --> [*]: 记录失败 %% step:mkt-callback-record-error %% kind:end
+
+    回访汇合 --> 回访完成 %% step:mkt-callback-join %% kind:join
+    回访完成 --> [*]: 根据短信发送结果告知：成功则提醒查看短信，失败则告知致电10086查询。礼貌结束
 
     %% OM5 — 拒绝后不再继续推销，直接收口
     拒绝 --> 记录拒绝: record_marketing_result(not_interested) %% tool:record_marketing_result %% step:mkt-record-rejected %% kind:tool

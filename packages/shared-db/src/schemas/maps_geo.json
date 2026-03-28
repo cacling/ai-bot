@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "required": ["geocodes", "count"],
+  "properties": {
+    "count": {
+      "type": "integer",
+      "description": "结果数量"
+    },
+    "geocodes": {
+      "type": "array",
+      "description": "地理编码结果列表",
+      "items": {
+        "type": "object",
+        "properties": {
+          "formatted_address": { "type": "string", "description": "格式化地址" },
+          "province": { "type": "string", "description": "省份" },
+          "city": { "type": "string", "description": "城市" },
+          "district": { "type": ["string", "null"], "description": "区县" },
+          "location": { "type": "string", "description": "经纬度坐标" },
+          "level": { "type": "string", "description": "匹配级别" }
+        }
+      }
+    }
+  }
+}

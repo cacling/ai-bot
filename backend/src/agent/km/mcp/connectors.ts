@@ -1,8 +1,7 @@
 /**
  * mcp/connectors.ts — Connectors CRUD + Test
  *
- * Connectors 是 DB / API / Remote MCP 连接依赖，属于本地实现层。
- * 不是 MCP Resource（MCP Resource 是 URI 标识的上下文数据）。
+ * Connectors 是 DB / API 后端连接依赖，属于本地实现层。
  *
  * GET    /              — 列出连接器（可按 type / server_id 筛选）
  * POST   /              — 新建连接器
@@ -105,18 +104,6 @@ app.post('/:id/test', async (c) => {
 
   const t0 = Date.now();
   try {
-    if (row.type === 'remote_mcp') {
-      const cfg = row.config ? JSON.parse(row.config) : {};
-      if (!cfg.url) return c.json({ ok: false, error: 'No URL configured' });
-      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
-      const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
-      const mcpClient = new Client({ name: 'connector-test', version: '1.0' });
-      await mcpClient.connect(new StreamableHTTPClientTransport(new URL(cfg.url)));
-      const { tools } = await mcpClient.listTools();
-      await mcpClient.close();
-      return c.json({ ok: true, elapsed_ms: Date.now() - t0, tools_count: tools.length });
-    }
-
     if (row.type === 'api') {
       const cfg = row.config ? JSON.parse(row.config) : {};
       if (!cfg.base_url) return c.json({ ok: false, error: 'No base_url configured' });

@@ -122,8 +122,8 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
       };
 
       if (createMode === 'handler') {
-        payload.impl_type = 'script';
-        payload.handler_key = handlerKey;
+        // handler_key will be set via toolImplementations after creation
+        payload._handler_key = handlerKey;
       }
 
       const res = await mcpApi.createTool(payload as any);

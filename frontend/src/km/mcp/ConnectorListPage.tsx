@@ -1,11 +1,11 @@
 /**
  * ConnectorListPage — 连接器管理（本地实现层）
  *
- * 管理 DB / API / Remote MCP 连接依赖。
- * 连接器不是 MCP Resource，而是 Tool Implementation 的后端连接。
+ * 管理 DB / API 连接依赖。
+ * 连接器是 Tool Implementation 的后端连接。
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, Trash2, Zap, Database, Globe, Server, Plug, ArrowLeft, Save, X } from 'lucide-react';
+import { Plus, Search, Trash2, Zap, ArrowLeft, Save } from 'lucide-react';
 import { mcpApi, type Connector } from './api';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -59,8 +59,8 @@ export function ConnectorListPage() {
 
   const stats = {
     total: connectors.length,
+    db: connectors.filter(c => c.type === 'db').length,
     api: connectors.filter(c => c.type === 'api').length,
-    mcp: connectors.filter(c => c.type === 'remote_mcp').length,
   };
 
   if (view === 'edit') {
@@ -80,8 +80,8 @@ export function ConnectorListPage() {
         <div className="grid grid-cols-4 gap-3">
           {[
             { label: '全部', value: stats.total, color: 'text-foreground' },
-            { label: 'API (mock/prod)', value: stats.api, color: 'text-blue-600' },
-            { label: 'Remote MCP', value: stats.mcp, color: 'text-purple-600' },
+            { label: 'DB', value: stats.db, color: 'text-emerald-600' },
+            { label: 'API', value: stats.api, color: 'text-blue-600' },
           ].map(card => (
             <div key={card.label} className="rounded-lg border p-3">
               <div className={`text-lg font-bold ${card.color}`}>{card.value}</div>
@@ -101,8 +101,8 @@ export function ConnectorListPage() {
           <SelectTrigger className="w-32 text-xs h-8"><SelectValue placeholder="类型" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部类型</SelectItem>
+            <SelectItem value="db">DB</SelectItem>
             <SelectItem value="api">API</SelectItem>
-            <SelectItem value="remote_mcp">Remote MCP</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex-1" />
@@ -116,7 +116,7 @@ export function ConnectorListPage() {
         <div className="text-sm text-muted-foreground text-center py-8">加载中...</div>
       ) : connectors.length === 0 ? (
         <div className="text-sm text-muted-foreground text-center py-8 border rounded-lg">
-          暂无连接器。连接器是 Tool 实现层的后端连接依赖（DB / API / Remote MCP）。
+          暂无连接器。连接器是 Tool 实现层的后端连接依赖（DB / API）。
         </div>
       ) : (
         <div className="rounded-lg border overflow-hidden">
@@ -143,7 +143,7 @@ export function ConnectorListPage() {
                     <TableCell className="font-mono font-medium">{c.name}</TableCell>
                     <TableCell className="text-center">
                       <Badge variant="outline" className="text-[9px] px-1.5">
-                        {c.type === 'remote_mcp' ? 'MCP' : c.type === 'db' ? 'DB' : 'API'}
+                        {c.type === 'db' ? 'DB' : 'API'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground truncate max-w-[200px]">{c.description || '—'}</TableCell>
@@ -235,10 +235,10 @@ function ConnectorEditor({ connectorId, onBack, onSaved }: { connectorId: string
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">连接器类型</label>
             <RadioGroup value={type} onValueChange={v => setType(v as typeof type)} className="flex gap-3">
               <Label className="flex items-center gap-1.5 text-xs font-normal cursor-pointer">
-                <RadioGroupItem value="api" className="size-3" /> API (mock_apis / 真实系统)
+                <RadioGroupItem value="db" className="size-3" /> DB（数据库）
               </Label>
               <Label className="flex items-center gap-1.5 text-xs font-normal cursor-pointer">
-                <RadioGroupItem value="remote_mcp" className="size-3" /> Remote MCP
+                <RadioGroupItem value="api" className="size-3" /> API（mock_apis / 真实系统）
               </Label>
             </RadioGroup>
           </div>
@@ -272,11 +272,11 @@ function ConnectorEditor({ connectorId, onBack, onSaved }: { connectorId: string
             value={configJson}
             onChange={e => setConfigJson(e.target.value)}
             className="text-xs font-mono min-h-[120px]"
-            placeholder={type === 'api' ? '{ "base_url": "http://127.0.0.1:18008", "timeout": 5000 }' : '{ "url": "http://.../mcp", "transport": "http" }'}
+            placeholder={type === 'db' ? '{ "connection_string": "sqlite:///path/to/db", "pool_size": 5 }' : '{ "base_url": "http://127.0.0.1:18008", "timeout": 5000 }'}
           />
           <p className="text-[10px] text-muted-foreground mt-1">
+            {type === 'db' && '配置项：connection_string, pool_size, read_only'}
             {type === 'api' && '配置项：base_url, method, headers, timeout（demo 阶段指向 mock_apis，生产替换为真实 URL）'}
-            {type === 'remote_mcp' && '配置项：url, transport, headers'}
           </p>
         </div>
       </div>

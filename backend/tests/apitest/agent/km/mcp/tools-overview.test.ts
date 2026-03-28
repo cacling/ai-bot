@@ -67,6 +67,8 @@ mock.module('../../../../../src/db', () => ({
 mock.module('../../../../../src/db/schema', () => ({
   mcpServers: MOCK_TABLE_SERVERS,
   mcpTools: MOCK_TABLE_TOOLS,
+  connectors: Symbol('connectors'),
+  toolImplementations: Symbol('toolImplementations'),
 }));
 
 mock.module('../../../../../src/engine/skills', () => ({

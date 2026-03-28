@@ -89,20 +89,20 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
   };
 
   const implLabel = (tool: McpToolRecord) => {
-    if (!tool.impl_type) return null;
-    if (tool.impl_type === 'script') return '脚本';
-    if (tool.impl_type === 'db') return 'DB (legacy)';
-    if (tool.impl_type === 'api') return 'API';
-    return tool.impl_type;
+    if (!tool.adapter_type) return null;
+    if (tool.adapter_type === 'script') return '脚本';
+    if (tool.adapter_type === 'remote_mcp') return 'MCP';
+    if (tool.adapter_type === 'api_proxy') return 'API';
+    if (tool.adapter_type === 'db') return 'DB';
+    if (tool.adapter_type === 'mock') return 'Mock';
+    return tool.adapter_type;
   };
 
   const toolStatus = (tool: McpToolRecord) => {
     if (tool.disabled) return { label: '已禁用', variant: 'secondary' as const };
     if (tool.mocked) return { label: 'Mock 中', variant: 'secondary' as const };
-    if (!tool.impl_type || (!tool.output_schema && !tool.input_schema)) return { label: '待配置', variant: 'outline' as const };
-    if (tool.impl_type === 'script' && !tool.handler_key) return { label: '不完整', variant: 'destructive' as const };
+    if (!tool.adapter_type || (!tool.output_schema && !tool.input_schema)) return { label: '待配置', variant: 'outline' as const };
     if (!tool.output_schema) return { label: '缺契约', variant: 'destructive' as const };
-    // 有风险信号的不算已就绪
     if (tool.risk_flags && tool.risk_flags.length > 0) return { label: '有风险', variant: 'destructive' as const };
     if (tool.mock_aligned === false) return { label: 'Mock 漂移', variant: 'destructive' as const };
     return { label: '已就绪', variant: 'default' as const };
@@ -153,7 +153,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
     else if (quickFilter === 'ready') list = list.filter(t => toolStatus(t).label === '已就绪');
 
     // Impl filter
-    if (filterImpl !== 'all') list = list.filter(t => (t.impl_type ?? 'none') === filterImpl);
+    if (filterImpl !== 'all') list = list.filter(t => (t.adapter_type ?? 'none') === filterImpl);
 
     // Server filter
     if (filterServer !== 'all') list = list.filter(t => t.server_id === filterServer);
@@ -262,7 +262,9 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
             <SelectContent>
               <SelectItem value="all">全部 Adapter</SelectItem>
               <SelectItem value="script">Script</SelectItem>
-              <SelectItem value="api">API Proxy</SelectItem>
+              <SelectItem value="remote_mcp">Remote MCP</SelectItem>
+              <SelectItem value="api_proxy">API Proxy</SelectItem>
+              <SelectItem value="db">DB</SelectItem>
               <SelectItem value="none">未配置</SelectItem>
             </SelectContent>
           </Select>

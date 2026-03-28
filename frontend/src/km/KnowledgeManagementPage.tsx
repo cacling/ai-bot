@@ -2,7 +2,7 @@
  * KnowledgeManagementPage.tsx — 知识管理主容器（左侧导航+右侧内容区）
  */
 import React, { useState, useCallback } from 'react';
-import { FileText, Inbox, PackageCheck, Archive, ClipboardList, Shield, ChevronRight } from 'lucide-react';
+import { FileText, BotMessageSquare, PackageCheck, Archive, ClipboardList, Shield, ChevronRight, Search, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DocumentListPage } from './DocumentListPage';
 import { DocumentDetailPage } from './DocumentDetailPage';
@@ -15,6 +15,8 @@ import { AssetListPage } from './AssetListPage';
 import { AssetDetailPage } from './AssetDetailPage';
 import { TaskListPage } from './TaskListPage';
 import { AuditLogPage } from './AuditLogPage';
+import { RetrievalEvalPage } from './RetrievalEvalPage';
+import { FeedbackDashboardPage } from './FeedbackDashboardPage';
 
 export type KMPage =
   | { view: 'documents' }
@@ -26,6 +28,8 @@ export type KMPage =
   | { view: 'action-drafts' }
   | { view: 'assets' }
   | { view: 'asset-detail'; id: string }
+  | { view: 'retrieval-eval' }
+  | { view: 'feedback-dashboard' }
   | { view: 'tasks' }
   | { view: 'audit-logs' };
 
@@ -42,8 +46,8 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [{ key: 'documents', label: '文档列表', icon: FileText, view: 'documents' }],
   },
   {
-    label: '知识候选',
-    items: [{ key: 'candidates', label: '候选列表', icon: Inbox, view: 'candidates' }],
+    label: '助手知识',
+    items: [{ key: 'candidates', label: '知识列表', icon: BotMessageSquare, view: 'candidates' }],
   },
   {
     label: '评审与发布',
@@ -54,7 +58,15 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: '资产中心',
-    items: [{ key: 'assets', label: '发布资产', icon: Archive, view: 'assets' }],
+    items: [{ key: 'assets', label: '在线资产', icon: Archive, view: 'assets' }],
+  },
+  {
+    label: '检索与评测',
+    items: [{ key: 'retrieval-eval', label: '检索评测', icon: Search, view: 'retrieval-eval' }],
+  },
+  {
+    label: '反馈与缺口',
+    items: [{ key: 'feedback-dashboard', label: '反馈看板', icon: BarChart3, view: 'feedback-dashboard' }],
   },
   {
     label: '运维与治理',
@@ -134,6 +146,10 @@ function renderPage(page: KMPage, navigate: (p: KMPage) => void) {
       return <AssetListPage navigate={navigate} />;
     case 'asset-detail':
       return <AssetDetailPage id={page.id} navigate={navigate} />;
+    case 'retrieval-eval':
+      return <RetrievalEvalPage navigate={navigate} />;
+    case 'feedback-dashboard':
+      return <FeedbackDashboardPage navigate={navigate} />;
     case 'tasks':
       return <TaskListPage navigate={navigate} />;
     case 'audit-logs':

@@ -163,7 +163,7 @@ export class ToolRegistry {
         this.connectorMap.set(row.id, {
           id: row.id,
           name: row.name,
-          type: row.type as 'db' | 'api' | 'remote_mcp',
+          type: row.type as 'db' | 'api',
           config: row.config ? JSON.parse(row.config) : undefined,
           status: row.status,
         });

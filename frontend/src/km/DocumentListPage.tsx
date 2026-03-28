@@ -10,6 +10,9 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const CLASSIFICATION_LABELS: Record<string, string> = { public: '公开', internal: '内部', sensitive: '敏感' };
+const AUTHORITY_LABELS: Record<string, string> = { policy: '制度', rule: '规则', faq: 'FAQ', experience: '经验' };
+const authorityVariant = (a: string): 'default' | 'secondary' | 'outline' =>
+  a === 'policy' ? 'default' : a === 'rule' ? 'secondary' : 'outline';
 
 const classVariant = (c: string): 'destructive' | 'outline' | 'secondary' =>
   c === 'sensitive' ? 'destructive' : c === 'internal' ? 'outline' : 'secondary';
@@ -18,7 +21,7 @@ export function DocumentListPage({ navigate }: { navigate: (p: KMPage) => void }
   const [items, setItems] = useState<KMDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ title: '', classification: 'internal', owner: '' });
+  const [form, setForm] = useState({ title: '', classification: 'internal', authority_level: 'rule', owner: '', citation_ready: false });
 
   const load = () => {
     setLoading(true);
@@ -30,7 +33,7 @@ export function DocumentListPage({ navigate }: { navigate: (p: KMPage) => void }
     if (!form.title.trim()) return;
     await kmApi.createDocument(form);
     setShowCreate(false);
-    setForm({ title: '', classification: 'internal', owner: '' });
+    setForm({ title: '', classification: 'internal', authority_level: 'rule', owner: '', citation_ready: false });
     load();
   };
 
@@ -74,20 +77,24 @@ export function DocumentListPage({ navigate }: { navigate: (p: KMPage) => void }
               <TableHead>标题</TableHead>
               <TableHead>来源</TableHead>
               <TableHead>密级</TableHead>
+              <TableHead>权威级别</TableHead>
+              <TableHead>可引用</TableHead>
               <TableHead>负责人</TableHead>
               <TableHead>更新时间</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">加载中...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">加载中...</TableCell></TableRow>
             ) : items.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">暂无文档</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">暂无文档</TableCell></TableRow>
             ) : items.map(doc => (
               <TableRow key={doc.id} className="cursor-pointer" onClick={() => navigate({ view: 'document-detail', id: doc.id })}>
                 <TableCell className="text-primary font-medium">{doc.title}</TableCell>
                 <TableCell className="text-muted-foreground">{doc.source}</TableCell>
                 <TableCell><Badge variant={classVariant(doc.classification)}>{CLASSIFICATION_LABELS[doc.classification] ?? doc.classification}</Badge></TableCell>
+                <TableCell><Badge variant={authorityVariant((doc as Record<string, unknown>).authority_level as string ?? 'rule')}>{AUTHORITY_LABELS[(doc as Record<string, unknown>).authority_level as string ?? 'rule'] ?? '规则'}</Badge></TableCell>
+                <TableCell>{(doc as Record<string, unknown>).citation_ready ? <span className="inline-block w-2 h-2 rounded-full bg-green-500" /> : <span className="inline-block w-2 h-2 rounded-full bg-muted-foreground/30" />}</TableCell>
                 <TableCell className="text-muted-foreground">{doc.owner ?? '-'}</TableCell>
                 <TableCell className="text-muted-foreground">{doc.updated_at?.slice(0, 16).replace('T', ' ')}</TableCell>
               </TableRow>

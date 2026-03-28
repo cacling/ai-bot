@@ -4,9 +4,9 @@ import { ToolRegistry } from '../../../src/tool-runtime/registry';
 import type { Adapter, AdapterCallContext, ToolRuntimeRequest, GovernPolicy } from '../../../src/tool-runtime/types';
 import { ErrorCode } from '../../../src/tool-runtime/types';
 
-function makeTestAdapter(result: Partial<Awaited<ReturnType<Adapter['call']>>> = {}): Adapter {
+function makeTestAdapter(type: string = 'script', result: Partial<Awaited<ReturnType<Adapter['call']>>> = {}): Adapter {
   return {
-    type: 'remote_mcp',
+    type: type as any,
     call: mock(async () => ({
       rawText: '{"ok":true}',
       parsed: { ok: true },
@@ -21,7 +21,7 @@ describe('Pipeline', () => {
   test('executes 7-step pipeline and returns ToolRuntimeResult', async () => {
     const adapter = makeTestAdapter();
     const registry = new ToolRegistry();
-    const pipeline = new Pipeline(registry, { remote_mcp: adapter });
+    const pipeline = new Pipeline(registry, { script: adapter, remote_mcp: adapter });
 
     const request: ToolRuntimeRequest = {
       toolName: 'query_subscriber',
@@ -35,7 +35,7 @@ describe('Pipeline', () => {
     const result = await pipeline.execute(request);
     if (result.success) {
       expect(result.hasData).toBe(true);
-      expect(result.source).toBe('remote_mcp');
+      expect(result.source).toBe('script');
       expect(typeof result.traceId).toBe('string');
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);
     }
@@ -47,7 +47,7 @@ describe('Pipeline', () => {
   test('returns TOOL_NOT_FOUND for unknown tool', async () => {
     const adapter = makeTestAdapter();
     const registry = new ToolRegistry();
-    const pipeline = new Pipeline(registry, { remote_mcp: adapter });
+    const pipeline = new Pipeline(registry, { script: adapter });
 
     const result = await pipeline.execute({
       toolName: '__nonexistent__',
@@ -65,9 +65,9 @@ describe('Pipeline', () => {
       type: 'mock',
       call: mock(async () => ({ rawText: '{"mocked":true}', parsed: { mocked: true }, success: true, hasData: true })),
     };
-    const mcpAdapter = makeTestAdapter();
+    const scriptAdapter = makeTestAdapter();
     const registry = new ToolRegistry();
-    const pipeline = new Pipeline(registry, { remote_mcp: mcpAdapter, mock: mockAdapter });
+    const pipeline = new Pipeline(registry, { script: scriptAdapter, mock: mockAdapter });
 
     // apply_service_suspension is mocked in DB
     const result = await pipeline.execute({
@@ -92,7 +92,7 @@ describe('Pipeline', () => {
       name: 'test-reject',
       check: () => 'Rejected by test policy',
     };
-    const pipeline = new Pipeline(registry, { remote_mcp: adapter }, [rejectPolicy]);
+    const pipeline = new Pipeline(registry, { script: adapter }, [rejectPolicy]);
 
     const result = await pipeline.execute({
       toolName: contracts[0].name,
@@ -107,7 +107,7 @@ describe('Pipeline', () => {
   test('injects traceId and sessionId into args', async () => {
     let capturedCtx: AdapterCallContext | null = null;
     const adapter: Adapter = {
-      type: 'remote_mcp',
+      type: 'script',
       call: mock(async (ctx: AdapterCallContext) => {
         capturedCtx = ctx;
         return { rawText: '{}', parsed: {}, success: true, hasData: true };
@@ -117,7 +117,7 @@ describe('Pipeline', () => {
     const contracts = registry.listContracts();
     expect(contracts.length).toBeGreaterThan(0);
 
-    const pipeline = new Pipeline(registry, { remote_mcp: adapter });
+    const pipeline = new Pipeline(registry, { script: adapter });
     await pipeline.execute({
       toolName: contracts[0].name,
       args: {},
@@ -133,7 +133,7 @@ describe('Pipeline', () => {
   test('normalizes month parameter in validate step', async () => {
     let capturedArgs: Record<string, unknown> = {};
     const adapter: Adapter = {
-      type: 'remote_mcp',
+      type: 'script',
       call: mock(async (ctx: AdapterCallContext) => {
         capturedArgs = ctx.request.args;
         return { rawText: '{}', parsed: {}, success: true, hasData: true };
@@ -143,7 +143,7 @@ describe('Pipeline', () => {
     const contracts = registry.listContracts();
     expect(contracts.length).toBeGreaterThan(0);
 
-    const pipeline = new Pipeline(registry, { remote_mcp: adapter });
+    const pipeline = new Pipeline(registry, { script: adapter });
     await pipeline.execute({
       toolName: contracts[0].name,
       args: { month: '2026-2' },

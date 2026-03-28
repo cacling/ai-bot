@@ -130,15 +130,15 @@ export class Pipeline {
     if (resolved.contract.mocked) return 'mock';
     if (resolved.binding?.adapterType) {
       const mapping: Record<string, AdapterType> = {
-        script: 'remote_mcp',
-        db_binding: 'remote_mcp',
+        script: 'script',
+        db_binding: 'db',
         api_proxy: 'api',
         remote_mcp: 'remote_mcp',
         api: 'api',
       };
-      return mapping[resolved.binding.adapterType] ?? 'remote_mcp';
+      return mapping[resolved.binding.adapterType] ?? 'script';
     }
-    return 'remote_mcp';
+    return 'script';
   }
 
   private normalize(

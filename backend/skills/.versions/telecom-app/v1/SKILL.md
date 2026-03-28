@@ -20,6 +20,7 @@ metadata:
 - 客户无法安装 App 或无法升级至新版本
 - App 提示设备环境异常、安全检测不通过
 - 账号显示可疑活动、被风控限制或疑似被盗
+- 客户询问附近营业厅地址、线下网点位置、如何前往营业厅
 
 ## 边界与转向
 
@@ -54,6 +55,7 @@ metadata:
 | "查话费查不了"、"缴费页面报错"、"功能点了没反应"、"页面显示不出来" | `feature_error` |
 | "装不上"、"更新失败"、"提示版本过低但更新不了" | `install_update` |
 | "说我设备不兼容"、"检测到 Root"、"有可疑登录提醒"、"账号被限制" | `security_check` |
+| "附近有没有营业厅"、"最近的网点在哪"、"怎么去营业厅"、"想去线下办理" | `store_locator` |
 
 ### 安全类诊断子类型
 
@@ -71,6 +73,8 @@ metadata:
 - `diagnose_app(phone, issue_type)` — 执行 App 安全诊断
   - 返回：`diagnostic_steps[]`（各检查项状态 ok / warning / error）、`conclusion`（整体结论）、`escalation_path`（升级路径 self_service / frontline / security_team）、`customer_actions[]`（按序排列的客户操作指引）
 - `query_subscriber(phone)` — 查询用户身份和账号状态
+- `maps_around_search(keywords, location, radius)` — 周边搜索营业厅/网点（需用户提供位置或城市）
+- `maps_direction_walking(origin, destination)` — 步行路径规划（为用户规划前往营业厅的路线）
 - `get_skill_reference("telecom-app", "troubleshoot-guide.md")` — 加载排查手册详细指引
 
 ## 客户引导状态图
@@ -87,6 +91,7 @@ stateDiagram-v2
     问题分类 --> TC3_功能异常: feature_error %% branch:feature_error %% guard:always
     问题分类 --> TC4_安装更新: install_update %% branch:install_update %% guard:always
     问题分类 --> TC5_安全: security_check %% branch:security_check %% guard:always
+    问题分类 --> TC6_营业厅查询: store_locator %% branch:store_locator %% guard:always
 
     %% T7 — 全局升级出口：用户随时可要求转人工
     用户要求转人工 --> 转接人工: 转接人工客服 %% step:app-request-human %% kind:human
@@ -190,6 +195,23 @@ stateDiagram-v2
         升级security_team_2 --> [*] %% kind:end
     }
 
+    state TC6_营业厅查询 {
+        [*] --> 获取用户位置: 询问用户所在城市或地址 %% step:app-tc6-get-location %% kind:llm
+        获取用户位置 --> 搜索附近营业厅: maps_around_search(keywords="电信营业厅", location, radius=3000) %% tool:maps_around_search %% step:app-tc6-search %% kind:tool
+        state 搜索结果 <<choice>>
+        搜索附近营业厅 --> 搜索结果
+        搜索结果 --> 展示营业厅列表: 找到结果 %% step:app-tc6-show-list %% kind:llm %% guard:tool.success
+        搜索结果 --> 建议拨打客服热线: 未找到或服务不可用 %% step:app-tc6-fallback %% kind:llm %% guard:tool.error
+        建议拨打客服热线 --> [*] %% kind:end
+        state 是否需要导航 <<choice>>
+        展示营业厅列表 --> 是否需要导航
+        是否需要导航 --> 规划步行路线: 用户选择某营业厅 %% tool:maps_direction_walking %% step:app-tc6-navigate %% kind:tool %% guard:user.confirm
+        是否需要导航 --> 查询结束: 用户无需导航 %% step:app-tc6-done %% kind:end %% guard:user.cancel
+        查询结束 --> [*]
+        规划步行路线 --> 展示路线: 展示步行距离和预计时间 %% step:app-tc6-show-route %% kind:llm
+        展示路线 --> [*] %% kind:end
+    }
+
     %% T3 — 共享终态确认环：所有"问题解决"出口汇入此处
     state 确认是否解决 <<choice>>
     确认是否解决 --> 问题已解决: 已解决 %% step:app-resolved %% kind:end %% guard:user.confirm
@@ -202,6 +224,7 @@ stateDiagram-v2
     TC3_功能异常 --> [*]
     TC4_安装更新 --> [*]
     TC5_安全 --> [*]
+    TC6_营业厅查询 --> [*]
 ```
 
 ## 升级处理

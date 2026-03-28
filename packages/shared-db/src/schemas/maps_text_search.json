@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "required": ["pois", "count"],
+  "properties": {
+    "count": {
+      "type": "integer",
+      "description": "搜索结果总数"
+    },
+    "pois": {
+      "type": "array",
+      "description": "POI 列表",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "POI 名称" },
+          "address": { "type": "string", "description": "地址" },
+          "location": { "type": "string", "description": "经纬度坐标" },
+          "tel": { "type": ["string", "null"], "description": "联系电话" },
+          "type": { "type": "string", "description": "POI 类型" },
+          "distance": { "type": ["string", "null"], "description": "距离（米）" }
+        }
+      }
+    }
+  }
+}

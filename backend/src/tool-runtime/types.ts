@@ -87,7 +87,7 @@ export interface ExecutionPolicy {
 export interface ConnectorConfig {
   id: string;
   name: string;
-  type: 'db' | 'api' | 'remote_mcp';
+  type: 'db' | 'api';
   config?: Record<string, unknown>;
   status: string;
 }

@@ -1,25 +1,25 @@
 /**
  * McpManagementPage.tsx — Tool Runtime 管理主容器
  *
- * Overview / Tool Contracts / Remote Endpoints / Connectors / Execution Records
+ * Overview / Tool Contracts / Runtime Bindings / 后端连接 / Execution Records
  */
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { Wrench, Server, Plug, Activity, ScrollText } from 'lucide-react';
+import { Wrench, Plug, Activity, ScrollText, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { McpServerList } from './McpServerList';
 import { McpToolListPage } from './McpToolListPage';
 import { ConnectorListPage } from './ConnectorListPage';
 
 const RuntimeOverviewPage = lazy(() => import('./RuntimeOverviewPage').then(m => ({ default: m.RuntimeOverviewPage })));
 const ExecutionRecordsPage = lazy(() => import('./ExecutionRecordsPage').then(m => ({ default: m.ExecutionRecordsPage })));
+const RuntimeBindingsPage = lazy(() => import('./RuntimeBindingsPage').then(m => ({ default: m.RuntimeBindingsPage })));
 
-type McpTab = 'overview' | 'tools' | 'servers' | 'connectors' | 'records';
+type McpTab = 'overview' | 'tools' | 'bindings' | 'connectors' | 'records';
 
 const TABS: Array<{ id: McpTab; label: string; icon: React.ReactNode }> = [
   { id: 'overview', label: 'Overview', icon: <Activity size={13} /> },
   { id: 'tools', label: 'Tool Contracts', icon: <Wrench size={13} /> },
-  { id: 'servers', label: 'Remote Endpoints', icon: <Server size={13} /> },
-  { id: 'connectors', label: 'Connectors', icon: <Plug size={13} /> },
+  { id: 'bindings', label: 'Runtime Bindings', icon: <Link2 size={13} /> },
+  { id: 'connectors', label: '后端连接', icon: <Plug size={13} /> },
   { id: 'records', label: 'Execution Records', icon: <ScrollText size={13} /> },
 ];
 
@@ -31,7 +31,7 @@ interface McpManagementProps {
 export function McpManagementPage({ externalNavigateToTool, onExternalNavigateHandled }: McpManagementProps = {}) {
   const [tab, setTab] = useState<McpTab>('tools');
 
-  // Cross-tab navigation: Server Console → Tool Studio
+  // Cross-tab navigation: Overview/Bindings → Tool Studio
   const [navigateToTool, setNavigateToTool] = useState<{
     toolId: string;
     step?: string;
@@ -46,10 +46,6 @@ export function McpManagementPage({ externalNavigateToTool, onExternalNavigateHa
     }
     setNavigateToTool({ toolId, step, fromServer });
     setTab('tools');
-  };
-
-  const handleBackToServers = () => {
-    setTab('servers');
   };
 
   // 接收外部导航（从技能管理跳转过来）
@@ -95,8 +91,14 @@ export function McpManagementPage({ externalNavigateToTool, onExternalNavigateHa
             <RuntimeOverviewPage />
           </Suspense>
         </div>
-        <div className={`absolute inset-0 ${tab !== 'tools' ? 'hidden' : ''}`}><McpToolListPage navigateToTool={navigateToTool} onNavigateHandled={() => setNavigateToTool(null)} onBackToServers={handleBackToServers} /></div>
-        <div className={`absolute inset-0 ${tab !== 'servers' ? 'hidden' : ''}`}><McpServerList onOpenTool={handleOpenTool} onOpenConnectors={() => setTab('connectors')} /></div>
+        <div className={`absolute inset-0 ${tab !== 'tools' ? 'hidden' : ''}`}>
+          <McpToolListPage navigateToTool={navigateToTool} onNavigateHandled={() => setNavigateToTool(null)} />
+        </div>
+        <div className={`absolute inset-0 ${tab !== 'bindings' ? 'hidden' : ''}`}>
+          <Suspense fallback={<div className="p-6 text-xs text-muted-foreground">Loading...</div>}>
+            <RuntimeBindingsPage onOpenTool={handleOpenTool} />
+          </Suspense>
+        </div>
         <div className={`absolute inset-0 ${tab !== 'connectors' ? 'hidden' : ''}`}><ConnectorListPage /></div>
         <div className={`absolute inset-0 ${tab !== 'records' ? 'hidden' : ''}`}>
           <Suspense fallback={<div className="p-6 text-xs text-muted-foreground">Loading...</div>}>

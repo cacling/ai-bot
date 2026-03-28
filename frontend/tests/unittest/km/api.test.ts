@@ -83,6 +83,30 @@ describe('km/api', () => {
     });
   });
 
+  describe('listChunks', () => {
+    it('calls GET /api/km/documents/versions/:vid/chunks', async () => {
+      const data = { items: [] };
+      const spy = mockFetchOk(data);
+
+      const result = await kmApi.listChunks('v1');
+      expect(result).toEqual(data);
+      expect(spy.mock.calls[0][0]).toContain('/api/km/documents/versions/v1/chunks');
+    });
+  });
+
+  describe('autoChunk', () => {
+    it('sends POST to /api/km/documents/versions/:vid/auto-chunk', async () => {
+      const data = { count: 3, ids: ['c1', 'c2', 'c3'] };
+      const spy = mockFetchOk(data);
+
+      const result = await kmApi.autoChunk('v1');
+      expect(result).toEqual(data);
+      const [url, opts] = spy.mock.calls[0];
+      expect(url).toContain('/api/km/documents/versions/v1/auto-chunk');
+      expect((opts as RequestInit).method).toBe('POST');
+    });
+  });
+
   describe('listCandidates', () => {
     it('calls GET /api/km/candidates', async () => {
       const data = { items: [], total: 0 };

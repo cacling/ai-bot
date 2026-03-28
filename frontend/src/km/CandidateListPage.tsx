@@ -18,6 +18,10 @@ const STATUS_LABELS: Record<string, string> = {
 const riskVariant = (r: string): 'destructive' | 'outline' | 'secondary' =>
   r === 'high' ? 'destructive' : r === 'medium' ? 'outline' : 'secondary';
 
+const KNOWLEDGE_TYPE_LABELS: Record<string, string> = {
+  reply: '回复', rag_answer: 'RAG', action: '动作', risk: '风险', followup: '追问',
+};
+
 export function CandidateListPage({ navigate }: { navigate: (p: KMPage) => void }) {
   const [items, setItems] = useState<KMCandidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +52,7 @@ export function CandidateListPage({ navigate }: { navigate: (p: KMPage) => void 
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold">知识候选</h2>
+        <h2 className="text-sm font-semibold">助手知识</h2>
         <div className="flex gap-2">
           <Button variant="ghost" size="icon-sm" onClick={load}><RefreshCw size={14} /></Button>
           <Button size="sm" onClick={() => setShowCreate(true)}><Plus size={12} /> 新建候选</Button>
@@ -75,6 +79,7 @@ export function CandidateListPage({ navigate }: { navigate: (p: KMPage) => void 
           <TableHeader>
             <TableRow>
               <TableHead>标准问句</TableHead>
+              <TableHead>类型</TableHead>
               <TableHead>来源</TableHead>
               <TableHead className="text-center">门槛</TableHead>
               <TableHead>风险</TableHead>
@@ -84,12 +89,15 @@ export function CandidateListPage({ navigate }: { navigate: (p: KMPage) => void 
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">加载中...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">加载中...</TableCell></TableRow>
             ) : items.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">暂无候选</TableCell></TableRow>
-            ) : items.map(c => (
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">暂无知识</TableCell></TableRow>
+            ) : items.map(c => {
+              const kt = (() => { try { return JSON.parse(c.structured_json ?? '{}').knowledge_type; } catch { return null; } })();
+              return (
               <TableRow key={c.id} className="cursor-pointer" onClick={() => navigate({ view: 'candidate-detail', id: c.id })}>
                 <TableCell className="text-primary font-medium truncate max-w-[250px]">{c.normalized_q}</TableCell>
+                <TableCell>{kt ? <Badge variant="outline" className="text-[10px]">{KNOWLEDGE_TYPE_LABELS[kt] ?? kt}</Badge> : '-'}</TableCell>
                 <TableCell className="text-muted-foreground">{c.source_type}</TableCell>
                 <TableCell>
                   <div className="flex items-center justify-center gap-1" title={`证据:${c.gate_evidence} 冲突:${c.gate_conflict} 归属:${c.gate_ownership}`}>
@@ -102,7 +110,8 @@ export function CandidateListPage({ navigate }: { navigate: (p: KMPage) => void 
                 <TableCell className="text-muted-foreground">{STATUS_LABELS[c.status] ?? c.status}</TableCell>
                 <TableCell className="text-muted-foreground">{c.updated_at?.slice(0, 16).replace('T', ' ')}</TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>

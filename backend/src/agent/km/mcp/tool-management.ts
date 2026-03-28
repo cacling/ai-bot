@@ -6,9 +6,9 @@
  * GET    /:id                  — 获取工具详情
  * PUT    /:id                  — 更新工具
  * DELETE /:id                  — 删除工具
- * PUT    /:id/execution-config — 更新执行配置
  * PUT    /:id/mock-rules       — 更新 Mock 规则
  * PUT    /:id/toggle-mock      — 切换 Mock/Real 模式
+ * GET    /bindings             — Runtime Bindings 联表视图
  */
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
@@ -58,9 +58,13 @@ app.get('/', async (c) => {
     return null;
   };
 
+  // 预加载所有 implementations，用 Map 按 tool_id 查找
+  const allImpls = db.select().from(toolImplementations).all();
+  const implByToolId = new Map(allImpls.map(i => [i.tool_id, i]));
+
   const items = await Promise.all(rows.map(async (t) => {
-    const cfg = t.execution_config ? JSON.parse(t.execution_config) as { resource_id?: string } : null;
-    const resource = cfg?.resource_id ? connectorMap.get(cfg.resource_id) ?? null : null;
+    const impl = implByToolId.get(t.id);
+    const connector = impl?.connector_id ? connectorMap.get(impl.connector_id) ?? null : null;
 
     // 轻量对齐检查：第一条 mock vs output_schema
     const risks: string[] = [];
@@ -68,8 +72,8 @@ app.get('/', async (c) => {
     const schema = await loadSchema(t.output_schema);
     const schemaFields = schema ? new Set(Object.keys((schema as any).properties ?? {})) : null;
 
-    if (t.impl_type && !t.output_schema) risks.push('有实现但无契约');
-    if (t.impl_type && !t.mock_rules) risks.push('无 Mock 场景');
+    if (impl && !t.output_schema) risks.push('有实现但无契约');
+    if (impl && !t.mock_rules) risks.push('无 Mock 场景');
 
     if (schemaFields && t.mock_rules) {
       try {
@@ -89,20 +93,11 @@ app.get('/', async (c) => {
       } catch { /* ignore */ }
     }
 
-    // DB 工具检查列覆盖
-    if (t.impl_type === 'db' && schemaFields && cfg) {
-      const dbCfg = (cfg as any).db;
-      if (dbCfg?.columns && Array.isArray(dbCfg.columns)) {
-        const dbCols = new Set(dbCfg.columns as string[]);
-        const missing = [...schemaFields].filter(f => !dbCols.has(f));
-        if (missing.length > 0) risks.push(`DB 覆盖缺口 -${missing.length}`);
-      }
-    }
-
     return {
       ...t,
+      adapter_type: impl?.adapter_type ?? null,
       skills: toolSkillsMap.get(t.name) ?? [],
-      resource,
+      connector,
       mock_aligned: mockAligned,
       risk_flags: risks,
     };
@@ -128,11 +123,8 @@ app.post('/', async (c) => {
     name,
     description: body.description ?? '',
     server_id: body.server_id ?? null,
-    impl_type: body.impl_type ?? null,
-    handler_key: body.handler_key ?? null,
     input_schema: body.input_schema ?? null,
     output_schema: body.output_schema ?? null,
-    execution_config: body.execution_config ?? null,
     mock_rules: body.mock_rules ?? null,
     mocked: body.mocked ?? true,
     disabled: body.disabled ?? false,
@@ -174,6 +166,49 @@ app.get('/handlers', async (c) => {
   return c.json({ handlers });
 });
 
+// ── Runtime Bindings（联表视图：tool + implementation + connector + server）───
+
+app.get('/bindings', async (c) => {
+  const allTools = db.select().from(mcpTools).all();
+  const allImpls = db.select().from(toolImplementations).all();
+  const allConnectors = db.select().from(connectors).all();
+  const allServers = db.select().from(mcpServers).all();
+
+  const implByToolId = new Map(allImpls.map(i => [i.tool_id, i]));
+  const connectorById = new Map(allConnectors.map(c => [c.id, c]));
+  const serverById = new Map(allServers.map(s => [s.id, s]));
+
+  const items = allTools.map(t => {
+    const impl = implByToolId.get(t.id);
+    const connector = impl?.connector_id ? connectorById.get(impl.connector_id) ?? null : null;
+    const server = serverById.get(t.server_id);
+
+    return {
+      impl_id: impl?.id ?? null,
+      tool_id: t.id,
+      tool_name: t.name,
+      tool_description: t.description,
+      server_id: t.server_id,
+      server_name: server?.name ?? '(unknown)',
+      server_kind: server?.kind ?? 'internal',
+      adapter_type: impl?.adapter_type ?? null,
+      connector_id: connector?.id ?? null,
+      connector_name: connector?.name ?? null,
+      connector_type: connector?.type ?? null,
+      handler_key: impl?.handler_key ?? null,
+      config: impl?.config ?? null,
+      impl_status: impl?.status ?? null,
+      host_server_id: impl?.host_server_id ?? null,
+      host_server_name: impl?.host_server_id ? (serverById.get(impl.host_server_id)?.name ?? null) : null,
+      contract_ready: !!(t.input_schema && t.output_schema),
+      disabled: t.disabled,
+      mocked: t.mocked,
+    };
+  });
+
+  return c.json({ items });
+});
+
 // ── Get ──────────────────────────────────────────────────────────────────────
 app.get('/:id', async (c) => {
   const row = db.select().from(mcpTools).where(eq(mcpTools.id, c.req.param('id'))).get();
@@ -181,9 +216,9 @@ app.get('/:id', async (c) => {
 
   // 附加 skill 引用和连接器信息
   const toolSkillsMap = getToolToSkillsMap();
-  const cfg = row.execution_config ? JSON.parse(row.execution_config) as { resource_id?: string } : null;
-  const resource = cfg?.resource_id
-    ? db.select().from(connectors).where(eq(connectors.id, cfg.resource_id)).get()
+  const impl = db.select().from(toolImplementations).where(eq(toolImplementations.tool_id, row.id)).get();
+  const connector = impl?.connector_id
+    ? db.select().from(connectors).where(eq(connectors.id, impl.connector_id)).get()
     : null;
 
   // 如果 output_schema 是文件路径，读取实际内容
@@ -201,8 +236,9 @@ app.get('/:id', async (c) => {
 
   return c.json({
     ...row,
+    adapter_type: impl?.adapter_type ?? null,
     skills: toolSkillsMap.get(row.name) ?? [],
-    resource: resource ? { id: resource.id, name: resource.name, type: resource.type } : null,
+    connector: connector ? { id: connector.id, name: connector.name, type: connector.type } : null,
     output_schema_content: outputSchemaContent,
   });
 });
@@ -218,11 +254,8 @@ app.put('/:id', async (c) => {
     name: body.name ?? existing.name,
     description: body.description ?? existing.description,
     server_id: body.server_id ?? existing.server_id,
-    impl_type: body.impl_type ?? existing.impl_type,
-    handler_key: body.handler_key ?? existing.handler_key,
     input_schema: body.input_schema ?? existing.input_schema,
     output_schema: body.output_schema ?? existing.output_schema,
-    execution_config: body.execution_config ?? existing.execution_config,
     mock_rules: body.mock_rules ?? existing.mock_rules,
     mocked: body.mocked ?? existing.mocked,
     disabled: body.disabled ?? existing.disabled,
@@ -238,21 +271,6 @@ app.delete('/:id', async (c) => {
   const id = c.req.param('id');
   db.delete(mcpTools).where(eq(mcpTools.id, id)).run();
   logger.info('mcp', 'tool_deleted', { id });
-  return c.json({ ok: true });
-});
-
-// ── Update execution config ──────────────────────────────────────────────────
-app.put('/:id/execution-config', async (c) => {
-  const id = c.req.param('id');
-  const body = await c.req.json();
-  const existing = db.select().from(mcpTools).where(eq(mcpTools.id, id)).get();
-  if (!existing) return c.json({ error: 'Not found' }, 404);
-
-  db.update(mcpTools).set({
-    execution_config: JSON.stringify(body),
-    updated_at: now(),
-  }).where(eq(mcpTools.id, id)).run();
-  logger.info('mcp', 'tool_execution_config_updated', { id, impl_type: body.impl_type });
   return c.json({ ok: true });
 });
 
@@ -415,22 +433,8 @@ app.get('/:id/implementation', async (c) => {
   const toolId = c.req.param('id');
   const impl = db.select().from(toolImplementations).where(eq(toolImplementations.tool_id, toolId)).get();
   if (!impl) {
-    // 向后兼容：从 mcp_tools.execution_config 回退读取
     const tool = db.select().from(mcpTools).where(eq(mcpTools.id, toolId)).get();
     if (!tool) return c.json({ error: 'Tool not found' }, 404);
-    if (tool.impl_type || tool.execution_config || tool.handler_key) {
-      return c.json({
-        id: null,
-        tool_id: toolId,
-        adapter_type: tool.impl_type,
-        config: tool.execution_config,
-        handler_key: tool.handler_key,
-        connector_id: null,
-        host_server_id: tool.server_id,
-        status: 'active',
-        _source: 'legacy',
-      });
-    }
     return c.json({ id: null, tool_id: toolId, _source: 'none' });
   }
   // 附带 connector 信息
@@ -475,14 +479,6 @@ app.put('/:id/implementation', async (c) => {
     }).run();
     logger.info('mcp', 'tool_impl_created', { tool_id: toolId, impl_id: id });
   }
-
-  // 同步更新 mcp_tools 旧字段（向后兼容，过渡期）
-  db.update(mcpTools).set({
-    impl_type: body.adapter_type ?? tool.impl_type,
-    execution_config: body.config !== undefined ? (typeof body.config === 'string' ? body.config : JSON.stringify(body.config)) : tool.execution_config,
-    handler_key: body.handler_key ?? tool.handler_key,
-    updated_at: now(),
-  }).where(eq(mcpTools.id, toolId)).run();
 
   return c.json({ ok: true });
 });

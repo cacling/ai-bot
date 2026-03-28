@@ -11,7 +11,7 @@ import { getJSON, postJSON, putJSON, deleteJSON } from '../../../helpers';
 
 const SERVER = {
   id: 'srv-001', name: 'account-service', description: '账户服务',
-  transport: 'http', status: 'active', enabled: true,
+  transport: 'http', enabled: true, kind: 'internal',
   url: 'http://localhost:18003/mcp', headers_json: null,
   command: null, args_json: null, cwd: null,
   env_json: null, env_prod_json: null, env_test_json: null,
@@ -22,8 +22,14 @@ const SERVER = {
 
 const TOOL_DB_ROW = {
   id: 'tool-001', name: 'query_subscriber', description: '查询用户',
-  server_id: 'srv-001', disabled: false, mocked: true, impl_type: 'script',
+  server_id: 'srv-001', disabled: false, mocked: true,
   input_schema: null, response_example: null, annotations: null,
+};
+
+const IMPL_ROW = {
+  id: 'impl-001', tool_id: 'tool-001', adapter_type: 'script',
+  host_server_id: 'srv-001', connector_id: null,
+  config: null, handler_key: 'user_info.query_subscriber', status: 'active',
 };
 
 const CONNECTOR_ROW = {
@@ -36,6 +42,7 @@ type Row = Record<string, unknown>;
 let serverRows: Row[] = [];
 let toolDbRows: Row[] = [];
 let connectorRows: Row[] = [];
+let implRows: Row[] = [];
 let inserted: Row[] = [];
 let updated: Row[] = [];
 let deleted: string[] = [];
@@ -46,10 +53,12 @@ let mockRuleResult: string | null = null;
 const T_SERVERS = Symbol('mcpServers');
 const T_TOOLS = Symbol('mcpTools');
 const T_CONNECTORS = Symbol('connectors');
+const T_IMPLS = Symbol('toolImplementations');
 
 function getRowsForTable(table: unknown): Row[] {
   if (table === T_TOOLS) return toolDbRows;
   if (table === T_CONNECTORS) return connectorRows;
+  if (table === T_IMPLS) return implRows;
   return serverRows;
 }
 
@@ -92,6 +101,7 @@ mock.module('../../../../../src/db/schema', () => ({
   mcpServers: T_SERVERS,
   mcpTools: T_TOOLS,
   connectors: T_CONNECTORS,
+  toolImplementations: T_IMPLS,
 }));
 
 mock.module('../../../../../src/db/nanoid', () => ({
@@ -136,6 +146,7 @@ beforeEach(() => {
   serverRows = [{ ...SERVER }];
   toolDbRows = [{ ...TOOL_DB_ROW }];
   connectorRows = [{ ...CONNECTOR_ROW }];
+  implRows = [{ ...IMPL_ROW }];
   inserted = [];
   updated = [];
   deleted = [];
@@ -169,7 +180,6 @@ describe('POST /api/mcp/servers', () => {
     const app = buildApp();
     await postJSON(app, '/api/mcp/servers', { name: 'test-service' });
     expect(inserted[0].transport).toBe('http');
-    expect(inserted[0].status).toBe('active');
     expect(inserted[0].enabled).toBe(true);
   });
 });
@@ -213,12 +223,28 @@ describe('PUT /api/mcp/servers/:id', () => {
 });
 
 describe('DELETE /api/mcp/servers/:id', () => {
-  test('deletes server', async () => {
+  test('returns 403 when deleting internal server', async () => {
+    const app = buildApp();
+    const { status, body } = await deleteJSON(app, '/api/mcp/servers/srv-001');
+    expect(status).toBe(403);
+    expect(body.error).toContain('Internal');
+    expect(deleted.length).toBe(0);
+  });
+
+  test('deletes external server', async () => {
+    serverRows = [{ ...SERVER, kind: 'external' }];
     const app = buildApp();
     const { status, body } = await deleteJSON(app, '/api/mcp/servers/srv-001');
     expect(status).toBe(200);
     expect(body.ok).toBe(true);
     expect(deleted.length).toBe(1);
+  });
+
+  test('returns 404 when server not found', async () => {
+    serverRows = [];
+    const app = buildApp();
+    const { status } = await deleteJSON(app, '/api/mcp/servers/nonexistent');
+    expect(status).toBe(404);
   });
 });
 
@@ -229,7 +255,7 @@ describe('GET /api/mcp/servers/:id/health', () => {
     expect(status).toBe(200);
     expect(body.server_id).toBe('srv-001');
     expect(body.server_name).toBe('account-service');
-    expect(body.status).toBe('active');
+    expect(body.kind).toBe('internal');
     expect(body.connectors).toBeInstanceOf(Array);
     expect(body.connector_count).toBe(1);
     expect(body.tools).toBeDefined();
@@ -273,7 +299,7 @@ describe('POST /api/mcp/servers/:id/invoke', () => {
   });
 
   test('returns 400 when server is in planned status', async () => {
-    serverRows = [{ ...SERVER, status: 'planned' }];
+    serverRows = [{ ...SERVER, kind: 'planned' }];
     const app = buildApp();
     const { status, body } = await postJSON(app, '/api/mcp/servers/srv-001/invoke', {
       tool_name: 'query_subscriber',

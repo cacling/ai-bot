@@ -171,3 +171,92 @@ function bigrams(s: string): Set<string> {
   }
   return set;
 }
+
+// ── searchKnowledgeAssets — top-k retrieval for evaluation & RAG ──────────────
+
+export interface SearchResult {
+  assetId: string;
+  versionId: string;
+  title: string;
+  score: number;
+  confidence: number;
+  structured: Record<string, unknown>;
+  contentSnapshot: string;
+}
+
+export async function searchKnowledgeAssets(params: {
+  query: string;
+  topK?: number;
+}): Promise<SearchResult[]> {
+  const { query, topK = 5 } = params;
+
+  const assets = await db.select({
+    assetId: kmAssets.id,
+    title: kmAssets.title,
+    versionId: kmAssetVersions.id,
+    contentSnapshot: kmAssetVersions.content_snapshot,
+    structuredSnapshot: kmAssetVersions.structured_snapshot_json,
+  })
+  .from(kmAssets)
+  .innerJoin(kmAssetVersions, and(
+    eq(kmAssetVersions.asset_id, kmAssets.id),
+    eq(kmAssetVersions.version_no, kmAssets.current_version),
+  ))
+  .where(eq(kmAssets.status, 'online'));
+
+  const withStructured = assets.filter(a => a.structuredSnapshot);
+  if (withStructured.length === 0) return [];
+
+  const queryText = query.toLowerCase();
+
+  const scored = withStructured.map(a => {
+    const structured = JSON.parse(a.structuredSnapshot!);
+    const expandedQuestions = Array.isArray(structured.expanded_questions)
+      ? structured.expanded_questions.map((v: unknown) => String(v).toLowerCase())
+      : [];
+    let score = 0;
+
+    const label = (structured.scene?.label ?? '').toLowerCase();
+    score += overlapScore(queryText, label) * 3;
+    score += overlapScore(queryText, (a.title ?? '').toLowerCase()) * 2;
+
+    try {
+      const content = JSON.parse(a.contentSnapshot ?? '{}');
+      score += overlapScore(queryText, (content.q ?? '').toLowerCase()) * 2;
+      const contentVariants = Array.isArray(content.variants)
+        ? content.variants.map((v: unknown) => String(v).toLowerCase())
+        : [];
+      score += bestOverlapScore(queryText, contentVariants.length > 0 ? contentVariants : expandedQuestions) * 3;
+    } catch { /* ignore */ }
+
+    const tags: string[] = structured.retrieval_tags ?? [];
+    for (const tag of tags) {
+      if (queryText.includes(tag.toLowerCase())) score += 2;
+    }
+
+    for (const variant of expandedQuestions) {
+      if (queryText.includes(variant) || variant.includes(queryText)) {
+        score += 2;
+        break;
+      }
+    }
+
+    const codeWords = (structured.scene?.code ?? '').split('_');
+    for (const w of codeWords) {
+      if (queryText.includes(w)) score += 1;
+    }
+
+    return {
+      assetId: a.assetId,
+      versionId: a.versionId,
+      title: a.title ?? structured.scene?.label ?? '未知',
+      score,
+      confidence: Math.min(score / 10, 1),
+      structured,
+      contentSnapshot: a.contentSnapshot ?? '',
+    };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.filter(s => s.score > 1).slice(0, topK);
+}

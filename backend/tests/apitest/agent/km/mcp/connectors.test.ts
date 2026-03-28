@@ -17,10 +17,10 @@ const CONNECTOR = {
   server_id: 'srv-001', created_at: '2026-03-01', updated_at: '2026-03-01',
 };
 
-const MCP_CONNECTOR = {
-  id: 'conn-002', name: 'billing-mcp', type: 'remote_mcp',
-  config: JSON.stringify({ url: 'http://localhost:18004/mcp' }),
-  status: 'active', description: 'MCP 远程连接',
+const DB_CONNECTOR = {
+  id: 'conn-002', name: 'billing-db', type: 'db',
+  config: JSON.stringify({ connection_string: 'sqlite:///tmp/billing.db' }),
+  status: 'active', description: 'Billing 数据库连接',
   env_json: null, env_prod_json: null, env_test_json: null,
   server_id: 'srv-002', created_at: '2026-03-01', updated_at: '2026-03-01',
 };
@@ -123,9 +123,8 @@ describe('GET /api/mcp/connectors', () => {
   });
 
   test('filters by type', async () => {
-    connectorRows = [{ ...CONNECTOR }, { ...MCP_CONNECTOR }];
+    connectorRows = [{ ...CONNECTOR }, { ...DB_CONNECTOR }];
     const app = buildApp();
-    // All connectors (no filter) — the mock doesn't actually filter, but route does
     const { body } = await getJSON(app, '/api/mcp/connectors');
     expect(body.items.length).toBe(2);
   });
@@ -145,15 +144,15 @@ describe('POST /api/mcp/connectors', () => {
     expect(inserted[0].type).toBe('api');
   });
 
-  test('creates remote_mcp connector', async () => {
+  test('creates db connector', async () => {
     const app = buildApp();
     const { status, body } = await postJSON(app, '/api/mcp/connectors', {
-      name: 'remote-mcp-conn', type: 'remote_mcp',
-      config: { url: 'http://localhost:18005/mcp' },
+      name: 'new-db-conn', type: 'db',
+      config: { connection_string: 'sqlite:///tmp/test.db' },
     });
     expect(status).toBe(200);
     expect(body.id).toBe('new-conn-001');
-    expect(inserted[0].type).toBe('remote_mcp');
+    expect(inserted[0].type).toBe('db');
   });
 
   test('returns 400 when name is missing', async () => {
@@ -241,15 +240,6 @@ describe('POST /api/mcp/connectors/:id/test', () => {
     expect(status).toBe(200);
     expect(body.ok).toBe(false);
     expect(body.error).toContain('base_url');
-  });
-
-  test('returns error when remote_mcp connector has no url', async () => {
-    connectorRows = [{ ...MCP_CONNECTOR, config: JSON.stringify({}) }];
-    const app = buildApp();
-    const { status, body } = await postJSON(app, '/api/mcp/connectors/conn-002/test', {});
-    expect(status).toBe(200);
-    expect(body.ok).toBe(false);
-    expect(body.error).toContain('URL');
   });
 
   test('returns error for unknown connector type', async () => {

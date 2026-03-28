@@ -4,7 +4,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { db } from '../../../db';
-import { mcpServers, mcpTools, connectors } from '../../../db/schema';
+import { mcpServers, mcpTools, connectors, toolImplementations } from '../../../db/schema';
 import { nanoid } from '../../../db/nanoid';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -17,11 +17,11 @@ const now = () => new Date().toISOString();
 
 // ── List ─────────────────────────────────────────────────────────────────────
 app.get('/', async (c) => {
-  const { keyword, transport, status } = c.req.query();
+  const { keyword, transport, kind } = c.req.query();
   let rows = db.select().from(mcpServers).all();
   if (keyword) rows = rows.filter(r => r.name.includes(keyword) || r.description.includes(keyword));
   if (transport) rows = rows.filter(r => r.transport === transport);
-  if (status) rows = rows.filter(r => r.status === status);
+  if (kind) rows = rows.filter(r => r.kind === kind);
   return c.json({ items: rows });
 });
 
@@ -41,8 +41,8 @@ app.post('/', async (c) => {
     name: body.name,
     description: body.description ?? '',
     transport: body.transport ?? 'http',
-    status: body.status ?? 'active',
     enabled: body.enabled ?? true,
+    kind: body.kind ?? 'internal',
     url: body.url ?? null,
     headers_json: body.headers_json ?? null,
     command: body.command ?? null,
@@ -73,8 +73,8 @@ app.put('/:id', async (c) => {
     name: body.name ?? existing.name,
     description: body.description ?? existing.description,
     transport: body.transport ?? existing.transport,
-    status: body.status ?? existing.status,
     enabled: body.enabled ?? existing.enabled,
+    kind: body.kind ?? existing.kind,
     url: body.url ?? existing.url,
     headers_json: body.headers_json ?? existing.headers_json,
     command: body.command ?? existing.command,
@@ -96,6 +96,11 @@ app.put('/:id', async (c) => {
 // ── Delete ───────────────────────────────────────────────────────────────────
 app.delete('/:id', async (c) => {
   const id = c.req.param('id');
+  const row = db.select().from(mcpServers).where(eq(mcpServers.id, id)).get();
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  if (row.kind === 'internal') {
+    return c.json({ error: 'Internal servers cannot be deleted (managed by start.sh)' }, 403);
+  }
   db.delete(mcpServers).where(eq(mcpServers.id, id)).run();
   logger.info('mcp', 'server_deleted', { id });
   return c.json({ ok: true });
@@ -113,7 +118,7 @@ app.delete('/:id', async (c) => {
 export async function discoverServerTools(serverId: string): Promise<Array<Record<string, unknown>>> {
   const row = db.select().from(mcpServers).where(eq(mcpServers.id, serverId)).get();
   if (!row) throw new Error('Server not found');
-  if (row.status === 'planned') throw new Error('Server is in planned status');
+  if (row.kind === 'planned') throw new Error('Server is in planned status');
   if (!row.url && row.transport !== 'stdio') throw new Error('No URL configured');
 
   const mcpClient = new Client({ name: 'mcp-sync', version: '1.0' });
@@ -200,19 +205,23 @@ app.get('/:id/health', async (c) => {
     status: r.status,
   }));
 
+  // Check which tools have implementations
+  const allImpls = db.select().from(toolImplementations).all();
+  const toolsWithImpl = new Set(allImpls.filter(i => i.host_server_id === row.id).map(i => i.tool_id));
+
   const toolsSummary = {
     total: tools.length,
-    ready: tools.filter(t => t.impl_type && !t.disabled).length,
+    ready: tools.filter(t => toolsWithImpl.has(t.id) && !t.disabled).length,
     mocked: tools.filter(t => t.mocked).length,
     disabled: tools.filter(t => t.disabled).length,
-    unconfigured: tools.filter(t => !t.impl_type && !t.disabled).length,
+    unconfigured: tools.filter(t => !toolsWithImpl.has(t.id) && !t.disabled).length,
   };
 
   return c.json({
     server_id: row.id,
     server_name: row.name,
-    status: row.status,
     enabled: row.enabled,
+    kind: row.kind,
     last_connected_at: row.last_connected_at,
     connectors: resourceSummary,
     connector_count: conns.length,
@@ -224,7 +233,7 @@ app.get('/:id/health', async (c) => {
 app.post('/:id/invoke', async (c) => {
   const row = db.select().from(mcpServers).where(eq(mcpServers.id, c.req.param('id'))).get();
   if (!row) return c.json({ error: 'Not found' }, 404);
-  if (row.status === 'planned') return c.json({ error: 'Server is in planned status' }, 400);
+  if (row.kind === 'planned') return c.json({ error: 'Server is in planned status' }, 400);
 
   const { tool_name, arguments: toolArgs } = await c.req.json();
   if (!tool_name) return c.json({ error: 'tool_name is required' }, 400);

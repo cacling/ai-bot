@@ -18,8 +18,8 @@ export interface McpServer {
   name: string;
   description: string;
   transport: 'http' | 'stdio' | 'sse';
-  status: 'active' | 'planned';
   enabled: boolean;
+  kind: 'internal' | 'external' | 'planned';
   url: string | null;
   headers_json: string | null;
   command: string | null;
@@ -67,40 +67,14 @@ export interface MockRule {
   response: string;    // JSON string
 }
 
-export interface McpResource {
-  id: string;
-  server_id: string;
-  name: string;
-  type: 'db' | 'api' | 'remote_mcp';
-  status: 'active' | 'planned' | 'disabled';
-  db_mode: string | null;
-  mcp_transport: string | null;
-  mcp_url: string | null;
-  mcp_headers: string | null;
-  api_base_url: string | null;
-  api_headers: string | null;
-  api_timeout: number | null;
-  env_json: string | null;
-  env_prod_json: string | null;
-  env_test_json: string | null;
-  description: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface McpToolRecord {
   id: string;
   name: string;
   description: string;
   server_id: string | null;
-  /** Real 实现类型：'script' | 'db' | 'api' | null */
-  impl_type: string | null;
-  /** 脚本模式：handler key */
-  handler_key: string | null;
   input_schema: string | null;
   /** 输出 Schema（JSON Schema） */
   output_schema: string | null;
-  execution_config: string | null;
   mock_rules: string | null;
   mocked: boolean;
   disabled: boolean;
@@ -110,8 +84,10 @@ export interface McpToolRecord {
   /** 输出 Schema 实际内容（GET /:id 时从文件读取） */
   output_schema_content?: Record<string, unknown> | null;
   // 附加字段（API 返回）
+  /** adapter_type 从 toolImplementations 读取 */
+  adapter_type?: string | null;
   skills?: string[];
-  resource?: { id: string; name: string; type: string } | null;
+  connector?: { id: string; name: string; type: string } | null;
   /** Mock 是否与 output_schema 对齐（列表接口返回） */
   mock_aligned?: boolean;
   /** 风险标记列表（列表接口返回） */
@@ -138,11 +114,11 @@ export interface ToolOverviewItem {
 export interface ServerHealthInfo {
   server_id: string;
   server_name: string;
-  status: string;
   enabled: boolean;
+  kind: 'internal' | 'external' | 'planned';
   last_connected_at: string | null;
-  resources: Array<{ id: string; name: string; type: string; status: string }>;
-  resource_count: number;
+  connectors: Array<{ id: string; name: string; type: string; status: string }>;
+  connector_count: number;
   tools: {
     total: number;
     ready: number;
@@ -184,21 +160,6 @@ export const mcpApi = {
   getToolsOverview: () =>
     request<{ items: ToolOverviewItem[] }>('/tools'),
 
-  // Resources
-  listResources: (serverId?: string) =>
-    request<{ items: McpResource[] }>(serverId ? `/resources?server_id=${serverId}` : '/resources'),
-  getResource: (id: string) => request<McpResource>(`/resources/${id}`),
-  createResource: (body: Partial<McpResource>) =>
-    request<{ id: string }>('/resources', { method: 'POST', body: JSON.stringify(body) }),
-  updateResource: (id: string, body: Partial<McpResource>) =>
-    request<{ ok: boolean }>(`/resources/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteResource: (id: string) =>
-    request<{ ok: boolean }>(`/resources/${id}`, { method: 'DELETE' }),
-  discoverFromResource: (id: string) =>
-    request<{ tools: number; created: number; updated: number }>(`/resources/${id}/discover`, { method: 'POST' }),
-  testResource: (id: string) =>
-    request<{ ok: boolean; error?: string; elapsed_ms?: number; tools_count?: number; tables_count?: number; http_status?: number }>(`/resources/${id}/test`, { method: 'POST' }),
-
   // Tool management (独立 CRUD)
   listTools: (serverId?: string) =>
     request<{ items: McpToolRecord[] }>(serverId ? `/tool-management?server_id=${serverId}` : '/tool-management'),
@@ -209,8 +170,6 @@ export const mcpApi = {
     request<{ ok: boolean }>(`/tool-management/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteTool: (id: string) =>
     request<{ ok: boolean }>(`/tool-management/${id}`, { method: 'DELETE' }),
-  updateExecutionConfig: (id: string, config: Record<string, unknown>) =>
-    request<{ ok: boolean }>(`/tool-management/${id}/execution-config`, { method: 'PUT', body: JSON.stringify(config) }),
   updateToolMockRules: (id: string, rules: MockRule[]) =>
     request<{ ok: boolean }>(`/tool-management/${id}/mock-rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
   toggleToolMock: (id: string) =>
@@ -219,6 +178,10 @@ export const mcpApi = {
   // Handlers
   listHandlers: () =>
     request<{ handlers: McpHandler[] }>('/tool-management/handlers'),
+
+  // Runtime Bindings (joined tool + impl + connector + server)
+  listBindings: () =>
+    request<{ items: RuntimeBindingRow[] }>('/tool-management/bindings'),
 
   // SQL preview
   sqlPreview: (id: string, config: { table: string; operation: string; where?: Array<{ param: string; column: string; op?: string }>; columns?: string[] }) =>
@@ -264,13 +227,13 @@ export interface ToolImplementation {
   handler_key: string | null;
   status: string;
   connector?: Connector | null;
-  _source: 'tool_implementations' | 'legacy' | 'none';
+  _source: 'tool_implementations' | 'none';
 }
 
 export interface Connector {
   id: string;
   name: string;
-  type: 'db' | 'api' | 'remote_mcp';
+  type: 'db' | 'api';
   config: string | null;
   status: string;
   description: string | null;
@@ -278,12 +241,33 @@ export interface Connector {
   env_prod_json: string | null;
   env_test_json: string | null;
   server_id: string | null;
-  migrated_from: string | null;
   created_at: string;
   updated_at: string;
 }
 
 // ── Execution Records ──
+
+export interface RuntimeBindingRow {
+  impl_id: string | null;
+  tool_id: string;
+  tool_name: string;
+  tool_description: string;
+  server_id: string;
+  server_name: string;
+  server_kind: 'internal' | 'external' | 'planned';
+  adapter_type: string | null;
+  connector_id: string | null;
+  connector_name: string | null;
+  connector_type: string | null;
+  handler_key: string | null;
+  config: string | null;
+  impl_status: string | null;
+  host_server_id: string | null;
+  host_server_name: string | null;
+  contract_ready: boolean;
+  disabled: boolean;
+  mocked: boolean;
+}
 
 export interface ExecutionRecord {
   id: string;

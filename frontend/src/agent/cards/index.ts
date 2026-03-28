@@ -9,7 +9,7 @@
  *   2. Call registerCard() here
  */
 
-import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle, ShieldAlert, MessageSquareText } from 'lucide-react';
+import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle, ShieldAlert, BotMessageSquare } from 'lucide-react';
 import { registerCard } from './registry';
 import { DiagramContent      } from './contents/DiagramContent';
 import { EmotionContent      } from './contents/EmotionContent';
@@ -17,7 +17,7 @@ import { HandoffContent      } from './contents/HandoffContent';
 import { OutboundTaskContent } from './contents/OutboundTaskContent';
 import { UserDetailContent   } from './contents/UserDetailContent';
 import { ComplianceContent   } from './contents/ComplianceContent';
-import { ReplyHintContent    } from './contents/ReplyHintContent';
+import { AgentCopilotContent } from './contents/AgentCopilotContent';
 
 // Registration order determines default layout.
 // col-span-1 cards first → they pair side-by-side in row 1.
@@ -30,6 +30,7 @@ registerCard({
   Icon: UserCircle,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
+  defaultHeight: 220,
   defaultOpen: true,
   defaultCollapsed: false,
   wsEvents: ['user_detail'],     // injected directly from AgentWorkstationPage
@@ -44,7 +45,8 @@ registerCard({
   Icon: PhoneCall,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
-  defaultOpen: true,
+  defaultHeight: 100,
+  defaultOpen: false,
   defaultCollapsed: false,
   wsEvents: ['outbound_task'],   // injected directly from AgentWorkstationPage
   dataExtractor: (msg) => msg.data,
@@ -58,6 +60,7 @@ registerCard({
   Icon: Smile,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
+  defaultHeight: 130,
   defaultOpen: true,
   defaultCollapsed: false,
   wsEvents: ['emotion_update'],
@@ -76,6 +79,7 @@ registerCard({
   Icon: ShieldAlert,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
+  defaultHeight: 80,
   defaultOpen: true,
   defaultCollapsed: false,
   wsEvents: ['compliance_alert'],
@@ -94,6 +98,7 @@ registerCard({
   Icon: PhoneForwarded,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
+  defaultHeight: 80,
   defaultOpen: true,
   defaultCollapsed: false,
   wsEvents: ['handoff_card'],
@@ -101,18 +106,19 @@ registerCard({
   component: HandoffContent,
 });
 
-// ── 回复提示卡片 (col-span-2, full width) ───────────────────────────────────
+// ── 坐席助手卡片 (col-span-2, full width) ───────────────────────────────────
 registerCard({
-  id: 'reply_hint',
-  title: { zh: '回复提示', en: 'Reply Hints' },
-  Icon: MessageSquareText,
+  id: 'agent_copilot',
+  title: { zh: '坐席助手', en: 'Agent Copilot' },
+  Icon: BotMessageSquare,
   headerClass: 'bg-gradient-to-r from-indigo-600 to-blue-500',
   colSpan: 2,
+  defaultHeight: 240,
   defaultOpen: true,
   defaultCollapsed: false,
-  wsEvents: ['reply_hints'],
+  wsEvents: ['agent_copilot', 'reply_hints'],
   dataExtractor: (msg) => msg.data,
-  component: ReplyHintContent,
+  component: AgentCopilotContent,
 });
 
 // ── 流程图卡片 (col-span-2, full width below) ──────────────────────────────────
@@ -122,6 +128,7 @@ registerCard({
   Icon: GitBranch,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 2,
+  defaultHeight: 180,
   defaultOpen: true,
   defaultCollapsed: false,
   wsEvents: ['skill_diagram_update'],

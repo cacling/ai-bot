@@ -15,11 +15,27 @@ const mockAsset = {
 
 const mockVersions = { items: [] };
 
+const mockMetrics = {
+  total_shown: 120,
+  total_used: 45,
+  total_edited: 18,
+  total_dismissed: 12,
+  adopt_rate: 0.375,
+  edit_rate: 0.15,
+  dismiss_rate: 0.1,
+};
+
 vi.stubGlobal('fetch', vi.fn((url: string) => {
   if (typeof url === 'string' && url.includes('/versions')) {
     return Promise.resolve({
       ok: true,
       json: () => Promise.resolve(mockVersions),
+    });
+  }
+  if (typeof url === 'string' && url.includes('/metrics')) {
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(mockMetrics),
     });
   }
   return Promise.resolve({
@@ -60,6 +76,14 @@ describe('AssetDetailPage', () => {
     render(<AssetDetailPage id="asset-1" navigate={navigate} />);
     await waitFor(() => {
       expect(screen.getByText('版本链')).toBeInTheDocument();
+    });
+  });
+
+  it('shows metrics cards when metrics are loaded', async () => {
+    render(<AssetDetailPage id="asset-1" navigate={navigate} />);
+    await waitFor(() => {
+      expect(screen.getByText('展示次数')).toBeInTheDocument();
+      expect(screen.getByText('采纳率')).toBeInTheDocument();
     });
   });
 });

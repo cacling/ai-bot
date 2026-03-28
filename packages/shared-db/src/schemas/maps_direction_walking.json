@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "required": ["route"],
+  "properties": {
+    "route": {
+      "type": "object",
+      "description": "路径规划结果",
+      "properties": {
+        "origin": { "type": "string", "description": "起点坐标" },
+        "destination": { "type": "string", "description": "终点坐标" },
+        "paths": {
+          "type": "array",
+          "description": "步行方案列表",
+          "items": {
+            "type": "object",
+            "properties": {
+              "distance": { "type": "string", "description": "总距离（米）" },
+              "duration": { "type": "string", "description": "预计耗时（秒）" },
+              "steps": {
+                "type": "array",
+                "description": "导航步骤",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "instruction": { "type": "string", "description": "导航指示" },
+                    "road": { "type": ["string", "null"], "description": "道路名称" },
+                    "distance": { "type": "string", "description": "该步距离（米）" },
+                    "orientation": { "type": ["string", "null"], "description": "方向" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -25,7 +25,7 @@ interface Props {
 }
 
 export function McpToolTestPanel({ server, tool, onClose, onServerUpdated }: Props) {
-  const isPlanned = server.status === 'planned';
+  const isPlanned = server.kind === 'planned';
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -241,7 +241,7 @@ function MockTab({ server, tool, onServerUpdated }: { server: McpServer; tool: M
 // ── Test Tab ─────────────────────────────────────────────────────────────────
 
 function TestTab({ server, tool }: { server: McpServer; tool: McpToolInfo }) {
-  const isPlanned = server.status === 'planned';
+  const isPlanned = server.kind === 'planned';
 
   const toolMockRules: MockRule[] = (() => {
     try {

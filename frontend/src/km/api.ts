@@ -27,6 +27,10 @@ export const kmApi = {
     request<{ id: string; version_no: number }>(`/documents/${docId}/versions`, { method: 'POST', body: JSON.stringify(body) }),
   triggerParse: (vid: string) =>
     request(`/documents/versions/${vid}/parse`, { method: 'POST', body: '{}' }),
+  listChunks: (vid: string) =>
+    request<{ items: KMDocChunk[] }>(`/documents/versions/${vid}/chunks`),
+  autoChunk: (vid: string) =>
+    request<{ count: number; ids: string[] }>(`/documents/versions/${vid}/auto-chunk`, { method: 'POST', body: '{}' }),
 
   // 候选
   listCandidates: (params?: Record<string, string>) =>
@@ -98,12 +102,19 @@ export const kmApi = {
 // ── Types ──
 export interface KMDocument {
   id: string; title: string; source: string; classification: string;
+  authority_level: string; applicable_scope: string | null; citation_ready: number;
   owner: string | null; status: string; created_at: string; updated_at: string;
 }
 export interface KMDocVersion {
   id: string; document_id: string; version_no: number; file_path: string | null;
   scope_json: string | null; effective_from: string | null; effective_to: string | null;
-  diff_summary: string | null; status: string; created_at: string;
+  diff_summary: string | null; chunk_count: number; supersedes_version_id: string | null;
+  status: string; created_at: string;
+}
+export interface KMDocChunk {
+  id: string; doc_version_id: string; chunk_index: number; chunk_text: string;
+  chunk_summary: string | null; anchor_type: string | null; anchor_value: string | null;
+  citation_label: string | null; created_at: string;
 }
 export interface KMDocumentLinkedCandidate {
   id: string;

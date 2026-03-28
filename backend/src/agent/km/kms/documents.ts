@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { eq, desc, like, and, SQL, inArray } from 'drizzle-orm';
 import { db } from '../../../db';
-import { kmDocuments, kmDocVersions, kmPipelineJobs, kmCandidates } from '../../../db/schema';
+import { kmDocuments, kmDocVersions, kmDocChunks, kmPipelineJobs, kmCandidates } from '../../../db/schema';
 import { logger } from '../../../services/logger';
 import { nanoid, writeAudit } from './helpers';
 
@@ -102,6 +102,7 @@ app.get('/:id', async (c) => {
 app.post('/', async (c) => {
   const body = await c.req.json<{
     title: string; source?: string; classification?: string; owner?: string;
+    authority_level?: string; applicable_scope?: string; citation_ready?: boolean;
     effective_from?: string; effective_to?: string; scope_json?: string;
   }>();
   if (!body.title?.trim()) return c.json({ error: '标题不能为空' }, 400);
@@ -114,6 +115,9 @@ app.post('/', async (c) => {
     id: docId, title: body.title.trim(),
     source: body.source ?? 'upload',
     classification: body.classification ?? 'internal',
+    authority_level: body.authority_level ?? 'rule',
+    applicable_scope: body.applicable_scope,
+    citation_ready: body.citation_ready ? 1 : 0,
     owner: body.owner, created_at: now, updated_at: now,
   });
   await db.insert(kmDocVersions).values({
@@ -131,9 +135,14 @@ app.post('/', async (c) => {
 // PUT /:id — 更新文档元信息
 app.put('/:id', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{ title?: string; classification?: string; owner?: string; status?: string }>();
+  const body = await c.req.json<{
+    title?: string; classification?: string; owner?: string; status?: string;
+    authority_level?: string; applicable_scope?: string; citation_ready?: boolean;
+  }>();
   const now = new Date().toISOString();
-  await db.update(kmDocuments).set({ ...body, updated_at: now }).where(eq(kmDocuments.id, id));
+  const updateData: Record<string, unknown> = { ...body, updated_at: now };
+  if (body.citation_ready !== undefined) updateData.citation_ready = body.citation_ready ? 1 : 0;
+  await db.update(kmDocuments).set(updateData).where(eq(kmDocuments.id, id));
   return c.json({ ok: true });
 });
 
@@ -181,6 +190,94 @@ app.post('/versions/:vid/parse', async (c) => {
 
   logger.info('km', 'parse_triggered', { vid, stages });
   return c.json({ jobs }, 201);
+});
+
+// GET /versions/:vid/chunks — 获取版本切块列表
+app.get('/versions/:vid/chunks', async (c) => {
+  const vid = c.req.param('vid');
+  const chunks = await db.select().from(kmDocChunks)
+    .where(eq(kmDocChunks.doc_version_id, vid))
+    .orderBy(kmDocChunks.chunk_index);
+  return c.json({ items: chunks });
+});
+
+// POST /versions/:vid/chunks — 手动创建切块
+app.post('/versions/:vid/chunks', async (c) => {
+  const vid = c.req.param('vid');
+  const body = await c.req.json<{
+    chunks: Array<{ chunk_text: string; anchor_type?: string; anchor_value?: string; citation_label?: string }>;
+  }>();
+  if (!body.chunks?.length) return c.json({ error: 'chunks array is required' }, 400);
+
+  const now = new Date().toISOString();
+  const ids: string[] = [];
+  for (let i = 0; i < body.chunks.length; i++) {
+    const chunk = body.chunks[i];
+    const id = nanoid();
+    ids.push(id);
+    await db.insert(kmDocChunks).values({
+      id,
+      doc_version_id: vid,
+      chunk_index: i,
+      chunk_text: chunk.chunk_text,
+      anchor_type: chunk.anchor_type,
+      anchor_value: chunk.anchor_value,
+      citation_label: chunk.citation_label,
+      created_at: now,
+    });
+  }
+  await db.update(kmDocVersions).set({ chunk_count: body.chunks.length }).where(eq(kmDocVersions.id, vid));
+
+  logger.info('km', 'chunks_created', { vid, count: body.chunks.length });
+  return c.json({ ids }, 201);
+});
+
+// POST /versions/:vid/auto-chunk — 自动从 Markdown 按标题拆分切块
+app.post('/versions/:vid/auto-chunk', async (c) => {
+  const vid = c.req.param('vid');
+  const [version] = await db.select().from(kmDocVersions).where(eq(kmDocVersions.id, vid)).limit(1);
+  if (!version) return c.json({ error: '版本不存在' }, 404);
+  if (!version.file_path) return c.json({ error: '未关联文档文件' }, 404);
+
+  const resolvedPath = resolveDocContentPath(version.file_path);
+  if (!resolvedPath || !existsSync(resolvedPath)) return c.json({ error: '文件不存在' }, 404);
+
+  const content = await readFile(resolvedPath, 'utf-8');
+  const sections = content.split(/^(#{1,3}\s+.+)$/m).filter(Boolean);
+
+  // Delete existing chunks for this version
+  await db.delete(kmDocChunks).where(eq(kmDocChunks.doc_version_id, vid));
+
+  const now = new Date().toISOString();
+  let chunkIndex = 0;
+  let currentTitle = '';
+  const ids: string[] = [];
+
+  for (const section of sections) {
+    if (/^#{1,3}\s+/.test(section)) {
+      currentTitle = section.replace(/^#+\s+/, '').trim();
+      continue;
+    }
+    const text = section.trim();
+    if (!text) continue;
+
+    const id = nanoid();
+    ids.push(id);
+    await db.insert(kmDocChunks).values({
+      id,
+      doc_version_id: vid,
+      chunk_index: chunkIndex++,
+      chunk_text: text,
+      anchor_type: 'section',
+      anchor_value: currentTitle,
+      citation_label: currentTitle || `Chunk ${chunkIndex}`,
+      created_at: now,
+    });
+  }
+
+  await db.update(kmDocVersions).set({ chunk_count: chunkIndex }).where(eq(kmDocVersions.id, vid));
+  logger.info('km', 'auto_chunked', { vid, count: chunkIndex });
+  return c.json({ count: chunkIndex, ids }, 201);
 });
 
 export default app;

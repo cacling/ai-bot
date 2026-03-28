@@ -15,6 +15,7 @@ export {
   outboundTasks,
   kmDocuments,
   kmDocVersions,
+  kmDocChunks,
   kmPipelineJobs,
   kmCandidates,
   kmEvidenceRefs,
@@ -27,6 +28,7 @@ export {
   kmRegressionWindows,
   kmAuditLogs,
   kmReplyFeedback,
+  kmRetrievalEvalCases,
   mcpServers,
   mcpTools,
   // 严格 MCP 对齐：新增三层架构表

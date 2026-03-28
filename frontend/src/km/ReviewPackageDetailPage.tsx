@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Send, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { ArrowLeft, Send, CheckCircle, XCircle, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { kmApi, type KMReviewPackageDetail } from './api';
+import { Badge } from '@/components/ui/badge';
 import type { KMPage } from './KnowledgeManagementPage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -124,6 +125,9 @@ export function ReviewPackageDetailPage({ id, navigate }: { id: string; navigate
         </Alert>
       )}
 
+      {/* 助手专项校验卡 */}
+      <AssistantValidationCard candidates={data.candidates} />
+
       {/* 候选列表 */}
       <Card>
         <CardHeader className="py-2 px-3">
@@ -155,5 +159,70 @@ export function ReviewPackageDetailPage({ id, navigate }: { id: string; navigate
         </Table>
       </Card>
     </div>
+  );
+}
+
+interface CandidateForValidation {
+  id: string;
+  normalized_q: string;
+  structured_json?: string | null;
+  risk_level?: string | null;
+}
+
+function AssistantValidationCard({ candidates }: { candidates: CandidateForValidation[] }) {
+  const checks = useMemo(() => {
+    return candidates.map(c => {
+      const s = (() => { try { return JSON.parse(c.structured_json ?? '{}'); } catch { return {}; } })();
+      const results = [
+        { label: '坐席答案', pass: !!s.agent_answer },
+        { label: '引用来源', pass: Array.isArray(s.citations) && s.citations.length > 0 || Array.isArray(s.sources) && s.sources.length > 0 },
+        { label: '区分坐席/客户回复', pass: Array.isArray(s.reply_options) && s.reply_options.length > 0 },
+        { label: '降级策略', pass: !!s.fallback_policy },
+        { label: '禁用术语(高风险)', pass: c.risk_level !== 'high' || (Array.isArray(s.forbidden_terms) && s.forbidden_terms.length > 0) },
+      ];
+      return { q: c.normalized_q, results, allPass: results.every(r => r.pass) };
+    });
+  }, [candidates]);
+
+  if (candidates.length === 0) return null;
+
+  const totalPass = checks.filter(c => c.allPass).length;
+
+  return (
+    <Card className="mb-3">
+      <CardHeader className="py-2 px-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-xs flex items-center gap-1.5">
+            <ShieldCheck size={12} />
+            助手专项校验
+          </CardTitle>
+          <Badge variant={totalPass === checks.length ? 'default' : 'secondary'} className="text-[10px]">
+            {totalPass}/{checks.length} 通过
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="divide-y">
+          {checks.map((c, i) => (
+            <div key={i} className="py-2">
+              <div className="flex items-center gap-2 mb-1">
+                {c.allPass
+                  ? <CheckCircle size={12} className="text-primary" />
+                  : <AlertTriangle size={12} className="text-amber-500" />
+                }
+                <span className="text-xs font-medium">{c.q}</span>
+              </div>
+              <div className="flex gap-3 ml-5">
+                {c.results.map((r, j) => (
+                  <span key={j} className={`text-[10px] ${r.pass ? 'text-muted-foreground' : 'text-amber-600 font-medium'}`}>
+                    {r.pass ? '\u2713' : '\u2717'} {r.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

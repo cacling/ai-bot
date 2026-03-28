@@ -25,9 +25,11 @@ describe('KnowledgeManagementPage', () => {
   it('renders navigation groups', () => {
     render(<KnowledgeManagementPage />);
     expect(screen.getByText('文档管理')).toBeInTheDocument();
-    expect(screen.getByText('知识候选')).toBeInTheDocument();
+    expect(screen.getByText('助手知识')).toBeInTheDocument();
     expect(screen.getByText('评审与发布')).toBeInTheDocument();
     expect(screen.getByText('资产中心')).toBeInTheDocument();
+    expect(screen.getByText('检索与评测')).toBeInTheDocument();
+    expect(screen.getByText('反馈与缺口')).toBeInTheDocument();
     expect(screen.getByText('运维与治理')).toBeInTheDocument();
   });
 
@@ -35,10 +37,12 @@ describe('KnowledgeManagementPage', () => {
     render(<KnowledgeManagementPage />);
     // '文档列表' appears in both nav and content area, use getAllByText
     expect(screen.getAllByText('文档列表').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('候选列表')).toBeInTheDocument();
+    expect(screen.getByText('知识列表')).toBeInTheDocument();
     expect(screen.getByText('评审包')).toBeInTheDocument();
     expect(screen.getByText('动作草案')).toBeInTheDocument();
-    expect(screen.getByText('发布资产')).toBeInTheDocument();
+    expect(screen.getByText('在线资产')).toBeInTheDocument();
+    expect(screen.getByText('检索评测')).toBeInTheDocument();
+    expect(screen.getByText('反馈看板')).toBeInTheDocument();
     expect(screen.getByText('治理任务')).toBeInTheDocument();
     expect(screen.getByText('审计日志')).toBeInTheDocument();
   });

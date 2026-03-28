@@ -12,6 +12,9 @@ import assets from './assets';
 import tasks from './tasks';
 import audit from './audit';
 import replyCopilot from './reply-copilot';
+import agentCopilot from './agent-copilot';
+import retrievalEval from './retrieval-eval';
+import feedbackDashboard from './feedback-dashboard';
 
 const km = new Hono();
 
@@ -25,5 +28,8 @@ km.route('/assets', assets);
 km.route('/tasks', tasks);
 km.route('/audit-logs', audit);
 km.route('/reply-copilot', replyCopilot);
+km.route('/agent-copilot', agentCopilot);
+km.route('/retrieval-eval', retrievalEval);
+km.route('/feedback-dashboard', feedbackDashboard);
 
 export default km;

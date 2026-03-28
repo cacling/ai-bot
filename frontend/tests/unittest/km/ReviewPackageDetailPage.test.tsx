@@ -59,4 +59,27 @@ describe('ReviewPackageDetailPage', () => {
       expect(screen.getByText('包内候选')).toBeInTheDocument();
     });
   });
+
+  it('renders with candidates and shows validation card', async () => {
+    const packageWithCandidates = {
+      ...mockPackage,
+      candidates: [
+        {
+          id: 'c1', normalized_q: '查话费', status: 'draft',
+          gate_evidence: 'pass', gate_conflict: 'pass', gate_ownership: 'pass',
+          structured_json: JSON.stringify({ agent_answer: '请查看账单', reply_options: [{ label: '标准', text: '您好' }], fallback_policy: 'suggest_supplement', sources: ['文档A'] }),
+          risk_level: 'low',
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(packageWithCandidates),
+    }));
+
+    render(<ReviewPackageDetailPage id="pkg-1" navigate={navigate} />);
+    await waitFor(() => {
+      expect(screen.getByText('助手专项校验')).toBeInTheDocument();
+    });
+  });
 });

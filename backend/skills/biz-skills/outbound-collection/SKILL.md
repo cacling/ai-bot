@@ -116,21 +116,53 @@ stateDiagram-v2
     承诺还款 --> 检查还款日期: 确认还款日期 %% ref:collection-guide.md#承诺还款 %% step:col-check-ptp-date %% kind:llm
     state 日期是否合规 <<choice>>
     检查还款日期 --> 日期是否合规
-    日期是否合规 --> 发送还款短信: 日期在max_ptp_days内 %% tool:send_followup_sms %% step:col-send-payment-sms %% kind:tool %% guard:always
+    日期是否合规 --> PTP并行处理: 日期在max_ptp_days内 %% step:col-ptp-fork %% kind:fork %% guard:always
     日期是否合规 --> 协商更近日期: 日期超出max_ptp_days，引导提前 %% step:col-negotiate-date %% kind:human %% guard:always
-    协商更近日期 --> 发送还款短信: 客户同意新日期 %% guard:user.confirm
+    协商更近日期 --> PTP并行处理: 客户同意新日期 %% guard:user.confirm
     协商更近日期 --> 转人工: 无法达成一致 %% guard:user.cancel
-    发送还款短信 --> 记录承诺: record_call_result(ptp) %% tool:record_call_result %% step:col-record-ptp %% kind:tool
-    记录承诺 --> [*]: 感谢挂断
+
+    PTP并行处理 --> 发送还款短信: send_followup_sms(payment_link) %% tool:send_followup_sms %% step:col-send-payment-sms %% kind:tool
+    PTP并行处理 --> 记录承诺: record_call_result(ptp) %% tool:record_call_result %% step:col-record-ptp %% kind:tool
+
+    state 发送还款短信结果 <<choice>>
+    发送还款短信 --> 发送还款短信结果
+    发送还款短信结果 --> PTP汇合: 成功 %% guard:tool.success
+    发送还款短信结果 --> PTP短信异常: 系统异常 %% guard:tool.error
+    PTP短信异常 --> [*]: 短信发送失败，告知用户通过APP查看还款链接 %% step:col-ptp-sms-error %% kind:end
+
+    state 记录承诺结果 <<choice>>
+    记录承诺 --> 记录承诺结果
+    记录承诺结果 --> PTP汇合: 成功 %% guard:tool.success
+    记录承诺结果 --> PTP记录异常: 系统异常 %% guard:tool.error
+    PTP记录异常 --> [*]: 记录失败，告知客户结果将人工跟进 %% step:col-ptp-record-error %% kind:end
+
+    PTP汇合 --> PTP完成 %% step:col-ptp-join %% kind:join
+    PTP完成 --> [*]: 感谢挂断
 
     预约回呼 --> 确认回呼信息: 询问期望回呼时间 + 确认回呼号码 %% step:col-confirm-callback-info %% kind:human
     state 号码确认 <<choice>>
     确认回呼信息 --> 号码确认
     号码确认 --> 回呼已预约: 使用当前号码 %% step:col-callback-scheduled %% kind:llm %% guard:user.confirm
     号码确认 --> 回呼已预约: 客户提供新手机号 %% guard:user.cancel
-    回呼已预约 --> 创建回访任务: create_callback_task %% tool:create_callback_task %% step:col-create-callback %% kind:tool
-    创建回访任务 --> 记录回呼: record_call_result(callback_request) %% tool:record_call_result %% step:col-record-callback %% kind:tool
-    记录回呼 --> [*]: 礼貌挂断
+    回呼已预约 --> 回呼并行处理 %% step:col-callback-fork %% kind:fork
+
+    回呼并行处理 --> 创建回访任务: create_callback_task %% tool:create_callback_task %% step:col-create-callback %% kind:tool
+    回呼并行处理 --> 记录回呼: record_call_result(callback_request) %% tool:record_call_result %% step:col-record-callback %% kind:tool
+
+    state 创建回访任务结果 <<choice>>
+    创建回访任务 --> 创建回访任务结果
+    创建回访任务结果 --> 回呼汇合: 成功 %% guard:tool.success
+    创建回访任务结果 --> 回访创建异常: 系统异常 %% guard:tool.error
+    回访创建异常 --> [*]: 回访任务创建失败，告知人工将跟进 %% step:col-callback-create-error %% kind:end
+
+    state 记录回呼结果 <<choice>>
+    记录回呼 --> 记录回呼结果
+    记录回呼结果 --> 回呼汇合: 成功 %% guard:tool.success
+    记录回呼结果 --> 回呼记录异常: 系统异常 %% guard:tool.error
+    回呼记录异常 --> [*]: 记录失败，告知客户结果将人工跟进 %% step:col-callback-record-error %% kind:end
+
+    回呼汇合 --> 回呼完成 %% step:col-callback-join %% kind:join
+    回呼完成 --> [*]: 礼貌挂断
 
     明确拒绝 --> 提醒后果: 提醒一次逾期后果（仅一次） %% step:col-warn-consequence %% kind:llm
     %% ref:collection-guide.md#明确拒绝

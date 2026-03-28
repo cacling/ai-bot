@@ -11,7 +11,7 @@
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { getCardDef } from './registry';
+import { getCardDef, type CardDef } from './registry';
 import type { CardState } from './registry';
 
 export type PackedSegment =
@@ -33,7 +33,8 @@ function greedyPack(visible: CardState[], heights: Map<string, number>): PackedS
     const left: string[] = [];
     const right: string[] = [];
     for (const c of sorted) {
-      const h = heights.get(c.id) ?? 100;
+      const def = getCardDef(c.id) as CardDef | undefined;
+      const h = heights.get(c.id) ?? def?.defaultHeight ?? 100;
       if (lh <= rh) { left.push(c.id); lh += h; }
       else           { right.push(c.id); rh += h; }
     }

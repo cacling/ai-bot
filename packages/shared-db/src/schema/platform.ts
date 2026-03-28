@@ -127,6 +127,9 @@ export const kmDocuments = sqliteTable('km_documents', {
   title: text('title').notNull(),
   source: text('source').notNull().default('upload'),
   classification: text('classification').notNull().default('internal'),
+  authority_level: text('authority_level').notNull().default('rule'),   // 'policy' | 'rule' | 'faq' | 'experience'
+  applicable_scope: text('applicable_scope'),                           // JSON: {channels, regions, products}
+  citation_ready: integer('citation_ready').notNull().default(0),       // 0/1
   owner: text('owner'),
   status: text('status').notNull().default('active'),
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
@@ -142,8 +145,22 @@ export const kmDocVersions = sqliteTable('km_doc_versions', {
   effective_from: text('effective_from'),
   effective_to: text('effective_to'),
   diff_summary: text('diff_summary'),
+  chunk_count: integer('chunk_count').default(0),
+  supersedes_version_id: text('supersedes_version_id'),
   status: text('status').notNull().default('draft'),
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+export const kmDocChunks = sqliteTable('km_doc_chunks', {
+  id: text('id').primaryKey(),
+  doc_version_id: text('doc_version_id').notNull().references(() => kmDocVersions.id, { onDelete: 'cascade' }),
+  chunk_index: integer('chunk_index').notNull().default(0),
+  chunk_text: text('chunk_text').notNull(),
+  chunk_summary: text('chunk_summary'),
+  anchor_type: text('anchor_type'),       // 'clause' | 'paragraph' | 'page' | 'section'
+  anchor_value: text('anchor_value'),       // e.g. '第5章第3条' or 'p12'
+  citation_label: text('citation_label'),
+  created_at: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
 
 export const kmPipelineJobs = sqliteTable('km_pipeline_jobs', {
@@ -252,6 +269,8 @@ export const kmAssets = sqliteTable('km_assets', {
   status: text('status').notNull().default('online'),
   current_version: integer('current_version').notNull().default(1),
   scope_json: text('scope_json'),
+  service_modes: text('service_modes'),            // JSON: ["auto_recommend", "kb_answer", "action_suggest"]
+  rollout_strategy: text('rollout_strategy').notNull().default('online'), // 'online' | 'canary' | 'downgraded'
   owner: text('owner'),
   next_review_date: text('next_review_date'),
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
@@ -277,6 +296,9 @@ export const kmGovernanceTasks = sqliteTable('km_governance_tasks', {
   task_type: text('task_type').notNull(),
   source_type: text('source_type'),
   source_ref_id: text('source_ref_id'),
+  source_kind: text('source_kind').notNull().default('manual'),   // 'manual' | 'feedback' | 'eval' | 'document_change'
+  issue_category: text('issue_category'),                          // 'retrieval_miss' | 'content_gap' | 'source_dispute' | 'low_confidence'
+  severity: text('severity').notNull().default('medium'),          // 'low' | 'medium' | 'high' | 'critical'
   priority: text('priority').notNull().default('medium'),
   assignee: text('assignee'),
   status: text('status').notNull().default('open'),
@@ -316,9 +338,26 @@ export const kmReplyFeedback = sqliteTable('km_reply_feedback', {
   phone: text('phone'),
   message_id: text('message_id'),
   asset_version_id: text('asset_version_id'),
-  event_type: text('event_type').notNull(), // 'shown' | 'use' | 'copy' | 'edit' | 'dismiss'
+  event_type: text('event_type').notNull(), // 'shown' | 'use' | 'copy' | 'edit' | 'dismiss' | 'adopt_direct' | 'adopt_with_edit' | 'helpful' | 'not_helpful'
+  feedback_scope: text('feedback_scope').notNull().default('reply_hint'), // 'reply_hint' | 'kb_answer' | 'action_suggest'
+  question_text: text('question_text'),
+  answer_text: text('answer_text'),
+  reason_code: text('reason_code'),         // 'inaccurate' | 'too_vague' | 'no_answer' | 'unreliable_source'
   detail_json: text('detail_json'),
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+});
+
+export const kmRetrievalEvalCases = sqliteTable('km_retrieval_eval_cases', {
+  id: text('id').primaryKey(),
+  input_text: text('input_text').notNull(),
+  input_kind: text('input_kind').notNull().default('user_message'),  // 'user_message' | 'agent_question'
+  expected_asset_ids: text('expected_asset_ids'),   // JSON array
+  actual_asset_ids: text('actual_asset_ids'),       // JSON array
+  actual_answer: text('actual_answer'),
+  citation_ok: integer('citation_ok'),              // 0/1/null
+  answer_ok: integer('answer_ok'),                  // 0/1/null
+  reviewer: text('reviewer'),
+  created_at: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
 
 // ── MCP 服务管理 ─────────────────────────────────────────────────────────────
@@ -328,8 +367,9 @@ export const mcpServers = sqliteTable('mcp_servers', {
   name: text('name').notNull().unique(),
   description: text('description').notNull().default(''),
   transport: text('transport').notNull().default('http'),
-  status: text('status').notNull().default('active'),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  /** 'internal' = 自研内部服务 | 'external' = 外部第三方 | 'planned' = 计划接入 */
+  kind: text('kind').notNull().default('internal'),
   url: text('url'),
   headers_json: text('headers_json'),
   command: text('command'),
@@ -351,40 +391,6 @@ export const mcpServers = sqliteTable('mcp_servers', {
   updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
 });
 
-// ── @deprecated 迁移到 connectors 表。保留期间仍可读写，待 Phase 9 清理完成后删除 ──
-
-/** @deprecated Use `connectors` table instead. See docs/glossary.md */
-export const mcpResources = sqliteTable('mcp_resources', {
-  id: text('id').primaryKey(),
-  server_id: text('server_id').notNull(),
-  name: text('name').notNull(),
-  type: text('type').notNull(),
-  status: text('status').notNull().default('active'),
-  mcp_transport: text('mcp_transport'),
-  mcp_url: text('mcp_url'),
-  mcp_headers: text('mcp_headers'),
-  mcp_tool_name: text('mcp_tool_name'),
-  db_mode: text('db_mode'),
-  db_table: text('db_table'),
-  db_operation: text('db_operation'),
-  db_where: text('db_where'),
-  db_columns: text('db_columns'),
-  db_set_columns: text('db_set_columns'),
-  db_set_fixed: text('db_set_fixed'),
-  api_base_url: text('api_base_url'),
-  api_method: text('api_method'),
-  api_path: text('api_path'),
-  api_headers: text('api_headers'),
-  api_body_template: text('api_body_template'),
-  api_timeout: integer('api_timeout'),
-  env_json: text('env_json'),
-  env_prod_json: text('env_prod_json'),
-  env_test_json: text('env_test_json'),
-  description: text('description'),
-  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
-  updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
-});
-
 // ── MCP 工具（独立管理）─────────────────────────────────────────────────────
 
 export const mcpTools = sqliteTable('mcp_tools', {
@@ -394,14 +400,8 @@ export const mcpTools = sqliteTable('mcp_tools', {
   title: text('title'),
   description: text('description').notNull().default(''),
   server_id: text('server_id'),
-  /** @deprecated 迁移到 tool_implementations.adapter_type，过渡期保留 */
-  impl_type: text('impl_type'),
   input_schema: text('input_schema'),
   output_schema: text('output_schema'),
-  /** @deprecated 迁移到 tool_implementations.config，过渡期保留 */
-  execution_config: text('execution_config'),
-  /** @deprecated 迁移到 tool_implementations.handler_key，过渡期保留 */
-  handler_key: text('handler_key'),
   mock_rules: text('mock_rules'),
   mocked: integer('mocked', { mode: 'boolean' }).notNull().default(false),
   disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
@@ -419,14 +419,14 @@ export const mcpTools = sqliteTable('mcp_tools', {
 // 参考：docs/glossary.md
 // ══════════════════════════════════════════════════════════════════════════════
 
-// ── 实现层：连接器（原 mcp_resources 中的 DB/API/Remote MCP 连接）──────────
+// ── 实现层：连接器（MCP Server 的下游后端依赖）──────────────────────────────
 
 export const connectors = sqliteTable('connectors', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
-  /** 'db' | 'api' | 'remote_mcp' */
+  /** 'db' | 'api' */
   type: text('type').notNull(),
-  /** 统一配置 JSON（取代 mcp_resources 中的 db/api/mcp 字段） */
+  /** 统一配置 JSON */
   config: text('config'),
   status: text('status').notNull().default('active'),
   description: text('description'),
@@ -435,13 +435,11 @@ export const connectors = sqliteTable('connectors', {
   env_test_json: text('env_test_json'),
   /** 可选：归属哪个本地 runtime 域 */
   server_id: text('server_id'),
-  /** 迁移追踪：原 mcp_resources.id */
-  migrated_from: text('migrated_from'),
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
   updated_at: text('updated_at').$defaultFn(() => new Date().toISOString()),
 });
 
-// ── 实现层：工具实现（从 mcp_tools.execution_config 拆出）─────────────────
+// ── 实现层：工具实现（Tool → Adapter → Connector 绑定）──────────────────────
 
 export const toolImplementations = sqliteTable('tool_implementations', {
   id: text('id').primaryKey(),
@@ -449,7 +447,7 @@ export const toolImplementations = sqliteTable('tool_implementations', {
   tool_id: text('tool_id').notNull(),
   /** 托管此工具的本地 MCP Server */
   host_server_id: text('host_server_id'),
-  /** 'script' | 'db_binding' | 'api_proxy' */
+  /** 'script' | 'db_binding' | 'api_proxy' | 'remote_mcp' | 'mock' */
   adapter_type: text('adapter_type').notNull(),
   /** 依赖的 connector */
   connector_id: text('connector_id'),

@@ -1,14 +1,17 @@
 /**
  * McpToolEditor.tsx — Tool Contract Studio
  *
- * 6 步骤流程（严格 MCP 对齐）：
- * Contract 组: Contract / Input Schema / Output Schema
- * Implementation 组: Implementation / Mock Scenarios / Validation
+ * 5 步骤流程（严格 MCP 对齐）：
+ * Contract 组: Contract Basics / Input Schema / Output Schema
+ * Testing 组: Mock Scenarios / Validation
  * 三栏布局：左导航 + 中编辑区 + 右摘要栏
+ *
+ * Implementation 编辑已迁移到 Runtime Bindings tab（BindingDetailDrawer）。
+ * 此页面仅保留只读 Runtime Summary 卡片 + 跳转按钮。
  */
 import React, { useState, useEffect } from 'react';
-import { Save, ArrowLeft, Plus, Trash2, FileCode2, Database, Settings2, ChevronRight, Check, AlertTriangle, Circle, Play } from 'lucide-react';
-import { mcpApi, type McpToolRecord, type McpServer, type McpHandler, type MockRule } from './api';
+import { Save, ArrowLeft, Plus, Trash2, ChevronRight, Check, AlertTriangle, Circle, Play, Link2 } from 'lucide-react';
+import { mcpApi, type McpToolRecord, type McpServer, type McpHandler, type MockRule, type ToolImplementation } from './api';
 import { SchemaTableEditor } from './SchemaTableEditor';
 import { ContractAlignmentCard, alignSchemaWithMockResponse, alignSchemaWithData, extractSchemaFields, compareAlignment, type AlignmentResult } from './ContractAlignmentCard';
 import { Button } from '@/components/ui/button';
@@ -17,10 +20,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import CodeMirror from '@uiw/react-codemirror';
-import { javascript } from '@codemirror/lang-javascript';
-import { oneDark } from '@codemirror/theme-one-dark';
-import { Loader2 } from 'lucide-react';
 
 /**
  * 从 MCP 工具调用结果中提取业务数据。
@@ -43,11 +42,12 @@ interface Props {
   toolId: string;
   onBack: () => void;
   onUpdated?: () => void;
+  onOpenBinding?: (toolId: string) => void;
   initialStep?: Step;
   fromServer?: string;
 }
 
-type Step = 'overview' | 'input' | 'output' | 'impl' | 'mock' | 'test';
+type Step = 'overview' | 'input' | 'output' | 'mock' | 'test';
 
 type StepGroup = 'contract' | 'implementation';
 
@@ -55,12 +55,11 @@ const STEPS: Array<{ id: Step; label: string; group: StepGroup }> = [
   { id: 'overview', label: 'Contract', group: 'contract' },
   { id: 'input', label: 'Input Schema', group: 'contract' },
   { id: 'output', label: 'Output Schema', group: 'contract' },
-  { id: 'impl', label: 'Implementation', group: 'implementation' },
   { id: 'mock', label: 'Mock Scenarios', group: 'implementation' },
   { id: 'test', label: 'Validation', group: 'implementation' },
 ];
 
-export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServer }: Props) {
+export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initialStep, fromServer }: Props) {
   const [tool, setTool] = useState<McpToolRecord | null>(null);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [step, setStep] = useState<Step>(initialStep ?? 'overview');
@@ -86,7 +85,6 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
       case 'overview': return 'done';
       case 'input': return tool.input_schema ? 'done' : 'empty';
       case 'output': return tool.output_schema ? 'done' : 'warning';
-      case 'impl': return tool.impl_type ? 'done' : 'warning';
       case 'mock': return tool.mock_rules ? 'done' : 'empty';
       case 'test': return lastTestPassed === true ? 'done' : lastTestPassed === false ? 'warning' : 'empty';
       default: return 'empty';
@@ -128,8 +126,8 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
           <Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[10px] px-2">
             {tool.mocked ? 'Mock' : 'Real'}
           </Badge>
-          <Badge variant={tool.impl_type ? 'outline' : 'destructive'} className="text-[10px] px-2">
-            {tool.impl_type === 'script' ? 'Script' : tool.impl_type === 'api' ? 'API' : tool.impl_type ?? '未配置'}
+          <Badge variant={tool.adapter_type ? 'outline' : 'destructive'} className="text-[10px] px-2">
+            {tool.adapter_type === 'script' ? 'Script' : tool.adapter_type === 'remote_mcp' ? 'MCP' : tool.adapter_type === 'api_proxy' ? 'API' : tool.adapter_type ?? '未配置'}
           </Badge>
           <Badge variant={tool.output_schema ? 'outline' : 'destructive'} className="text-[10px] px-2">
             {tool.output_schema ? '契约已定义' : '契约未定义'}
@@ -232,10 +230,9 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
         <ResizablePanel id="tool-center" defaultSize="60%" minSize="30%">
         <div className="h-full overflow-auto p-6 pb-20">
           <div className="max-w-[760px] mx-auto">
-            {step === 'overview' && <OverviewStep tool={tool} servers={servers} onUpdated={handleUpdated} />}
+            {step === 'overview' && <OverviewStep tool={tool} servers={servers} onUpdated={handleUpdated} onOpenBinding={onOpenBinding} />}
             {step === 'input' && <InputContractStep tool={tool} onUpdated={handleUpdated} />}
             {step === 'output' && <OutputContractStep tool={tool} onUpdated={handleUpdated} />}
-            {step === 'impl' && <ImplStep tool={tool} onUpdated={handleUpdated} />}
             {step === 'mock' && <MockStep tool={tool} onUpdated={handleUpdated} />}
             {step === 'test' && <TestStep tool={tool} onTestResult={setLastTestPassed} />}
           </div>
@@ -247,7 +244,7 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
         {/* Right: Summary sidebar */}
         <ResizablePanel id="tool-right" defaultSize="25%" minSize="15%" maxSize="35%">
         <div className="h-full border-l bg-background p-4 overflow-auto">
-          <SummarySidebar tool={tool} servers={servers} />
+          <SummarySidebar tool={tool} servers={servers} onOpenBinding={onOpenBinding} />
         </div>
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -270,7 +267,7 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
             下一步 <ChevronRight size={12} />
           </Button>
         ) : (
-          <Button size="sm" variant={tool.output_schema && tool.impl_type ? 'default' : 'outline'} disabled={!tool.output_schema || !tool.impl_type}>
+          <Button size="sm" variant={tool.output_schema && tool.adapter_type ? 'default' : 'outline'} disabled={!tool.output_schema}>
             <Check size={12} /> 发布工具
           </Button>
         )}
@@ -281,11 +278,16 @@ export function McpToolEditor({ toolId, onBack, onUpdated, initialStep, fromServ
 
 // ── Step 1: Overview ─────────────────────────────────────────────────────────
 
-function OverviewStep({ tool, servers, onUpdated }: { tool: McpToolRecord; servers: McpServer[]; onUpdated: () => void }) {
+function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpToolRecord; servers: McpServer[]; onUpdated: () => void; onOpenBinding?: (toolId: string) => void }) {
   const [name, setName] = useState(tool.name);
   const [description, setDescription] = useState(tool.description);
   const [serverId, setServerId] = useState(tool.server_id ?? '');
   const [saving, setSaving] = useState(false);
+  const [impl, setImpl] = useState<ToolImplementation | null>(null);
+
+  useEffect(() => {
+    mcpApi.getToolImplementation(tool.id).then(setImpl).catch(() => {});
+  }, [tool.id]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -312,9 +314,9 @@ function OverviewStep({ tool, servers, onUpdated }: { tool: McpToolRecord; serve
     { label: 'Input Schema', level: tool.input_schema ? 'done' : 'empty' },
     { label: 'Output Schema', level: tool.output_schema ? 'done' : 'empty' },
     {
-      label: 'Implementation',
-      level: tool.impl_type ? 'done' : 'empty',
-      detail: tool.impl_type ? undefined : '未配置',
+      label: 'Binding',
+      level: tool.adapter_type ? 'done' : 'empty',
+      detail: tool.adapter_type ? undefined : '未绑定',
     },
     {
       label: 'Mock Alignment',
@@ -386,13 +388,59 @@ function OverviewStep({ tool, servers, onUpdated }: { tool: McpToolRecord; serve
           </div>
           <div className="text-[11px]">
             <span className="text-muted-foreground block mb-0.5">实现方式</span>
-            <span className="font-medium">{tool.impl_type === 'script' ? 'Script' : tool.impl_type === 'api' ? 'API' : tool.impl_type ?? '未配置'}</span>
+            <span className="font-medium">{tool.adapter_type === 'script' ? 'Script' : tool.adapter_type === 'remote_mcp' ? 'MCP' : tool.adapter_type === 'api_proxy' ? 'API' : tool.adapter_type ?? '未配置'}</span>
           </div>
           <div className="text-[11px]">
             <span className="text-muted-foreground block mb-0.5">Mock 场景</span>
             <span className="font-medium">{tool.mock_rules ? `${JSON.parse(tool.mock_rules).length} 个` : '无'}</span>
           </div>
         </div>
+      </div>
+
+      {/* Runtime Summary (read-only) */}
+      <div className="bg-background rounded-xl border p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Link2 size={14} className="text-muted-foreground" />
+            <h3 className="text-xs font-semibold">Runtime Binding</h3>
+          </div>
+          {onOpenBinding && (
+            <Button variant="ghost" size="sm" className="text-xs h-7 gap-1 text-primary" onClick={() => onOpenBinding(tool.id)}>
+              Open in Runtime Bindings <ChevronRight size={10} />
+            </Button>
+          )}
+        </div>
+        {impl && impl._source !== 'none' ? (
+          <div className="grid grid-cols-2 gap-3 text-[11px]">
+            <div>
+              <span className="text-muted-foreground block mb-0.5">Adapter</span>
+              <Badge variant="outline" className="text-[9px]">
+                {impl.adapter_type === 'script' ? 'Script' : impl.adapter_type === 'remote_mcp' ? 'MCP' : impl.adapter_type === 'api_proxy' ? 'API Proxy' : impl.adapter_type ?? '—'}
+              </Badge>
+            </div>
+            <div>
+              <span className="text-muted-foreground block mb-0.5">Connector</span>
+              <span className="font-medium font-mono">{impl.connector?.name ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground block mb-0.5">Handler</span>
+              <span className="font-medium font-mono">{impl.handler_key ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground block mb-0.5">Status</span>
+              <Badge variant={impl.status === 'active' ? 'default' : 'secondary'} className="text-[9px]">{impl.status}</Badge>
+            </div>
+          </div>
+        ) : (
+          <div className="text-[11px] text-muted-foreground py-2">
+            No runtime binding configured.
+            {onOpenBinding && (
+              <Button variant="link" size="sm" className="text-xs h-auto p-0 ml-1" onClick={() => onOpenBinding(tool.id)}>
+                Configure in Runtime Bindings
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Skills & usage */}
@@ -600,236 +648,7 @@ function OutputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdate
   );
 }
 
-// ── Step 4: Implementation ───────────────────────────────────────────────────
-
-const IMPL_OPTIONS = [
-  {
-    value: 'script',
-    label: '脚本',
-    icon: <FileCode2 size={18} />,
-    desc: '适合复杂规则、多表聚合、诊断逻辑',
-    detail: 'TypeScript handler，完全自定义实现',
-  },
-  {
-    value: 'api',
-    label: 'API Proxy',
-    icon: <Settings2 size={18} />,
-    desc: '调用 mock_apis 或真实后端系统',
-    detail: 'REST API 代理，demo 阶段指向 mock_apis，生产替换为真实 URL',
-  },
-];
-
-function ImplStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => void }) {
-  const [implType, setImplType] = useState(tool.impl_type ?? '');
-  const [handlerKey, setHandlerKey] = useState(tool.handler_key ?? '');
-  const [handlers, setHandlers] = useState<McpHandler[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [contractMatch, setContractMatch] = useState<{ checked: boolean; valid?: boolean; errors?: string[] }>({ checked: false });
-
-  // 脚本源码预览
-  const [scriptContent, setScriptContent] = useState<string | null>(null);
-  const [scriptLoading, setScriptLoading] = useState(false);
-
-  // Runtime Binding
-  const [runtimeBinding, setRuntimeBinding] = useState<{ adapter_type: string | null; connector_id: string | null; connector_name: string | null; status: string; config: string | null; source: string } | null>(null);
-  useEffect(() => {
-    mcpApi.getToolImplementation(tool.id).then(impl => {
-      setRuntimeBinding({
-        adapter_type: impl.adapter_type,
-        connector_id: impl.connector_id,
-        connector_name: impl.connector?.name ?? null,
-        status: impl.status,
-        config: impl.config,
-        source: impl._source,
-      });
-    }).catch(() => setRuntimeBinding(null));
-  }, [tool.id]);
-
-  useEffect(() => { mcpApi.listHandlers().then(r => setHandlers(r.handlers)).catch(() => {}); }, []);
-
-  const selectedHandler = handlers.find(h => h.key === handlerKey);
-
-  // 加载脚本源码
-  useEffect(() => {
-    if (!selectedHandler?.file) { setScriptContent(null); return; }
-    setScriptLoading(true);
-    fetch(`/api/files/content?path=${encodeURIComponent(selectedHandler.file)}`)
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then((d: { content: string }) => setScriptContent(d.content))
-      .catch(() => setScriptContent(null))
-      .finally(() => setScriptLoading(false));
-  }, [selectedHandler?.file]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await mcpApi.updateTool(tool.id, {
-        impl_type: implType || null,
-        handler_key: implType === 'script' ? handlerKey || null : null,
-      } as any);
-      onUpdated();
-    } catch (e) { alert(`保存失败: ${e}`); }
-    finally { setSaving(false); }
-  };
-
-  const handleCheckContract = async () => {
-    if (!tool.server_id || !tool.output_schema) {
-      setContractMatch({ checked: true, valid: undefined, errors: [!tool.output_schema ? '请先定义输出契约' : '请先分配 Server'] });
-      return;
-    }
-    try {
-      const testArgs: Record<string, unknown> = {};
-      const inputSchema = tool.input_schema ? JSON.parse(tool.input_schema) : null;
-      if (inputSchema?.properties) {
-        for (const [k, v] of Object.entries(inputSchema.properties as Record<string, any>)) {
-          if (v.type === 'string') testArgs[k] = 'test';
-          else if (v.type === 'number' || v.type === 'integer') testArgs[k] = 0;
-          else if (v.type === 'boolean') testArgs[k] = false;
-        }
-      }
-      const res = tool.mocked
-        ? await mcpApi.mockInvokeTool(tool.server_id, tool.name, testArgs)
-        : await mcpApi.invokeTool(tool.server_id, tool.name, testArgs);
-      const businessData = extractBusinessData(res.result);
-      const vr = await mcpApi.validateOutput(tool.id, businessData);
-      setContractMatch({ checked: true, valid: vr.valid, errors: vr.errors });
-    } catch (e) {
-      setContractMatch({ checked: true, valid: undefined, errors: [`执行失败: ${e}`] });
-    }
-  };
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* ── 上半区：紧凑配置带 ── */}
-      <div className="shrink-0 space-y-3 pb-3 border-b border-border">
-        {/* 第一行：标题 + 模式 badge + 契约检查 + 保存 */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold">实现方式</h2>
-            <Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[9px]">{tool.mocked ? 'Mock' : 'Real'}</Badge>
-            {tool.output_schema && (
-              <>
-                <button onClick={handleCheckContract} className="text-[11px] text-primary hover:underline">检查契约匹配</button>
-                {contractMatch.checked && (
-                  <Badge variant={contractMatch.valid ? 'default' : contractMatch.valid === false ? 'destructive' : 'outline'} className="text-[9px]">
-                    {contractMatch.valid ? '匹配' : contractMatch.valid === false ? '不匹配' : '未知'}
-                  </Badge>
-                )}
-              </>
-            )}
-          </div>
-          <Button size="sm" onClick={handleSave} disabled={saving} className="text-xs h-7">
-            <Save size={11} /> {saving ? '保存中...' : '保存'}
-          </Button>
-        </div>
-
-        {contractMatch.checked && contractMatch.errors && contractMatch.errors.length > 0 && (
-          <div className="text-[10px] text-destructive bg-destructive/5 px-3 py-1.5 rounded space-y-0.5">
-            {contractMatch.errors.map((e, i) => <div key={i}>{e}</div>)}
-          </div>
-        )}
-
-        {/* 第二行：实现类型切换 */}
-        <div className="flex items-center gap-2">
-          {IMPL_OPTIONS.map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => setImplType(opt.value)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                implType === opt.value
-                  ? 'border-primary bg-primary/5 text-primary'
-                  : 'border-border hover:bg-accent text-muted-foreground'
-              }`}
-            >
-              {opt.icon}
-              {opt.label}
-              {tool.impl_type === opt.value && <Badge variant="secondary" className="text-[8px] px-1 ml-1">当前</Badge>}
-            </button>
-          ))}
-        </div>
-
-        {/* 第三行：脚本 handler 选择 + meta */}
-        {implType === 'script' && (
-          <div className="flex items-center gap-3">
-            <Select value={handlerKey} onValueChange={v => { if (v) setHandlerKey(v); }}>
-              <SelectTrigger className="text-xs h-8 font-mono w-64"><SelectValue placeholder="选择 handler">{handlerKey || '选择...'}</SelectValue></SelectTrigger>
-              <SelectContent>{handlers.map(h => <SelectItem key={h.key} value={h.key}><span className="font-mono text-xs">{h.key}</span></SelectItem>)}</SelectContent>
-            </Select>
-            {selectedHandler && (
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                <Badge variant="outline" className="text-[9px] font-mono">{selectedHandler.server_name}</Badge>
-                <span className="font-mono truncate max-w-[200px]" title={selectedHandler.file}>{selectedHandler.file}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* API 配置 */}
-        {implType === 'api' && <ApiPanel toolId={tool.id} config={tool.execution_config} outputSchema={(tool.output_schema_content ?? null) as Record<string, unknown> | null} onUpdated={onUpdated} />}
-
-        {/* Runtime Binding 信息 */}
-        {runtimeBinding && (
-          <div className="mt-2 rounded-lg border bg-muted/30 px-3 py-2">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Runtime Binding</span>
-              <Badge variant={runtimeBinding.source === 'tool_implementations' ? 'default' : 'outline'} className="text-[8px]">
-                {runtimeBinding.source === 'tool_implementations' ? 'Bound' : runtimeBinding.source === 'legacy' ? 'Legacy' : 'Unbound'}
-              </Badge>
-            </div>
-            <div className="grid grid-cols-4 gap-x-4 gap-y-1 text-xs">
-              <div><span className="text-muted-foreground">Adapter:</span> <span className="font-mono">{runtimeBinding.adapter_type ?? 'remote_mcp'}</span></div>
-              <div><span className="text-muted-foreground">Connector:</span> <span className="font-mono">{runtimeBinding.connector_name ?? '-'}</span></div>
-              <div><span className="text-muted-foreground">Status:</span> <Badge variant={runtimeBinding.status === 'active' ? 'default' : 'secondary'} className="text-[8px]">{runtimeBinding.status}</Badge></div>
-              <div><span className="text-muted-foreground">Pipeline:</span> <span className="font-mono text-muted-foreground">resolve → validate → inject → govern → dispatch → normalize → observe</span></div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── 下半区：脚本源码预览 ── */}
-      {implType === 'script' && (
-        <div className="flex-1 flex flex-col min-h-0 pt-2">
-          <div className="flex items-center justify-between px-1 pb-1.5">
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-              脚本源码（只读）
-            </span>
-            {selectedHandler && (
-              <span className="text-[10px] font-mono text-muted-foreground truncate max-w-[300px]" title={selectedHandler.file}>
-                {selectedHandler.file}
-              </span>
-            )}
-          </div>
-          <div className="flex-1 rounded-lg border overflow-hidden bg-[#282c34]">
-            {scriptLoading ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground gap-2">
-                <Loader2 size={16} className="animate-spin" />
-                <span className="text-xs">加载中…</span>
-              </div>
-            ) : scriptContent ? (
-              <CodeMirror
-                value={scriptContent}
-                height="100%"
-                theme={oneDark}
-                extensions={[javascript({ typescript: true })]}
-                readOnly
-                basicSetup={{ lineNumbers: true, foldGutter: true }}
-                style={{ fontSize: '12px', height: '100%' }}
-              />
-            ) : selectedHandler ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
-                无法加载源码
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
-                选择 handler 后显示源码
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// (ImplStep removed — editing moved to Runtime Bindings tab)
 
 // ── Step 5: Mock Scenarios ───────────────────────────────────────────────────
 
@@ -1119,7 +938,7 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
         path = `Mock → ${(response as any).matched_rule || '匹配规则'}`;
       } else {
         response = await mcpApi.invokeTool(tool.server_id, tool.name, parsedArgs);
-        path = `Real → ${tool.impl_type === 'script' ? tool.handler_key : tool.impl_type ?? 'unknown'}`;
+        path = `Real → ${tool.adapter_type ?? 'unknown'}`;
       }
 
       // Extract business data from MCP content wrapper
@@ -1156,7 +975,7 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
   const checks = [
     { label: 'Input Schema 已定义', ok: !!tool.input_schema },
     { label: 'Output Schema 已定义', ok: !!tool.output_schema },
-    { label: 'Implementation 已配置', ok: !!tool.impl_type },
+    { label: 'Runtime Binding 已配置', ok: !!tool.adapter_type },
     { label: '至少一条 Mock Scenario', ok: !!tool.mock_rules },
     { label: '最近测试通过', ok: result?.success === true && result?.contractValid !== false },
   ];
@@ -1285,7 +1104,7 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
 
 // ── Right Sidebar ────────────────────────────────────────────────────────────
 
-function SummarySidebar({ tool, servers }: { tool: McpToolRecord; servers: McpServer[] }) {
+function SummarySidebar({ tool, servers, onOpenBinding }: { tool: McpToolRecord; servers: McpServer[]; onOpenBinding?: (toolId: string) => void }) {
   const mockRules: MockRule[] = tool.mock_rules ? JSON.parse(tool.mock_rules) : [];
   const inputSchema = tool.input_schema ? JSON.parse(tool.input_schema) : null;
   const inputFieldCount = inputSchema?.properties ? Object.keys(inputSchema.properties).length : 0;
@@ -1295,8 +1114,8 @@ function SummarySidebar({ tool, servers }: { tool: McpToolRecord; servers: McpSe
   // Risk checks
   const risks: string[] = [];
   if (!tool.output_schema) risks.push('输出契约未定义');
-  if (!tool.impl_type) risks.push('Implementation 未配置');
-  if (tool.impl_type && mockRules.length === 0) risks.push('无 Mock 场景');
+  if (!tool.adapter_type) risks.push('Runtime Binding 未配置');
+  if (tool.adapter_type && mockRules.length === 0) risks.push('无 Mock 场景');
 
   return (
     <div className="space-y-5 text-xs">
@@ -1305,7 +1124,12 @@ function SummarySidebar({ tool, servers }: { tool: McpToolRecord; servers: McpSe
         <div className="space-y-1.5">
           <div className="flex justify-between"><span className="text-muted-foreground">Server</span><span className="font-medium">{servers.find(s => s.id === tool.server_id)?.name ?? '—'}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Mode</span><Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[9px]">{tool.mocked ? 'Mock' : 'Real'}</Badge></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Adapter</span><span className="font-medium">{tool.impl_type === 'script' ? 'Script' : tool.impl_type === 'api' ? 'API Proxy' : '—'}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Adapter</span><span className="font-medium">{tool.adapter_type === 'script' ? 'Script' : tool.adapter_type === 'remote_mcp' ? 'MCP' : tool.adapter_type === 'api_proxy' ? 'API Proxy' : tool.adapter_type ?? '—'}</span></div>
+          {onOpenBinding && (
+            <button onClick={() => onOpenBinding(tool.id)} className="flex items-center gap-1 text-[10px] text-primary hover:underline mt-1">
+              <Link2 size={9} /> Open in Runtime Bindings
+            </button>
+          )}
         </div>
       </div>
 
@@ -1316,13 +1140,6 @@ function SummarySidebar({ tool, servers }: { tool: McpToolRecord; servers: McpSe
           <div className="flex justify-between"><span className="text-muted-foreground">Output Schema</span><Badge variant={tool.output_schema ? 'default' : 'destructive'} className="text-[9px]">{tool.output_schema ? `${outputFieldCount} fields` : '未定义'}</Badge></div>
         </div>
       </div>
-
-      {tool.handler_key && (
-        <div className="border-t pt-4">
-          <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">实现</h3>
-          <div className="font-mono text-[11px] bg-muted p-2 rounded break-all">{tool.handler_key}</div>
-        </div>
-      )}
 
       <div className="border-t pt-4">
         <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">Mock</h3>
@@ -1378,10 +1195,10 @@ function ApiPanel({ toolId, config, outputSchema, onUpdated }: { toolId: string;
   const [responsePath, setResponsePath] = useState<string>(apiCfg.response_path ?? '$.data');
   const [errorMappings, setErrorMappings] = useState<Array<{ status: string; error_code: string; message: string }>>(apiCfg.error_mappings ?? []);
   const [saving, setSaving] = useState(false);
-  const [resources, setResources] = useState<Array<{ id: string; name: string; type: string; api_base_url: string | null }>>([]);
+  const [connectors, setConnectors] = useState<Array<{ id: string; name: string; type: string; config: string | null }>>([]);
 
   useEffect(() => {
-    mcpApi.listResources().then(r => setResources((r.items ?? []).filter((res: any) => res.type === 'api'))).catch(() => {});
+    mcpApi.listConnectors().then(r => setConnectors((r.items ?? []).filter(c => c.type === 'api'))).catch(() => {});
   }, []);
 
   const handleSave = async () => {
@@ -1390,16 +1207,17 @@ function ApiPanel({ toolId, config, outputSchema, onUpdated }: { toolId: string;
     try { parsedHeaders = JSON.parse(headers); } catch { /* ignore */ }
     setSaving(true);
     try {
-      await mcpApi.updateExecutionConfig(toolId, {
-        impl_type: 'api',
-        resource_id: existing.resource_id,
-        api: {
-          url: url.trim(), method, timeout,
-          headers: parsedHeaders,
-          body_template: bodyTemplate || undefined,
-          response_path: responsePath || undefined,
-          error_mappings: errorMappings.length > 0 ? errorMappings : undefined,
-        },
+      await mcpApi.updateToolImplementation(toolId, {
+        adapter_type: 'api_proxy',
+        config: JSON.stringify({
+          api: {
+            url: url.trim(), method, timeout,
+            headers: parsedHeaders,
+            body_template: bodyTemplate || undefined,
+            response_path: responsePath || undefined,
+            error_mappings: errorMappings.length > 0 ? errorMappings : undefined,
+          },
+        }),
       });
       onUpdated();
     } catch (e) { alert(`保存失败: ${e}`); } finally { setSaving(false); }
@@ -1412,22 +1230,25 @@ function ApiPanel({ toolId, config, outputSchema, onUpdated }: { toolId: string;
 
   return (
     <div className="space-y-4">
-      {/* 1. API 资源 */}
-      {resources.length > 0 && (
+      {/* 1. API 连接器 */}
+      {connectors.length > 0 && (
         <div className="bg-background rounded-xl border p-5 space-y-3">
-          <h3 className="text-sm font-semibold">API 资源</h3>
-          <div className="text-[11px] text-muted-foreground mb-2">选择已注册的 API 资源，或直接填写完整 URL</div>
+          <h3 className="text-sm font-semibold">API 连接器</h3>
+          <div className="text-[11px] text-muted-foreground mb-2">选择已注册的 API 连接器填充 URL，或直接填写完整 URL</div>
           <div className="flex flex-wrap gap-2">
-            {resources.map(r => (
-              <button
-                key={r.id}
-                onClick={() => { if (r.api_base_url) setUrl(r.api_base_url); }}
-                className="text-[11px] px-3 py-1.5 rounded-lg border hover:bg-accent"
-              >
-                <span className="font-medium">{r.name}</span>
-                {r.api_base_url && <span className="ml-1.5 text-muted-foreground font-mono">{r.api_base_url}</span>}
-              </button>
-            ))}
+            {connectors.map(c => {
+              const cfg = c.config ? JSON.parse(c.config) : {};
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => { if (cfg.base_url) setUrl(cfg.base_url); }}
+                  className="text-[11px] px-3 py-1.5 rounded-lg border hover:bg-accent"
+                >
+                  <span className="font-medium">{c.name}</span>
+                  {cfg.base_url && <span className="ml-1.5 text-muted-foreground font-mono">{cfg.base_url}</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

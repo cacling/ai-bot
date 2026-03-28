@@ -294,13 +294,18 @@ export function AgentWorkstationPage() {
         });
       }
       if (detail?.type === 'reply_feedback') {
-        fetch('/api/km/reply-copilot/feedback', {
+        const source = detail.source ?? 'reply_hint';
+        const endpoint = source === 'agent_copilot'
+          ? '/api/km/agent-copilot/feedback'
+          : '/api/km/reply-copilot/feedback';
+        fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             phone: userPhone,
             asset_version_id: detail.assetVersionId,
             event_type: detail.event,
+            source,
           }),
         }).catch(() => {});
       }
@@ -315,7 +320,7 @@ export function AgentWorkstationPage() {
     const task = findOutboundTaskByPhone(outboundTasksList, userPhone);
     setCardStates(prev => prev.map(c => {
       if (c.id === 'user_detail')   return { ...c, data: user, isOpen: true };
-      if (c.id === 'outbound_task') return { ...c, data: task ?? null, isOpen: true };
+      if (c.id === 'outbound_task') return { ...c, data: task ?? null, isOpen: !!task };
       return c;
     }));
   }, [userPhone, allPersonas, outboundTasksList]);
@@ -338,13 +343,14 @@ export function AgentWorkstationPage() {
     const pendingHint = pendingReplyHintRef.current;
     if (pendingHint?.assetVersionId && trimmed.includes(pendingHint.insertedText.trim())) {
       const eventType = trimmed === pendingHint.insertedText.trim() ? 'use' : 'edit';
-      fetch('/api/km/reply-copilot/feedback', {
+      fetch('/api/km/agent-copilot/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: userPhone,
           asset_version_id: pendingHint.assetVersionId,
           event_type: eventType,
+          source: 'agent_copilot',
         }),
       }).catch(() => {});
     }

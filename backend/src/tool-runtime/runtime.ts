@@ -13,17 +13,20 @@ export class ToolRuntime {
   private policies: GovernPolicy[] = [];
   private adapters: Partial<Record<AdapterType, Adapter>>;
   private remoteMcpAdapter: RemoteMcpAdapter;
+  private scriptAdapter: ScriptAdapter;
 
   constructor() {
     this.registry = new ToolRegistry();
     this.remoteMcpAdapter = new RemoteMcpAdapter();
     this.remoteMcpAdapter.setRegistry(this.registry);
+    this.scriptAdapter = new ScriptAdapter();
+    this.scriptAdapter.setRegistry(this.registry);
     this.adapters = {
       remote_mcp: this.remoteMcpAdapter,
       mock: new MockAdapter(),
       api: new ApiAdapter(),
       db: new DbAdapter(),
-      script: new ScriptAdapter(),
+      script: this.scriptAdapter,
     };
     this.pipeline = new Pipeline(this.registry, this.adapters, this.policies);
   }
@@ -52,6 +55,7 @@ export class ToolRuntime {
 
   setMcpTools(tools: Record<string, { execute: (...args: any[]) => Promise<any> }>): void {
     this.remoteMcpAdapter.setMcpTools(tools);
+    this.scriptAdapter.setMcpTools(tools);
   }
 
   getRegistry(): ToolRegistry {

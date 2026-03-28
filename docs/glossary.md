@@ -30,11 +30,13 @@
 
 ### Tool Implementation（工具实现）
 - **定义**：Tool Contract 的具体实现方式
-- **adapter_type**：`script` / `db_binding` / `api_proxy`
+- **adapter_type**：`script` / `remote_mcp` / `api_proxy` / `db` / `mock`
+- **存储**：`tool_implementations` 表（契约与实现分离）
 - **只有本地托管工具才需要 Implementation 配置**
 
 ### MCP Server
 - **定义**：真正说 MCP 协议的服务端点
+- **kind 分类**：`internal`（自托管）/ `external`（第三方如 AMap）/ `planned`（规划中）
 - **必须**：支持 `tools/list` / `tools/call`
 - **可选**：支持 `resources/list` / `resources/read`、`prompts/list` / `prompts/get`
 - **不是**：业务分组或逻辑容器
@@ -49,10 +51,11 @@
 - **来源**：通过 `prompts/list` / `prompts/get` 从 MCP Server 发现
 
 ### Connector（连接器）
-- **定义**：DB / API / Remote MCP / Cache / Queue 等后端连接依赖
+- **定义**：DB / API 后端连接依赖（`type: 'db' | 'api'`）
 - **只服务于**：本地 Adapter MCP Server 的内部实现
 - **不暴露给**：Skill 层
 - **不冒充**：MCP Resource
+- **外部 MCP 不需要 Connector**（通过 Server URL 直连）
 
 ### Execution Trace（执行链路）
 - **定义**：Skill 运行时的工具调用链展示
@@ -81,15 +84,15 @@
 
 ## 数据模型术语映射
 
-| 旧表/字段 | 新去向 |
-|-----------|--------|
-| `mcp_resources`（DB/API/remote） | → `connectors` |
-| `mcp_tools.execution_config` | → `tool_implementations.config` |
-| `mcp_tools.impl_type` | → `tool_implementations.adapter_type` |
-| `mcp_tools.handler_key` | → `tool_implementations.handler_key` |
-| `skill_registry.tool_names`（JSON） | → `skill_tool_bindings` |
-| discover 到的 MCP URI resources | → `mcp_resources`（新语义） |
-| discover 到的 MCP prompts | → `mcp_prompts` |
+| 旧表/字段 | 状态 |
+|-----------|------|
+| `mcp_resources` 表 | **已删除** — 连接依赖用 `connectors` 表 |
+| `mcp_tools.impl_type` | **已删除** — 迁移至 `tool_implementations.adapter_type` |
+| `mcp_tools.execution_config` | **已删除** — 迁移至 `tool_implementations.config` |
+| `mcp_tools.handler_key` | **已删除** — 迁移至 `tool_implementations.handler_key` |
+| `connectors.type = 'remote_mcp'` | **已删除** — 外部 MCP 通过 Server URL 直连 |
+| `/api/mcp/resources` 路由 | **已删除** — 使用 `/api/mcp/connectors` |
+| `PUT /:id/execution-config` 端点 | **已删除** — 使用 `PUT /:id/implementation` |
 
 ---
 

@@ -18,7 +18,7 @@ describe('AssetListPage', () => {
 
   it('renders without crashing', () => {
     render(<AssetListPage navigate={navigate} />);
-    expect(screen.getByText('发布资产')).toBeInTheDocument();
+    expect(screen.getByText('在线资产')).toBeInTheDocument();
   });
 
   it('shows loading state initially', () => {

@@ -1,13 +1,15 @@
 /**
  * RuntimeOverviewPage.tsx — Tool Runtime 总览仪表盘
  *
- * 展示执行统计：总调用量、成功率、平均延迟、适配器分布、Top 工具
+ * 展示执行统计 + 服务来源。Server 管理从独立 tab 收归到此。
  */
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, CheckCircle, Clock, Layers } from 'lucide-react';
-import { fetchRuntimeStats, type RuntimeStats } from './api';
+import { Button } from '@/components/ui/button';
+import { Activity, CheckCircle, Clock, Layers, Settings, Plus, RefreshCw } from 'lucide-react';
+import { fetchRuntimeStats, mcpApi, type RuntimeStats, type McpServer, type McpToolRecord } from './api';
+import { ServerManageDialog } from './ServerManageDialog';
 
 const EMPTY_STATS: RuntimeStats = {
   totalCalls: 0, successRate: 0, avgLatencyMs: 0,
@@ -18,9 +20,31 @@ export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
   const [stats, setStats] = useState<RuntimeStats>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
 
+  // Server source data
+  const [servers, setServers] = useState<McpServer[]>([]);
+  const [toolCounts, setToolCounts] = useState<Map<string, number>>(new Map());
+  const [dialogServer, setDialogServer] = useState<McpServer | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const loadServers = useCallback(() => {
+    Promise.all([
+      mcpApi.listServers(),
+      mcpApi.listTools(),
+    ]).then(([sRes, tRes]) => {
+      setServers(sRes.items);
+      const counts = new Map<string, number>();
+      for (const t of tRes.items) {
+        if (t.server_id) counts.set(t.server_id, (counts.get(t.server_id) ?? 0) + 1);
+      }
+      setToolCounts(counts);
+    }).catch(console.error);
+  }, []);
+
   useEffect(() => {
     fetchRuntimeStats().then(setStats).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+    loadServers();
+  }, [loadServers]);
 
   if (loading) return <div className="p-6 text-xs text-muted-foreground">Loading stats...</div>;
 
@@ -44,6 +68,63 @@ export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Server Sources */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm">Server Sources</CardTitle>
+            <div className="flex items-center gap-1.5">
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={loadServers}>
+                <RefreshCw size={11} /> Refresh
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => { setDialogServer(null); setCreating(true); setDialogOpen(true); }}>
+                <Plus size={11} /> Add Server
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {servers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No servers configured.</p>
+          ) : (
+            <div className="space-y-1">
+              {servers.map(s => {
+                const isActive = s.kind !== 'planned' && s.enabled;
+                return (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-muted/50 cursor-pointer group"
+                    onClick={() => { setDialogServer(s); setCreating(false); setDialogOpen(true); }}
+                  >
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-green-500' : 'bg-gray-300'}`} />
+                    <span className="text-xs font-mono font-medium flex-1 min-w-0 truncate">{s.name}</span>
+                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
+                      s.kind === 'internal' ? 'bg-sky-50 text-sky-700' :
+                      s.kind === 'external' ? 'bg-orange-50 text-orange-700' :
+                      'bg-gray-50 text-gray-500'
+                    }`}>{s.kind}</Badge>
+                    <span className="text-[11px] text-muted-foreground w-16">
+                      {isActive ? 'Running' : s.kind === 'planned' ? 'Planned' : 'Disabled'}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground w-14 text-right">
+                      {toolCounts.get(s.id) ?? 0} tools
+                    </span>
+                    <Settings size={12} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <ServerManageDialog
+        open={dialogOpen}
+        server={creating ? null : dialogServer}
+        onClose={() => { setDialogOpen(false); setDialogServer(null); setCreating(false); }}
+        onSaved={() => { setDialogOpen(false); setDialogServer(null); setCreating(false); loadServers(); }}
+      />
 
       {hasData && (
         <div className="grid grid-cols-2 gap-4">

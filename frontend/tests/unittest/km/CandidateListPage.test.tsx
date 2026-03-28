@@ -18,7 +18,7 @@ describe('CandidateListPage', () => {
 
   it('renders without crashing', () => {
     render(<CandidateListPage navigate={navigate} />);
-    expect(screen.getByText('知识候选')).toBeInTheDocument();
+    expect(screen.getByText('助手知识')).toBeInTheDocument();
   });
 
   it('shows loading state initially', () => {
@@ -29,7 +29,7 @@ describe('CandidateListPage', () => {
   it('shows empty state after loading', async () => {
     render(<CandidateListPage navigate={navigate} />);
     await waitFor(() => {
-      expect(screen.getByText('暂无候选')).toBeInTheDocument();
+      expect(screen.getByText('暂无知识')).toBeInTheDocument();
     });
   });
 

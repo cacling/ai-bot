@@ -11,7 +11,7 @@ const BACKEND = 'http://localhost:18472';
 
 test.describe('Connector 列表', () => {
   test.skip('MCP-CONN-01: GET /api/mcp/connectors 返回连接器列表', async ({ request }) => {});
-  test.skip('MCP-CONN-02: 支持按类型筛选 (api/remote_mcp)', async ({ request }) => {});
+  test.skip('MCP-CONN-02: 支持按类型筛选 (db/api)', async ({ request }) => {});
 });
 
 test.describe('Connector CRUD', () => {

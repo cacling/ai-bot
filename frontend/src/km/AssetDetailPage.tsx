@@ -1,22 +1,33 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, BarChart3 } from 'lucide-react';
 import { kmApi, type KMAsset, type KMAssetVersion } from './api';
 import type { KMPage } from './KnowledgeManagementPage';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 
+interface AssetMetrics {
+  total_shown: number; total_used: number; total_edited: number; total_dismissed: number;
+  adopt_rate: number; edit_rate: number; dismiss_rate: number;
+}
+
 export function AssetDetailPage({ id, navigate }: { id: string; navigate: (p: KMPage) => void }) {
   const [asset, setAsset] = useState<KMAsset | null>(null);
   const [versions, setVersions] = useState<KMAssetVersion[]>([]);
+  const [metrics, setMetrics] = useState<AssetMetrics | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([kmApi.getAsset(id), kmApi.getAssetVersions(id)])
-      .then(([a, v]) => { setAsset(a); setVersions(v.items); })
+    Promise.all([
+      kmApi.getAsset(id),
+      kmApi.getAssetVersions(id),
+      fetch(`/api/km/assets/${id}/metrics`).then(r => r.json()).catch(() => null),
+    ])
+      .then(([a, v, m]) => { setAsset(a); setVersions(v.items); setMetrics(m); })
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -32,12 +43,23 @@ export function AssetDetailPage({ id, navigate }: { id: string; navigate: (p: KM
       <Card className="mb-3">
         <CardContent className="pt-4">
           <h2 className="text-sm font-semibold mb-2">{asset.title}</h2>
-          <div className="flex gap-4 text-xs text-muted-foreground">
+          <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
             <span>类型: {asset.asset_type}</span>
             <span>状态: {asset.status}</span>
             <span>当前版本: v{asset.current_version}</span>
             <span>负责人: {asset.owner ?? '-'}</span>
+            <span>策略: <Badge variant="outline" className="text-[10px] ml-1">{(asset as Record<string, unknown>).rollout_strategy as string ?? 'online'}</Badge></span>
           </div>
+          {(() => {
+            const modes: string[] = (() => { try { return JSON.parse((asset as Record<string, unknown>).service_modes as string ?? '[]'); } catch { return []; } })();
+            const modeLabels: Record<string, string> = { auto_recommend: '自动推荐', kb_answer: '知识问答', action_suggest: '动作建议' };
+            return modes.length > 0 ? (
+              <div className="flex gap-1.5 mt-2">
+                <span className="text-[10px] text-muted-foreground">服务模式:</span>
+                {modes.map(m => <Badge key={m} variant="secondary" className="text-[10px]">{modeLabels[m] ?? m}</Badge>)}
+              </div>
+            ) : null;
+          })()}
           <Alert className="mt-2">
             <AlertTriangle size={13} />
             <AlertTitle className="text-xs font-medium">操作须知</AlertTitle>
@@ -47,6 +69,25 @@ export function AssetDetailPage({ id, navigate }: { id: string; navigate: (p: KM
           </Alert>
         </CardContent>
       </Card>
+
+      {/* Metrics card */}
+      {metrics && (
+        <div className="grid grid-cols-4 gap-3 mb-3">
+          {[
+            { label: '展示次数', value: metrics.total_shown },
+            { label: '采纳率', value: `${(metrics.adopt_rate * 100).toFixed(1)}%` },
+            { label: '编辑采纳率', value: `${(metrics.edit_rate * 100).toFixed(1)}%` },
+            { label: '忽略率', value: `${(metrics.dismiss_rate * 100).toFixed(1)}%` },
+          ].map(m => (
+            <Card key={m.label}>
+              <CardContent className="pt-3 pb-2 text-center">
+                <p className="text-[10px] text-muted-foreground mb-0.5">{m.label}</p>
+                <p className="text-lg font-bold">{m.value}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Card>
         <CardHeader className="py-2 px-3">

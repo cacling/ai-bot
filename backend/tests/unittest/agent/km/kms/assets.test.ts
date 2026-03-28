@@ -81,4 +81,19 @@ describe('assets route', () => {
     expect(Array.isArray(data.items)).toBe(true);
     expect((data.items as unknown[]).length).toBeGreaterThanOrEqual(1);
   });
+
+  test('GET /:id/metrics — aggregated metrics', async () => {
+    const { status, data } = await req('GET', `/assets/${assetId}/metrics`);
+    expect(status).toBe(200);
+    expect(typeof data.total_shown).toBe('number');
+    expect(typeof data.adopt_rate).toBe('number');
+    expect(typeof data.edit_rate).toBe('number');
+    expect(typeof data.dismiss_rate).toBe('number');
+  });
+
+  test('GET /:id/metrics — empty for asset with no feedback', async () => {
+    const { data } = await req('GET', `/assets/${assetId}/metrics`);
+    expect(data.total_shown).toBe(0);
+    expect(data.adopt_rate).toBe(0);
+  });
 });

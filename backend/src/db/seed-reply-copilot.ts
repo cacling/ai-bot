@@ -22,6 +22,17 @@ interface ReplySceneSeed {
   next_actions: string[];
   sources: string[];
   tags: string[];
+  // Agent Copilot extended fields
+  knowledge_type?: 'reply' | 'rag_answer' | 'action' | 'risk' | 'followup';
+  agent_answer?: string;
+  customer_reply_followup?: string;
+  customer_reply_risk_safe?: string;
+  caution_notes?: string[];
+  escalation_conditions?: string[];
+  citations?: Array<{ title: string; version: string; anchor: string }>;
+  fallback_policy?: 'suggest_supplement' | 'show_related' | 'escalate';
+  applicable_scope?: Record<string, string[]>;
+  emotion_hints?: string[];
 }
 
 export const REPLY_COPILOT_SCENES: ReplySceneSeed[] = [
@@ -54,6 +65,16 @@ export const REPLY_COPILOT_SCENES: ReplySceneSeed[] = [
     next_actions: ['查询套餐受理记录', '核对套餐生效规则', '必要时发起套餐生效复核'],
     sources: ['5G套餐资费说明（2026Q1）', '套餐变更生效规则 v2026.03'],
     tags: ['5G套餐', '套餐变更', '生效', '网速', '流量', '未生效'],
+    knowledge_type: 'reply',
+    agent_answer: '5G套餐变更分"立即生效"和"次月生效"两种，取决于办理渠道和套餐类型。线上渠道（APP/小程序）大多次月1号生效，营业厅办理可能当日生效。需核查受理记录中的"生效类型"字段。若超时未生效，可发起套餐生效复核工单。',
+    customer_reply_followup: '请问您是通过哪个渠道办理的？APP、小程序还是营业厅？另外办理时有没有收到确认短信？',
+    customer_reply_risk_safe: '套餐变更的生效时间确实因渠道和类型有所不同，这边需要先帮您核实具体情况，暂时无法给出确定的生效时间，请您稍等。',
+    caution_notes: ['不要承诺具体生效时间', '不要说"系统延迟"等模糊说法', '如客户已等超过3个工作日需升级处理'],
+    escalation_conditions: ['客户等待超过3个工作日仍未生效', '受理记录显示成功但系统未切换'],
+    citations: [{ title: '5G套餐资费说明（2026Q1）', version: 'v2026.03', anchor: '§3.2 生效规则' }],
+    fallback_policy: 'suggest_supplement',
+    applicable_scope: { channels: ['online', 'voice'] },
+    emotion_hints: ['焦虑', '不满'],
   },
   {
     category: '资费类',
@@ -84,6 +105,16 @@ export const REPLY_COPILOT_SCENES: ReplySceneSeed[] = [
     next_actions: ['查询流量详单', '核查套外计费记录', '必要时发起资费争议工单'],
     sources: ['计费规则与争议处理规范 第5章', '流量提醒与套外计费说明'],
     tags: ['流量', '扣费', '详单', '套外', '异常', '费用'],
+    knowledge_type: 'reply',
+    agent_answer: '流量异常需分三步核查：1）套餐内流量是否用尽（查详单）；2）是否有套外流量产生（查计费记录）；3）是否订购了增值业务自动扣费。常见原因包括后台应用消耗、热点共享、系统更新等。如客户对计费仍有异议，可发起资费争议工单。',
+    customer_reply_followup: '方便告诉我您手机号和异常发生的大致时间吗？另外近期有没有开过热点或在境外使用？',
+    customer_reply_risk_safe: '流量消耗的原因比较多样，这边需要调取详单逐一核实才能给出准确结论，暂时无法直接判断是否存在计费异常，请您理解。',
+    caution_notes: ['不要直接否定客户感受', '不要说"系统不会出错"', '如存在实际计费差异需及时升级'],
+    escalation_conditions: ['详单核查后确认计费差异', '客户三次来电反映同一问题'],
+    citations: [{ title: '计费规则与争议处理规范', version: 'v2026.01', anchor: '第5章 流量争议' }],
+    fallback_policy: 'suggest_supplement',
+    applicable_scope: { channels: ['online', 'voice'] },
+    emotion_hints: ['焦虑', '怀疑'],
   },
   {
     category: '资费类',
@@ -446,6 +477,17 @@ export async function seedReplyCopilotKnowledge(
       sources: scene.sources,
       expanded_questions: scene.expanded_questions,
       retrieval_tags: scene.tags,
+      // Agent Copilot extended fields
+      knowledge_type: scene.knowledge_type ?? 'reply',
+      agent_answer: scene.agent_answer ?? scene.a,
+      customer_reply_followup: scene.customer_reply_followup ?? '',
+      customer_reply_risk_safe: scene.customer_reply_risk_safe ?? '',
+      caution_notes: scene.caution_notes ?? [],
+      escalation_conditions: scene.escalation_conditions ?? [],
+      citations: scene.citations ?? scene.sources.map(s => ({ title: s, version: '', anchor: '' })),
+      fallback_policy: scene.fallback_policy ?? 'suggest_supplement',
+      applicable_scope: scene.applicable_scope ?? { channels: ['online', 'voice'] },
+      emotion_hints: scene.emotion_hints ?? [],
     });
 
     candidateIds.push(candId);

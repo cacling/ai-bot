@@ -21,6 +21,7 @@ metadata:
 | `task_id` | 催收任务 ID |
 | `phone` | 客户手机号 |
 | `customer_name` | 客户姓名 |
+| `gender` | 客户性别（male/female/unknown），用于确定称呼"先生"或"女士" |
 | `product_name` | 产品名称（如"宽带包年套餐"） |
 | `overdue_amount` | 逾期金额（元） |
 | `overdue_days` | 逾期天数 |
@@ -38,15 +39,17 @@ metadata:
 
 | 客户反应 | 意向类型 |
 |---|---|
-| 表示会还、说出日期或"最近" | `ptp`（承诺还款） |
-| 现在不方便、要你晚点再打、预约回呼 | `callback`（预约回呼） |
+| 明确说出还款日期（如"周五还""15号还"）且口头承诺 | `ptp`（承诺还款） |
+| 只说"最近""回头""晚点看看"但无明确日期 | `callback`（预约回呼，不可记为 ptp） |
+| 现在不方便、要你晚点再打、预约回呼 | `callback_request`（预约回呼） |
 | 明确拒绝、不配合、情绪激动 | `refusal` |
 | 说已还了 / 金额不对 / 不是本人的欠款 | `dispute` |
 | 要求转人工 | `transfer` |
+| 严重疾病/丧失劳动能力/非本人且称机主已故/情绪极度脆弱 | `vulnerable`（特殊困难，立即停止施压并转人工） |
 
 ### 工具说明
 
-- `record_call_result(task_id, result, ptp_date?, notes?)` — 记录本次通话结果，result 取值为 ptp / refusal / dispute / transfer / callback_request
+- `record_call_result(task_id, result, ptp_date?, notes?)` — 记录本次通话结果，result 取值为 ptp / refusal / dispute / transfer / callback_request / vulnerable / dnd
 - `send_followup_sms(phone, sms_type)` — 发送跟进短信，sms_type 取值如 payment_link
 - `create_callback_task(task_id, preferred_time, callback_phone)` — 创建回呼任务，记录客户期望的回呼时间和号码
 - `transfer_to_human(task_id, reason)` — 转接人工坐席，reason 说明转接原因
@@ -77,48 +80,89 @@ stateDiagram-v2
     记录忙线 --> [*]: record_call_result(busy)
     记录关机 --> [*]: record_call_result(power_off)
 
-    开场说明 --> 身份核验: 告知录音 + 确认客户姓名/证件后四位 %% step:col-identity-verify %% kind:human
+    开场说明 --> 身份确认: 告知录音 + 用已知姓名确认"请问您是XX先生/女士吗？" %% step:col-identity-confirm %% kind:human
     %% ref:collection-guide.md#开场白
 
-    %% OC3 — 身份核验
+    %% OC3 — 身份确认（客户信息已在任务中注入，不需要客户提供姓名/证件号）
     %% ref:collection-guide.md#身份核验
-    state 核验结果 <<choice>>
-    身份核验 --> 核验结果
-    核验结果 --> 告知欠款: 核验通过，告知欠款详情 %% step:col-notify-debt %% kind:llm %% guard:tool.success
-    核验结果 --> 记录非本人: 非本人接听 %% tool:record_call_result %% step:col-record-non-owner %% kind:tool %% guard:always
-    核验结果 --> 记录核验失败: 核验失败 %% tool:record_call_result %% step:col-record-verify-failed %% kind:tool %% guard:tool.error
+    state 确认结果 <<choice>>
+    身份确认 --> 确认结果
+    确认结果 --> 告知欠款: 确认是本人，告知欠款详情 %% step:col-notify-debt %% kind:llm %% guard:user.confirm
+    确认结果 --> 记录非本人: 非本人接听 %% tool:record_call_result %% step:col-record-non-owner %% kind:tool %% guard:user.cancel
     记录非本人 --> [*]: record_call_result(non_owner)，请转告机主
-    记录核验失败 --> [*]: record_call_result(verify_failed)，建议拨打10086
     告知欠款 --> 客户回复意向: 询问还款计划 %% step:col-ask-intent %% kind:llm
 
     state 意向判断 <<choice>>
     客户回复意向 --> 意向判断
-    意向判断 --> 承诺还款: 表示会还、说出日期 %% step:col-promise-pay %% kind:human %% guard:always
+    意向判断 --> 承诺还款: 明确说出还款日期且口头承诺 %% step:col-promise-pay %% kind:human %% guard:always
+    意向判断 --> 模糊意愿: 只说"最近""回头""晚点看看"但无明确日期 %% step:col-vague-intent %% kind:llm %% guard:always
     意向判断 --> 预约回呼: 现在不方便、要求晚点再打 %% step:col-callback-request %% kind:human %% guard:always
     意向判断 --> 明确拒绝: 拒绝还款、不配合 %% step:col-refusal %% kind:llm %% guard:always
     意向判断 --> 提出异议: 已还款、金额有误、非本人欠款 %% step:col-dispute %% kind:llm %% guard:always
     意向判断 --> 转人工: 要求转人工 %% step:col-transfer-human %% kind:human %% guard:always
     意向判断 --> 声称已付: 客户称刚刚付款/正在付款 %% step:col-claim-paid %% kind:llm %% guard:always
+    意向判断 --> 特殊困难: 严重疾病/丧失劳动能力/机主已故/情绪极度脆弱 %% step:col-vulnerable %% kind:llm %% guard:always
 
-    %% OC4 — PTP 日期超限
+    模糊意愿 --> 追问日期: 温和追问具体还款日期 %% step:col-followup-date %% kind:llm
+    state 追问结果 <<choice>>
+    追问日期 --> 追问结果
+    追问结果 --> 承诺还款: 客户给出明确日期 %% guard:user.confirm
+    追问结果 --> 预约回呼: 仍无法给出日期，转为回呼 %% guard:always
+
+    特殊困难 --> 记录困难: 立即停止施压，表达理解 %% tool:record_call_result %% step:col-record-vulnerable %% kind:tool
+    记录困难 --> 转人工: record_call_result(vulnerable)，转人工跟进 %% guard:always
+
+    %% OC4 — PTP 日期超限（PTP 必须同时满足：有明确日期 + 客户明确承诺）
     承诺还款 --> 检查还款日期: 确认还款日期 %% ref:collection-guide.md#承诺还款 %% step:col-check-ptp-date %% kind:llm
     state 日期是否合规 <<choice>>
     检查还款日期 --> 日期是否合规
-    日期是否合规 --> 发送还款短信: 日期在max_ptp_days内 %% tool:send_followup_sms %% step:col-send-payment-sms %% kind:tool %% guard:always
+    日期是否合规 --> PTP并行处理: 日期在max_ptp_days内 %% step:col-ptp-fork %% kind:fork %% guard:always
     日期是否合规 --> 协商更近日期: 日期超出max_ptp_days，引导提前 %% step:col-negotiate-date %% kind:human %% guard:always
-    协商更近日期 --> 发送还款短信: 客户同意新日期 %% guard:user.confirm
+    协商更近日期 --> PTP并行处理: 客户同意新日期 %% guard:user.confirm
     协商更近日期 --> 转人工: 无法达成一致 %% guard:user.cancel
-    发送还款短信 --> 记录承诺: record_call_result(ptp) %% tool:record_call_result %% step:col-record-ptp %% kind:tool
-    记录承诺 --> [*]: 感谢挂断
 
-    预约回呼 --> 确认回呼信息: 询问期望回呼时间 + 确认回呼号码 %% step:col-confirm-callback-info %% kind:llm
+    PTP并行处理 --> 发送还款短信: send_followup_sms(payment_link) %% tool:send_followup_sms %% step:col-send-payment-sms %% kind:tool
+    PTP并行处理 --> 记录承诺: record_call_result(ptp) %% tool:record_call_result %% step:col-record-ptp %% kind:tool
+
+    state 发送还款短信结果 <<choice>>
+    发送还款短信 --> 发送还款短信结果
+    发送还款短信结果 --> PTP汇合: 成功 %% guard:tool.success
+    发送还款短信结果 --> PTP短信异常: 系统异常 %% guard:tool.error
+    PTP短信异常 --> [*]: 短信发送失败，告知用户通过APP查看还款链接 %% step:col-ptp-sms-error %% kind:end
+
+    state 记录承诺结果 <<choice>>
+    记录承诺 --> 记录承诺结果
+    记录承诺结果 --> PTP汇合: 成功 %% guard:tool.success
+    记录承诺结果 --> PTP记录异常: 系统异常 %% guard:tool.error
+    PTP记录异常 --> [*]: 记录失败，告知客户结果将人工跟进 %% step:col-ptp-record-error %% kind:end
+
+    PTP汇合 --> PTP完成 %% step:col-ptp-join %% kind:join
+    PTP完成 --> [*]: 感谢挂断
+
+    预约回呼 --> 确认回呼信息: 询问期望回呼时间 + 确认回呼号码 %% step:col-confirm-callback-info %% kind:human
     state 号码确认 <<choice>>
     确认回呼信息 --> 号码确认
-    号码确认 --> 回呼已预约: 使用当前号码 %% step:col-callback-scheduled %% kind:llm %% guard:always
-    号码确认 --> 回呼已预约: 客户提供新手机号 %% guard:always
-    回呼已预约 --> 创建回访任务: create_callback_task %% tool:create_callback_task %% step:col-create-callback %% kind:tool
-    创建回访任务 --> 记录回呼: record_call_result(ptp) %% tool:record_call_result %% step:col-record-callback %% kind:tool
-    记录回呼 --> [*]: 礼貌挂断
+    号码确认 --> 回呼已预约: 使用当前号码 %% step:col-callback-scheduled %% kind:llm %% guard:user.confirm
+    号码确认 --> 回呼已预约: 客户提供新手机号 %% guard:user.cancel
+    回呼已预约 --> 回呼并行处理 %% step:col-callback-fork %% kind:fork
+
+    回呼并行处理 --> 创建回访任务: create_callback_task %% tool:create_callback_task %% step:col-create-callback %% kind:tool
+    回呼并行处理 --> 记录回呼: record_call_result(callback_request) %% tool:record_call_result %% step:col-record-callback %% kind:tool
+
+    state 创建回访任务结果 <<choice>>
+    创建回访任务 --> 创建回访任务结果
+    创建回访任务结果 --> 回呼汇合: 成功 %% guard:tool.success
+    创建回访任务结果 --> 回访创建异常: 系统异常 %% guard:tool.error
+    回访创建异常 --> [*]: 回访任务创建失败，告知人工将跟进 %% step:col-callback-create-error %% kind:end
+
+    state 记录回呼结果 <<choice>>
+    记录回呼 --> 记录回呼结果
+    记录回呼结果 --> 回呼汇合: 成功 %% guard:tool.success
+    记录回呼结果 --> 回呼记录异常: 系统异常 %% guard:tool.error
+    回呼记录异常 --> [*]: 记录失败，告知客户结果将人工跟进 %% step:col-callback-record-error %% kind:end
+
+    回呼汇合 --> 回呼完成 %% step:col-callback-join %% kind:join
+    回呼完成 --> [*]: 礼貌挂断
 
     明确拒绝 --> 提醒后果: 提醒一次逾期后果（仅一次） %% step:col-warn-consequence %% kind:llm
     %% ref:collection-guide.md#明确拒绝
@@ -133,7 +177,7 @@ stateDiagram-v2
     提醒后果 --> DND请求: 客户明确要求停止拨打 %% guard:always
     state DND请求处理 {
         DND请求 --> 记录DND: 记录客户要求不再来电 %% step:col-record-dnd %% kind:tool
-        记录DND --> [*]: record_call_result(dnd)，从外呼名单移除，礼貌结束
+        记录DND --> [*]: record_call_result(dnd)，从外呼名单移除，不再安排后续催收，礼貌结束
     }
 
     提出异议 --> 收集异议详情: 收集详情（已还款时间渠道、金额差异、非本人说明） %% step:col-collect-dispute-detail %% kind:llm
@@ -178,6 +222,10 @@ stateDiagram-v2
 - **禁止**：凭空编造欠款数据，所有欠款信息必须来自任务平台注入的数据
 - **禁止**：在 `allowed_hours` 允许时段之外拨打电话
 - **禁止**：索要完整身份证号、银行卡号、密码、OTP 验证码
+- **禁止**：将无明确日期的模糊意愿（"最近""回头""晚点看看"）记录为 `ptp`
+- **禁止**：对特殊困难客户（严重疾病、丧失劳动能力、机主已故、情绪极度脆弱）继续施压
+- **必须**：`ptp` 记录需同时满足两个条件——有明确还款日期 + 客户明确口头承诺
+- **必须**：`dnd` 一旦记录，不再安排后续催收拨打
 - **必须**：开场告知本通话可能被录音
 - **必须**：通话结束前调用 `record_call_result` 记录结果
 - **必须**：涉及变更操作须客户明确同意

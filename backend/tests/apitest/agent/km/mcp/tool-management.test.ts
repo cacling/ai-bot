@@ -1,7 +1,7 @@
 /**
  * API tests for: src/agent/km/mcp/tool-management.ts
  * Routes: GET/POST /api/mcp/tool-management, GET handlers, GET/PUT/DELETE /:id,
- *         PUT execution-config/mock-rules/toggle-mock, POST sql-preview/validate-output/infer-schema,
+ *         PUT mock-rules/toggle-mock, POST sql-preview/validate-output/infer-schema,
  *         GET/PUT /:id/implementation
  * Mock: db(mcpTools, mcpServers, connectors, toolImplementations), fs, skills
  */
@@ -13,16 +13,16 @@ import { getJSON, postJSON, putJSON, deleteJSON } from '../../../helpers';
 
 const TOOL = {
   id: 'tool-001', name: 'query_subscriber', description: '查询用户信息',
-  server_id: 'srv-001', impl_type: 'script', handler_key: 'user_info.query_subscriber',
+  server_id: 'srv-001',
   input_schema: '{"type":"object","properties":{"phone":{"type":"string"}}}',
-  output_schema: null, execution_config: null,
+  output_schema: null,
   mock_rules: JSON.stringify([{ tool_name: 'query_subscriber', match: '*', response: '{"found":true}' }]),
   mocked: true, disabled: false, response_example: null,
   annotations: null, created_at: '2026-03-01', updated_at: '2026-03-01',
 };
 
 const SERVER = {
-  id: 'srv-001', name: 'mcp-user-info', status: 'active', enabled: true,
+  id: 'srv-001', name: 'mcp-user-info', enabled: true, kind: 'internal',
   tools_json: JSON.stringify([{ name: 'query_subscriber' }, { name: 'verify_identity' }]),
 };
 
@@ -271,25 +271,6 @@ describe('DELETE /api/mcp/tool-management/:id', () => {
   });
 });
 
-describe('PUT /api/mcp/tool-management/:id/execution-config', () => {
-  test('updates execution config', async () => {
-    const app = buildApp();
-    const { status, body } = await putJSON(app, '/api/mcp/tool-management/tool-001/execution-config', {
-      impl_type: 'db', timeout: 5000,
-    });
-    expect(status).toBe(200);
-    expect(body.ok).toBe(true);
-    expect(updated.length).toBe(1);
-  });
-
-  test('returns 404 when tool does not exist', async () => {
-    toolRows = [];
-    const app = buildApp();
-    const { status } = await putJSON(app, '/api/mcp/tool-management/nonexistent/execution-config', {});
-    expect(status).toBe(404);
-  });
-});
-
 describe('PUT /api/mcp/tool-management/:id/mock-rules', () => {
   test('updates mock rules', async () => {
     const app = buildApp();
@@ -498,19 +479,8 @@ describe('GET /api/mcp/tool-management/:id/implementation', () => {
     expect(body._source).toBe('tool_implementations');
   });
 
-  test('falls back to legacy fields when no implementation exists', async () => {
+  test('returns none source when no implementation exists', async () => {
     implRows = [];
-    const app = buildApp();
-    const { status, body } = await getJSON(app, '/api/mcp/tool-management/tool-001/implementation');
-    expect(status).toBe(200);
-    expect(body._source).toBe('legacy');
-    expect(body.adapter_type).toBe('script');
-    expect(body.handler_key).toBe('user_info.query_subscriber');
-  });
-
-  test('returns none source when no impl and no legacy config', async () => {
-    implRows = [];
-    toolRows = [{ ...TOOL, impl_type: null, execution_config: null, handler_key: null }];
     const app = buildApp();
     const { status, body } = await getJSON(app, '/api/mcp/tool-management/tool-001/implementation');
     expect(status).toBe(200);
@@ -534,8 +504,7 @@ describe('PUT /api/mcp/tool-management/:id/implementation', () => {
     });
     expect(status).toBe(200);
     expect(body.ok).toBe(true);
-    // Should update impl + sync mcp_tools legacy fields
-    expect(updated.length).toBe(2);
+    expect(updated.length).toBe(1);
   });
 
   test('creates new implementation when none exists', async () => {
@@ -557,5 +526,58 @@ describe('PUT /api/mcp/tool-management/:id/implementation', () => {
       adapter_type: 'script',
     });
     expect(status).toBe(404);
+  });
+});
+
+// ── Runtime Bindings ──────────────────────────────────────────────────────────
+
+describe('GET /api/mcp/tool-management/bindings', () => {
+  test('returns joined tool + impl + connector + server data', async () => {
+    serverRows = [{ ...SERVER, kind: 'internal' }];
+    const app = buildApp();
+    const { status, body } = await getJSON(app, '/api/mcp/tool-management/bindings');
+    expect(status).toBe(200);
+    expect(body.items).toBeInstanceOf(Array);
+    expect(body.items.length).toBe(1);
+    const item = body.items[0];
+    expect(item.tool_id).toBe('tool-001');
+    expect(item.tool_name).toBe('query_subscriber');
+    expect(item.server_name).toBe('mcp-user-info');
+    expect(item.adapter_type).toBe('script');
+    expect(item.connector_id).toBe('conn-001');
+    expect(item.connector_name).toBe('account-db');
+    expect(item.handler_key).toBe('user_info.query_subscriber');
+    expect(item.impl_status).toBe('active');
+    expect(item.host_server_id).toBe('srv-001');
+    expect(item.host_server_name).toBe('mcp-user-info');
+    expect(item.contract_ready).toBe(false); // TOOL has input_schema but no output_schema
+    expect(item.disabled).toBe(false);
+    expect(item.mocked).toBe(true);
+  });
+
+  test('returns null fields when tool has no implementation', async () => {
+    implRows = [];
+    connectorRows = [];
+    serverRows = [{ ...SERVER, kind: 'internal' }];
+    const app = buildApp();
+    const { status, body } = await getJSON(app, '/api/mcp/tool-management/bindings');
+    expect(status).toBe(200);
+    expect(body.items.length).toBe(1);
+    const item = body.items[0];
+    expect(item.impl_id).toBeNull();
+    expect(item.adapter_type).toBeNull();
+    expect(item.connector_id).toBeNull();
+    expect(item.handler_key).toBeNull();
+    expect(item.host_server_id).toBeNull();
+    expect(item.host_server_name).toBeNull();
+    expect(item.contract_ready).toBe(false);
+  });
+
+  test('returns empty list when no tools', async () => {
+    toolRows = [];
+    const app = buildApp();
+    const { status, body } = await getJSON(app, '/api/mcp/tool-management/bindings');
+    expect(status).toBe(200);
+    expect(body.items).toEqual([]);
   });
 });

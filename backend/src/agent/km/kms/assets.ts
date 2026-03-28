@@ -2,9 +2,9 @@
  * assets.ts — 知识资产列表/详情/版本链
  */
 import { Hono } from 'hono';
-import { eq, desc, like, and, SQL } from 'drizzle-orm';
+import { eq, desc, like, and, SQL, sql } from 'drizzle-orm';
 import { db } from '../../../db';
-import { kmAssets, kmAssetVersions } from '../../../db/schema';
+import { kmAssets, kmAssetVersions, kmReplyFeedback } from '../../../db/schema';
 
 const app = new Hono();
 
@@ -39,6 +39,44 @@ app.get('/:id/versions', async (c) => {
     .where(eq(kmAssetVersions.asset_id, id))
     .orderBy(desc(kmAssetVersions.version_no));
   return c.json({ items: versions });
+});
+
+// GET /:id/metrics — 聚合运行指标
+app.get('/:id/metrics', async (c) => {
+  const id = c.req.param('id');
+  // Get all version IDs for this asset
+  const versions = await db.select({ id: kmAssetVersions.id }).from(kmAssetVersions)
+    .where(eq(kmAssetVersions.asset_id, id));
+  const versionIds = versions.map(v => v.id);
+  if (versionIds.length === 0) {
+    return c.json({ total_shown: 0, total_used: 0, total_edited: 0, total_dismissed: 0, adopt_rate: 0, edit_rate: 0, dismiss_rate: 0 });
+  }
+
+  const feedbacks = await db.select({
+    event_type: kmReplyFeedback.event_type,
+    cnt: sql<number>`count(*)`,
+  }).from(kmReplyFeedback)
+    .where(sql`${kmReplyFeedback.asset_version_id} IN (${sql.join(versionIds.map(v => sql`${v}`), sql`, `)})`)
+    .groupBy(kmReplyFeedback.event_type);
+
+  const counts: Record<string, number> = {};
+  for (const r of feedbacks) counts[r.event_type] = Number(r.cnt);
+
+  const totalShown = counts['shown'] ?? 0;
+  const totalUsed = (counts['use'] ?? 0) + (counts['adopt_direct'] ?? 0);
+  const totalEdited = (counts['edit'] ?? 0) + (counts['adopt_with_edit'] ?? 0);
+  const totalDismissed = counts['dismiss'] ?? 0;
+  const total = totalShown || 1;
+
+  return c.json({
+    total_shown: totalShown,
+    total_used: totalUsed,
+    total_edited: totalEdited,
+    total_dismissed: totalDismissed,
+    adopt_rate: totalUsed / total,
+    edit_rate: totalEdited / total,
+    dismiss_rate: totalDismissed / total,
+  });
 });
 
 export default app;
