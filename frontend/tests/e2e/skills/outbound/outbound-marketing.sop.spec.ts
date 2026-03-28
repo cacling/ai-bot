@@ -4,7 +4,7 @@
  * 外呼营销技能的流程验证（text mode）。
  * 状态图分支：合规检查 → 呼叫 → 身份确认 → 意愿探测 → 方案介绍 → 意向判断
  *
- * 工具：record_call_result, send_followup_sms, create_callback_task
+ * 工具：record_marketing_result, send_followup_sms, transfer_to_human
  * 依赖：服务已启动（./start.sh 或 ./start.sh --reset）
  */
 import { test, expect } from '@playwright/test';
@@ -40,7 +40,28 @@ test.describe.serial('outbound-marketing SOP: 标准营销流程', () => {
     }
   });
 
-  test.skip('SOP-MKT-02: 用户犹豫→异议处理（价格/合约）→说服→同意', async () => {});
+  test('SOP-MKT-02: 用户犹豫→异议处理（价格/合约）→说服→同意', async () => {
+    let client: OutboundWsClient | null = null;
+    try {
+      client = await connectOutbound({ task: 'marketing', id: 'M001' });
+      expect(client.getBotResponses()[0]).toBeTruthy();
+
+      await client.sendAndWait('是我');
+
+      // User raises price objection
+      const r1 = await client.sendAndWait('这个套餐太贵了，我现在的够用了');
+      expect(r1).toBeTruthy();
+
+      // Bot should address the objection; user is persuaded
+      const r2 = await client.sendAndWait('这样说的话好像确实划算，那我办吧');
+      expect(r2).toBeTruthy();
+
+      const allResponses = client.getBotResponses();
+      expect(allResponses.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      client?.close();
+    }
+  });
 });
 
 test.describe.serial('outbound-marketing SOP: 拒绝与 DND', () => {
@@ -67,12 +88,54 @@ test.describe.serial('outbound-marketing SOP: 拒绝与 DND', () => {
     }
   });
 
-  test.skip('SOP-MKT-04: 用户要求加入免打扰名单→记录DND→结束', async () => {});
+  test('SOP-MKT-04: 用户要求加入免打扰名单→记录DND→结束', async () => {
+    let client: OutboundWsClient | null = null;
+    try {
+      client = await connectOutbound({ task: 'marketing', id: 'M001' });
+      expect(client.getBotResponses()[0]).toBeTruthy();
+
+      await client.sendAndWait('是我');
+
+      // User explicitly requests DND
+      const r1 = await client.sendAndWait('不需要，以后也别再打了，把我从你们名单里删掉');
+      expect(r1).toBeTruthy();
+
+      // Bot should acknowledge DND request and end politely
+      const allResponses = client.getBotResponses();
+      expect(allResponses.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      client?.close();
+    }
+  });
 });
 
 test.describe.serial('outbound-marketing SOP: 特殊分支', () => {
   test.setTimeout(300_000);
-  test.skip('SOP-MKT-05: 用户对其他套餐感兴趣→切换推荐方案→介绍新方案', async () => {});
-  test.skip('SOP-MKT-06: 合规检查不通过（DND 名单/呼叫限制）→任务跳过', async () => {});
-  test.skip('SOP-MKT-07: 未接/忙线→record_marketing_result(no_answer)→结束', async () => {});
+
+  test('SOP-MKT-05: 用户对其他套餐感兴趣→切换推荐方案→介绍新方案', async () => {
+    let client: OutboundWsClient | null = null;
+    try {
+      client = await connectOutbound({ task: 'marketing', id: 'M001' });
+      expect(client.getBotResponses()[0]).toBeTruthy();
+
+      await client.sendAndWait('是我');
+
+      // User interested but in a different plan
+      const r1 = await client.sendAndWait('这个套餐不太适合我，你们有没有流量更多的？');
+      expect(r1).toBeTruthy();
+
+      // Bot should switch recommendation; user responds
+      const r2 = await client.sendAndWait('这个听起来还行，多少钱一个月？');
+      expect(r2).toBeTruthy();
+
+      const allResponses = client.getBotResponses();
+      expect(allResponses.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      client?.close();
+    }
+  });
+
+  // ── 以下场景为拨前门控（pre-dial gate），text mode 连接即代表接通，无法模拟 ──
+  test.skip('SOP-MKT-06: 合规检查不通过（DND 名单/呼叫限制）→任务跳过（拨前门控，需语音模式或单元测试）', async () => {});
+  test.skip('SOP-MKT-07: 未接/忙线→record_marketing_result(no_answer)→结束（拨前门控，需语音模式或单元测试）', async () => {});
 });

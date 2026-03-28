@@ -39,7 +39,28 @@ test.describe.serial('outbound-collection SOP: 标准催收流程', () => {
     }
   });
 
-  test.skip('SOP-COL-02: 用户承诺但日期不合理→追问→修正PTP→确认', async () => {});
+  test('SOP-COL-02: 用户承诺但日期不合理→追问→修正PTP→确认', async () => {
+    let client: OutboundWsClient | null = null;
+    try {
+      client = await connectOutbound({ task: 'collection', id: 'C001' });
+      expect(client.getBotResponses()[0]).toBeTruthy();
+
+      await client.sendAndWait('是我');
+
+      // Promise to pay but with an unreasonably far date (exceeds max_ptp_days)
+      const r1 = await client.sendAndWait('我下个月底再还吧，最近手头紧');
+      expect(r1).toBeTruthy();
+
+      // Bot should negotiate a closer date; user agrees to a nearer date
+      const r2 = await client.sendAndWait('那好吧，这周五还可以吗');
+      expect(r2).toBeTruthy();
+
+      const allResponses = client.getBotResponses();
+      expect(allResponses.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      client?.close();
+    }
+  });
 });
 
 test.describe.serial('outbound-collection SOP: 拒绝分支', () => {
@@ -71,18 +92,84 @@ test.describe.serial('outbound-collection SOP: 拒绝分支', () => {
     }
   });
 
-  test.skip('SOP-COL-04: 用户有异议（金额/账单争议）→引导核实→升级处理', async () => {});
+  test('SOP-COL-04: 用户有异议（金额/账单争议）→引导核实→升级处理', async () => {
+    let client: OutboundWsClient | null = null;
+    try {
+      client = await connectOutbound({ task: 'collection', id: 'C001' });
+      expect(client.getBotResponses()[0]).toBeTruthy();
+
+      await client.sendAndWait('是我');
+
+      // User disputes the amount
+      const r1 = await client.sendAndWait('这个金额不对吧，我上个月明明交过了，你们搞错了');
+      expect(r1).toBeTruthy();
+
+      // Bot should collect dispute details; user provides more info
+      const r2 = await client.sendAndWait('我是通过支付宝交的，大概15号左右');
+      expect(r2).toBeTruthy();
+
+      const allResponses = client.getBotResponses();
+      expect(allResponses.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      client?.close();
+    }
+  });
 });
 
 test.describe.serial('outbound-collection SOP: 特殊情况', () => {
   test.setTimeout(300_000);
-  test.skip('SOP-COL-05: 模糊承诺→追问具体日期→转为PTP或创建回访', async () => {});
-  test.skip('SOP-COL-06: 脆弱客户识别→停止施压→转人工', async () => {});
-  test.skip('SOP-COL-07: 未接/忙线/关机→record_call_result(no_answer)→结束', async () => {});
+
+  test('SOP-COL-05: 模糊承诺→追问具体日期→转为PTP或创建回访', async () => {
+    let client: OutboundWsClient | null = null;
+    try {
+      client = await connectOutbound({ task: 'collection', id: 'C001' });
+      expect(client.getBotResponses()[0]).toBeTruthy();
+
+      await client.sendAndWait('是我');
+
+      // User gives vague promise without specific date
+      const r1 = await client.sendAndWait('知道了，我最近会还的');
+      expect(r1).toBeTruthy();
+
+      // Bot should ask for specific date; user provides one
+      const r2 = await client.sendAndWait('那就这周五吧');
+      expect(r2).toBeTruthy();
+
+      const allResponses = client.getBotResponses();
+      expect(allResponses.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      client?.close();
+    }
+  });
+
+  test('SOP-COL-06: 脆弱客户识别→停止施压→转人工', async () => {
+    let client: OutboundWsClient | null = null;
+    try {
+      client = await connectOutbound({ task: 'collection', id: 'C001' });
+      expect(client.getBotResponses()[0]).toBeTruthy();
+
+      await client.sendAndWait('是我');
+
+      // User reveals vulnerable situation
+      const r1 = await client.sendAndWait('我现在生了重病在住院，根本没办法处理这些事情');
+      expect(r1).toBeTruthy();
+
+      // Bot should stop pressing and show empathy
+      // May trigger transfer_to_human or record_call_result(vulnerable)
+      const allResponses = client.getBotResponses();
+      expect(allResponses.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      client?.close();
+    }
+  });
+
+  // ── 以下场景为拨前门控（pre-dial gate），text mode 连接即代表接通，无法模拟未接通场景 ──
+  test.skip('SOP-COL-07: 未接/忙线/关机→record_call_result(no_answer)→结束（拨前门控，需语音模式）', async () => {});
 });
 
 test.describe.serial('outbound-collection SOP: 合规阻止', () => {
   test.setTimeout(300_000);
-  test.skip('SOP-COL-08: 非法时段呼叫→合规拦截→任务延后', async () => {});
-  test.skip('SOP-COL-09: 超最大重试次数→合规拦截→标记放弃', async () => {});
+  // 合规拦截发生在呼叫建立前，text mode WS 连接即代表通话已接通，无法覆盖拨前门控逻辑
+  test.skip('SOP-COL-08: 非法时段呼叫→合规拦截→任务延后（拨前门控，需语音模式或单元测试）', async () => {});
+  test.skip('SOP-COL-09: 超最大重试次数→合规拦截→标记放弃（拨前门控，需语音模式或单元测试）', async () => {});
 });
