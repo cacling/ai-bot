@@ -7,7 +7,7 @@
 import { expect, type Page } from '@playwright/test';
 import WebSocket from 'ws';
 
-const BASE_URL = process.env.E2E_BACKEND_URL ?? 'ws://localhost:18001';
+const BASE_URL = process.env.E2E_BACKEND_URL ?? 'ws://localhost:18472';
 
 export interface OutboundWsOptions {
   phone?: string;

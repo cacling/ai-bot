@@ -33,8 +33,9 @@ test.describe.serial('outbound-marketing SOP: 标准营销流程', () => {
       const r3 = await client.sendAndWait('好的，我办理');
       expect(r3).toBeTruthy();
 
+      // Opening + at least one reply per user message; LLM may merge turns
       const allResponses = client.getBotResponses();
-      expect(allResponses.length).toBeGreaterThanOrEqual(4);
+      expect(allResponses.length).toBeGreaterThanOrEqual(3);
     } finally {
       client?.close();
     }

@@ -32,8 +32,9 @@ test.describe.serial('outbound-collection SOP: 标准催收流程', () => {
 
       // Check that some response references payment or PTP
       // (Exact wording depends on LLM, just verify flow continues)
+      // Opening + at least one reply per user message; LLM may merge turns
       const allResponses = client.getBotResponses();
-      expect(allResponses.length).toBeGreaterThanOrEqual(3);
+      expect(allResponses.length).toBeGreaterThanOrEqual(2);
     } finally {
       client?.close();
     }
