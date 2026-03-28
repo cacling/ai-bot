@@ -13,7 +13,7 @@ import React, { useState, useEffect } from 'react';
 import { Save, ArrowLeft, Plus, Trash2, ChevronRight, Check, AlertTriangle, Circle, Play, Link2 } from 'lucide-react';
 import { mcpApi, type McpToolRecord, type McpServer, type McpHandler, type MockRule, type ToolImplementation } from './api';
 import { SchemaTableEditor } from './SchemaTableEditor';
-import { ContractAlignmentCard, alignSchemaWithMockResponse, alignSchemaWithData, extractSchemaFields, compareAlignment, type AlignmentResult } from './ContractAlignmentCard';
+import { ContractAlignmentCard, alignSchemaWithMockResponse, alignSchemaWithData, compareAlignment, type AlignmentResult } from './ContractAlignmentCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -648,8 +648,6 @@ function OutputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdate
   );
 }
 
-// (ImplStep removed — editing moved to Runtime Bindings tab)
-
 // ── Step 5: Mock Scenarios ───────────────────────────────────────────────────
 
 function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => void }) {
@@ -1177,157 +1175,6 @@ function SummarySidebar({ tool, servers, onOpenBinding }: { tool: McpToolRecord;
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-
-// ── API Panel ────────────────────────────────────────────────────────────────
-
-function ApiPanel({ toolId, config, outputSchema, onUpdated }: { toolId: string; config: string | null; outputSchema: Record<string, unknown> | null; onUpdated: () => void }) {
-  const existing = config ? JSON.parse(config) as Record<string, any> : {};
-  const apiCfg = existing.api ?? {};
-  const [url, setUrl] = useState(apiCfg.url ?? '');
-  const [method, setMethod] = useState(apiCfg.method ?? 'POST');
-  const [timeout, setTimeout_] = useState(apiCfg.timeout ?? 10000);
-  const [headers, setHeaders] = useState<string>(apiCfg.headers ? JSON.stringify(apiCfg.headers, null, 2) : '{}');
-  const [bodyTemplate, setBodyTemplate] = useState<string>(apiCfg.body_template ?? '');
-  const [responsePath, setResponsePath] = useState<string>(apiCfg.response_path ?? '$.data');
-  const [errorMappings, setErrorMappings] = useState<Array<{ status: string; error_code: string; message: string }>>(apiCfg.error_mappings ?? []);
-  const [saving, setSaving] = useState(false);
-  const [connectors, setConnectors] = useState<Array<{ id: string; name: string; type: string; config: string | null }>>([]);
-
-  useEffect(() => {
-    mcpApi.listConnectors().then(r => setConnectors((r.items ?? []).filter(c => c.type === 'api'))).catch(() => {});
-  }, []);
-
-  const handleSave = async () => {
-    if (!url.trim()) { alert('URL 不能为空'); return; }
-    let parsedHeaders = {};
-    try { parsedHeaders = JSON.parse(headers); } catch { /* ignore */ }
-    setSaving(true);
-    try {
-      await mcpApi.updateToolImplementation(toolId, {
-        adapter_type: 'api_proxy',
-        config: JSON.stringify({
-          api: {
-            url: url.trim(), method, timeout,
-            headers: parsedHeaders,
-            body_template: bodyTemplate || undefined,
-            response_path: responsePath || undefined,
-            error_mappings: errorMappings.length > 0 ? errorMappings : undefined,
-          },
-        }),
-      });
-      onUpdated();
-    } catch (e) { alert(`保存失败: ${e}`); } finally { setSaving(false); }
-  };
-
-  // Request preview
-  const requestPreview = `${method} ${url}\nContent-Type: application/json${
-    bodyTemplate ? `\n\n${bodyTemplate}` : '\n\n{ ...工具参数 }'
-  }`;
-
-  return (
-    <div className="space-y-4">
-      {/* 1. API 连接器 */}
-      {connectors.length > 0 && (
-        <div className="bg-background rounded-xl border p-5 space-y-3">
-          <h3 className="text-sm font-semibold">API 连接器</h3>
-          <div className="text-[11px] text-muted-foreground mb-2">选择已注册的 API 连接器填充 URL，或直接填写完整 URL</div>
-          <div className="flex flex-wrap gap-2">
-            {connectors.map(c => {
-              const cfg = c.config ? JSON.parse(c.config) : {};
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => { if (cfg.base_url) setUrl(cfg.base_url); }}
-                  className="text-[11px] px-3 py-1.5 rounded-lg border hover:bg-accent"
-                >
-                  <span className="font-medium">{c.name}</span>
-                  {cfg.base_url && <span className="ml-1.5 text-muted-foreground font-mono">{cfg.base_url}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 2. 请求定义 */}
-      <div className="bg-background rounded-xl border p-5 space-y-4">
-        <h3 className="text-sm font-semibold">请求定义</h3>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-2">
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">URL</label>
-            <Input value={url} onChange={e => setUrl(e.target.value)} className="text-xs font-mono" placeholder="http://127.0.0.1:18008/api/..." />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Method</label>
-            <Select value={method} onValueChange={v => { if (v) setMethod(v); }}>
-              <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="POST">POST</SelectItem><SelectItem value="GET">GET</SelectItem><SelectItem value="PUT">PUT</SelectItem><SelectItem value="DELETE">DELETE</SelectItem></SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">超时 (ms)</label>
-            <Input type="number" value={timeout} onChange={e => setTimeout_(Number(e.target.value))} className="text-xs" />
-          </div>
-        </div>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1 block">Headers (JSON)</label>
-          <Textarea value={headers} onChange={e => setHeaders(e.target.value)} className="text-[11px] font-mono h-16 resize-none" placeholder='{"Authorization": "Bearer ..."}' />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1 block">Body 模板 <span className="opacity-50">(留空=直接转发工具参数)</span></label>
-          <Textarea value={bodyTemplate} onChange={e => setBodyTemplate(e.target.value)} className="text-[11px] font-mono h-16 resize-none" placeholder='{"phone": "{phone}", "otp": "{otp}"}' />
-        </div>
-
-        {/* 请求预览 */}
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1 block">请求预览</label>
-          <pre className="text-[11px] font-mono bg-muted p-3 rounded-lg overflow-auto max-h-24">{requestPreview}</pre>
-        </div>
-      </div>
-
-      {/* 3. 响应映射 */}
-      <div className="bg-background rounded-xl border p-5 space-y-3">
-        <h3 className="text-sm font-semibold">响应映射</h3>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1 block">提取路径 <span className="opacity-50">(从上游响应中取哪一层)</span></label>
-          <Input value={responsePath} onChange={e => setResponsePath(e.target.value)} className="text-xs font-mono" placeholder="$.data" />
-          <p className="text-[10px] text-muted-foreground mt-1">例如上游返回 {`{"code":0,"data":{...}}`}，填 <code className="bg-muted px-1 rounded">$.data</code> 提取 data 层</p>
-        </div>
-        {outputSchema && (
-          <div className="text-[11px] space-y-1 mt-2">
-            <span className="text-muted-foreground">输出契约要求以下字段：</span>
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {extractSchemaFields(outputSchema).map(f => (
-                <span key={f} className="font-mono px-1.5 py-0.5 bg-muted rounded text-[10px]">{f}</span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 4. 错误映射 */}
-      <div className="bg-background rounded-xl border p-5 space-y-3">
-        <h3 className="text-sm font-semibold">错误映射</h3>
-        <p className="text-[11px] text-muted-foreground">HTTP 错误码如何映射为工具返回</p>
-        {errorMappings.map((em, i) => (
-          <div key={i} className="flex gap-2 items-center">
-            <Input value={em.status} onChange={e => { const n = [...errorMappings]; n[i] = { ...n[i], status: e.target.value }; setErrorMappings(n); }} placeholder="401" className="w-16 text-[11px] font-mono" />
-            <span className="text-[11px] text-muted-foreground">→</span>
-            <Input value={em.error_code} onChange={e => { const n = [...errorMappings]; n[i] = { ...n[i], error_code: e.target.value }; setErrorMappings(n); }} placeholder="error_code" className="w-32 text-[11px] font-mono" />
-            <Input value={em.message} onChange={e => { const n = [...errorMappings]; n[i] = { ...n[i], message: e.target.value }; setErrorMappings(n); }} placeholder="错误消息" className="flex-1 text-[11px]" />
-            <Button variant="ghost" size="icon-xs" className="text-destructive" onClick={() => setErrorMappings(errorMappings.filter((_, j) => j !== i))}><Trash2 size={11} /></Button>
-          </div>
-        ))}
-        <Button variant="ghost" size="xs" onClick={() => setErrorMappings([...errorMappings, { status: '', error_code: '', message: '' }])}><Plus size={11} /> 添加错误映射</Button>
-      </div>
-
-      <div className="flex justify-end"><Button size="sm" onClick={handleSave} disabled={saving}><Save size={12} /> 保存</Button></div>
     </div>
   );
 }

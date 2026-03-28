@@ -11,9 +11,12 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { BindingDetailDrawer } from './BindingDetailDrawer';
 
 interface Props {
   onOpenTool?: (toolId: string, step?: string) => void;
+  navigateToBinding?: string | null;
+  onNavigateHandled?: () => void;
 }
 
 type StatusFilter = 'all' | 'active' | 'unbound' | 'misconfigured';

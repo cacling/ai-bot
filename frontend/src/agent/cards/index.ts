@@ -19,9 +19,9 @@ import { UserDetailContent   } from './contents/UserDetailContent';
 import { ComplianceContent   } from './contents/ComplianceContent';
 import { AgentCopilotContent } from './contents/AgentCopilotContent';
 
-// Registration order determines default layout.
-// col-span-1 cards first → they pair side-by-side in row 1.
-// col-span-2 cards last  → full-width row below.
+// Priority determines layout position (1 = highest, 10 = lowest).
+// Higher-priority cards are placed higher in the layout.
+// colSpan=2 cards render full-width; colSpan=1 cards are packed into two columns.
 
 // ── 用户详情卡片 (col-span-1) ─────────────────────────────────────────────────
 registerCard({
@@ -30,6 +30,7 @@ registerCard({
   Icon: UserCircle,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
+  priority: 1,
   defaultHeight: 220,
   defaultOpen: true,
   defaultCollapsed: false,
@@ -45,6 +46,7 @@ registerCard({
   Icon: PhoneCall,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
+  priority: 2,
   defaultHeight: 100,
   defaultOpen: false,
   defaultCollapsed: false,
@@ -53,13 +55,14 @@ registerCard({
   component: OutboundTaskContent,
 });
 
-// ── 情感分析卡片 (col-span-1, left) ───────────────────────────────────────────
+// ── 情感分析卡片 (col-span-1) ────────────────────────────────────────────────
 registerCard({
   id: 'emotion',
   title: { zh: '情感分析', en: 'Emotion' },
   Icon: Smile,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
+  priority: 3,
   defaultHeight: 130,
   defaultOpen: true,
   defaultCollapsed: false,
@@ -79,6 +82,7 @@ registerCard({
   Icon: ShieldAlert,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
+  priority: 4,
   defaultHeight: 80,
   defaultOpen: true,
   defaultCollapsed: false,
@@ -91,13 +95,14 @@ registerCard({
   component: ComplianceContent,
 });
 
-// ── 转人工摘要卡片 (col-span-1, right) ────────────────────────────────────────
+// ── 转人工摘要卡片 (col-span-1) ───────────────────────────────────────────────
 registerCard({
   id: 'handoff',
   title: { zh: '转人工摘要', en: 'Handoff Summary' },
   Icon: PhoneForwarded,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 1,
+  priority: 5,
   defaultHeight: 80,
   defaultOpen: true,
   defaultCollapsed: false,
@@ -113,6 +118,7 @@ registerCard({
   Icon: BotMessageSquare,
   headerClass: 'bg-gradient-to-r from-indigo-600 to-blue-500',
   colSpan: 2,
+  priority: 3,
   defaultHeight: 240,
   defaultOpen: true,
   defaultCollapsed: false,
@@ -121,13 +127,14 @@ registerCard({
   component: AgentCopilotContent,
 });
 
-// ── 流程图卡片 (col-span-2, full width below) ──────────────────────────────────
+// ── 流程图卡片 (col-span-2, full width) ─────────────────────────────────────
 registerCard({
   id: 'diagram',
   title: { zh: '流程图', en: 'Flowchart' },
   Icon: GitBranch,
   headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
   colSpan: 2,
+  priority: 7,
   defaultHeight: 180,
   defaultOpen: true,
   defaultCollapsed: false,

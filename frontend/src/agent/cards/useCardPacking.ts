@@ -1,13 +1,16 @@
 /**
- * useCardPacking.ts — Greedy two-column bin packing
+ * useCardPacking.ts — Priority-aware greedy two-column bin packing
  *
  * Observes card heights via ResizeObserver, re-packs when:
  *  - visible card list changes (new card appears / card removed)
  *  - any card height changes by >50% from last packed snapshot
  *
- * colSpan=1 cards are sorted by height desc and greedily assigned
- * to the shorter column. colSpan=2 cards flush the current batch
- * and render full-width.
+ * Layout algorithm (Scheme C):
+ *  1. Sort all visible cards by priority ASC (1 = highest)
+ *  2. colSpan=2 cards flush the current span-1 batch and render full-width
+ *  3. Within each batch, cards are processed in priority order and greedily
+ *     assigned to the shorter column (using real/estimated height for balance)
+ *  4. Column order naturally follows priority (processed first → placed first)
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';
@@ -18,31 +21,39 @@ export type PackedSegment =
   | { type: 'columns'; left: string[]; right: string[] }
   | { type: 'full'; id: string };
 
-/** Pure function: greedy bin-pack span-1 cards between span-2 breaks */
+function cardHeight(id: string, heights: Map<string, number>): number {
+  return heights.get(id) ?? (getCardDef(id) as CardDef | undefined)?.defaultHeight ?? 100;
+}
+
+function cardPriority(id: string): number {
+  return (getCardDef(id) as CardDef | undefined)?.priority ?? 5;
+}
+
+/** Pure function: priority-aware greedy bin-pack span-1 cards between span-2 breaks */
 function greedyPack(visible: CardState[], heights: Map<string, number>): PackedSegment[] {
+  // Sort all visible cards by priority ASC before segmenting
+  const sorted = [...visible].sort((a, b) => cardPriority(a.id) - cardPriority(b.id));
+
   const segments: PackedSegment[] = [];
   let batch: CardState[] = [];
 
   const flushBatch = () => {
     if (batch.length === 0) return;
-    const sorted = [...batch].sort((a, b) =>
-      (heights.get(b.id) ?? 100) - (heights.get(a.id) ?? 100),
-    );
+    // batch is already in priority order (inherited from sorted input)
     let lh = 0;
     let rh = 0;
     const left: string[] = [];
     const right: string[] = [];
-    for (const c of sorted) {
-      const def = getCardDef(c.id) as CardDef | undefined;
-      const h = heights.get(c.id) ?? def?.defaultHeight ?? 100;
+    for (const c of batch) {
+      const h = cardHeight(c.id, heights);
       if (lh <= rh) { left.push(c.id); lh += h; }
-      else           { right.push(c.id); rh += h; }
+      else          { right.push(c.id); rh += h; }
     }
     segments.push({ type: 'columns', left, right });
     batch = [];
   };
 
-  for (const card of visible) {
+  for (const card of sorted) {
     const def = getCardDef(card.id);
     if (!def) continue;
     if (def.colSpan === 2) {

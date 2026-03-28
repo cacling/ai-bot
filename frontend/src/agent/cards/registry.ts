@@ -20,6 +20,7 @@ export interface CardDef {
   Icon: LucideIcon;
   headerClass: string;   // Tailwind gradient classes for the card header
   colSpan: 1 | 2;       // how many columns in the 2-col grid
+  priority: number;     // 1 (highest) – 10 (lowest): higher-priority cards are placed higher
   defaultHeight: number; // estimated initial height (px) before ResizeObserver measures
   defaultOpen: boolean;
   defaultCollapsed: boolean;
