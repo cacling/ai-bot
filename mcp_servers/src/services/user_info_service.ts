@@ -74,9 +74,7 @@ function normalizeMonth(raw: string | undefined): string | undefined {
 
 // ── Server ───────────────────────────────────────────────────────────────────
 
-function createServer(): McpServer {
-  const server = new McpServer({ name: "user-info-service", version: "2.0.0" });
-
+export function registerUserInfoTools(server: McpServer): void {
   server.tool("query_subscriber", "根据手机号查询电信用户信息（套餐、状态、余额、用量分析、增值业务详情、欠费分层）", {
     phone: z.string().describe('用户手机号，如 "13800000001"'),
   }, async ({ phone }) => {
@@ -237,6 +235,11 @@ function createServer(): McpServer {
     }
   });
 
+}
+
+function createServer(): McpServer {
+  const server = new McpServer({ name: "user-info-service", version: "2.0.0" });
+  registerUserInfoTools(server);
   return server;
 }
 

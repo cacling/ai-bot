@@ -9,7 +9,7 @@
  *   2. Call registerCard() here
  */
 
-import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle, ShieldAlert, BotMessageSquare } from 'lucide-react';
+import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle, ShieldAlert, BotMessageSquare, ClipboardList, Clock, CalendarCheck } from 'lucide-react';
 import { registerCard } from './registry';
 import { DiagramContent      } from './contents/DiagramContent';
 import { EmotionContent      } from './contents/EmotionContent';
@@ -18,6 +18,9 @@ import { OutboundTaskContent } from './contents/OutboundTaskContent';
 import { UserDetailContent   } from './contents/UserDetailContent';
 import { ComplianceContent   } from './contents/ComplianceContent';
 import { AgentCopilotContent } from './contents/AgentCopilotContent';
+import { WorkOrderSummaryContent  } from './contents/WorkOrderSummaryContent';
+import { WorkOrderTimelineContent } from './contents/WorkOrderTimelineContent';
+import { AppointmentPanelContent  } from './contents/AppointmentPanelContent';
 
 // Priority determines layout position (1 = highest, 10 = lowest).
 // Higher-priority cards are placed higher in the layout.
@@ -104,7 +107,7 @@ registerCard({
   colSpan: 1,
   priority: 5,
   defaultHeight: 80,
-  defaultOpen: true,
+  defaultOpen: false,
   defaultCollapsed: false,
   wsEvents: ['handoff_card'],
   dataExtractor: (msg) => msg.data,
@@ -120,7 +123,7 @@ registerCard({
   colSpan: 2,
   priority: 3,
   defaultHeight: 240,
-  defaultOpen: true,
+  defaultOpen: false,
   defaultCollapsed: false,
   wsEvents: ['agent_copilot', 'reply_hints'],
   dataExtractor: (msg) => msg.data,
@@ -146,4 +149,52 @@ registerCard({
     progressState: msg.progress_state,
   }),
   component: DiagramContent,
+});
+
+// ── 工单概要卡片 (col-span-1) ──────────────────────────────────────────────
+registerCard({
+  id: 'work_order_summary',
+  title: { zh: '工单概要', en: 'Work Order Summary' },
+  Icon: ClipboardList,
+  headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
+  colSpan: 1,
+  priority: 2,
+  defaultHeight: 200,
+  defaultOpen: true,
+  defaultCollapsed: false,
+  wsEvents: ['work_item_summary', 'work_item_updated'],
+  dataExtractor: (msg) => msg.data,
+  component: WorkOrderSummaryContent,
+});
+
+// ── 预约详情卡片 (col-span-1) ──────────────────────────────────────────────
+registerCard({
+  id: 'appointment_panel',
+  title: { zh: '预约详情', en: 'Appointment' },
+  Icon: CalendarCheck,
+  headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
+  colSpan: 1,
+  priority: 3,
+  defaultHeight: 160,
+  defaultOpen: false,
+  defaultCollapsed: false,
+  wsEvents: ['appointment_update'],
+  dataExtractor: (msg) => msg.data,
+  component: AppointmentPanelContent,
+});
+
+// ── 工单时间线卡片 (col-span-2, full width) ─────────────────────────────────
+registerCard({
+  id: 'work_order_timeline',
+  title: { zh: '工单时间线', en: 'Work Order Timeline' },
+  Icon: Clock,
+  headerClass: 'bg-gradient-to-r from-gray-600 to-gray-500',
+  colSpan: 2,
+  priority: 6,
+  defaultHeight: 200,
+  defaultOpen: true,
+  defaultCollapsed: true,
+  wsEvents: ['work_item_timeline'],
+  dataExtractor: (msg) => msg.data,
+  component: WorkOrderTimelineContent,
 });

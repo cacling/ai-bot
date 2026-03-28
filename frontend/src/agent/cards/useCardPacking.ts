@@ -1,16 +1,18 @@
 /**
- * useCardPacking.ts — Priority-aware greedy two-column bin packing
+ * useCardPacking.ts — Space-first, priority-aware two-column bin packing
  *
  * Observes card heights via ResizeObserver, re-packs when:
  *  - visible card list changes (new card appears / card removed)
  *  - any card height changes by >50% from last packed snapshot
  *
- * Layout algorithm (Scheme C):
- *  1. Sort all visible cards by priority ASC (1 = highest)
- *  2. colSpan=2 cards flush the current span-1 batch and render full-width
- *  3. Within each batch, cards are processed in priority order and greedily
- *     assigned to the shorter column (using real/estimated height for balance)
- *  4. Column order naturally follows priority (processed first → placed first)
+ * Layout algorithm:
+ *  1. Separate visible cards into span-1 and span-2 groups
+ *  2. Sort span-1 cards by priority ASC, then greedily assign each to the
+ *     shorter column (using real/estimated height) → one merged column segment
+ *  3. Sort span-2 cards by priority ASC, append as full-width segments below
+ *
+ * This maximises space utilisation (all span-1 cards share the same two-column
+ * segment) while still respecting priority for vertical ordering.
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';
@@ -29,41 +31,34 @@ function cardPriority(id: string): number {
   return (getCardDef(id) as CardDef | undefined)?.priority ?? 5;
 }
 
-/** Pure function: priority-aware greedy bin-pack span-1 cards between span-2 breaks */
+/** Pure function: space-first greedy bin-pack */
 function greedyPack(visible: CardState[], heights: Map<string, number>): PackedSegment[] {
-  // Sort all visible cards by priority ASC before segmenting
-  const sorted = [...visible].sort((a, b) => cardPriority(a.id) - cardPriority(b.id));
+  const byPriority = (a: CardState, b: CardState) => cardPriority(a.id) - cardPriority(b.id);
+
+  const span1 = visible.filter(c => getCardDef(c.id)?.colSpan !== 2).sort(byPriority);
+  const span2 = visible.filter(c => getCardDef(c.id)?.colSpan === 2).sort(byPriority);
 
   const segments: PackedSegment[] = [];
-  let batch: CardState[] = [];
 
-  const flushBatch = () => {
-    if (batch.length === 0) return;
-    // batch is already in priority order (inherited from sorted input)
+  // Pack all span-1 cards into a single two-column segment
+  if (span1.length > 0) {
     let lh = 0;
     let rh = 0;
     const left: string[] = [];
     const right: string[] = [];
-    for (const c of batch) {
+    for (const c of span1) {
       const h = cardHeight(c.id, heights);
       if (lh <= rh) { left.push(c.id); lh += h; }
       else          { right.push(c.id); rh += h; }
     }
     segments.push({ type: 'columns', left, right });
-    batch = [];
-  };
-
-  for (const card of sorted) {
-    const def = getCardDef(card.id);
-    if (!def) continue;
-    if (def.colSpan === 2) {
-      flushBatch();
-      segments.push({ type: 'full', id: card.id });
-    } else {
-      batch.push(card);
-    }
   }
-  flushBatch();
+
+  // Append span-2 cards as full-width segments below
+  for (const c of span2) {
+    segments.push({ type: 'full', id: c.id });
+  }
+
   return segments;
 }
 

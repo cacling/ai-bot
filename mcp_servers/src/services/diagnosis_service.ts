@@ -7,9 +7,7 @@
  */
 import { backendPost, mcpLog, startMcpHttpServer, z, McpServer, performance } from "../shared/server.js";
 
-function createServer(): McpServer {
-  const server = new McpServer({ name: "diagnosis-service", version: "2.0.0" });
-
+export function registerDiagnosisTools(server: McpServer): void {
   server.tool("diagnose_network", "对指定手机号进行网络故障诊断，检查信号、基站、DNS、路由等状态", {
     phone: z.string().describe("用户手机号"),
     issue_type: z.enum(["no_signal", "slow_data", "call_drop", "no_network"]).describe("故障类型"),
@@ -104,6 +102,11 @@ function createServer(): McpServer {
     }
   });
 
+}
+
+function createServer(): McpServer {
+  const server = new McpServer({ name: "diagnosis-service", version: "2.0.0" });
+  registerDiagnosisTools(server);
   return server;
 }
 

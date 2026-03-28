@@ -1,0 +1,23 @@
+{
+  "name": "@ai-bot/work-order-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --import tsx/esm src/server.ts",
+    "test": "bun test",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-bot/shared-db": "workspace:*",
+    "@libsql/client": "^0.17.0",
+    "@hono/node-server": "^1.14.3",
+    "drizzle-orm": "^0.43.1",
+    "hono": "^4.7.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -8,6 +8,7 @@
     "./schema": "./src/schema/index.ts",
     "./schema/business": "./src/schema/business.ts",
     "./schema/platform": "./src/schema/platform.ts",
+    "./schema/workorder": "./src/schema/workorder.ts",
     "./env": "./src/env.ts"
   },
   "scripts": {

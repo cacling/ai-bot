@@ -19,12 +19,9 @@ kill_port() {
 
 log "停止所有服务..."
 kill_port 18472  # backend
-kill_port 18003  # 用户信息 MCP
-kill_port 18004  # 业务办理 MCP
-kill_port 18005  # 故障诊断 MCP
-kill_port 18006  # 外呼服务 MCP
-kill_port 18007  # 账户操作 MCP
+kill_port 18003  # 内部服务 MCP (统一)
 kill_port 18008  # mock_apis
+kill_port 18009  # work_order_service
 kill_port 5173   # frontend
 
 # 杀掉可能漂移的 Vite 端口

@@ -6,6 +6,7 @@
     "frontend",
     "mcp_servers",
     "mock_apis",
+    "work_order_service",
     "packages/*"
   ],
   "scripts": {

@@ -6,9 +6,7 @@
  */
 import { backendPost, mcpLog, startMcpHttpServer, z, McpServer, performance } from "../shared/server.js";
 
-function createServer(): McpServer {
-  const server = new McpServer({ name: "business-service", version: "2.0.0" });
-
+export function registerBusinessTools(server: McpServer): void {
   server.tool("cancel_service", "退订用户已订阅的增值业务（如流量包、短信包等）", {
     phone: z.string().describe("用户手机号"),
     service_id: z.string().describe("要退订的业务 ID（如 video_pkg、sms_100）"),
@@ -74,6 +72,11 @@ function createServer(): McpServer {
     }
   });
 
+}
+
+function createServer(): McpServer {
+  const server = new McpServer({ name: "business-service", version: "2.0.0" });
+  registerBusinessTools(server);
   return server;
 }
 

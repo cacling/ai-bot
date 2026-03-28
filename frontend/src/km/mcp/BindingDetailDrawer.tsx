@@ -227,7 +227,7 @@ export function BindingDetailDrawer({ toolId, onClose, onSaved, onOpenContract }
             {adapterType === 'script' && (
               <section className="space-y-2">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Script Handler</h3>
-                <Select value={handlerKey} onValueChange={setHandlerKey}>
+                <Select value={handlerKey} onValueChange={v => { if (v) setHandlerKey(v); }}>
                   <SelectTrigger className="text-xs h-8 font-mono">
                     <SelectValue placeholder="选择 handler">{handlerKey || '选择...'}</SelectValue>
                   </SelectTrigger>
@@ -265,7 +265,7 @@ export function BindingDetailDrawer({ toolId, onClose, onSaved, onOpenContract }
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground mb-0.5 block">Method</label>
-                    <Select value={apiMethod} onValueChange={setApiMethod}>
+                    <Select value={apiMethod} onValueChange={v => { if (v) setApiMethod(v); }}>
                       <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="POST">POST</SelectItem>
@@ -316,7 +316,7 @@ export function BindingDetailDrawer({ toolId, onClose, onSaved, onOpenContract }
             {(adapterType === 'api_proxy' || adapterType === 'db') && (
               <section className="space-y-2">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Connector</h3>
-                <Select value={connectorId} onValueChange={setConnectorId}>
+                <Select value={connectorId} onValueChange={v => setConnectorId(v ?? '')}>
                   <SelectTrigger className="text-xs h-8">
                     <SelectValue placeholder="选择 Connector">{filteredConnectors.find(c => c.id === connectorId)?.name ?? '未选择'}</SelectValue>
                   </SelectTrigger>
@@ -360,7 +360,7 @@ export function BindingDetailDrawer({ toolId, onClose, onSaved, onOpenContract }
             {/* ── 5. Status ── */}
             <section className="space-y-2">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</h3>
-              <Select value={status} onValueChange={setStatus}>
+              <Select value={status} onValueChange={v => { if (v) setStatus(v); }}>
                 <SelectTrigger className="text-xs h-8 w-40">
                   <SelectValue />
                 </SelectTrigger>

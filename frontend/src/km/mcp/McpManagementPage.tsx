@@ -39,6 +39,9 @@ export function McpManagementPage({ externalNavigateToTool, onExternalNavigateHa
     toolName?: string;
   } | null>(null);
 
+  // Cross-tab navigation: Tool Contracts → Runtime Bindings drawer
+  const [navigateToBinding, setNavigateToBinding] = useState<string | null>(null);
+
   const handleOpenTool = (toolId: string, step?: string, fromServer?: string) => {
     if (!toolId) {
       setTab('tools');
@@ -46,6 +49,11 @@ export function McpManagementPage({ externalNavigateToTool, onExternalNavigateHa
     }
     setNavigateToTool({ toolId, step, fromServer });
     setTab('tools');
+  };
+
+  const handleOpenBinding = (toolId: string) => {
+    setNavigateToBinding(toolId);
+    setTab('bindings');
   };
 
   // 接收外部导航（从技能管理跳转过来）
@@ -92,11 +100,11 @@ export function McpManagementPage({ externalNavigateToTool, onExternalNavigateHa
           </Suspense>
         </div>
         <div className={`absolute inset-0 ${tab !== 'tools' ? 'hidden' : ''}`}>
-          <McpToolListPage navigateToTool={navigateToTool} onNavigateHandled={() => setNavigateToTool(null)} />
+          <McpToolListPage navigateToTool={navigateToTool} onNavigateHandled={() => setNavigateToTool(null)} onOpenBinding={handleOpenBinding} />
         </div>
         <div className={`absolute inset-0 ${tab !== 'bindings' ? 'hidden' : ''}`}>
           <Suspense fallback={<div className="p-6 text-xs text-muted-foreground">Loading...</div>}>
-            <RuntimeBindingsPage onOpenTool={handleOpenTool} />
+            <RuntimeBindingsPage onOpenTool={handleOpenTool} navigateToBinding={navigateToBinding} onNavigateHandled={() => setNavigateToBinding(null)} />
           </Suspense>
         </div>
         <div className={`absolute inset-0 ${tab !== 'connectors' ? 'hidden' : ''}`}><ConnectorListPage /></div>

@@ -6,9 +6,7 @@
  */
 import { backendGet, backendPost, mcpLog, startMcpHttpServer, z, McpServer } from "../shared/server.js";
 
-function createServer(): McpServer {
-  const server = new McpServer({ name: "account-service", version: "2.0.0" });
-
+export function registerAccountTools(server: McpServer): void {
   server.tool("verify_identity", "验证用户身份（通过短信验证码）。高风险操作前必须先验证。", {
     phone: z.string().describe("用户手机号"),
     otp: z.string().describe("用户输入的验证码"),
@@ -95,6 +93,11 @@ function createServer(): McpServer {
     }
   });
 
+}
+
+function createServer(): McpServer {
+  const server = new McpServer({ name: "account-service", version: "2.0.0" });
+  registerAccountTools(server);
   return server;
 }
 

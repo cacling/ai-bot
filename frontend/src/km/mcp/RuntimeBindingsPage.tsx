@@ -3,6 +3,8 @@
  *
  * 展示 tool_implementations JOIN mcp_tools JOIN connectors JOIN mcp_servers 的联表结果。
  * 契约视角（schema/mock）在 Tool Contracts；这里是运行时视角（adapter/connector/policy/handler）。
+ *
+ * 编辑模式：点击行后切换到全屏 BindingEditor（与 Tool Contracts 一致），而非侧边抽屉。
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, ExternalLink } from 'lucide-react';
@@ -11,7 +13,9 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { BindingDetailDrawer } from './BindingDetailDrawer';
+import { BindingEditor } from './BindingEditor';
+
+type View = 'list' | 'edit';
 
 interface Props {
   onOpenTool?: (toolId: string, step?: string) => void;
@@ -54,7 +58,8 @@ export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateH
   const [search, setSearch] = useState('');
   const [adapterFilter, setAdapterFilter] = useState<AdapterFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
+  const [view, setView] = useState<View>('list');
+  const [editToolId, setEditToolId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -66,12 +71,12 @@ export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateH
 
   useEffect(load, [load]);
 
-  // Handle cross-navigation: auto-open drawer when navigateToBinding is set
+  // Handle cross-navigation: auto-open editor when navigateToBinding is set
   useEffect(() => {
     if (navigateToBinding) {
-      // Delay slightly to ensure the page is mounted
       const timer = setTimeout(() => {
-        setSelectedToolId(navigateToBinding);
+        setEditToolId(navigateToBinding);
+        setView('edit');
         onNavigateHandled?.();
       }, 100);
       return () => clearTimeout(timer);
@@ -153,124 +158,137 @@ export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateH
     }
   }
 
-  return (
-    <div className="p-4 space-y-4">
-      {/* Stats */}
-      {!loading && items.length > 0 && (
-        <div className="grid grid-cols-4 gap-3">
-          <StatCard label="Total Bindings" value={stats.total} onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-          <StatCard label="Active" value={stats.active} onClick={() => setStatusFilter('active')} active={statusFilter === 'active'} />
-          <StatCard label="Unbound" value={stats.unbound} onClick={() => setStatusFilter('unbound')} active={statusFilter === 'unbound'} warn={stats.unbound > 0} />
-          <StatCard label="Misconfigured" value={stats.misconfigured} onClick={() => setStatusFilter('misconfigured')} active={statusFilter === 'misconfigured'} warn={stats.misconfigured > 0} />
-        </div>
-      )}
+  const handleEditorBack = () => {
+    setView('list');
+    setEditToolId(null);
+  };
 
-      {/* Filters */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search tool / server / connector..."
-            className="pl-8 text-xs h-8"
+  return (
+    <>
+      {/* Editor (full-window, hidden when in list view) */}
+      {editToolId && (
+        <div className={view !== 'edit' ? 'hidden' : 'h-full'}>
+          <BindingEditor
+            toolId={editToolId}
+            onBack={handleEditorBack}
+            onSaved={() => { handleEditorBack(); load(); }}
+            onOpenContract={onOpenTool ? (id) => onOpenTool(id, 'overview') : undefined}
           />
         </div>
-        <Select value={adapterFilter} onValueChange={v => setAdapterFilter(v as AdapterFilter)}>
-          <SelectTrigger className="w-36 text-xs h-8">
-            <SelectValue placeholder="Adapter" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Adapters</SelectItem>
-            <SelectItem value="script">Script</SelectItem>
-            <SelectItem value="remote_mcp">MCP</SelectItem>
-            <SelectItem value="api_proxy">API</SelectItem>
-            <SelectItem value="db">DB</SelectItem>
-            <SelectItem value="mock">Mock</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Table */}
-      {loading ? (
-        <div className="text-xs text-muted-foreground p-6">Loading...</div>
-      ) : filtered.length === 0 ? (
-        <div className="text-xs text-muted-foreground p-6">No bindings found.</div>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow className="text-xs">
-              <TableHead className="w-[220px]">Tool</TableHead>
-              <TableHead className="w-[140px]">Server</TableHead>
-              <TableHead className="w-[80px]">Adapter</TableHead>
-              <TableHead className="w-[120px]">Connector</TableHead>
-              <TableHead className="w-[160px]">Handler</TableHead>
-              <TableHead className="w-[120px]">Policy</TableHead>
-              <TableHead className="w-[140px]">Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map(b => (
-              <TableRow
-                key={b.tool_id}
-                className="cursor-pointer hover:bg-muted/50"
-                onClick={() => setSelectedToolId(b.tool_id)}
-              >
-                <TableCell>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-mono font-medium">{b.tool_name}</span>
-                    {onOpenTool && <ExternalLink size={10} className="text-muted-foreground" />}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground truncate max-w-[200px]">{b.tool_description}</div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs">{b.server_name}</span>
-                    <Badge variant="outline" className={`text-[9px] px-1 py-0 ${KIND_COLORS[b.server_kind] ?? ''}`}>
-                      {b.server_kind}
-                    </Badge>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {b.adapter_type ? (
-                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${ADAPTER_COLORS[b.adapter_type] ?? ''}`}>
-                      {ADAPTER_LABELS[b.adapter_type] ?? b.adapter_type}
-                    </Badge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">{'\u2014'}</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-xs">
-                  {b.connector_name ? (
-                    <span className="font-mono">{b.connector_name}</span>
-                  ) : (
-                    <span className="text-muted-foreground">{'\u2014'}</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-xs font-mono text-muted-foreground truncate max-w-[160px]">
-                  {b.handler_key ?? '\u2014'}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {parsePolicy(b.config)}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {renderStatusBadges(b)}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
       )}
 
-      <BindingDetailDrawer
-        toolId={selectedToolId}
-        onClose={() => setSelectedToolId(null)}
-        onSaved={() => { setSelectedToolId(null); load(); }}
-        onOpenContract={onOpenTool ? (id) => onOpenTool(id, 'overview') : undefined}
-      />
-    </div>
+      {/* List */}
+      <div className={view !== 'list' ? 'hidden' : 'p-4 space-y-4'}>
+        {/* Stats */}
+        {!loading && items.length > 0 && (
+          <div className="grid grid-cols-4 gap-3">
+            <StatCard label="Total Bindings" value={stats.total} onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+            <StatCard label="Active" value={stats.active} onClick={() => setStatusFilter('active')} active={statusFilter === 'active'} />
+            <StatCard label="Unbound" value={stats.unbound} onClick={() => setStatusFilter('unbound')} active={statusFilter === 'unbound'} warn={stats.unbound > 0} />
+            <StatCard label="Misconfigured" value={stats.misconfigured} onClick={() => setStatusFilter('misconfigured')} active={statusFilter === 'misconfigured'} warn={stats.misconfigured > 0} />
+          </div>
+        )}
+
+        {/* Filters */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search tool / server / connector..."
+              className="pl-8 text-xs h-8"
+            />
+          </div>
+          <Select value={adapterFilter} onValueChange={v => setAdapterFilter(v as AdapterFilter)}>
+            <SelectTrigger className="w-36 text-xs h-8">
+              <SelectValue placeholder="Adapter" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Adapters</SelectItem>
+              <SelectItem value="script">Script</SelectItem>
+              <SelectItem value="remote_mcp">MCP</SelectItem>
+              <SelectItem value="api_proxy">API</SelectItem>
+              <SelectItem value="db">DB</SelectItem>
+              <SelectItem value="mock">Mock</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Table */}
+        {loading ? (
+          <div className="text-xs text-muted-foreground p-6">Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-xs text-muted-foreground p-6">No bindings found.</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="text-xs">
+                <TableHead className="w-[220px]">Tool</TableHead>
+                <TableHead className="w-[140px]">Server</TableHead>
+                <TableHead className="w-[80px]">Adapter</TableHead>
+                <TableHead className="w-[120px]">Connector</TableHead>
+                <TableHead className="w-[160px]">Handler</TableHead>
+                <TableHead className="w-[120px]">Policy</TableHead>
+                <TableHead className="w-[140px]">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map(b => (
+                <TableRow
+                  key={b.tool_id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => { setEditToolId(b.tool_id); setView('edit'); }}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-mono font-medium">{b.tool_name}</span>
+                      {onOpenTool && <ExternalLink size={10} className="text-muted-foreground" />}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate max-w-[200px]">{b.tool_description}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs">{b.server_name}</span>
+                      <Badge variant="outline" className={`text-[9px] px-1 py-0 ${KIND_COLORS[b.server_kind] ?? ''}`}>
+                        {b.server_kind}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {b.adapter_type ? (
+                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${ADAPTER_COLORS[b.adapter_type] ?? ''}`}>
+                        {ADAPTER_LABELS[b.adapter_type] ?? b.adapter_type}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{'\u2014'}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {b.connector_name ? (
+                      <span className="font-mono">{b.connector_name}</span>
+                    ) : (
+                      <span className="text-muted-foreground">{'\u2014'}</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground truncate max-w-[160px]">
+                    {b.handler_key ?? '\u2014'}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {parsePolicy(b.config)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {renderStatusBadges(b)}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+    </>
   );
 }
 

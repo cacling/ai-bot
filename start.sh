@@ -20,12 +20,13 @@ RESET_MODE=false
 
 # ── 端口定义 ────────────────────────────────────────────────────────────────
 BACKEND_PORT=18472
-MCP_PORTS=(18003 18004 18005 18006 18007)
-MCP_SERVICES=("user_info_service" "business_service" "diagnosis_service" "outbound_service" "account_service")
-MCP_LABELS=("用户信息" "业务办理" "故障诊断" "外呼服务" "账户操作")
+MCP_PORTS=(18003)
+MCP_SERVICES=("internal_service")
+MCP_LABELS=("内部服务")
 MOCK_APIS_PORT=18008
+WORK_ORDER_PORT=18009
 FRONTEND_PORT=5173
-ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$FRONTEND_PORT")
+ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$FRONTEND_PORT")
 
 # ── 颜色 ────────────────────────────────────────────────────────────────────
 GRN='\033[0;32m'; RED='\033[0;31m'; YEL='\033[1;33m'; BLU='\033[0;34m'; NC='\033[0m'
@@ -99,6 +100,10 @@ ok "backend 依赖就绪"
 log "mcp_servers: bun install"
 cd "$BASE_DIR/mcp_servers" && "$BUN" install 2>&1 | tail -3
 ok "mcp_servers 依赖就绪"
+
+log "work_order_service: bun install"
+cd "$BASE_DIR/work_order_service" && "$BUN" install 2>&1 | tail -3
+ok "work_order_service 依赖就绪"
 
 log "frontend: bun install"
 cd "$BASE_DIR/frontend" && "$BUN" install 2>&1 | tail -3
@@ -229,6 +234,10 @@ done
 
 # Mock APIs
 start_service "mock-apis" "$BASE_DIR/mock_apis" \
+  "$NODE --import tsx/esm src/server.ts"
+
+# Work Order Service
+start_service "work-order" "$BASE_DIR/work_order_service" \
   "$NODE --import tsx/esm src/server.ts"
 
 # Backend

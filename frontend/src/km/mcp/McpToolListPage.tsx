@@ -20,10 +20,10 @@ type QuickFilter = 'all' | 'no_contract' | 'mock_on' | 'has_risk' | 'ready';
 interface Props {
   navigateToTool?: { toolId: string; step?: string; fromServer?: string; toolName?: string } | null;
   onNavigateHandled?: () => void;
-  onBackToServers?: () => void;
+  onOpenBinding?: (toolId: string) => void;
 }
 
-export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToServers }: Props = {}) {
+export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBinding }: Props = {}) {
   const [tools, setTools] = useState<McpToolRecord[]>([]);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -181,18 +181,10 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
   // ── Edit view ───────────────────────────────────────────────────────────────
 
   const handleEditorBack = () => {
-    if (editFromServer && onBackToServers) {
-      setView('list');
-      setEditId(null);
-      setEditInitialStep(undefined);
-      setEditFromServer(undefined);
-      onBackToServers();
-    } else {
-      setView('list');
-      setEditId(null);
-      setEditInitialStep(undefined);
-      setEditFromServer(undefined);
-    }
+    setView('list');
+    setEditId(null);
+    setEditInitialStep(undefined);
+    setEditFromServer(undefined);
   };
 
   // ── 双视图：list + editor 同时渲染，用 hidden 切换 ──
@@ -208,6 +200,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onBackToSer
           onUpdated={load}
           initialStep={editInitialStep as any}
           fromServer={editFromServer}
+          onOpenBinding={onOpenBinding}
         />
       </div>
     )}

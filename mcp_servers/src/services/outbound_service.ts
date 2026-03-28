@@ -38,9 +38,7 @@ function isQuietHours(): boolean {
 
 // ── Server ───────────────────────────────────────────────────────────────────
 
-function createServer(): McpServer {
-  const server = new McpServer({ name: "outbound-service", version: "1.0.0" });
-
+export function registerOutboundTools(server: McpServer): void {
   // schema: result, result_category, remark, callback_time, ptp_date
   server.tool("record_call_result", "记录本次外呼催收通话结果（含 PTP 日期校验和结果分类）", {
     result: z.enum(["ptp", "refusal", "dispute", "no_answer", "busy", "power_off", "converted", "callback", "not_interested", "non_owner", "verify_failed", "dnd"]).describe("通话结果"),
@@ -190,6 +188,11 @@ function createServer(): McpServer {
     }
   });
 
+}
+
+function createServer(): McpServer {
+  const server = new McpServer({ name: "outbound-service", version: "1.0.0" });
+  registerOutboundTools(server);
   return server;
 }
 
