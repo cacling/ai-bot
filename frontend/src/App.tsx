@@ -39,6 +39,7 @@ export interface FaqMessage {
   sender: 'bot';
   type: 'faq';
   options: string[];
+  title?: string;
   time: string;
 }
 
@@ -101,7 +102,7 @@ const MessageBubble = memo(function MessageBubble({ msg, isTyping, lang, onSend 
 
         {msg.type === 'faq' && (
           <div className="bg-background p-3 rounded-2xl rounded-tl-none shadow-sm border border-border w-full mb-1">
-            <p className="text-sm text-muted-foreground mb-2 font-medium">{t.chat_faq_hint}</p>
+            <p className="text-sm text-muted-foreground mb-2 font-medium">{msg.title || t.chat_faq_hint}</p>
             <div className="space-y-2">
               {msg.options.map((opt, idx) => (
                 <Button
@@ -137,9 +138,6 @@ function makeInitialMessages(lang: Lang = 'zh'): Message[] {
   const t = T[lang];
   const now = new Date();
   const fmt = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const faqOptions = lang === 'zh'
-    ? ['查询本月话费账单', '退订视频会员流量包', '帮我推荐一个适合重度用户的套餐', '我的手机网速非常慢怎么办？']
-    : ['Check this month\'s bill', 'Unsubscribe from video data pack', 'Recommend a plan for heavy users', 'My mobile data is very slow'];
   return [
     {
       id: 1,
@@ -147,13 +145,6 @@ function makeInitialMessages(lang: Lang = 'zh'): Message[] {
       type: 'text',
       text: t.chat_greeting,
       time: fmt(new Date(now.getTime() - 2000)),
-    },
-    {
-      id: 2,
-      sender: 'bot',
-      type: 'faq',
-      options: faqOptions,
-      time: fmt(new Date(now.getTime() - 1000)),
     },
   ];
 }
@@ -184,6 +175,7 @@ export default function App() {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [botMode, setBotMode] = useState<'bot' | 'human'>('bot');
+  const [quickFaqs, setQuickFaqs] = useState<string[]>(() => T[lang].chat_faq);
 
   const t = T[lang];
   const langRef = useRef<Lang>(lang); // 用 ref 让 WS 建立时读取最新 lang，而不把 lang 加入 deps
@@ -278,6 +270,23 @@ export default function App() {
 
       } else if (msg.type === 'transfer_to_bot') {
         setBotMode('bot');
+
+      } else if (msg.type === 'suggestions') {
+        const options = ((msg.options ?? []) as Array<{ label: string }>).map(o => o.label);
+        if (options.length > 0) {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: nextMsgId(),
+              sender: 'bot',
+              type: 'faq',
+              options,
+              title: msg.title as string | undefined,
+              time: nowTime(),
+            } as FaqMessage,
+          ]);
+          setQuickFaqs(options);
+        }
 
       } else if (msg.type === 'error') {
         const id = pendingBotIdRef.current;
@@ -537,7 +546,7 @@ export default function App() {
             {/* 快捷问题栏 */}
             <div className="bg-background/60 backdrop-blur-md border-t border-border px-3 py-2.5">
               <div className="flex items-center space-x-2 overflow-x-auto scrollbar-hide pb-1">
-                {t.chat_faq.map((faq, idx) => (
+                {quickFaqs.map((faq, idx) => (
                   <Button
                     key={idx}
                     variant="outline"

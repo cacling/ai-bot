@@ -22,6 +22,7 @@ interface Translations {
   chat_transfer:       string;
   chat_reset:          string;
   chat_faq_hint:       string;
+  chat_suggestion_title: string;
   chat_placeholder:    string;
   agent_reply_placeholder: string;
   chat_faq:            string[];
@@ -172,6 +173,7 @@ export const T: Record<Lang, Translations> = {
     chat_transfer:     '转人工',
     chat_reset:        '重置对话',
     chat_faq_hint:     '猜您想问：',
+    chat_suggestion_title: '根据您的问题，推荐您这样问',
     chat_placeholder:  '输入您的问题，例如：查话费、网速慢…',
     agent_reply_placeholder: '输入您的回复…',
     chat_faq:          ['查话费', '退订业务', '查套餐', '故障报修', '人工客服'],
@@ -368,6 +370,7 @@ export const T: Record<Lang, Translations> = {
     chat_transfer:     'Transfer',
     chat_reset:        'Reset',
     chat_faq_hint:     'You might want to ask:',
+    chat_suggestion_title: 'Based on your question, try asking:',
     chat_placeholder:  'Type your question, e.g. check balance, slow network…',
     agent_reply_placeholder: 'Type your reply…',
     chat_faq:          ['Check bill', 'Unsubscribe', 'Plan info', 'Report issue', 'Human agent'],

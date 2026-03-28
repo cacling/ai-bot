@@ -1,0 +1,68 @@
+{
+  "welcome": {
+    "zh": [
+      {
+        "label": "帮我查一下本月账单明细",
+        "skill_hint": "bill-inquiry",
+        "category": "direct"
+      },
+      {
+        "label": "最近网速很慢，帮我排查一下",
+        "skill_hint": "fault-diagnosis",
+        "category": "direct"
+      },
+      {
+        "label": "看看有没有更适合我的套餐",
+        "skill_hint": "plan-inquiry",
+        "category": "direct"
+      },
+      {
+        "label": "帮我退订不需要的增值业务",
+        "skill_hint": "service-cancel",
+        "category": "direct"
+      },
+      {
+        "label": "营业厅 App 打不开，帮我看看",
+        "skill_hint": "telecom-app",
+        "category": "direct"
+      },
+      {
+        "label": "帮我转人工客服",
+        "skill_hint": null,
+        "category": "transfer"
+      }
+    ],
+    "en": [
+      {
+        "label": "Help me check this month's bill details",
+        "skill_hint": "bill-inquiry",
+        "category": "direct"
+      },
+      {
+        "label": "My internet has been really slow, help me troubleshoot",
+        "skill_hint": "fault-diagnosis",
+        "category": "direct"
+      },
+      {
+        "label": "Help me find a plan that suits me better",
+        "skill_hint": "plan-inquiry",
+        "category": "direct"
+      },
+      {
+        "label": "Help me cancel unwanted subscriptions",
+        "skill_hint": "service-cancel",
+        "category": "direct"
+      },
+      {
+        "label": "The carrier app won't open, help me fix it",
+        "skill_hint": "telecom-app",
+        "category": "direct"
+      },
+      {
+        "label": "Transfer me to a human agent",
+        "skill_hint": null,
+        "category": "transfer"
+      }
+    ]
+  }
+}
