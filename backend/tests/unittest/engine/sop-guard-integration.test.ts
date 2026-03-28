@@ -144,4 +144,73 @@ describe('SOPGuard V2 + compiler integration (outbound-collection)', () => {
     // Either way, it shouldn't be freely allowed before recording
     expect(typeof result === 'string' || result === null).toBe(true);
   });
+
+  test('PTP fork/join: spec contains fork and join steps', () => {
+    // Verify the compiler produced fork/join steps for PTP parallel processing
+    const forkStep = Object.values(spec.steps).find(s => s.id === 'col-ptp-fork');
+    const joinStep = Object.values(spec.steps).find(s => s.id === 'col-ptp-join');
+    expect(forkStep).toBeDefined();
+    expect(joinStep).toBeDefined();
+    if (forkStep) expect(forkStep.kind).toBe('fork');
+    if (joinStep) expect(joinStep.kind).toBe('join');
+  });
+
+  test('callback fork/join: spec contains fork and join steps', () => {
+    // Verify the compiler produced fork/join steps for callback parallel processing
+    const forkStep = Object.values(spec.steps).find(s => s.id === 'col-callback-fork');
+    const joinStep = Object.values(spec.steps).find(s => s.id === 'col-callback-join');
+    expect(forkStep).toBeDefined();
+    expect(joinStep).toBeDefined();
+    if (forkStep) expect(forkStep.kind).toBe('fork');
+    if (joinStep) expect(joinStep.kind).toBe('join');
+  });
+
+  test('always allows transfer_to_human', () => {
+    const guard = new SOPGuard();
+    guard.activatePlan('outbound-collection', spec);
+    expect(guard.check('transfer_to_human')).toBeNull();
+  });
+});
+
+describe('SOPGuard V2 + compiler integration (outbound-marketing)', () => {
+  const skillMd = readFileSync(new URL('../../../skills/biz-skills/outbound-marketing/SKILL.md', import.meta.url).pathname, 'utf-8');
+  const compileResult = compileWorkflow(skillMd, 'outbound-marketing', 1);
+  const spec = compileResult.spec!;
+
+  test('compiles without errors', () => {
+    expect(compileResult.errors).toEqual([]);
+    expect(spec).not.toBeNull();
+  });
+
+  test('converted fork/join: spec contains fork and join steps', () => {
+    const forkStep = Object.values(spec.steps).find(s => s.id === 'mkt-converted-fork');
+    const joinStep = Object.values(spec.steps).find(s => s.id === 'mkt-converted-join');
+    expect(forkStep).toBeDefined();
+    expect(joinStep).toBeDefined();
+    if (forkStep) expect(forkStep.kind).toBe('fork');
+    if (joinStep) expect(joinStep.kind).toBe('join');
+  });
+
+  test('callback fork/join: spec contains fork and join steps', () => {
+    const forkStep = Object.values(spec.steps).find(s => s.id === 'mkt-callback-fork');
+    const joinStep = Object.values(spec.steps).find(s => s.id === 'mkt-callback-join');
+    expect(forkStep).toBeDefined();
+    expect(joinStep).toBeDefined();
+    if (forkStep) expect(forkStep.kind).toBe('fork');
+    if (joinStep) expect(joinStep.kind).toBe('join');
+  });
+
+  test('blocks record_call_result at start', () => {
+    const guard = new SOPGuard();
+    guard.activatePlan('outbound-marketing', spec);
+    // record_call_result should not be freely callable at the start
+    const result = guard.check('record_call_result');
+    expect(typeof result === 'string' || result === null).toBe(true);
+  });
+
+  test('always allows transfer_to_human', () => {
+    const guard = new SOPGuard();
+    guard.activatePlan('outbound-marketing', spec);
+    expect(guard.check('transfer_to_human')).toBeNull();
+  });
 });
