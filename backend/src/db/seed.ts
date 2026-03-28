@@ -1271,6 +1271,7 @@ async function seed() {
     mock_source: string;
     mocked?: boolean;
     readOnly?: boolean; // true=查询类（不拦截），false=操作类（需前置检查）
+    disabled?: boolean; // true=LLM 不可见（disposition 模式），resolve() 仍可找到
   }> = [
     // user-info-service（全部查询类）
     { server_id: 'mcp-internal',tool_name: 'query_subscriber', tool_desc: '根据手机号查询电信用户信息（套餐、状态、余额、用量分析、增值业务详情、欠费分层）', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-internal', readOnly: true },
@@ -1278,7 +1279,7 @@ async function seed() {
     { server_id: 'mcp-internal',tool_name: 'query_plans', tool_desc: '获取所有可用套餐列表，或查询指定套餐详情', input_schema: { type: 'object', properties: { plan_id: { type: 'string', description: '套餐 ID' } } }, mock_source: 'mcp-internal', readOnly: true },
     { server_id: 'mcp-internal',tool_name: 'analyze_bill_anomaly', tool_desc: '分析用户账单异常：自动对比当月与上月账单，定位费用异常原因', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '当月账期，格式 YYYY-MM' } }, required: ['phone', 'month'] }, mock_source: 'mcp-internal', readOnly: true },
     // business-service（cancel/issue 是操作类）
-    { server_id: 'mcp-internal',tool_name: 'cancel_service', tool_desc: '退订用户已订阅的增值业务', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, service_id: { type: 'string', description: '要退订的业务 ID' } }, required: ['phone', 'service_id'] }, mock_source: 'mcp-internal', readOnly: false },
+    { server_id: 'mcp-internal',tool_name: 'cancel_service', tool_desc: '退订用户已订阅的增值业务', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, service_id: { type: 'string', description: '要退订的业务 ID' } }, required: ['phone', 'service_id'] }, mock_source: 'mcp-internal', readOnly: false, disabled: true },
     { server_id: 'mcp-internal', tool_name: 'issue_invoice', tool_desc: '为指定用户的指定月份账单开具电子发票', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份' }, email: { type: 'string', description: '邮箱' } }, required: ['phone', 'month', 'email'] }, mock_source: 'mcp-internal', readOnly: false },
     // diagnosis-service（全部查询类）
     { server_id: 'mcp-internal', tool_name: 'diagnose_network', tool_desc: '对指定手机号进行网络故障诊断', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, issue_type: { type: 'string', enum: ['no_signal', 'slow_data', 'call_drop', 'no_network'], description: '故障类型' } }, required: ['phone', 'issue_type'] }, mock_source: 'mcp-internal', readOnly: true },
@@ -1293,6 +1294,10 @@ async function seed() {
     { server_id: 'mcp-internal', tool_name: 'check_account_balance', tool_desc: '查询用户账户余额和欠费状态', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-internal', readOnly: true },
     { server_id: 'mcp-internal', tool_name: 'check_contracts', tool_desc: '查询用户当前有效合约列表', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-internal', readOnly: true },
     { server_id: 'mcp-internal', tool_name: 'apply_service_suspension', tool_desc: '执行停机保号操作，暂停语音/短信/流量服务，保留号码', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-internal', readOnly: false, mocked: true },
+    // L2 聚合读工具（ScriptAdapter in-memory handler，不经 MCP Server）
+    { server_id: 'mcp-internal', tool_name: 'get_bill_context', tool_desc: '一次性获取用户账单完整上下文（用户信息+账单明细+异常分析），减少多轮工具调用', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' }, month: { type: 'string', description: '账单月份，格式 YYYY-MM，不填则返回最近3个月' } }, required: ['phone'] }, mock_source: 'mcp-internal', readOnly: true },
+    { server_id: 'mcp-internal', tool_name: 'get_plan_context', tool_desc: '一次性获取用户套餐完整上下文（用户信息+可用套餐列表），用于套餐查询和变更咨询', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-internal', readOnly: true },
+    { server_id: 'mcp-internal', tool_name: 'get_cancel_context', tool_desc: '一次性获取退订所需完整上下文（用户信息+套餐列表+账单），用于业务退订前的信息收集', input_schema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] }, mock_source: 'mcp-internal', readOnly: true },
     // amap-maps-service（外部第三方 MCP，全部查询类）
     { server_id: 'mcp-amap', tool_name: 'maps_text_search', tool_desc: '关键词搜索 POI（如"营业厅"、"电信大楼"）', input_schema: { type: 'object', properties: { keywords: { type: 'string', description: '搜索关键词' }, city: { type: 'string', description: '城市名称' }, page_size: { type: 'number', description: '每页结果数' } }, required: ['keywords'] }, mock_source: '', readOnly: true },
     { server_id: 'mcp-amap', tool_name: 'maps_around_search', tool_desc: '周边搜索（以某点为圆心，搜索指定半径内的 POI）', input_schema: { type: 'object', properties: { keywords: { type: 'string', description: '搜索关键词' }, location: { type: 'string', description: '中心点坐标，格式: 经度,纬度' }, radius: { type: 'number', description: '搜索半径（米）' } }, required: ['location'] }, mock_source: '', readOnly: true },
@@ -1321,7 +1326,7 @@ async function seed() {
       mock_rules: toolRules.length > 0 ? JSON.stringify(toolRules) : null,
       annotations: JSON.stringify({ readOnlyHint: t.readOnly ?? false }),
       mocked: t.mocked ?? false,
-      disabled: false,
+      disabled: t.disabled ?? false,
       created_at: now,
       updated_at: now,
     }).onConflictDoNothing().run();
@@ -1434,6 +1439,10 @@ async function seed() {
     { tool_name: 'check_contracts',      adapter_type: 'script', connector_id: 'conn-customer',  host_server_id: 'mcp-internal',   handler_key: 'account.check_contracts' },
     { tool_name: 'apply_service_suspension', adapter_type: 'script', connector_id: 'conn-orders', host_server_id: 'mcp-internal', handler_key: 'account.apply_service_suspension',
       config: { executionPolicy: { allowedChannels: ['online', 'voice'], timeoutMs: 15000, confirmRequired: true } } },
+    // L2 聚合读工具 — ScriptAdapter in-memory handler，内部并行调用底层 MCP 工具
+    { tool_name: 'get_bill_context',   adapter_type: 'script', host_server_id: 'mcp-internal', handler_key: 'aggregated.get_bill_context' },
+    { tool_name: 'get_plan_context',   adapter_type: 'script', host_server_id: 'mcp-internal', handler_key: 'aggregated.get_plan_context' },
+    { tool_name: 'get_cancel_context', adapter_type: 'script', host_server_id: 'mcp-internal', handler_key: 'aggregated.get_cancel_context' },
     // amap-maps-service — 外部第三方 MCP（通过 server URL 直连，无需 connector）
     { tool_name: 'maps_text_search',       adapter_type: 'remote_mcp', host_server_id: 'mcp-amap' },
     { tool_name: 'maps_around_search',     adapter_type: 'remote_mcp', host_server_id: 'mcp-amap' },

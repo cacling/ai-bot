@@ -142,11 +142,7 @@ app.get('/handlers', async (c) => {
   const handlers: Array<{ key: string; tool_name: string; server_name: string; server_id: string; file: string }> = [];
 
   const serverFileMap: Record<string, string> = {
-    'mcp-user-info': 'mcp_servers/src/services/user_info_service.ts',
-    'mcp-business': 'mcp_servers/src/services/business_service.ts',
-    'mcp-diagnosis': 'mcp_servers/src/services/diagnosis_service.ts',
-    'mcp-outbound': 'mcp_servers/src/services/outbound_service.ts',
-    'mcp-account': 'mcp_servers/src/services/account_service.ts',
+    'mcp-internal': 'mcp_servers/src/services/internal_service.ts',
   };
 
   for (const s of servers) {

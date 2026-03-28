@@ -49,7 +49,7 @@ export class ApiAdapter implements Adapter {
     if (api?.url) return api;
 
     if (connectorConfig) {
-      const baseUrl = connectorConfig.baseUrl as string | undefined;
+      const baseUrl = (connectorConfig.base_url ?? connectorConfig.baseUrl) as string | undefined;
       const path = (bindingConfig?.path ?? '') as string;
       if (baseUrl) {
         return {

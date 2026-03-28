@@ -50,10 +50,13 @@ metadata:
 
 ### 工具说明
 
+- `get_cancel_context(phone)` — **首选**，一次调用同时返回用户信息（身份、已订业务列表）、当前套餐列表和近期账单，等价于 query_subscriber + query_plans + query_bill 并行调用
 - `query_subscriber(phone)` — 查询用户身份和已订增值业务列表
 - `query_bill(phone, month)` — 查询指定月份账单明细，用于定位未知扣费项
 - `cancel_service(phone, service_id)` — 执行增值业务退订操作
 - `get_skill_reference("service-cancel", "cancellation-policy.md")` — 加载退订政策和详细处理指引
+
+> **优化提示**：退订流程开始时，优先使用 `get_cancel_context` 一次获取用户信息、套餐和账单完整上下文，减少工具调用轮次。未知扣费场景仍可单独使用 query_bill 查询特定月份。
 
 ## 客户引导状态图
 

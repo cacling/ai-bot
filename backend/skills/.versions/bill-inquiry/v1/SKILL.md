@@ -34,10 +34,13 @@ metadata:
 
 ### 工具说明
 
-- `query_subscriber(phone)` — 确认用户身份和账号状态（返回欠费分层、用量比率等增强信息）
-- `query_bill(phone, month)` — 获取指定月份账单明细（返回费用拆解 breakdown）
-- `analyze_bill_anomaly(phone, month)` — 分析账单异常：自动对比当月与上月，定位原因，给出建议。当用户反映"话费变高了"时优先使用此工具。返回值中 `summary` 是已拼好的人类可读摘要，`changed_items_text` 是逐项变化文本数组——**回复时直接复述这两个字段，禁止自行计算或拼接数字**
+- `get_bill_context(phone, month?)` — **首选**：一次性获取用户账单完整上下文（用户信息+账单明细+异常分析），减少多轮工具调用。返回 `{ subscriber, bill, anomaly }` 三合一结果
+- `query_subscriber(phone)` — 单独确认用户身份和账号状态（返回欠费分层、用量比率等增强信息）
+- `query_bill(phone, month)` — 单独获取指定月份账单明细（返回费用拆解 breakdown）
+- `analyze_bill_anomaly(phone, month)` — 单独分析账单异常：自动对比当月与上月，定位原因，给出建议。当用户反映"话费变高了"时优先使用此工具。返回值中 `summary` 是已拼好的人类可读摘要，`changed_items_text` 是逐项变化文本数组——**回复时直接复述这两个字段，禁止自行计算或拼接数字**
 - `get_skill_reference("bill-inquiry", "billing-rules.md")` — 加载计费规则和处理指引
+
+> **优化提示**：大多数账单查询场景可以直接使用 `get_bill_context` 一次获取全部数据，无需分别调用 query_subscriber + query_bill + analyze_bill_anomaly。仅在只需要部分信息时使用单独工具。
 
 ### 账单对比模式
 

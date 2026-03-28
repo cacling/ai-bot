@@ -122,7 +122,9 @@ describe('OutboundTextSession', () => {
 
     // generateText should have been called
     expect(generateTextCalls.length).toBe(1);
-    expect(generateTextCalls[0].system).toBe('You are an outbound agent.');
+    // System prompt includes disposition instructions appended by constructor
+    expect(generateTextCalls[0].system).toContain('You are an outbound agent.');
+    expect(generateTextCalls[0].system).toContain('Disposition');
   });
 
   test('handleMessage() sends bot response to user message', async () => {
@@ -176,8 +178,10 @@ describe('OutboundTextSession', () => {
     // Check that generateText was called with tools
     const call = generateTextCalls[0];
     expect(call.tools).toBeDefined();
-    expect(call.tools.record_call_result).toBeDefined();
+    // record_call_result is now handled via disposition, not as a direct tool
+    expect(call.tools.record_call_result).toBeUndefined();
+    // transfer_to_human is still a direct tool
     expect(call.tools.transfer_to_human).toBeDefined();
-    expect(call.tools.record_call_result.description).toBe('记录通话结果');
+    expect(call.tools.transfer_to_human.description).toBe('转人工');
   });
 });

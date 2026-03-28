@@ -22,7 +22,7 @@ const TOOL = {
 };
 
 const SERVER = {
-  id: 'srv-001', name: 'mcp-user-info', enabled: true, kind: 'internal',
+  id: 'srv-001', name: 'internal-service', enabled: true, kind: 'internal',
   tools_json: JSON.stringify([{ name: 'query_subscriber' }, { name: 'verify_identity' }]),
 };
 
@@ -542,14 +542,14 @@ describe('GET /api/mcp/tool-management/bindings', () => {
     const item = body.items[0];
     expect(item.tool_id).toBe('tool-001');
     expect(item.tool_name).toBe('query_subscriber');
-    expect(item.server_name).toBe('mcp-user-info');
+    expect(item.server_name).toBe('internal-service');
     expect(item.adapter_type).toBe('script');
     expect(item.connector_id).toBe('conn-001');
     expect(item.connector_name).toBe('account-db');
     expect(item.handler_key).toBe('user_info.query_subscriber');
     expect(item.impl_status).toBe('active');
     expect(item.host_server_id).toBe('srv-001');
-    expect(item.host_server_name).toBe('mcp-user-info');
+    expect(item.host_server_name).toBe('internal-service');
     expect(item.contract_ready).toBe(false); // TOOL has input_schema but no output_schema
     expect(item.disabled).toBe(false);
     expect(item.mocked).toBe(true);

@@ -21,6 +21,7 @@ import { sessionBus } from './session-bus';
 import { sendSkillDiagram, runProgressTracking, triggerHandoff } from './voice-common';
 import { VoiceSessionState } from './voice-session';
 import { t, OUTBOUND_TOOL_LABELS } from './i18n';
+import { parseDisposition } from '../engine/disposition-executor';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,44 @@ export interface OutboundTextConfig {
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
+/** Write tools that are handled via disposition pattern instead of direct tool calling */
+const DISPOSITION_TOOLS = new Set(['record_call_result', 'send_followup_sms', 'create_callback_task', 'record_marketing_result']);
+
+const DISPOSITION_INSTRUCTIONS = `
+
+---
+
+### 操作输出格式（Disposition）
+
+当你需要执行以下操作时，**不要**调用工具，而是在回复末尾输出一个 JSON 代码块：
+
+- 记录通话结果（record_call_result）
+- 发送跟进短信（send_followup_sms）
+- 创建回访任务（create_callback_task）
+
+输出格式：
+\`\`\`json
+{"action":"操作名","params":{...参数},"confirmed":true}
+\`\`\`
+
+示例 — 记录通话结果：
+\`\`\`json
+{"action":"record_call_result","params":{"result":"ptp","ptp_date":"2026-04-01"},"confirmed":true}
+\`\`\`
+
+示例 — 发送还款链接短信：
+\`\`\`json
+{"action":"send_followup_sms","params":{"phone":"13800000001","sms_type":"payment_link"},"confirmed":true}
+\`\`\`
+
+示例 — 创建回访任务：
+\`\`\`json
+{"action":"create_callback_task","params":{"original_task_id":"C001","callback_phone":"13800000001","preferred_time":"2026-04-01 上午10点"},"confirmed":true}
+\`\`\`
+
+**重要**：每次只输出一个 disposition。先说完该说的话，再在末尾附上 JSON 代码块。transfer_to_human 仍然使用工具调用。
+`;
+
 export class OutboundTextSession {
   private history: CoreMessage[] = [];
   private state: VoiceSessionState;
@@ -49,6 +88,9 @@ export class OutboundTextSession {
   constructor(private config: OutboundTextConfig) {
     this.state = new VoiceSessionState(config.userPhone, config.sessionId);
     this.skillName = config.taskParam === 'collection' ? 'outbound-collection' : 'outbound-marketing';
+    // Inject disposition instructions into system prompt (text mode only, voice mode unchanged)
+    this.config.systemPrompt += DISPOSITION_INSTRUCTIONS;
+    // Build tools excluding write operations (handled by disposition)
     this.tools = this.buildTools();
   }
 
@@ -114,7 +156,35 @@ export class OutboundTextSession {
         maxSteps: 10,
       });
 
-      const text = result.text || '';
+      let text = result.text || '';
+
+      // ── L4 Disposition 检测与执行 ──
+      const disposition = parseDisposition(text);
+      if (disposition) {
+        logger.info('outbound-text', 'disposition_detected', { session: sessionId, action: disposition.action, confirmed: disposition.confirmed });
+        if (disposition.confirmed) {
+          try {
+            // Enrich params (same as voice mode tool arg enrichment)
+            const params = { ...disposition.params } as Record<string, unknown>;
+            if (disposition.action === 'create_callback_task') {
+              if (!params.original_task_id) params.original_task_id = this.config.taskId;
+              if (!params.callback_phone) params.callback_phone = userPhone;
+              if (!params.customer_name) params.customer_name = (this.config.resolvedTask as Record<string, unknown>).customer_name ?? '';
+              if (!params.product_name) params.product_name = (this.config.resolvedTask as Record<string, unknown>).product_name ?? '';
+            } else if (disposition.action === 'send_followup_sms') {
+              if (!params.phone) params.phone = userPhone;
+            }
+            const mcpResult = await callMcpTool(sessionId, disposition.action, params);
+            this.state.recordTool(disposition.action, params, mcpResult.text, mcpResult.success);
+            logger.info('outbound-text', 'disposition_executed', { session: sessionId, action: disposition.action, success: mcpResult.success });
+          } catch (err) {
+            logger.error('outbound-text', 'disposition_exec_error', { session: sessionId, action: disposition.action, error: String(err) });
+          }
+        }
+        // Strip disposition JSON from user-facing text
+        text = text.replace(/```json\s*\n?[\s\S]*?\n?```/g, '').trim();
+        if (!text) text = disposition.confirmed ? '好的，已为您处理。' : '请确认是否执行此操作。';
+      }
 
       // Append response messages to history for multi-turn context
       if (result.response?.messages) {
@@ -150,6 +220,8 @@ export class OutboundTextSession {
 
     for (const glmTool of this.config.glmTools) {
       const name = glmTool.name as string;
+      // Skip write tools — handled via disposition pattern
+      if (DISPOSITION_TOOLS.has(name)) continue;
       const description = glmTool.description as string;
       const parameters = glmTool.parameters as Record<string, unknown>;
 

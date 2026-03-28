@@ -1,4 +1,7 @@
 export { ToolRuntime } from './runtime';
+
+// Side-effect import: register aggregated read handlers at module load time
+import './handlers/aggregated-reads';
 export type {
   ToolRuntimeRequest,
   ToolRuntimeResult,

@@ -51,9 +51,12 @@ metadata:
 
 ### 工具说明
 
+- `get_plan_context(phone)` — **首选**，一次调用同时返回用户信息（身份、当前套餐、用量）和全部可用套餐列表，等价于 query_subscriber + query_plans 并行调用
 - `query_plans()` — 获取所有可用套餐列表及详情
 - `query_subscriber(phone)` — 查询用户身份、当前套餐、用量数据
 - `get_skill_reference("plan-inquiry", "plan-details.md")` — 加载套餐详细说明、推荐指引、变更规则等参考文档
+
+> **优化提示**：当需要同时查询用户信息和套餐列表时，优先使用 `get_plan_context` 一次获取完整上下文，避免分别调用 query_subscriber 和 query_plans。
 
 ## 客户引导状态图
 

@@ -20,6 +20,7 @@ import { type NormalizedQuery } from '../services/query-normalizer';
 import { formatNormalizedContext } from '../services/query-normalizer';
 import { ToolRuntime, type RuntimeChannel, type GovernPolicy } from '../tool-runtime';
 import { SopPolicy } from '../tool-runtime/policies/sop-policy';
+import { parseDisposition, executeDisposition } from './disposition-executor';
 
 // Re-export for test file
 export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };
@@ -678,6 +679,45 @@ export async function runAgent(
       if (!text) {
         text = '系统处理遇到异常，请重新发送您的请求。';
       }
+    }
+
+    // ── L4 Disposition 检测与执行 ──
+    const disposition = parseDisposition(text);
+    if (disposition) {
+      logger.info('agent', 'disposition_detected', { action: disposition.action, confirmed: disposition.confirmed, session: requestSessionId });
+      if (disposition.confirmed) {
+        const runtime = getToolRuntime();
+        const execResult = await executeDisposition(runtime, disposition, {
+          sessionId: requestSessionId,
+          channel: 'online',
+          userPhone,
+          traceId: `trc_dsp_${randomUUID().slice(0, 12)}`,
+        });
+
+        // Record in SOP guard for state tracking
+        sopGuard.recordToolCall(disposition.action, { success: execResult.success, hasData: !!execResult.result });
+
+        // Extract card from disposition result (e.g., cancel_card)
+        if (execResult.success && execResult.result) {
+          try {
+            const parsed = typeof execResult.result === 'string' ? JSON.parse(execResult.result) : execResult.result;
+            if (disposition.action === 'cancel_service' && parsed.service_name) {
+              card = { type: 'cancel_card', data: { service_name: parsed.service_name, monthly_fee: parsed.monthly_fee, effective_end: parsed.effective_end, phone: parsed.phone } };
+            }
+          } catch { /* ignore parse errors */ }
+        }
+
+        // Collect tool record for handoff analysis
+        collectedToolRecords.push({
+          tool: disposition.action,
+          args: disposition.params,
+          result_summary: JSON.stringify(execResult.result).slice(0, 150),
+          success: execResult.success,
+        });
+      }
+      // Strip disposition JSON from user-facing text
+      text = text.replace(/```json\s*\n?[\s\S]*?\n?```/g, '').trim();
+      if (!text) text = disposition.confirmed ? '操作已完成。' : '请确认是否执行此操作。';
     }
 
     // ── 流程进度追踪 ──

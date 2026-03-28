@@ -3,9 +3,12 @@ import { isErrorResult, isNoDataResult } from '../../services/tool-result';
 import { logger } from '../../services/logger';
 import type { ToolRegistry } from '../registry';
 
-const handlers = new Map<string, (args: Record<string, unknown>) => Promise<unknown>>();
+export type ScriptCallTool = (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
+export type ScriptHandler = (args: Record<string, unknown>, callTool: ScriptCallTool) => Promise<unknown>;
 
-export function registerScriptHandler(key: string, handler: (args: Record<string, unknown>) => Promise<unknown>): void {
+const handlers = new Map<string, ScriptHandler>();
+
+export function registerScriptHandler(key: string, handler: ScriptHandler): void {
   handlers.set(key, handler);
 }
 
@@ -30,7 +33,18 @@ export class ScriptAdapter implements Adapter {
     if (handlerKey) {
       const handler = handlers.get(handlerKey);
       if (handler) {
-        return this.callHandler(toolName, handlerKey, args, handler);
+        const callTool: ScriptCallTool = async (subToolName, subArgs) => {
+          const poolTool = this.mcpTools[subToolName];
+          if (poolTool) {
+            const result = await poolTool.execute(subArgs);
+            if (result?.content?.[0]?.text) {
+              try { return JSON.parse(result.content[0].text); } catch { return result.content[0].text; }
+            }
+            return result;
+          }
+          throw new Error(`Sub-tool "${subToolName}" not found in MCP pool`);
+        };
+        return this.callHandler(toolName, handlerKey, args, handler, callTool);
       }
     }
 
@@ -51,10 +65,10 @@ export class ScriptAdapter implements Adapter {
 
   private async callHandler(
     toolName: string, handlerKey: string, args: Record<string, unknown>,
-    handler: (args: Record<string, unknown>) => Promise<unknown>,
+    handler: ScriptHandler, callTool: ScriptCallTool,
   ): Promise<{ rawText: string; parsed: unknown; success: boolean; hasData: boolean }> {
     try {
-      const result = await handler(args);
+      const result = await handler(args, callTool);
       const text = typeof result === 'string' ? result : JSON.stringify(result);
       const success = !isErrorResult(text);
       const hasData = success && !isNoDataResult(text);
