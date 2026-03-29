@@ -13,6 +13,10 @@ import ticketRoutes from "./routes/tickets.js";
 import taskRoutes from "./routes/tasks.js";
 import workflowRoutes from "./routes/workflows.js";
 import categoryRoutes from "./routes/categories.js";
+import intakeRoutes from "./routes/intakes.js";
+import draftRoutes from "./routes/drafts.js";
+import issueThreadRoutes from "./routes/issue-threads.js";
+import mergeReviewRoutes from "./routes/merge-reviews.js";
 
 export function createApp() {
   const app = new Hono();
@@ -29,6 +33,10 @@ export function createApp() {
       "tasks",
       "workflows",
       "categories",
+      "intakes",
+      "drafts",
+      "issue-threads",
+      "merge-reviews",
     ],
   }));
 
@@ -40,11 +48,15 @@ export function createApp() {
   app.route("/api/tasks", taskRoutes);
   app.route("/api/workflows", workflowRoutes);
   app.route("/api/categories", categoryRoutes);
+  app.route("/api/intakes", intakeRoutes);
+  app.route("/api/drafts", draftRoutes);
+  app.route("/api/issue-threads", issueThreadRoutes);
+  app.route("/api/merge-reviews", mergeReviewRoutes);
 
   return app;
 }
 
-export function startServer(port = Number(process.env.PORT ?? 18009)) {
+export function startServer(port = Number(process.env.WORK_ORDER_PORT ?? 18009)) {
   const app = createApp();
   console.log(`[work-order] Starting on port ${port}...`);
   return serve({ fetch: app.fetch, port }, () => {

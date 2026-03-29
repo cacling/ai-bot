@@ -243,4 +243,4 @@ function createServer(): McpServer {
   return server;
 }
 
-startMcpHttpServer("user-info-service", Number(process.env.PORT ?? 18003), createServer);
+if (import.meta.main) startMcpHttpServer("user-info-service", Number(process.env.MCP_INTERNAL_PORT ?? 18003), createServer);

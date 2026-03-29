@@ -13,7 +13,7 @@
 
 1. 安装 **Bun ≥ 1.1** + **Node.js ≥ 18**
 2. 在 [https://cloud.siliconflow.cn](https://cloud.siliconflow.cn) 注册并获取 API Key（免费）
-3. 创建 `backend/.env`，最简配置：
+3. 创建项目根目录 `.env`，最简配置：
 
 ```bash
 SILICONFLOW_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
@@ -45,7 +45,7 @@ ZHIPU_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx
 - [ ] **Node.js** ≥ 18 + npm 已安装 — `node --version && npm --version`
 - [ ] **SiliconFlow 账号**已注册，API Key 已获取 — [https://cloud.siliconflow.cn](https://cloud.siliconflow.cn)
 - [ ] （可选）**智谱 AI 账号**已注册，API Key 已获取（仅语音客服需要）— [https://open.bigmodel.cn](https://open.bigmodel.cn)
-- [ ] `backend/.env` 文件已创建，至少包含 `SILICONFLOW_API_KEY` 和 `SQLITE_PATH`
+- [ ] 项目根目录 `.env` 文件已创建，至少包含 `SILICONFLOW_API_KEY` 和 `SQLITE_PATH`
 - [ ] 端口 5173、18003-18007、18472 均未被占用 — `lsof -i :18472`
 - [ ] （若使用代理）`.env` 中已添加 `NO_PROXY=localhost,127.0.0.1,api.siliconflow.cn,open.bigmodel.cn`
 
@@ -55,7 +55,7 @@ ZHIPU_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx
 
 ## 2. 环境变量配置
 
-在 `backend/` 目录下创建 `.env` 文件：
+在项目根目录下创建 `.env` 文件（所有子服务共享）：
 
 ```bash
 # 数据库（SQLite，文件自动创建）
@@ -420,7 +420,7 @@ SQLite WAL 模式下偶现。重启后端即可恢复。若频繁出现，检查
 
 ```bash
 # 切换更快的模型
-# backend/.env
+# .env
 SILICONFLOW_CHAT_MODEL=stepfun-ai/Step-3.5-Flash
 ```
 

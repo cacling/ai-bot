@@ -3,7 +3,6 @@
 
 # 环境变量（含 API 密钥，不得提交）
 .env
-backend/.env
 
 # SQLite 数据库文件（运行时生成）
 backend/data/

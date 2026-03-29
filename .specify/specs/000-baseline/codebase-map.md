@@ -677,7 +677,7 @@ tests/unittest/frontend/
 
 | 类型 | 位置 |
 |------|------|
-| **环境配置** | `backend/.env`（不入库） |
+| **环境配置** | `.env`（项目根目录，不入库） |
 | **数据库 Schema** | `backend/src/db/schema/business.ts`（业务）、`platform.ts`（平台） |
 | **种子数据** | `backend/src/db/seed.ts` |
 | **系统提示词** | `backend/src/engine/*-system-prompt.md`（5 个文件） |

@@ -6,7 +6,7 @@
  */
 import { logger } from './logger';
 
-const WO_URL = process.env.WORK_ORDER_URL ?? 'http://127.0.0.1:18009';
+const WO_URL = process.env.WORK_ORDER_URL ?? `http://127.0.0.1:${process.env.WORK_ORDER_PORT ?? 18009}`;
 
 async function postJSON(path: string, body: Record<string, unknown>): Promise<{ ok: boolean; data?: any; error?: string }> {
   try {

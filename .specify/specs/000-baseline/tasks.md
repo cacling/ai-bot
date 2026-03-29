@@ -21,7 +21,7 @@
 - [x] T001 Initialize backend project with Bun + Hono `backend/package.json`
 - [x] T002 Initialize frontend project with React 18 + Vite + Tailwind `frontend/package.json`
 - [x] T003 Configure TypeScript for backend and frontend `backend/tsconfig.json`, `frontend/tsconfig.json`
-- [x] T004 Create `.env` template with SiliconFlow + GLM-Realtime config `backend/.env`
+- [x] T004 Create `.env` template with SiliconFlow + GLM-Realtime config `.env`
 - [x] T005 Create startup scripts `start.sh`, `stop.sh`, `win-start.sh`, `win-stop.sh`
 
 ---

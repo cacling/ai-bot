@@ -19,14 +19,17 @@ HEALTH_TIMEOUT=30
 RESET_MODE=false
 [[ "${1:-}" == "--reset" ]] && RESET_MODE=true
 
-# ── 端口定义 ────────────────────────────────────────────────────────────────
-BACKEND_PORT=18472
-MCP_PORTS=(18003 18004 18005 18006 18007)
-MCP_SERVICES=("user_info_service" "business_service" "diagnosis_service" "outbound_service" "account_service")
-MCP_LABELS=("用户信息" "业务办理" "故障诊断" "外呼服务" "账户操作")
-MOCK_APIS_PORT=18008
-FRONTEND_PORT=5173
-ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$FRONTEND_PORT")
+# ── 端口定义（从 .env 读取，有默认值兜底）────────────────────────────────────
+BACKEND_PORT="${BACKEND_PORT:-18472}"
+KM_SERVICE_PORT="${KM_SERVICE_PORT:-18010}"
+MOCK_APIS_PORT="${MOCK_APIS_PORT:-18008}"
+WORK_ORDER_PORT="${WORK_ORDER_PORT:-18009}"
+MCP_INTERNAL_PORT="${MCP_INTERNAL_PORT:-18003}"
+FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+MCP_PORTS=("$MCP_INTERNAL_PORT")
+MCP_SERVICES=("internal_service")
+MCP_LABELS=("内部服务")
+ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$FRONTEND_PORT")
 
 # ── 颜色 ────────────────────────────────────────────────────────────────────
 GRN='\033[0;32m'; RED='\033[0;31m'; YEL='\033[1;33m'; BLU='\033[0;34m'; NC='\033[0m'
@@ -76,6 +79,19 @@ trap cleanup SIGINT SIGTERM
 
 mkdir -p "$LOG_DIR"
 
+# ── 加载环境变量（根目录 .env）──────────────────────────────────────────────
+# 跳过 PORT（各服务有独立端口）和 SQLITE_PATH（start.sh 显式设置绝对路径）
+if [[ -f "$BASE_DIR/.env" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^PORT= || "$line" =~ ^SQLITE_PATH= ]] && continue
+    export "$line"
+  done < "$BASE_DIR/.env"
+  log "已加载 .env"
+else
+  warn ".env 文件不存在，请从 .env.example 创建"
+fi
+
 # ── 清除代理（本地服务直连）────────────────────────────────────────────────
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
 NO_PROXY="localhost,127.0.0.1"
@@ -124,7 +140,7 @@ ok "frontend 依赖就绪"
 echo -e "\n${BLU}══════ 数据库准备 ══════${NC}"
 
 mkdir -p "$BASE_DIR/data"
-export SQLITE_PATH="../data/telecom.db"
+export SQLITE_PATH="$BASE_DIR/data/telecom.db"
 
 log "同步数据库 Schema..."
 cd "$BASE_DIR/backend"

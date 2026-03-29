@@ -15,7 +15,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 // ── Backend Systems HTTP Client ─────────────────────────────────────────────
 // demo 阶段指向 mock_apis，生产阶段替换为真实系统 URL
 
-export const BACKEND_URL = process.env.MOCK_API_URL ?? 'http://127.0.0.1:18008';
+export const BACKEND_URL = process.env.MOCK_API_URL ?? `http://127.0.0.1:${process.env.MOCK_APIS_PORT ?? 18008}`;
 
 export async function backendGet<T = unknown>(path: string): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`);

@@ -2,6 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const FRONTEND_PORT = Number(process.env.FRONTEND_PORT ?? 5173);
+const BACKEND_PORT = Number(process.env.BACKEND_PORT ?? 18472);
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -11,24 +14,13 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 5173,
+    port: FRONTEND_PORT,
+    allowedHosts: true,
     proxy: {
-      // KM/MCP/Skills routes → km_service (18010)
-      '/api/km': 'http://localhost:18010',
-      '/api/mcp': 'http://localhost:18010',
-      '/api/files': 'http://localhost:18010',
-      '/api/skills': 'http://localhost:18010',
-      '/api/skill-versions': 'http://localhost:18010',
-      '/api/sandbox': 'http://localhost:18010',
-      '/api/skill-edit': 'http://localhost:18010',
-      '/api/canary': 'http://localhost:18010',
-      '/api/change-requests': 'http://localhost:18010',
-      '/api/test-cases': 'http://localhost:18010',
-      '/api/skill-creator': 'http://localhost:18010',
-      // All other API routes → backend (18472)
-      '/api': 'http://localhost:18472',
+      // 所有 API 统一走 backend（session 中间件 → 代理注入 header → 子服务）
+      '/api': `http://localhost:${BACKEND_PORT}`,
       '/ws': {
-        target: 'ws://localhost:18472',
+        target: `ws://localhost:${BACKEND_PORT}`,
         ws: true,
         rewriteWsOrigin: true,
       },

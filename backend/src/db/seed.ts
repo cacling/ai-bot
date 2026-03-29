@@ -111,6 +111,8 @@ import {
   skillInstances,
   skillInstanceEvents,
   executionRecords,
+  staffAccounts,
+  staffSessions,
 } from './schema';
 
 /** 计算从 dueDate 到今天的逾期天数（负数表示还没到期） */
@@ -878,6 +880,53 @@ async function seed() {
     { id: 'auditor',       name: '审计员',    role: 'auditor' },
   ]).run();
 
+  // ── 员工账号（Staff RBAC）──────────────────────────────────────────────────
+  console.log('[seed] 写入员工账号...');
+  db.delete(staffSessions).run();
+  db.delete(staffAccounts).run();
+
+  const STAFF_SEED = [
+    { id: 'demo_admin_001', username: 'demo',      display_name: '演示主管', password: '123456',  primary_staff_role: 'agent', staff_roles: ['agent', 'operations'], platform_role: 'admin',        team_code: 'demo_supervisor',  seat_code: 'D01',  default_queue_code: 'frontline', is_demo: true },
+    { id: 'agent_001',      username: 'zhang.qi',   display_name: '张琦',     password: '123456', primary_staff_role: 'agent', staff_roles: ['agent'],              platform_role: 'auditor',      team_code: 'frontline_online', seat_code: 'A01',  default_queue_code: 'frontline', is_demo: false },
+    { id: 'agent_002',      username: 'li.na',      display_name: '李娜',     password: '123456', primary_staff_role: 'agent', staff_roles: ['agent'],              platform_role: 'auditor',      team_code: 'frontline_online', seat_code: 'A02',  default_queue_code: 'frontline', is_demo: false },
+    { id: 'agent_callback_01', username: 'wang.lei', display_name: '王蕾',    password: '123456', primary_staff_role: 'agent', staff_roles: ['agent'],              platform_role: 'auditor',      team_code: 'callback_team',    seat_code: 'C01',  default_queue_code: 'callback_team', is_demo: false },
+    { id: 'ops_001',        username: 'chen.min',   display_name: '陈敏',     password: '123456',   primary_staff_role: 'operations', staff_roles: ['operations'],     platform_role: 'flow_manager', team_code: 'ops_knowledge',    seat_code: null,   default_queue_code: null,        is_demo: false },
+    { id: 'ops_002',        username: 'zhao.ning',  display_name: '赵宁',     password: '123456',   primary_staff_role: 'operations', staff_roles: ['operations'],     platform_role: 'flow_manager', team_code: 'ops_workorder',    seat_code: null,   default_queue_code: null,        is_demo: false },
+  ];
+
+  for (const s of STAFF_SEED) {
+    const password_hash = await Bun.password.hash(s.password, 'bcrypt');
+    db.insert(staffAccounts).values({
+      id: s.id,
+      username: s.username,
+      display_name: s.display_name,
+      password_hash,
+      primary_staff_role: s.primary_staff_role,
+      staff_roles: JSON.stringify(s.staff_roles),
+      platform_role: s.platform_role,
+      team_code: s.team_code,
+      seat_code: s.seat_code,
+      default_queue_code: s.default_queue_code,
+      is_demo: s.is_demo,
+    }).onConflictDoUpdate({
+      target: staffAccounts.id,
+      set: {
+        username: s.username,
+        display_name: s.display_name,
+        password_hash,
+        primary_staff_role: s.primary_staff_role,
+        staff_roles: JSON.stringify(s.staff_roles),
+        platform_role: s.platform_role,
+        team_code: s.team_code,
+        seat_code: s.seat_code,
+        default_queue_code: s.default_queue_code,
+        is_demo: s.is_demo,
+        status: 'active',
+      },
+    }).run();
+  }
+  console.log('[seed] 员工账号写入完成（6 条）');
+
   // ── 8. 知识管理演示数据 ────────────────────────────────────────────────────
   console.log('[seed] 写入知识管理演示数据...');
 
@@ -1128,7 +1177,7 @@ async function seed() {
       id: 'mcp-internal', name: 'internal-service',
       description: '统一内部服务（用户信息、业务办理、故障诊断、外呼、账户）',
       transport: 'http', enabled: true, kind: 'internal',
-      url: 'http://127.0.0.1:18003/mcp',
+      url: `http://127.0.0.1:${process.env.MCP_INTERNAL_PORT ?? 18003}/mcp`,
       tools_json: JSON.stringify([
         // user-info
         { name: 'query_subscriber', description: '根据手机号查询电信用户信息（套餐、状态、余额、用量分析、增值业务详情、欠费分层）', inputSchema: { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] } },
@@ -1370,7 +1419,7 @@ async function seed() {
   console.log('[seed] 写入 Connectors...');
   db.delete(connectors).run();
 
-  const MOCK_BASE = 'http://127.0.0.1:18008';
+  const MOCK_BASE = `http://127.0.0.1:${process.env.MOCK_APIS_PORT ?? 18008}`;
   const connectorDefs: Array<{
     id: string; name: string; type: string;
     config: Record<string, unknown>; description: string;

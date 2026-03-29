@@ -50,7 +50,7 @@ export class RemoteMcpAdapter implements Adapter {
   ): Promise<{ rawText: string; parsed: unknown; success: boolean; hasData: boolean }> {
     let url = this.resolveUrl(toolName, ctx);
     if (!url) {
-      url = process.env.TELECOM_MCP_URL ?? 'http://127.0.0.1:18003/mcp';
+      url = process.env.TELECOM_MCP_URL ?? `http://127.0.0.1:${process.env.MCP_INTERNAL_PORT ?? 18003}/mcp`;
     }
 
     try {

@@ -64,7 +64,7 @@ export function createApp() {
   return app;
 }
 
-export function startServer(port = Number(process.env.PORT ?? 18008)) {
+export function startServer(port = Number(process.env.MOCK_APIS_PORT ?? 18008)) {
   const app = createApp();
   console.log(`[mock-apis] Starting on port ${port}...`);
   return serve({ fetch: app.fetch, port }, () => {

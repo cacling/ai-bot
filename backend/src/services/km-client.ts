@@ -7,7 +7,7 @@
 
 import { logger } from './logger';
 
-const KM_BASE = process.env.KM_SERVICE_URL ?? 'http://localhost:18010';
+const KM_BASE = process.env.KM_SERVICE_URL ?? `http://localhost:${process.env.KM_SERVICE_PORT ?? 18010}`;
 
 async function kmFetch<T>(path: string, options?: RequestInit): Promise<T | null> {
   try {

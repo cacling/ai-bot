@@ -21,4 +21,4 @@ function createServer(): McpServer {
   return server;
 }
 
-startMcpHttpServer("internal-service", Number(process.env.PORT ?? 18003), createServer);
+startMcpHttpServer("internal-service", Number(process.env.MCP_INTERNAL_PORT ?? 18003), createServer);

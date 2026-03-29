@@ -20,11 +20,17 @@ app.use(
   cors({
     origin: (origin) => origin,  // 开发环境：允许任意来源（含局域网 IP）
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+    credentials: true,
   })
 );
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
+
+// ── Staff Auth ──────────────────────────────────────────────────────────────
+import { staffAuthRoutes, staffSessionMiddleware, cleanExpiredSessions } from './services/staff-auth';
+app.route('/api/staff-auth', staffAuthRoutes);
+app.use('/api/*', staffSessionMiddleware);
 
 // Agent workstation config (cards visibility etc.)
 app.get('/api/agent-config', (c) => {
@@ -44,42 +50,10 @@ app.route('/api/compliance', complianceRoutes);
 // Routes for KM, MCP, Skills, Sandbox, etc. are served by km_service (port 18010).
 // In production, the frontend proxy sends these directly to km_service.
 // This reverse proxy is a convenience for dev/test when only the backend is running.
-const KM_SERVICE_URL = process.env.KM_SERVICE_URL ?? 'http://localhost:18010';
-const KM_PROXY_PREFIXES = [
-  '/api/km/', '/api/mcp/', '/api/files/', '/api/skills/', '/api/skill-versions/',
-  '/api/sandbox/', '/api/skill-edit/', '/api/canary/', '/api/change-requests/',
-  '/api/test-cases/', '/api/skill-creator/',
-];
-
-// Exact root paths (e.g. GET /api/skills) + wildcard sub-paths (e.g. GET /api/skills/:id/files)
-for (const prefix of KM_PROXY_PREFIXES) {
-  const root = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
-  app.all(root, proxyToKm);
-  app.all(`${root}/*`, proxyToKm);
-}
-
-async function proxyToKm(c: import('hono').Context) {
-  try {
-    const url = new URL(c.req.url);
-    const targetUrl = `${KM_SERVICE_URL}${url.pathname}${url.search}`;
-    const headers = new Headers(c.req.raw.headers);
-    headers.delete('host');
-    const res = await fetch(targetUrl, {
-      method: c.req.method,
-      headers,
-      body: ['GET', 'HEAD'].includes(c.req.method) ? undefined : c.req.raw.body,
-      // @ts-expect-error duplex needed for streaming request body
-      duplex: 'half',
-    });
-    return new Response(res.body, {
-      status: res.status,
-      statusText: res.statusText,
-      headers: res.headers,
-    });
-  } catch (e) {
-    return c.json({ error: `km_service unreachable: ${String(e)}` }, 502);
-  }
-}
+import { mountKmProxy } from './services/km-proxy';
+import { mountWorkOrderProxy } from './services/work-order-proxy';
+mountKmProxy(app);
+mountWorkOrderProxy(app);
 
 // Mount voice WebSocket route: GET /ws/voice
 app.route('/', voiceRoutes);
@@ -93,7 +67,7 @@ app.route('/', chatWsRoutes);
 // Mount agent workstation WebSocket route: GET /ws/agent
 app.route('/', agentWsRoutes);
 
-const PORT = Number(process.env.PORT ?? 8000);
+const PORT = Number(process.env.BACKEND_PORT ?? 18472);
 
 logger.info('server', 'starting', {
   port: PORT,
@@ -104,11 +78,15 @@ logger.info('server', 'starting', {
 // Initialize Query Normalizer dictionaries
 loadLexicons(resolve(import.meta.dir, 'services/query-normalizer/dictionaries'));
 
+// Clean expired staff sessions on startup + hourly
+cleanExpiredSessions();
+setInterval(cleanExpiredSessions, 60 * 60 * 1000);
+
 // Warmup: make a lightweight LLM call at startup to avoid cold-start latency on first request
 // Waits up to 30s for the MCP server to become available before warmup
 (async () => {
   // Poll until at least one MCP server is reachable
-  const MCP_CHECK_URL = process.env.TELECOM_MCP_URL ?? 'http://127.0.0.1:18003/mcp';
+  const MCP_CHECK_URL = process.env.TELECOM_MCP_URL ?? `http://127.0.0.1:${process.env.MCP_INTERNAL_PORT ?? 18003}/mcp`;
   for (let i = 0; i < 30; i++) {
     try {
       const res = await fetch(MCP_CHECK_URL, { method: 'GET', signal: AbortSignal.timeout(1000) });

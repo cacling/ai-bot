@@ -28,7 +28,7 @@ export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch
 import { db } from '../db';
 import { mcpServers } from '../db/schema';
 
-const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? 'http://127.0.0.1:18003/mcp';
+const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? `http://127.0.0.1:${process.env.MCP_INTERNAL_PORT ?? 18003}/mcp`;
 
 // ── Tool Runtime singleton (Phase 4) ──
 let onlineRuntime: ToolRuntime | null = null;

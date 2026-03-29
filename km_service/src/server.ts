@@ -63,7 +63,7 @@ export function createApp() {
   return app;
 }
 
-export function startServer(port = Number(process.env.PORT ?? 18010)) {
+export function startServer(port = Number(process.env.KM_SERVICE_PORT ?? 18010)) {
   const app = createApp();
   console.log(`[km-service] Starting on port ${port}...`);
   return serve({ fetch: app.fetch, port }, () => {

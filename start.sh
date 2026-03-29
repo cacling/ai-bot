@@ -18,23 +18,39 @@ HEALTH_TIMEOUT=30
 RESET_MODE=false
 [[ "${1:-}" == "--reset" ]] && RESET_MODE=true
 
-# ── 端口定义 ────────────────────────────────────────────────────────────────
-BACKEND_PORT=18472
-MCP_PORTS=(18003)
-MCP_SERVICES=("internal_service")
-MCP_LABELS=("内部服务")
-MOCK_APIS_PORT=18008
-WORK_ORDER_PORT=18009
-KM_SERVICE_PORT=18010
-FRONTEND_PORT=5173
-ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$FRONTEND_PORT")
-
 # ── 颜色 ────────────────────────────────────────────────────────────────────
 GRN='\033[0;32m'; RED='\033[0;31m'; YEL='\033[1;33m'; BLU='\033[0;34m'; NC='\033[0m'
 log()  { echo -e "${BLU}[$(date '+%H:%M:%S')]${NC} $*"; }
 ok()   { echo -e "  ${GRN}✓${NC} $*"; }
 fail() { echo -e "  ${RED}✗${NC} $*"; }
 warn() { echo -e "  ${YEL}!${NC} $*"; }
+
+mkdir -p "$LOG_DIR"
+
+# ── 加载环境变量（根目录 .env）──────────────────────────────────────────────
+if [[ -f "$BASE_DIR/.env" ]]; then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    # SQLITE_PATH 由 start.sh 显式设置绝对路径，跳过 .env 中的相对路径
+    [[ "$line" =~ ^SQLITE_PATH= ]] && continue
+    export "$line"
+  done < "$BASE_DIR/.env"
+  log "已加载 .env"
+else
+  warn ".env 文件不存在，请从 .env.example 创建"
+fi
+
+# ── 端口定义（从 .env 读取，有默认值兜底）────────────────────────────────────
+BACKEND_PORT="${BACKEND_PORT:-18472}"
+KM_SERVICE_PORT="${KM_SERVICE_PORT:-18010}"
+MOCK_APIS_PORT="${MOCK_APIS_PORT:-18008}"
+WORK_ORDER_PORT="${WORK_ORDER_PORT:-18009}"
+MCP_INTERNAL_PORT="${MCP_INTERNAL_PORT:-18003}"
+FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+MCP_PORTS=("$MCP_INTERNAL_PORT")
+MCP_SERVICES=("internal_service")
+MCP_LABELS=("内部服务")
+ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$FRONTEND_PORT")
 
 # ── PID 记录 ────────────────────────────────────────────────────────────────
 WRAPPER_PIDS=()
@@ -64,8 +80,6 @@ cleanup() {
   echo -e "${YEL}所有服务已停止。${NC}"
 }
 trap cleanup SIGINT SIGTERM
-
-mkdir -p "$LOG_DIR"
 
 # ── 清除代理 ────────────────────────────────────────────────────────────────
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
@@ -199,11 +213,14 @@ if [[ "$RESET_MODE" == true ]]; then
   # 重新 push schema + seed
   "$BUN" drizzle-kit push 2>&1 | tail -3
   "$BUN" run db:seed 2>&1 | tail -5
+  # 工单系统 seed（共用同一个 SQLite）
+  cd "$BASE_DIR/work_order_service" && SQLITE_PATH="$SQLITE_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   ok "数据已重置为初始状态"
 else
   # 正常模式：upsert，保留用户数据
   log "写入/更新初始数据..."
   cd "$BASE_DIR/backend" && "$BUN" run db:seed 2>&1 | tail -5
+  cd "$BASE_DIR/work_order_service" && SQLITE_PATH="$SQLITE_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   ok "初始数据就绪"
 fi
 
@@ -245,12 +262,12 @@ start_service "mock-apis" "$BASE_DIR/mock_apis" \
 start_service "work-order" "$BASE_DIR/work_order_service" \
   "$NODE --import tsx/esm src/server.ts"
 
-# KM Service (知识管理微服务)
+# KM Service (知识管理微服务，使用 bun:sqlite 需 bun 运行时)
 start_service "km-service" "$BASE_DIR/km_service" \
-  "$NODE --import tsx/esm src/server.ts"
+  "$BUN src/server.ts"
 
 # Backend
-start_service "backend" "$BASE_DIR/backend" "$BUN src/index.ts"
+start_service "backend" "$BASE_DIR/backend" "PORT=$BACKEND_PORT $BUN src/index.ts"
 
 # Frontend
 start_service "frontend" "$BASE_DIR/frontend" "$NPM run dev"
