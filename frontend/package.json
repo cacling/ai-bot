@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-bot/km-frontend": "workspace:*",
+    "@ai-bot/wo-frontend": "workspace:*",
     "@base-ui/react": "^1.3.0",
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
@@ -27,6 +28,7 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.7.3",
+    "react-router-dom": "^7.13.2",
     "remark-gfm": "^4.0.1",
     "shadcn": "^4.0.8",
     "tailwind-merge": "^3.5.0",

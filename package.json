@@ -7,6 +7,7 @@
     "mcp_servers",
     "mock_apis",
     "work_order_service",
+    "work_order_service/frontend",
     "km_service",
     "km_service/frontend",
     "packages/*"
