@@ -12,7 +12,7 @@ export const workItems = sqliteTable('work_items', {
   id: text('id').primaryKey(),
   root_id: text('root_id').notNull(),
   parent_id: text('parent_id'),
-  type: text('type').notNull(),                   // 'case' | 'work_order' | 'appointment' | 'task'
+  type: text('type').notNull(),                   // 'ticket' | 'work_order' | 'appointment' | 'task'
   subtype: text('subtype'),                        // 如 'callback' | 'store_visit' | 'password_reset'（兼容字段，逐步迁移到 category_code）
   category_code: text('category_code'),             // 业务分类编码，如 'ticket.incident.app_login'
   title: text('title').notNull(),
@@ -234,5 +234,101 @@ export const workflowRunEvents = sqliteTable('workflow_run_events', {
   event_type: text('event_type').notNull(),
   node_id: text('node_id'),
   payload_json: text('payload_json'),
+  created_at: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+// ── Intake（待判定的服务线索）──────────────────────────────────────────────
+
+export const workItemIntakes = sqliteTable('work_item_intakes', {
+  id: text('id').primaryKey(),
+  source_kind: text('source_kind').notNull(),           // 'agent_after_service' | 'self_service_form' | 'handoff_overflow' | 'external_monitoring' | 'emotion_escalation'
+  source_channel: text('source_channel'),               // 'online' | 'voice' | 'outbound'
+  source_ref: text('source_ref'),                       // 外部引用（session_id, form_id 等）
+  customer_phone: text('customer_phone'),
+  customer_id: text('customer_id'),
+  customer_name: text('customer_name'),
+  subject: text('subject'),
+  raw_payload_json: text('raw_payload_json').notNull(),
+  normalized_payload_json: text('normalized_payload_json'),
+  signal_json: text('signal_json'),                     // 提取的信号（情绪、风险等）
+  dedupe_key: text('dedupe_key'),
+  thread_id: text('thread_id'),                         // FK → issue_threads.id（匹配后填入）
+  materialized_item_id: text('materialized_item_id'),   // FK → work_items.id（正式建单后填入）
+  resolution_action: text('resolution_action'),         // 'create_new_thread' | 'append_followup' | 'merge_master' | 'reopen_master' | 'ignored_duplicate'
+  resolution_reason_json: text('resolution_reason_json'),
+  priority_hint: text('priority_hint'),
+  risk_score: integer('risk_score'),
+  sentiment_score: integer('sentiment_score'),
+  confidence_score: integer('confidence_score'),         // 置信度（0-100），normalizer 自动计算
+  status: text('status').notNull().default('new'),      // 'new' | 'analyzed' | 'draft_created' | 'materialized' | 'discarded' | 'failed'
+  decision_mode: text('decision_mode'),                 // 'manual_confirm' | 'auto_create' | 'auto_create_if_confident' | 'auto_create_and_schedule'
+  created_at: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updated_at: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+// ── Draft（草稿层）──────────────────────────────────────────────────────────
+
+export const workItemDrafts = sqliteTable('work_item_drafts', {
+  id: text('id').primaryKey(),
+  intake_id: text('intake_id').notNull(),               // FK → work_item_intakes.id
+  target_type: text('target_type').notNull(),            // 'ticket' | 'work_order'
+  category_code: text('category_code'),
+  title: text('title').notNull(),
+  summary: text('summary'),
+  description: text('description'),
+  customer_phone: text('customer_phone'),
+  customer_name: text('customer_name'),
+  priority: text('priority').default('medium'),
+  severity: text('severity'),
+  queue_code: text('queue_code'),
+  owner_id: text('owner_id'),
+  workflow_key: text('workflow_key'),
+  structured_payload_json: text('structured_payload_json'), // 类型特有字段（ticket_category, work_type 等）
+  appointment_plan_json: text('appointment_plan_json'),     // 草稿含预约计划时填入
+  status: text('status').notNull().default('draft'),        // 'draft' | 'pending_review' | 'confirmed' | 'discarded' | 'published'
+  confidence_score: integer('confidence_score'),
+  review_required: integer('review_required').default(1),
+  reviewed_by: text('reviewed_by'),
+  reviewed_at: text('reviewed_at'),
+  published_item_id: text('published_item_id'),         // FK → work_items.id（发布后填入）
+  created_at: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updated_at: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+// ── Issue Thread（同一事项主线）────────────────────────────────────────────
+
+export const issueThreads = sqliteTable('issue_threads', {
+  id: text('id').primaryKey(),
+  thread_key: text('thread_key').notNull(),             // 确定性唯一键
+  customer_id: text('customer_id'),
+  customer_phone: text('customer_phone'),
+  canonical_category_code: text('canonical_category_code'),
+  canonical_subject: text('canonical_subject'),
+  status: text('status').notNull().default('open'),     // 'open' | 'resolved' | 'closed'
+  master_ticket_id: text('master_ticket_id'),           // FK → work_items.id
+  latest_item_id: text('latest_item_id'),               // FK → work_items.id
+  first_seen_at: text('first_seen_at').notNull(),
+  last_seen_at: text('last_seen_at').notNull(),
+  reopen_until: text('reopen_until'),
+  dedupe_window_hours: integer('dedupe_window_hours').default(168),
+  metadata_json: text('metadata_json'),
+  created_at: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updated_at: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+// ── Issue Merge Review（合并审核）──────────────────────────────────────────
+
+export const issueMergeReviews = sqliteTable('issue_merge_reviews', {
+  id: text('id').primaryKey(),
+  intake_id: text('intake_id').notNull(),               // FK → work_item_intakes.id
+  candidate_thread_id: text('candidate_thread_id').notNull(), // FK → issue_threads.id
+  recommended_action: text('recommended_action').notNull(), // 'append_followup' | 'merge_master' | 'reopen_master'
+  score_total: integer('score_total').notNull(),
+  score_breakdown_json: text('score_breakdown_json').notNull(),
+  match_reason_json: text('match_reason_json'),
+  decision_status: text('decision_status').notNull().default('pending'), // 'pending' | 'approved' | 'rejected' | 'executed' | 'expired'
+  decided_by: text('decided_by'),
+  decided_at: text('decided_at'),
+  executed_at: text('executed_at'),
   created_at: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
