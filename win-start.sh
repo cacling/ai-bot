@@ -80,11 +80,11 @@ trap cleanup SIGINT SIGTERM
 mkdir -p "$LOG_DIR"
 
 # ── 加载环境变量（根目录 .env）──────────────────────────────────────────────
-# 跳过 PORT（各服务有独立端口）和 SQLITE_PATH（start.sh 显式设置绝对路径）
+# SQLITE_PATH 和 SKILLS_DIR 是相对路径，各服务 cwd 不同不能全局 export
 if [[ -f "$BASE_DIR/.env" ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ "$line" =~ ^PORT= || "$line" =~ ^SQLITE_PATH= ]] && continue
+    [[ "$line" =~ ^SQLITE_PATH= || "$line" =~ ^SKILLS_DIR= ]] && continue
     export "$line"
   done < "$BASE_DIR/.env"
   log "已加载 .env"

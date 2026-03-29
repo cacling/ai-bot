@@ -31,8 +31,8 @@ mkdir -p "$LOG_DIR"
 if [[ -f "$BASE_DIR/.env" ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-    # SQLITE_PATH 由 start.sh 显式设置绝对路径，跳过 .env 中的相对路径
-    [[ "$line" =~ ^SQLITE_PATH= ]] && continue
+    # SQLITE_PATH 和 SKILLS_DIR 是相对路径，各服务 cwd 不同不能全局 export
+    [[ "$line" =~ ^SQLITE_PATH= || "$line" =~ ^SKILLS_DIR= ]] && continue
     export "$line"
   done < "$BASE_DIR/.env"
   log "已加载 .env"
