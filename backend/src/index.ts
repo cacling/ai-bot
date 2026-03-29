@@ -3,22 +3,10 @@ import { cors } from 'hono/cors';
 import chatRoutes from './chat/chat';
 import chatWsRoutes from './chat/chat-ws';
 import agentWsRoutes from './agent/chat/agent-ws';
-import filesRoutes from './agent/km/skills/files';
-import skillsRoutes from './agent/km/skills/skills';
 import voiceRoutes, { voiceWebsocket } from './chat/voice';
 import outboundRoutes from './chat/outbound';
 import mockDataRoutes from './chat/mock-data';
 import complianceRoutes from './agent/card/compliance';
-import skillVersionsRoute from './agent/km/skills/skill-versions';
-import sandboxRoutes from './agent/km/skills/sandbox';
-import skillEditRoutes from './agent/km/skills/skill-edit';
-import canaryRoutes from './agent/km/skills/canary';
-import changeRequestRoutes from './agent/km/skills/change-requests';
-import testCaseRoutes from './agent/km/skills/test-cases';
-import skillCreatorRoutes from './agent/km/skills/skill-creator';
-import toolBindingsRoutes from './agent/km/skills/tool-bindings';
-import kmRoutes from './agent/km/kms';
-import mcpRoutes from './agent/km/mcp';
 import { resolve } from 'path';
 import { logger } from './services/logger';
 import { runAgent } from './engine/runner';
@@ -49,44 +37,49 @@ app.get('/api/agent-config', (c) => {
 app.route('/api', chatRoutes);
 app.route('/api', mockDataRoutes);
 
-// Mount files routes: GET /api/files/tree, GET /api/files/content, PUT /api/files/content
-app.route('/api/files', filesRoutes);
-
-// Mount skills routes: GET /api/skills
-app.route('/api/skills', skillsRoutes);
-
-// Mount tool bindings routes: GET/PUT/POST /api/skills/:id/tool-bindings
-app.route('/api/skills', toolBindingsRoutes);
-
 // Mount compliance routes: GET/POST/DELETE /api/compliance/keywords, POST /api/compliance/check
 app.route('/api/compliance', complianceRoutes);
 
-// Mount skill version routes: GET/POST /api/skill-versions
-app.route('/api/skill-versions', skillVersionsRoute);
+// ── KM Service Proxy ─────────────────────────────────────────────────────────
+// Routes for KM, MCP, Skills, Sandbox, etc. are served by km_service (port 18010).
+// In production, the frontend proxy sends these directly to km_service.
+// This reverse proxy is a convenience for dev/test when only the backend is running.
+const KM_SERVICE_URL = process.env.KM_SERVICE_URL ?? 'http://localhost:18010';
+const KM_PROXY_PREFIXES = [
+  '/api/km/', '/api/mcp/', '/api/files/', '/api/skills/', '/api/skill-versions/',
+  '/api/sandbox/', '/api/skill-edit/', '/api/canary/', '/api/change-requests/',
+  '/api/test-cases/', '/api/skill-creator/',
+];
 
-// Mount sandbox routes: POST/PUT/GET/DELETE /api/sandbox
-app.route('/api/sandbox', sandboxRoutes);
+// Exact root paths (e.g. GET /api/skills) + wildcard sub-paths (e.g. GET /api/skills/:id/files)
+for (const prefix of KM_PROXY_PREFIXES) {
+  const root = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+  app.all(root, proxyToKm);
+  app.all(`${root}/*`, proxyToKm);
+}
 
-// Mount skill-edit routes: POST /api/skill-edit/clarify, /api/skill-edit, /api/skill-edit/apply
-app.route('/api/skill-edit', skillEditRoutes);
-
-// Mount canary routes: POST/GET/DELETE /api/canary
-app.route('/api/canary', canaryRoutes);
-
-// Mount change-request routes: GET/POST /api/change-requests
-app.route('/api/change-requests', changeRequestRoutes);
-
-// Mount test-case routes: GET/POST/DELETE /api/test-cases
-app.route('/api/test-cases', testCaseRoutes);
-
-// Mount skill-creator routes: POST /api/skill-creator/chat, /api/skill-creator/save
-app.route('/api/skill-creator', skillCreatorRoutes);
-
-// Mount knowledge management routes: /api/km/*
-app.route('/api/km', kmRoutes);
-
-// Mount MCP management routes: /api/mcp/*
-app.route('/api/mcp', mcpRoutes);
+async function proxyToKm(c: import('hono').Context) {
+  try {
+    const url = new URL(c.req.url);
+    const targetUrl = `${KM_SERVICE_URL}${url.pathname}${url.search}`;
+    const headers = new Headers(c.req.raw.headers);
+    headers.delete('host');
+    const res = await fetch(targetUrl, {
+      method: c.req.method,
+      headers,
+      body: ['GET', 'HEAD'].includes(c.req.method) ? undefined : c.req.raw.body,
+      // @ts-expect-error duplex needed for streaming request body
+      duplex: 'half',
+    });
+    return new Response(res.body, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: res.headers,
+    });
+  } catch (e) {
+    return c.json({ error: `km_service unreachable: ${String(e)}` }, 502);
+  }
+}
 
 // Mount voice WebSocket route: GET /ws/voice
 app.route('/', voiceRoutes);

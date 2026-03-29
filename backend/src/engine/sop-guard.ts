@@ -8,7 +8,7 @@
  */
 
 import { logger } from '../services/logger';
-import { getToolsOverview } from '../agent/km/mcp/tools-overview';
+import { getToolsOverviewSync } from '../services/km-client';
 import { getAvailableSkills, getSkillMermaid } from './skills';
 import { type WorkflowSpec, type GuardType } from './skill-workflow-types';
 
@@ -161,7 +161,7 @@ function buildGlobalDependencies(): Map<string, ToolDependency> {
   // 从 mcp_tools 表的 annotations 列读取，readOnlyHint=true 的工具是查询类，不拦截
   const readOnlyTools = new Set<string>();
   try {
-    const allTools = getToolsOverview();
+    const allTools = getToolsOverviewSync();
     for (const t of allTools) {
       if (t.annotations) {
         try {
@@ -509,7 +509,7 @@ export class SOPGuard {
 
     this.violations++;
     // 从 DB 动态获取工具描述
-    const allTools = getToolsOverview();
+    const allTools = getToolsOverviewSync();
     const toolDescMap = new Map(allTools.map(t => [t.name, t.description]));
     const missingDesc = missing.map(t => {
       const desc = toolDescMap.get(t);

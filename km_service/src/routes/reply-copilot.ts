@@ -20,6 +20,14 @@ app.post('/preview', async (c) => {
   return c.json({ hints });
 });
 
+// POST /build — called by main backend via km-client proxy
+app.post('/build', async (c) => {
+  const body = await c.req.json<{ message: string; phone?: string; normalizedQuery?: string; intentHints?: string[] }>();
+  if (!body.message) return c.json({ error: 'message is required' }, 400);
+  const hints = await buildReplyHints({ message: body.message, phone: body.phone ?? '', normalizedQuery: body.normalizedQuery, intentHints: body.intentHints });
+  return c.json(hints);
+});
+
 app.post('/feedback', async (c) => {
   const body = await c.req.json<{
     session_id?: string;

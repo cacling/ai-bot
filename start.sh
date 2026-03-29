@@ -25,8 +25,9 @@ MCP_SERVICES=("internal_service")
 MCP_LABELS=("内部服务")
 MOCK_APIS_PORT=18008
 WORK_ORDER_PORT=18009
+KM_SERVICE_PORT=18010
 FRONTEND_PORT=5173
-ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$FRONTEND_PORT")
+ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$FRONTEND_PORT")
 
 # ── 颜色 ────────────────────────────────────────────────────────────────────
 GRN='\033[0;32m'; RED='\033[0;31m'; YEL='\033[1;33m'; BLU='\033[0;34m'; NC='\033[0m'
@@ -104,6 +105,10 @@ ok "mcp_servers 依赖就绪"
 log "work_order_service: bun install"
 cd "$BASE_DIR/work_order_service" && "$BUN" install 2>&1 | tail -3
 ok "work_order_service 依赖就绪"
+
+log "km_service: bun install"
+cd "$BASE_DIR/km_service" && "$BUN" install 2>&1 | tail -3
+ok "km_service 依赖就绪"
 
 log "frontend: bun install"
 cd "$BASE_DIR/frontend" && "$BUN" install 2>&1 | tail -3
@@ -240,6 +245,10 @@ start_service "mock-apis" "$BASE_DIR/mock_apis" \
 start_service "work-order" "$BASE_DIR/work_order_service" \
   "$NODE --import tsx/esm src/server.ts"
 
+# KM Service (知识管理微服务)
+start_service "km-service" "$BASE_DIR/km_service" \
+  "$NODE --import tsx/esm src/server.ts"
+
 # Backend
 start_service "backend" "$BASE_DIR/backend" "$BUN src/index.ts"
 
@@ -265,6 +274,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 if [[ "$READY" == true ]]; then
   ok "Backend      → http://127.0.0.1:${BACKEND_PORT}"
+  ok "KM Service   → http://127.0.0.1:${KM_SERVICE_PORT}"
   ok "Frontend     → http://localhost:${FRONTEND_PORT}"
 
   # 检查每个 MCP 服务

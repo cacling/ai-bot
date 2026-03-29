@@ -7,11 +7,31 @@
 import { Hono } from 'hono';
 import { db } from '../db';
 import { kmReplyFeedback } from '../db';
-import { askKnowledgeBase } from '../services/agent-copilot';
+import { askKnowledgeBase, buildCopilotContext } from '../services/agent-copilot';
 import { nanoid } from './helpers';
 import { logger } from '../logger';
 
 const app = new Hono();
+
+// POST /context — called by main backend via km-client proxy
+app.post('/context', async (c) => {
+  const body = await c.req.json<{
+    message: string;
+    phone?: string;
+    conversationHistory?: Array<{ role: string; content: string }>;
+    normalizedQuery?: string;
+    intentHints?: string[];
+  }>();
+  if (!body.message) return c.json({ error: 'message is required' }, 400);
+  const data = await buildCopilotContext({
+    message: body.message,
+    phone: body.phone ?? '',
+    conversationHistory: body.conversationHistory,
+    normalizedQuery: body.normalizedQuery,
+    intentHints: body.intentHints,
+  });
+  return c.json(data);
+});
 
 app.post('/ask', async (c) => {
   const body = await c.req.json<{

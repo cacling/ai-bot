@@ -38,8 +38,7 @@ import { checkCompliance, maskPII, sanitizeText } from '../services/keyword-filt
 import { detectHallucination } from '../services/hallucination-detector';
 import { runProgressTracking } from '../services/voice-common';
 import { normalizeQuery } from '../services/query-normalizer';
-import { buildReplyHints } from '../services/reply-copilot';
-import { buildCopilotContext } from '../services/agent-copilot';
+import { buildReplyHints, buildCopilotContext } from '../services/km-client';
 import { getWelcomeSuggestions } from '../services/conversation-guidance';
 
 const chatWs = new Hono();

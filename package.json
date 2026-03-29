@@ -8,6 +8,7 @@
     "mock_apis",
     "work_order_service",
     "km_service",
+    "km_service/frontend",
     "packages/*"
   ],
   "scripts": {
@@ -15,7 +16,10 @@
     "dev:frontend": "npm --workspace frontend run dev",
     "dev:mcp": "npm --workspace @ai-bot/mcp-servers run dev:all",
     "test:mcp": "npm --workspace @ai-bot/mcp-servers run test",
+    "dev:km": "npm --workspace @ai-bot/km-service run dev",
+    "dev:km-frontend": "npm --workspace @ai-bot/km-frontend run dev",
     "check:shared-db": "npm --workspace @ai-bot/shared-db run check",
-    "check:mcp": "npm --workspace @ai-bot/mcp-servers run check"
+    "check:mcp": "npm --workspace @ai-bot/mcp-servers run check",
+    "check:km": "npm --workspace @ai-bot/km-service run check"
   }
 }

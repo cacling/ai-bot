@@ -22,6 +22,7 @@ kill_port 18472  # backend
 kill_port 18003  # 内部服务 MCP (统一)
 kill_port 18008  # mock_apis
 kill_port 18009  # work_order_service
+kill_port 18010  # km_service
 kill_port 5173   # frontend
 
 # 杀掉可能漂移的 Vite 端口

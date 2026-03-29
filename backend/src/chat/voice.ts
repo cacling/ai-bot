@@ -82,7 +82,7 @@ export { VoiceSessionState, TRANSFER_PHRASE_RE } from '../services/voice-session
 
 // ── GLM 工具定义（从 DB 动态生成）─────────────────────────────────────────────
 
-import { getToolsOverview } from '../agent/km/mcp/tools-overview';
+import { getToolsOverview, getToolDetail } from '../services/km-client';
 
 const TRANSFER_TO_HUMAN_TOOL = {
   type: 'function',
@@ -105,9 +105,9 @@ const TRANSFER_TO_HUMAN_TOOL = {
 };
 
 /** 从 DB 读取所有 available 的 MCP 工具，转换为 GLM function calling 格式 */
-function buildVoiceTools(): Array<Record<string, unknown>> {
+async function buildVoiceTools(): Promise<Array<Record<string, unknown>>> {
   const tools: Array<Record<string, unknown>> = [];
-  const allTools = getToolsOverview();
+  const allTools = await getToolsOverview();
 
   tools.push({
     type: 'function',
@@ -124,14 +124,14 @@ function buildVoiceTools(): Array<Record<string, unknown>> {
     if (tool.source_type === 'builtin') continue;
     if (tool.status !== 'available') continue;
 
-    const schema = (() => {
-      try {
-        const { getToolDetail } = require('../agent/km/mcp/tools-overview');
-        const detail = getToolDetail(tool.name);
-        if (detail?.inputSchema) return detail.inputSchema;
-      } catch { /* ignore */ }
-      return { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] };
-    })();
+    let schema: Record<string, unknown> | null = null;
+    try {
+      const detail = await getToolDetail(tool.name);
+      if (detail?.inputSchema) schema = detail.inputSchema;
+    } catch { /* ignore */ }
+    if (!schema) {
+      schema = { type: 'object', properties: { phone: { type: 'string', description: '用户手机号' } }, required: ['phone'] };
+    }
 
     tools.push({
       type: 'function',
@@ -204,7 +204,7 @@ voice.get(
         logger.info('voice', 'subscriber_info', { session: sessionId, name: subInfo?.name ?? null, plan: subInfo?.planName ?? null });
 
         const instructions = buildVoicePrompt(userPhone, lang, subInfo?.name, subInfo?.planName, subInfo?.gender);
-        const voiceTools = buildVoiceTools();
+        const voiceTools = await buildVoiceTools();
         const hasEnInstruction = instructions.includes('LANGUAGE REQUIREMENT');
         logger.info('voice', 'lang_chain_prompt', { session: sessionId, lang, hasEnInstruction, promptLen: instructions.length, promptHead: instructions.slice(0, 120) });
         logger.info('voice', 'session_tools', { session: sessionId, toolCount: voiceTools.length, toolNames: voiceTools.map((t: any) => t.name) });

@@ -13,10 +13,7 @@ import './cards/index';  // register all card defs (side-effect)
 import { buildInitialCardStates, findCardByEvent, type CardState } from './cards/registry';
 import { CardPanel } from './cards/CardPanel';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import { EditorPage } from '../km/EditorPage';
-import { SkillManagerPage } from '../km/SkillManagerPage';
-import { KnowledgeManagementPage } from '../km/KnowledgeManagementPage';
-import { McpManagementPage } from '../km/mcp/McpManagementPage';
+import { EditorPage, SkillManagerPage, KnowledgeManagementPage, McpManagementPage } from '@ai-bot/km-frontend';
 import { Button } from '@/components/ui/button';
 
 interface AgentMessage {
