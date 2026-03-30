@@ -14,7 +14,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { type Context, type Next } from 'hono';
 import { eq, and, gt } from 'drizzle-orm';
-import { db } from '../db';
+import { platformDb as db } from '../db';
 import { staffAccounts, staffSessions } from '../db/schema';
 import { logger } from './logger';
 

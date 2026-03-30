@@ -1,15 +1,36 @@
 # 数据模型：智能电信客服系统
 
-**功能**: 000-baseline | **日期**: 2026-03-19
+**功能**: 000-baseline | **日期**: 2026-03-19 | **更新**: 2026-03-30
 
 > 本文档定义系统全部实体和数据库 Schema，是数据层面的唯一权威来源。
 > 接口规范见 [contracts/apis.md](contracts/apis.md)，组件实现见 [contracts/components.md](contracts/components.md)。
+> 数据库域隔离架构见 [plan.md §2.5](plan.md)。
+
+---
+
+## 0. 数据库文件布局
+
+系统使用 4 个 SQLite 文件按业务域隔离，Schema 定义在 `packages/shared-db/src/schema/`：
+
+| DB 文件 | 环境变量 | Owner | Schema 源 | 表数 |
+|---------|---------|-------|-----------|------|
+| `data/km.db` | `SQLITE_PATH` | km_service（独占写入） | `platform.ts` + `km.ts` | ~39 |
+| `data/platform.db` | `PLATFORM_DB_PATH` | backend（独占） | `platform.ts`（子集） | ~8 |
+| `data/business.db` | `BUSINESS_DB_PATH` | mock_apis（独占） | `business.ts` | ~24 |
+| `data/workorder.db` | `WORKORDER_DB_PATH` | work_order_service（独占） | `workorder.ts` | ~16 |
+
+**Drizzle 配置文件：**
+- `backend/drizzle.config.ts` → km.db（platform 表）
+- `backend/drizzle-platform.config.ts` → platform.db（backend 运行时表）
+- `backend/drizzle-business.config.ts` → business.db
+- `backend/drizzle-workorder.config.ts` → workorder.db
+- `km_service/drizzle.config.ts` → km.db（km 表）
 
 ---
 
 ## 1. 用户对象（Subscriber）
 
-**来源：** `backend/src/db/schema.ts`（Drizzle ORM）— SQLite 持久化，`backend/data/telecom.db`
+**来源：** `packages/shared-db/src/schema/business.ts`（Drizzle ORM）— SQLite 持久化，`data/business.db`
 
 ```typescript
 interface Subscriber {

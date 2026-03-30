@@ -7,8 +7,20 @@
  * 幂等设计：先清空再插入，可重复执行。
  */
 
-import { db, sqlite } from './index';
+import { db, sqlite, platformDb, platformSqlite } from './index';
 import { eq } from 'drizzle-orm';
+import { Database } from 'bun:sqlite';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { fileURLToPath } from 'url';
+
+// ── Business DB（独立 SQLite 文件，供 mock_apis 使用）───────────────────────
+const businessDbPath =
+  process.env.BUSINESS_DB_PATH ??
+  fileURLToPath(new URL('../../../data/business.db', import.meta.url));
+const businessSqlite = new Database(businessDbPath, { create: true });
+businessSqlite.exec('PRAGMA journal_mode = WAL');
+businessSqlite.exec('PRAGMA busy_timeout = 5000');
+const businessDb = drizzle(businessSqlite);
 // E2E test cases (originally from tests/apitest/usecase/, inlined after directory removal)
 const seededE2ECases = [
   // bill-inquiry
@@ -140,7 +152,7 @@ function kmDocPath(name: string): string {
 }
 
 function ensureMockBackendTables() {
-  sqlite.exec(`
+  businessSqlite.exec(`
     CREATE TABLE IF NOT EXISTS customer_households (
       household_id TEXT PRIMARY KEY,
       household_name TEXT NOT NULL,
@@ -335,8 +347,8 @@ async function seed() {
 
   // ── 1. 套餐 ─────────────────────────────────────────────────────────────────
   console.log('[seed] 写入套餐数据...');
-  db.delete(plans).run();
-  db.insert(plans).values([
+  businessDb.delete(plans).run();
+  businessDb.insert(plans).values([
     {
       plan_id: 'plan_10g',
       name: '基础 10G 套餐',
@@ -480,8 +492,8 @@ async function seed() {
   ]).run();
 
   console.log('[seed] 写入营销活动数据...');
-  db.delete(offersCampaigns).run();
-  db.insert(offersCampaigns).values([
+  businessDb.delete(offersCampaigns).run();
+  businessDb.insert(offersCampaigns).values([
     {
       campaign_id: 'CMP-UP-100G',
       campaign_name: '畅享 50G 升级 100G',
@@ -538,8 +550,8 @@ async function seed() {
 
   // ── 2. 增值业务 ──────────────────────────────────────────────────────────────
   console.log('[seed] 写入增值业务数据...');
-  db.delete(valueAddedServices).run();
-  db.insert(valueAddedServices).values([
+  businessDb.delete(valueAddedServices).run();
+  businessDb.insert(valueAddedServices).values([
     { service_id: 'video_pkg', name: '视频会员流量包（20GB/月）', monthly_fee: 20, effective_end: '次月1日00:00' },
     { service_id: 'sms_100', name: '短信百条包（100条/月）', monthly_fee: 5, effective_end: '次月1日00:00' },
     { service_id: 'roaming_pkg', name: '国际漫游安心包', monthly_fee: 30, effective_end: '次月1日00:00' },
@@ -549,10 +561,10 @@ async function seed() {
 
   // ── 3. 家庭 / 客户主档 ───────────────────────────────────────────────────────
   console.log('[seed] 写入客户家庭主数据...');
-  db.delete(subscriberSubscriptions).run();
-  db.delete(subscribers).run();
-  db.delete(customerHouseholds).run();
-  db.insert(customerHouseholds).values([
+  businessDb.delete(subscriberSubscriptions).run();
+  businessDb.delete(subscribers).run();
+  businessDb.delete(customerHouseholds).run();
+  businessDb.insert(customerHouseholds).values([
     {
       household_id: 'HH-001',
       household_name: '李四家庭',
@@ -580,7 +592,7 @@ async function seed() {
   ]).run();
 
   console.log('[seed] 写入用户主数据...');
-  db.insert(subscribers).values([
+  businessDb.insert(subscribers).values([
     { phone: '13800000001', name: '张三', gender: 'male', customer_tier: 'standard', preferred_language: 'zh-CN', id_type: '居民身份证', id_last4: '1234', plan_id: 'plan_50g', household_id: null, status: 'active', balance: 45.8, data_used_gb: 32.5, voice_used_min: 280, sms_used: 45, activated_at: '2023-06-15', contract_end_date: '2026-06-15', overdue_days: 0, email: 'zhangsan@example.com', region: '广州' },
     { phone: '13800000002', name: '李四', gender: 'female', customer_tier: 'vip', preferred_language: 'zh-CN', id_type: '居民身份证', id_last4: '5678', plan_id: 'plan_unlimited', household_id: 'HH-001', status: 'active', balance: 128.0, data_used_gb: 89.2, voice_used_min: 130, sms_used: 12, activated_at: '2022-11-01', contract_end_date: '2026-11-01', overdue_days: 0, email: 'lisi@example.com', region: '深圳' },
     { phone: '13800000003', name: '王五', gender: 'male', customer_tier: 'delinquent', preferred_language: 'zh-CN', id_type: '居民身份证', id_last4: '9012', plan_id: 'plan_10g', household_id: null, status: 'suspended', balance: -23.5, data_used_gb: 10, voice_used_min: 200, sms_used: 120, activated_at: '2024-01-20', contract_end_date: '2025-12-31', overdue_days: 25, email: 'wangwu@example.com', region: '北京' },
@@ -596,7 +608,7 @@ async function seed() {
 
   // ── 4. 用户已订增值业务 / 当前权益 ───────────────────────────────────────────
   console.log('[seed] 写入用户订阅关系...');
-  db.insert(subscriberSubscriptions).values([
+  businessDb.insert(subscriberSubscriptions).values([
     { phone: '13800000001', service_id: 'video_pkg', status: 'active', channel: 'app', subscribed_at: `${m2}-05T10:00:00+08:00`, effective_start: `${m2}-05T10:00:00+08:00`, effective_end: null, auto_renew: true, order_id: 'ORD-SUB-001' },
     { phone: '13800000001', service_id: 'sms_100', status: 'active', channel: 'app', subscribed_at: `${m1}-03T09:00:00+08:00`, effective_start: `${m1}-03T09:00:00+08:00`, effective_end: null, auto_renew: true, order_id: 'ORD-SUB-002' },
     { phone: '13800000002', service_id: 'video_pkg', status: 'active', channel: 'store', subscribed_at: `${m2}-01T08:00:00+08:00`, effective_start: `${m2}-01T08:00:00+08:00`, effective_end: null, auto_renew: true, order_id: 'ORD-SUB-003' },
@@ -608,8 +620,8 @@ async function seed() {
   ]).run();
 
   console.log('[seed] 写入客户偏好数据...');
-  db.delete(customerPreferences).run();
-  db.insert(customerPreferences).values([
+  businessDb.delete(customerPreferences).run();
+  businessDb.insert(customerPreferences).values([
     { phone: '13800000001', marketing_opt_in: true, sms_opt_in: true, dnd: false, preferred_channel: 'sms', contact_window_start: '09:00', contact_window_end: '20:30', notes: '愿意接收套餐升级和账单解释短信。' },
     { phone: '13800000002', marketing_opt_in: false, sms_opt_in: false, dnd: true, preferred_channel: 'app', contact_window_start: '10:00', contact_window_end: '18:00', notes: 'VIP 客户，除服务通知外不接受营销联系。' },
     { phone: '13800000003', marketing_opt_in: true, sms_opt_in: true, dnd: false, preferred_channel: 'voice', contact_window_start: '09:30', contact_window_end: '19:00', notes: '催缴和账单解释优先电话联系。' },
@@ -623,8 +635,8 @@ async function seed() {
 
   // ── 4b. 合约（依赖用户）──────────────────────────────────────────────────────
   console.log('[seed] 写入合约数据...');
-  db.delete(contracts).run();
-  db.insert(contracts).values([
+  businessDb.delete(contracts).run();
+  businessDb.insert(contracts).values([
     { contract_id: 'CT001', phone: '13800000001', name: '24个月 50G 套餐合约', start_date: '2024-07-01', end_date: '2026-06-30', penalty: 200, risk_level: 'medium', status: 'active' },
     { contract_id: 'CT002', phone: '13800000002', name: 'VIP 无限流量承诺合约', start_date: '2024-11-01', end_date: '2026-11-01', penalty: 300, risk_level: 'high', status: 'active' },
     { contract_id: 'CT003', phone: '13800000003', name: '12个月宽带合约', start_date: '2025-01-20', end_date: '2026-01-19', penalty: 100, risk_level: 'medium', status: 'expired' },
@@ -649,8 +661,8 @@ async function seed() {
     tax,
     status,
   });
-  db.delete(bills).run();
-  db.insert(bills).values([
+  businessDb.delete(bills).run();
+  businessDb.insert(bills).values([
     mkBill('13800000001', m0, 88.0, 50.0, 10.0, 0.0, 0.0, 25.0, 3.0, 'paid'),
     mkBill('13800000001', m1, 79.5, 50.0, 12.5, 0.0, 0.0, 15.0, 2.0, 'paid'),
     mkBill('13800000001', m2, 58.0, 50.0, 0.0, 0.0, 0.0, 6.0, 2.0, 'paid'),
@@ -680,14 +692,14 @@ async function seed() {
     mkBill('13900000006', m2, 159.0, 159.0, 0.0, 0.0, 0.0, 0.0, 0.0, 'paid'),
   ]).run();
 
-  const billRows = db.select().from(bills).all();
+  const billRows = businessDb.select().from(bills).all();
   const billIdByPhoneMonth = new Map(billRows.map((bill) => [`${bill.phone}:${bill.month}`, bill.id]));
   const findBillId = (phone: string, month: string) => billIdByPhoneMonth.get(`${phone}:${month}`) ?? null;
 
   console.log('[seed] 写入账单明细与争议数据...');
-  db.delete(billingBillItems).run();
-  db.delete(billingDisputeCases).run();
-  db.insert(billingBillItems).values([
+  businessDb.delete(billingBillItems).run();
+  businessDb.delete(billingDisputeCases).run();
+  businessDb.insert(billingBillItems).values([
     { line_id: `BLI-${m0}-001`, phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), item_type: 'plan_fee', item_name: '畅享 50G 套餐月费', amount: 50, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
     { line_id: `BLI-${m0}-002`, phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), item_type: 'data_fee', item_name: '流量超额费', amount: 10, service_id: null, occurred_at: `${m0}-15T12:00:00+08:00`, source_system: 'billing_core', disputable: true },
     { line_id: `BLI-${m0}-003`, phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), item_type: 'value_added_fee', item_name: '视频会员流量包（20GB/月）', amount: 20, service_id: 'video_pkg', occurred_at: `${m0}-03T09:00:00+08:00`, source_system: 'vas_center', disputable: true },
@@ -723,14 +735,14 @@ async function seed() {
     { line_id: `BLI-${m0}-033`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'value_added_fee', item_name: '国际漫游安心包', amount: 20, service_id: 'roaming_pkg', occurred_at: `${m0}-02T09:45:00+08:00`, source_system: 'vas_center', disputable: false },
     { line_id: `BLI-${m0}-034`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'tax', item_name: '税费', amount: 8, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
   ]).run();
-  db.insert(billingDisputeCases).values([
+  businessDb.insert(billingDisputeCases).values([
     { case_id: 'DSP-001', phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), issue_category: 'value_added_charge', description: '客户质疑视频会员未主动续订仍继续扣费。', claimed_amount: 20, status: 'open', resolution_summary: null, created_at: `${m0}-22T09:30:00+08:00`, resolved_at: null },
     { case_id: 'DSP-002', phone: '13900000006', month: m1, bill_id: findBillId('13900000006', m1), issue_category: 'roaming_charge', description: '客户反馈上月漫游流量费可能重复计费。', claimed_amount: 30, status: 'resolved', resolution_summary: '核查后确认计费正常，已补偿 10 元关怀券。', created_at: `${m1}-14T10:00:00+08:00`, resolved_at: `${m1}-16T16:30:00+08:00` },
   ]).run();
 
   console.log('[seed] 写入支付交易数据...');
-  db.delete(paymentsTransactions).run();
-  db.insert(paymentsTransactions).values([
+  businessDb.delete(paymentsTransactions).run();
+  businessDb.insert(paymentsTransactions).values([
     { payment_id: 'PAY-1001', phone: '13800000001', month: m0, amount: 88, channel: 'app', status: 'success', posted: true, paid_at: `${m0}-09T09:12:00+08:00` },
     { payment_id: 'PAY-1002', phone: '13800000001', month: m1, amount: 79.5, channel: 'autopay', status: 'success', posted: true, paid_at: `${m1}-11T08:40:00+08:00` },
     { payment_id: 'PAY-2001', phone: '13800000002', month: m0, amount: 158, channel: 'bank', status: 'success', posted: true, paid_at: `${m0}-21T21:05:00+08:00` },
@@ -746,16 +758,16 @@ async function seed() {
   ]).run();
 
   console.log('[seed] 清空 OTP / 登录事件 / 发票 / 退款数据...');
-  db.delete(identityOtpRequests).run();
-  db.delete(identityLoginEvents).run();
-  db.delete(invoiceRecords).run();
-  db.delete(ordersRefundRequests).run();
-  db.insert(identityOtpRequests).values([
+  businessDb.delete(identityOtpRequests).run();
+  businessDb.delete(identityLoginEvents).run();
+  businessDb.delete(invoiceRecords).run();
+  businessDb.delete(ordersRefundRequests).run();
+  businessDb.insert(identityOtpRequests).values([
     { request_id: 'OTP-DEMO-001', phone: '13800000001', otp: '000001', channel: 'sms', delivery_status: 'sent', status: 'verified', requested_at: `${m0}-22T09:30:00+08:00`, expires_at: `${m0}-22T09:35:00+08:00`, trace_id: 'trace_demo_otp_001' },
     { request_id: 'OTP-DEMO-002', phone: '13800000003', otp: '000003', channel: 'sms', delivery_status: 'delayed', status: 'pending', requested_at: `${m0}-22T10:00:00+08:00`, expires_at: `${m0}-22T10:05:00+08:00`, trace_id: 'trace_demo_otp_002' },
     { request_id: 'OTP-DEMO-003', phone: '13900000006', otp: '000006', channel: 'sms', delivery_status: 'sent', status: 'pending', requested_at: `${m0}-22T11:00:00+08:00`, expires_at: `${m0}-22T11:05:00+08:00`, trace_id: 'trace_demo_otp_003' },
   ]).run();
-  db.insert(identityLoginEvents).values([
+  businessDb.insert(identityLoginEvents).values([
     { event_id: 'LOGIN-001', phone: '13800000001', event_type: 'login_success', result: 'success', failure_reason: null, device_label: 'Pixel 8', ip_region: '广州', occurred_at: `${m0}-21T08:10:00+08:00` },
     { event_id: 'LOGIN-002', phone: '13800000002', event_type: 'login_success', result: 'success', failure_reason: null, device_label: 'iPhone 15', ip_region: '深圳', occurred_at: `${m0}-21T09:00:00+08:00` },
     { event_id: 'LOGIN-003', phone: '13800000003', event_type: 'login_failed', result: 'failed', failure_reason: 'password_attempts_exceeded', device_label: 'Redmi Note 12', ip_region: '北京', occurred_at: `${m0}-22T09:50:00+08:00` },
@@ -764,12 +776,12 @@ async function seed() {
     { event_id: 'LOGIN-006', phone: '13900000004', event_type: 'login_success', result: 'success', failure_reason: null, device_label: 'Honor 100', ip_region: '广州', occurred_at: `${m0}-20T20:10:00+08:00` },
     { event_id: 'LOGIN-007', phone: '13900000006', event_type: 'login_failed', result: 'failed', failure_reason: 'unusual_ip_region', device_label: 'iPhone 14 Pro', ip_region: '香港', occurred_at: `${m0}-19T07:40:00+08:00` },
   ]).run();
-  db.insert(invoiceRecords).values([
+  businessDb.insert(invoiceRecords).values([
     { invoice_no: `INV-${m1.replace('-', '')}-0001`, phone: '13800000001', month: m1, total: 79.5, email: 'zhangsan@example.com', status: 'issued', requested_at: `${m0}-18T14:20:00+08:00` },
     { invoice_no: `INV-${m0.replace('-', '')}-0002`, phone: '13800000002', month: m0, total: 158, email: 'lisi@example.com', status: 'issued', requested_at: `${m0}-20T09:20:00+08:00` },
     { invoice_no: `INV-${m1.replace('-', '')}-0003`, phone: '13900000006', month: m1, total: 239, email: 'finance@corp.example.com', status: 'issued', requested_at: `${m0}-15T16:20:00+08:00` },
   ]).run();
-  db.insert(ordersRefundRequests).values([
+  businessDb.insert(ordersRefundRequests).values([
     { refund_id: 'REF-001', phone: '13800000001', service_id: 'video_pkg', month: m0, reason: 'customer_claims_unwanted_renewal', amount: 20, status: 'pending_review', requested_at: `${m0}-22T10:10:00+08:00`, resolved_at: null },
     { refund_id: 'REF-002', phone: '13900000006', service_id: 'roaming_pkg', month: m1, reason: 'duplicate_roaming_charge_claim', amount: 30, status: 'approved', requested_at: `${m1}-14T11:20:00+08:00`, resolved_at: `${m1}-16T17:00:00+08:00` },
     { refund_id: 'REF-003', phone: '13800000003', service_id: 'game_pkg', month: m0, reason: 'service_not_used', amount: 15, status: 'rejected', requested_at: `${m0}-21T18:10:00+08:00`, resolved_at: `${m0}-22T09:10:00+08:00` },
@@ -796,16 +808,16 @@ async function seed() {
 
   // ── 7a. callback_tasks ─────────────────────────────────────────────────────
   console.log('[seed] 写入 callback_tasks 历史数据...');
-  db.delete(callbackTasks).run();
-  db.insert(callbackTasks).values([
+  businessDb.delete(callbackTasks).run();
+  businessDb.insert(callbackTasks).values([
     { task_id: 'CB-HIST-001', original_task_id: 'C001', customer_name: '张明', callback_phone: '13900000001', preferred_time: `${m0}-23T15:00:00+08:00`, product_name: '宽带包年套餐', created_at: `${m0}-22T14:10:00+08:00`, status: 'completed' },
     { task_id: 'CB-HIST-002', original_task_id: 'M001', customer_name: '陈伟', callback_phone: '13900000004', preferred_time: `${m0}-24T10:30:00+08:00`, product_name: '5G 畅享套餐', created_at: `${m0}-22T16:10:00+08:00`, status: 'pending' },
   ]).run();
 
   // ── 7b. device_contexts ────────────────────────────────────────────────────
   console.log('[seed] 写入 device_contexts 数据...');
-  db.delete(deviceContexts).run();
-  db.insert(deviceContexts).values([
+  businessDb.delete(deviceContexts).run();
+  businessDb.insert(deviceContexts).values([
     { phone: '13800000001', installed_app_version: '3.2.1', latest_app_version: '3.5.0', device_os: 'android', os_version: 'Android 13', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: false, new_device: false, otp_delivery_issue: false },
     { phone: '13800000002', installed_app_version: '3.5.0', latest_app_version: '3.5.0', device_os: 'ios', os_version: 'iOS 17.4', device_rooted: false, developer_mode_on: false, running_on_emulator: false, has_vpn_active: true, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: false, new_device: false, otp_delivery_issue: false },
     { phone: '13800000003', installed_app_version: '3.0.0', latest_app_version: '3.5.0', device_os: 'android', os_version: 'Android 12', device_rooted: false, developer_mode_on: true, running_on_emulator: false, has_vpn_active: false, has_fake_gps: false, has_remote_access_app: false, has_screen_share_active: false, flagged_apps: '[]', login_location_changed: true, new_device: true, otp_delivery_issue: true },
@@ -818,8 +830,8 @@ async function seed() {
   ]).run();
 
   console.log('[seed] 写入网络事件数据...');
-  db.delete(networkIncidents).run();
-  db.insert(networkIncidents).values([
+  businessDb.delete(networkIncidents).run();
+  businessDb.insert(networkIncidents).values([
     { incident_id: 'NET-001', region: '广州', incident_type: 'congestion', severity: 'medium', status: 'open', affected_services: JSON.stringify(['4G', '5G']), start_time: '2026-03-22T08:30:00+08:00', end_time: null, description: '广州天河晚高峰基站负载偏高，可能导致数据速率下降。' },
     { incident_id: 'NET-002', region: '深圳', incident_type: 'maintenance', severity: 'low', status: 'observing', affected_services: JSON.stringify(['5G']), start_time: '2026-03-22T01:00:00+08:00', end_time: '2026-03-22T05:00:00+08:00', description: '深圳南山区 5G 维护窗口，部分用户可能出现瞬时波动。' },
     { incident_id: 'NET-003', region: '北京', incident_type: 'outage', severity: 'high', status: 'open', affected_services: JSON.stringify(['4G', '语音']), start_time: '2026-03-22T10:00:00+08:00', end_time: null, description: '北京朝阳部分片区基站中断，影响语音与数据业务。' },
@@ -829,8 +841,8 @@ async function seed() {
 
   // ── 7c. outbound_tasks ─────────────────────────────────────────────────────
   console.log('[seed] 写入 outbound_tasks 数据...');
-  db.delete(outboundTasks).run();
-  db.insert(outboundTasks).values([
+  platformDb.delete(outboundTasks).run();
+  platformDb.insert(outboundTasks).values([
     { id: 'C001', phone: '13900000001', task_type: 'collection', label_zh: 'C001 · 张明 · 宽带包年 · ¥386', label_en: 'C001 · Zhang Ming · Annual Broadband · ¥386', data: JSON.stringify({ zh: { case_id: 'C001', customer_name: '张明', gender: 'male', overdue_amount: 386, due_date: `${m0}-15`, product_name: '宽带包年套餐', strategy: '轻催' }, en: { case_id: 'C001', customer_name: 'Zhang Ming', gender: 'male', overdue_amount: 386, due_date: `${m0}-15`, product_name: 'Annual Broadband Plan', strategy: 'soft' } }) },
     { id: 'C002', phone: '13900000002', task_type: 'collection', label_zh: 'C002 · 李华 · 家庭融合 · ¥1,280', label_en: 'C002 · Li Hua · Family Bundle · ¥1,280', data: JSON.stringify({ zh: { case_id: 'C002', customer_name: '李华', gender: 'male', overdue_amount: 1280, due_date: `${m0}-05`, product_name: '家庭融合套餐', strategy: '中催' }, en: { case_id: 'C002', customer_name: 'Li Hua', gender: 'male', overdue_amount: 1280, due_date: `${m0}-05`, product_name: 'Family Bundle Plan', strategy: 'medium' } }) },
     { id: 'C003', phone: '13900000003', task_type: 'collection', label_zh: 'C003 · 王芳 · 流量月包 · ¥520', label_en: 'C003 · Wang Fang · Monthly Data Pack · ¥520', data: JSON.stringify({ zh: { case_id: 'C003', customer_name: '王芳', gender: 'female', overdue_amount: 520, due_date: `${m0}-20`, product_name: '流量月包', strategy: '轻催' }, en: { case_id: 'C003', customer_name: 'Wang Fang', gender: 'female', overdue_amount: 520, due_date: `${m0}-20`, product_name: 'Monthly Data Plan', strategy: 'soft' } }) },
@@ -840,30 +852,30 @@ async function seed() {
   ]).run();
 
   console.log('[seed] 清空服务订单、退款、外呼结果、短信事件、转人工与营销结果...');
-  db.delete(ordersServiceOrders).run();
-  db.delete(outreachCallResults).run();
-  db.delete(outreachSmsEvents).run();
-  db.delete(outreachHandoffCases).run();
-  db.delete(outreachMarketingResults).run();
-  db.insert(ordersServiceOrders).values([
+  businessDb.delete(ordersServiceOrders).run();
+  businessDb.delete(outreachCallResults).run();
+  businessDb.delete(outreachSmsEvents).run();
+  businessDb.delete(outreachHandoffCases).run();
+  businessDb.delete(outreachMarketingResults).run();
+  businessDb.insert(ordersServiceOrders).values([
     { order_id: 'ORD-DEMO-001', order_type: 'service_cancel', phone: '13800000001', service_id: 'sms_100', service_name: '短信百条包（100条/月）', reason: 'customer_requested_cancel', status: 'pending_effective', effective_at: '次月1日00:00', requires_manual_review: false, message: '退订申请已受理，预计次月生效。', created_at: `${m0}-20T11:00:00+08:00` },
     { order_id: 'ORD-DEMO-002', order_type: 'service_cancel', phone: '13900000002', service_id: 'family_share', service_name: '家庭共享副卡权益包', reason: 'arrears_review_required', status: 'manual_review', effective_at: null, requires_manual_review: true, message: '客户存在高额欠费，已提交人工复核后再决定是否退订。', created_at: `${m0}-21T10:00:00+08:00` },
   ]).run();
-  db.insert(outreachCallResults).values([
+  businessDb.insert(outreachCallResults).values([
     { result_id: 'CALL-DEMO-001', task_id: 'C001', phone: '13900000001', result: 'ptp', remark: '客户承诺本周五前缴费', callback_time: null, ptp_date: `${m0}-28`, created_at: `${m0}-22T14:00:00+08:00` },
     { result_id: 'CALL-DEMO-002', task_id: 'C002', phone: '13900000002', result: 'human_transfer', remark: '客户要求人工协商分期', callback_time: null, ptp_date: null, created_at: `${m0}-22T14:20:00+08:00` },
     { result_id: 'CALL-DEMO-003', task_id: 'M001', phone: '13900000004', result: 'callback', remark: '客户对 5G 升级有兴趣，需要下周回访', callback_time: `${m0}-24T10:30:00+08:00`, ptp_date: null, created_at: `${m0}-22T15:10:00+08:00` },
   ]).run();
-  db.insert(outreachSmsEvents).values([
+  businessDb.insert(outreachSmsEvents).values([
     { event_id: 'SMS-DEMO-001', phone: '13900000001', sms_type: 'payment_link', context: 'collection', status: 'sent', reason: null, sent_at: `${m0}-22T14:02:00+08:00` },
     { event_id: 'SMS-DEMO-002', phone: '13900000004', sms_type: 'plan_detail', context: 'marketing', status: 'sent', reason: null, sent_at: `${m0}-22T15:20:00+08:00` },
     { event_id: 'SMS-DEMO-003', phone: '13800000002', sms_type: 'plan_detail', context: 'marketing', status: 'blocked', reason: 'dnd_preference', sent_at: `${m0}-22T16:05:00+08:00` },
   ]).run();
-  db.insert(outreachHandoffCases).values([
+  businessDb.insert(outreachHandoffCases).values([
     { case_id: 'HOF-DEMO-001', phone: '13800000002', source_skill: 'outbound-marketing', reason: 'customer_requested_human', priority: 'medium', queue_name: 'general_support', status: 'open', created_at: `${m0}-22T15:10:00+08:00` },
     { case_id: 'HOF-DEMO-002', phone: '13900000002', source_skill: 'outbound-collection', reason: 'installment_negotiation', priority: 'high', queue_name: 'collections_specialist', status: 'open', created_at: `${m0}-22T14:25:00+08:00` },
   ]).run();
-  db.insert(outreachMarketingResults).values([
+  businessDb.insert(outreachMarketingResults).values([
     { record_id: 'MKT-DEMO-001', campaign_id: 'CMP-UP-100G', phone: '13900000004', result: 'callback', callback_time: `${m0}-24T10:30:00+08:00`, is_dnd: false, recorded_at: `${m0}-22T15:30:00+08:00` },
     { record_id: 'MKT-DEMO-002', campaign_id: 'CMP-FAMILY-001', phone: '13900000005', result: 'interested', callback_time: null, is_dnd: false, recorded_at: `${m0}-22T16:00:00+08:00` },
     { record_id: 'MKT-DEMO-003', campaign_id: 'CMP-FAMILY-001', phone: '13800000002', result: 'dnd', callback_time: null, is_dnd: true, recorded_at: `${m0}-22T16:10:00+08:00` },
@@ -871,8 +883,8 @@ async function seed() {
 
   // ── 默认用户 ─────────────────────────────────────────────────────
   console.log('[seed] 写入默认用户...');
-  db.delete(users).run();
-  db.insert(users).values([
+  platformDb.delete(users).run();
+  platformDb.insert(users).values([
     { id: 'admin',         name: '管理员',    role: 'admin' },
     { id: 'flow_manager',  name: '流程管理员', role: 'flow_manager' },
     { id: 'config_editor', name: '配置编辑员', role: 'config_editor' },
@@ -882,8 +894,8 @@ async function seed() {
 
   // ── 员工账号（Staff RBAC）──────────────────────────────────────────────────
   console.log('[seed] 写入员工账号...');
-  db.delete(staffSessions).run();
-  db.delete(staffAccounts).run();
+  platformDb.delete(staffSessions).run();
+  platformDb.delete(staffAccounts).run();
 
   const STAFF_SEED = [
     { id: 'demo_admin_001', username: 'demo',      display_name: '演示主管', password: '123456',  primary_staff_role: 'agent', staff_roles: ['agent', 'operations'], platform_role: 'admin',        team_code: 'demo_supervisor',  seat_code: 'D01',  default_queue_code: 'frontline', is_demo: true },
@@ -896,7 +908,7 @@ async function seed() {
 
   for (const s of STAFF_SEED) {
     const password_hash = await Bun.password.hash(s.password, 'bcrypt');
-    db.insert(staffAccounts).values({
+    platformDb.insert(staffAccounts).values({
       id: s.id,
       username: s.username,
       display_name: s.display_name,
@@ -1572,13 +1584,13 @@ async function seed() {
 
   // ── 9g. Skill Instances + Events（历史执行实例，覆盖完整生命周期）─────────
   console.log('[seed] 写入历史技能实例...');
-  db.delete(skillInstanceEvents).run();
-  db.delete(skillInstances).run();
-  db.insert(skillInstances).values([
+  platformDb.delete(skillInstanceEvents).run();
+  platformDb.delete(skillInstances).run();
+  platformDb.insert(skillInstances).values([
     { id: 'si-seed-001', session_id: 'sess-seed-002', skill_id: 'service-cancel', skill_version: 1, status: 'completed', current_step_id: 'std-cancel-service', pending_confirm: 0, revision: 5, started_at: yesterday, updated_at: yesterday, finished_at: yesterday },
     { id: 'si-seed-002', session_id: 'sess-seed-006', skill_id: 'fault-diagnosis', skill_version: 1, status: 'failed',    current_step_id: 'diag-run-diagnose',  pending_confirm: 0, revision: 2, started_at: yesterday, updated_at: yesterday, finished_at: yesterday },
   ]).run();
-  db.insert(skillInstanceEvents).values([
+  platformDb.insert(skillInstanceEvents).values([
     // service-cancel 完整流程
     { instance_id: 'si-seed-001', seq: 1, event_type: 'step_enter',     step_id: 'std-query-subscriber', tool_name: null,             payload_json: null },
     { instance_id: 'si-seed-001', seq: 2, event_type: 'tool_call',      step_id: 'std-query-subscriber', tool_name: 'query_subscriber', payload_json: '{"phone":"13800000001"}' },

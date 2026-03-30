@@ -1,4 +1,4 @@
-import { db } from '../db';
+import { platformDb as db } from '../db';
 import { skillInstances, skillInstanceEvents } from '../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';

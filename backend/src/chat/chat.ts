@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { type CoreMessage } from 'ai';
-import { db } from '../db';
+import { platformDb as db } from '../db';
 import { messages, sessions } from '../db/schema';
 import { runAgent, getMcpToolsForRuntime, type AgentResult } from '../engine/runner';
 import { routeSkill, shouldUseRuntime } from '../engine/skill-router';

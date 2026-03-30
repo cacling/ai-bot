@@ -739,16 +739,21 @@ skillCreator.post('/chat', async (c) => {
       parameters: z.object({}),
       execute: async () => {
         logger.info('skill-creator', 'tool_call', { tool: 'list_mcp_tools', session_id: session.id });
-        const items = getToolsOverview();
-        const result = JSON.stringify(items.map(t => ({
-          name: t.name,
-          description: t.description,
-          source: t.source,
-          status: t.status,
-          skills: t.skills,
-        })));
-        logger.info('skill-creator', 'tool_result', { tool: 'list_mcp_tools', result_len: result.length, tool_count: items.length, session_id: session.id });
-        return result;
+        try {
+          const items = getToolsOverview();
+          const result = JSON.stringify(items.map(t => ({
+            name: t.name,
+            description: t.description,
+            source: t.source,
+            status: t.status,
+            skills: t.skills,
+          })));
+          logger.info('skill-creator', 'tool_result', { tool: 'list_mcp_tools', result_len: result.length, tool_count: items.length, session_id: session.id });
+          return result;
+        } catch (err) {
+          logger.warn('skill-creator', 'tool_error', { tool: 'list_mcp_tools', error: String(err), session_id: session.id });
+          return JSON.stringify({ error: '工具列表暂时不可用，请继续对话', items: [] });
+        }
       },
     }),
     get_mcp_tool_detail: tool({
@@ -758,23 +763,28 @@ skillCreator.post('/chat', async (c) => {
       }),
       execute: async ({ tool_name }) => {
         logger.info('skill-creator', 'tool_call', { tool: 'get_mcp_tool_detail', args: { tool_name }, session_id: session.id });
-        const detail = getToolDetail(tool_name);
-        if (!detail) {
-          logger.info('skill-creator', 'tool_result', { tool: 'get_mcp_tool_detail', found: false, session_id: session.id });
-          return JSON.stringify({ found: false, message: `工具 "${tool_name}" 未注册。可能需要新建。` });
+        try {
+          const detail = getToolDetail(tool_name);
+          if (!detail) {
+            logger.info('skill-creator', 'tool_result', { tool: 'get_mcp_tool_detail', found: false, session_id: session.id });
+            return JSON.stringify({ found: false, message: `工具 "${tool_name}" 未注册。可能需要新建。` });
+          }
+          const result = JSON.stringify({
+            found: true,
+            name: detail.name,
+            description: detail.description,
+            source: detail.source,
+            status: detail.status,
+            inputSchema: detail.inputSchema,
+            responseExample: detail.responseExample,
+            skills: detail.skills,
+          });
+          logger.info('skill-creator', 'tool_result', { tool: 'get_mcp_tool_detail', found: true, result_len: result.length, session_id: session.id });
+          return result;
+        } catch (err) {
+          logger.warn('skill-creator', 'tool_error', { tool: 'get_mcp_tool_detail', error: String(err), session_id: session.id });
+          return JSON.stringify({ found: false, message: `查询失败: ${String(err)}` });
         }
-        const result = JSON.stringify({
-          found: true,
-          name: detail.name,
-          description: detail.description,
-          source: detail.source,
-          status: detail.status,
-          inputSchema: detail.inputSchema,
-          responseExample: detail.responseExample,
-          skills: detail.skills,
-        });
-        logger.info('skill-creator', 'tool_result', { tool: 'get_mcp_tool_detail', found: true, result_len: result.length, session_id: session.id });
-        return result;
       },
     }),
   };
@@ -899,7 +909,12 @@ skillCreator.post('/chat', async (c) => {
 
             session.phase = finalParsed.phase ?? session.phase;
             if (finalParsed.draft) session.draft = finalParsed.draft;
-            session.history.push({ role: 'assistant', content: finalParsed.reply });
+            // 防止空回复污染历史（会导致后续轮次持续异常）
+            if (finalParsed.reply) {
+              session.history.push({ role: 'assistant', content: finalParsed.reply });
+            } else {
+              logger.warn('skill-creator', 'empty_reply_skipped', { session_id: session.id, reasoning_length: reasoning?.toString().length ?? 0 });
+            }
 
             if (validation) {
               logger.info('skill-creator', 'draft_validation', {

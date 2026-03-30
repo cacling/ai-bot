@@ -19,11 +19,11 @@
 | 实时通信 | 事件驱动 | Session Bus（内存 pub/sub）解耦客户侧与坐席侧；4 条 WebSocket 持久连接 |
 | AI 编排 | ReAct Agent | Vercel AI SDK generateText + 工具调用，最多 10 步循环 |
 | 知识层 | 静态文件驱动 | Skills 以 Markdown 文件存储，按需懒加载，热更新无需重启 |
-| 数据层 | 嵌入式数据库 | SQLite WAL 模式，后端与 MCP Server 共享同一 DB 文件 |
+| 数据层 | 域隔离嵌入式数据库 | SQLite WAL 模式，4 个 DB 文件按域隔离（km/platform/business/workorder），每个 DB 最多一个进程写入 |
 
 > **不是微服务**：后端是单进程单体，没有服务注册/发现、网关、熔断器。
 > **不是 BFF**：后端直接服务前端和 MCP，没有聚合多个下游微服务的 BFF 层。
-> MCP Server 虽然是独立进程，但本质上是"工具执行器"而非业务微服务，无独立状态，共享同一 DB。
+> MCP Server 虽然是独立进程，但本质上是"工具执行器"而非业务微服务，无独立状态，通过 HTTP 调用 mock_apis。
 
 ---
 
@@ -69,7 +69,10 @@ flowchart TD
         TTS_API["SiliconFlow TTS<br/>CosyVoice2"]
     end
 
-    DB[("SQLite<br/>WAL 模式<br/>30 张表")]
+    DB_KM[("km.db<br/>技能+MCP+知识管理")]
+    DB_PLAT[("platform.db<br/>会话+员工+运行时")]
+    DB_BIZ[("business.db<br/>用户+账单+套餐")]
+    DB_WO[("workorder.db<br/>工单+工作流")]
     SK[("Skills 文件<br/>Markdown<br/>按需加载")]
 
     U -->|"WS"| FE
@@ -104,13 +107,16 @@ flowchart TD
     SVC -->|"翻译/情绪"| SF
     SVC -->|"TTS"| TTS_API
 
-    MCP1 --> DB
-    MCP2 --> DB
-    MCP3 --> DB
-    MCP4 --> DB
-    MCP5 --> DB
-    ENGINE -->|"会话记录"| DB
-    REST -->|"管理数据"| DB
+    MCP1 -->|"HTTP"| MCP_MOCK["mock_apis :18008"]
+    MCP2 -->|"HTTP"| MCP_MOCK
+    MCP3 -->|"HTTP"| MCP_MOCK
+    MCP4 -->|"HTTP"| MCP_MOCK
+    MCP5 -->|"HTTP"| MCP_MOCK
+    MCP_MOCK --> DB_BIZ
+    ENGINE -->|"会话记录"| DB_PLAT
+    ENGINE -->|"只读"| DB_KM
+    REST -->|"HTTP 代理"| KM_SVC["km_service :18010"]
+    KM_SVC --> DB_KM
 ```
 
 > 完整功能清单详见 [feature-map.md](feature-map.md)。源码文件树及每个文件的职责详见 [codebase-map.md](codebase-map.md)。
@@ -174,18 +180,55 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 
 ### 2.3 Workspace 结构
 
-| Workspace | 包名 | 职责 |
-|-----------|------|------|
-| `backend/` | telecom-support-backend | Agent runtime + 管理 API + 控制面 |
-| `frontend/` | — | React UI |
-| `mcp_servers/` | @ai-bot/mcp-servers | 5 个 MCP 执行服务 |
-| `packages/shared-db/` | @ai-bot/shared-db | 共享 schema（business + platform）+ env helper |
+| Workspace | 包名 | 职责 | DB |
+|-----------|------|------|-----|
+| `backend/` | telecom-support-backend | Agent runtime + 管理 API 代理 | `platform.db`（独占）+ `km.db`（只读） |
+| `km_service/` | — | 技能管理 + MCP 管理 + 知识管理 | `km.db`（独占写入） |
+| `mock_apis/` | — | 电信业务模拟后端 | `business.db`（独占） |
+| `work_order_service/` | — | 工单/工作流管理 | `workorder.db`（独占） |
+| `frontend/` | — | 客服 React UI | — |
+| `mcp_servers/` | @ai-bot/mcp-servers | 5 个 MCP 执行服务（无 DB） | — |
+| `packages/shared-db/` | @ai-bot/shared-db | 共享 Drizzle schema（4 域） | — |
 
 ### 2.4 已知边界违反（待清理）
 
-| 文件 | 违反 | 原因 |
+| 文件 | 违反 | 状态 |
 |------|------|------|
-| `backend/src/chat/voice.ts` | 直接读 subscribers/plans | 语音通道启动时需要用户名/套餐名注入 prompt，应改为调 MCP |
+| `backend/src/chat/voice.ts` | 直接读 subscribers/plans | ✅ 已改为读 `businessDb`（只读连接） |
+| `backend/src/chat/chat-ws.ts` | 直接读 subscribers/plans | ✅ 已改为读 `businessDb`（只读连接） |
+
+### 2.5 数据库域隔离架构
+
+系统采用 4 个 SQLite 文件按业务域隔离，每个 DB 最多一个进程写入，消除多进程并发写竞争。
+
+```
+┌──────────────┐  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐  ┌──────────────┐
+│ MCP Servers   │  │  mock_apis   │  │ work_order    │  │  km_service  │  │   backend    │
+│   :18003      │  │   :18008     │  │   :18009      │  │   :18010     │  │   :18472     │
+│  (无 DB)      │  │              │  │               │  │              │  │              │
+│               │  │ business.db  │  │ workorder.db  │  │   km.db      │  │ platform.db  │
+│               │  │   (独占)     │  │   (独占)      │  │  (独占写入)  │  │   (独占)     │
+└───────────────┘  └──────────────┘  └───────────────┘  └──────┬───────┘  └──────┬───────┘
+                                                               │                 │
+                                                               │◄── 只读连接 ──►│
+                                                               │◄── HTTP 代理 ──►│
+```
+
+| DB 文件 | Owner 进程 | 表域 | 其他进程访问 |
+|---------|-----------|------|-------------|
+| **km.db** | km_service（独占写入） | platform 表（skill_registry, mcp_servers, mcp_tools 等）+ km_* 表 | backend（只读，用于技能缓存和 tool registry） |
+| **platform.db** | backend（独占） | sessions, messages, staff_accounts, staff_sessions, users, outbound_tasks, skill_instances | 无 |
+| **business.db** | mock_apis（独占） | subscribers, bills, plans, contracts 等 24 张电信业务表 | backend（只读，用于 chat/voice 个性化问候） |
+| **workorder.db** | work_order_service（独占） | work_items, work_orders, appointments, tickets, workflows 等 16 张工单表 | backend（通过 HTTP work-order-proxy 代理） |
+
+**关键设计决策：**
+
+- **写入隔离**：每个 DB 文件最多一个进程写入，彻底消除 SQLite 多进程写入竞争（`disk I/O error`）
+- **只读连接**：backend 对 km.db 和 business.db 保持只读连接（`readonly: true`），WAL 模式下多进程并发读完全安全
+- **HTTP 代理**：backend 的 `/api/skills/`, `/api/mcp/`, `/api/km/` 等管理路由通过 `km-proxy.ts` 代理到 km_service
+- **busy_timeout**：所有 DB 连接启用 `PRAGMA busy_timeout = 5000`，即使偶发竞争也不会立即失败
+- **Drizzle 配置**：每个域有独立的 `drizzle.config.ts`，`start.sh` 按序 push schema + seed
+- **共享 Schema 包**：`packages/shared-db/` 按域分文件（`business.ts`, `platform.ts`, `workorder.ts`, `km.ts`），各服务只导入所需域
 
 ---
 
@@ -289,7 +332,7 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 | 文字客服 LLM | SiliconFlow 托管模型（stepfun-ai/Step-3.5-Flash） |
 | 语音客服 LLM | 智谱 GLM-Realtime（glm-realtime-air） |
 | MCP 协议 | @modelcontextprotocol/sdk（StreamableHTTP） |
-| 数据库 | SQLite + Drizzle ORM（WAL 模式，30 张表） |
+| 数据库 | SQLite + Drizzle ORM（WAL 模式，4 个 DB 文件按域隔离，共 ~80 张表） |
 | 运行时 | Bun（后端）/ Node.js + npm（MCP Server、前端） |
 
 ### 外部依赖
@@ -299,7 +342,7 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 | SiliconFlow API | 文字 LLM + 情感分析 + Handoff 分析 + 翻译 | HTTPS | 是 | `SILICONFLOW_API_KEY` |
 | SiliconFlow TTS | 语音合成（CosyVoice2-0.5B） | HTTPS | 仅多语言 | 同上 |
 | GLM-Realtime | 语音实时对话 | WSS | 仅语音 | `ZHIPU_API_KEY` |
-| SQLite | 嵌入式数据库，无需独立部署 | 文件 I/O | 是 | `SQLITE_PATH` |
+| SQLite | 嵌入式数据库，无需独立部署 | 文件 I/O | 是 | `SQLITE_PATH` / `PLATFORM_DB_PATH` / `BUSINESS_DB_PATH` / `WORKORDER_DB_PATH` |
 
 **不依赖**：无 Redis、无 MQ、无对象存储、无搜索引擎、无独立数据库服务器。
 
@@ -344,8 +387,9 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 | MCP Server 连接失败 | 后端捕获异常，返回 HTTP 500 |
 | LLM 超时（>180s） | AbortSignal 中断，返回 HTTP 500 |
 
-- 会话消息持久化在 SQLite，进程重启后历史保留
-- 后端与 MCP Server 共享同一 DB 文件（WAL 模式支持并发读写）
+- 会话消息持久化在 SQLite（platform.db），进程重启后历史保留
+- 4 个 DB 文件按域隔离，每个 DB 最多一个进程写入，消除写入竞争
+- 所有 DB 连接启用 `busy_timeout = 5000`，WAL 模式支持并发读
 - 生产建议：替换为 PostgreSQL 以支持多实例横向扩展
 
 ### 5.4 可观测性

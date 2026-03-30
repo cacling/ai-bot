@@ -182,26 +182,27 @@ export class Pipeline {
   }
 
   private async persistRecord(request: ToolRuntimeRequest, result: ToolRuntimeResult, traceId: string): Promise<void> {
+    // Write execution records to km_service via HTTP (backend is read-only on km.db)
+    const KM_BASE = process.env.KM_SERVICE_URL ?? `http://localhost:${process.env.KM_SERVICE_PORT ?? 18010}`;
     try {
-      const { db } = await import('../db');
-      const { executionRecords } = await import('../db/schema');
-      const { randomUUID } = await import('crypto');
-
-      await db.insert(executionRecords).values({
-        id: randomUUID(),
-        trace_id: traceId,
-        tool_name: request.toolName,
-        channel: request.channel,
-        adapter_type: result.source,
-        session_id: request.sessionId,
-        user_phone: request.userPhone ?? null,
-        skill_name: request.activeSkillName ?? null,
-        success: result.success,
-        has_data: result.hasData,
-        error_code: result.errorCode ?? null,
-        latency_ms: result.latencyMs,
-        input_json: JSON.stringify(request.args).slice(0, 2000),
-        output_preview: result.rawText.slice(0, 1000),
+      await fetch(`${KM_BASE}/api/mcp/execution-records`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trace_id: traceId,
+          tool_name: request.toolName,
+          channel: request.channel,
+          adapter_type: result.source,
+          session_id: request.sessionId,
+          user_phone: request.userPhone ?? null,
+          skill_name: request.activeSkillName ?? null,
+          success: result.success,
+          has_data: result.hasData,
+          error_code: result.errorCode ?? null,
+          latency_ms: result.latencyMs,
+          input_json: JSON.stringify(request.args).slice(0, 2000),
+          output_preview: result.rawText.slice(0, 1000),
+        }),
       });
     } catch {
       // Non-critical: don't let audit failure break tool execution

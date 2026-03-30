@@ -20,7 +20,7 @@
 import { Hono } from 'hono';
 import { asc, eq } from 'drizzle-orm';
 import { type CoreMessage } from 'ai';
-import { db } from '../db';
+import { platformDb as db, businessDb } from '../db';
 import { messages, sessions, subscribers, plans } from '../db/schema';
 import { runAgent, getMcpToolsForRuntime } from '../engine/runner';
 import { buildNodeTypeMap, stripMermaidMarkers } from '../services/mermaid';
@@ -108,14 +108,14 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
 
       // 查询用户身份，推送个性化问候
       try {
-        const subRows = await db
+        const subRows = await businessDb
           .select({ name: subscribers.name, gender: subscribers.gender, planId: subscribers.plan_id })
           .from(subscribers)
           .where(eq(subscribers.phone, phone))
           .limit(1);
         let greetingText: string;
         if (subRows.length) {
-          const planRows = await db
+          const planRows = await businessDb
             .select({ name: plans.name })
             .from(plans)
             .where(eq(plans.plan_id, subRows[0].planId))

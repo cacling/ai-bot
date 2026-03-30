@@ -22,7 +22,7 @@
  */
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
-import { db } from '../../db';
+import { platformDb as db } from '../../db';
 import { sessions } from '../../db/schema';
 import { upgradeWebSocket } from '../../chat/voice';
 import { sessionBus } from '../../services/session-bus';

@@ -17,11 +17,12 @@
 
 ```bash
 SILICONFLOW_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
-SQLITE_PATH=./data/telecom.db
 
 # 如需使用语音客服：
 ZHIPU_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx
 ```
+
+> DB 文件由 `start.sh` 自动创建在 `data/` 目录下（km.db, platform.db, business.db, workorder.db），无需手动配置。
 
 4. 在项目根目录执行：
 
@@ -45,11 +46,11 @@ ZHIPU_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx
 - [ ] **Node.js** ≥ 18 + npm 已安装 — `node --version && npm --version`
 - [ ] **SiliconFlow 账号**已注册，API Key 已获取 — [https://cloud.siliconflow.cn](https://cloud.siliconflow.cn)
 - [ ] （可选）**智谱 AI 账号**已注册，API Key 已获取（仅语音客服需要）— [https://open.bigmodel.cn](https://open.bigmodel.cn)
-- [ ] 项目根目录 `.env` 文件已创建，至少包含 `SILICONFLOW_API_KEY` 和 `SQLITE_PATH`
+- [ ] 项目根目录 `.env` 文件已创建，至少包含 `SILICONFLOW_API_KEY`
 - [ ] 端口 5173、18003-18007、18472 均未被占用 — `lsof -i :18472`
 - [ ] （若使用代理）`.env` 中已添加 `NO_PROXY=localhost,127.0.0.1,api.siliconflow.cn,open.bigmodel.cn`
 
-**中间件依赖：** 本项目**不依赖**任何外部中间件（无 Redis、无 MQ、无对象存储、无搜索引擎）。SQLite 为嵌入式数据库，DB 文件自动创建。
+**中间件依赖：** 本项目**不依赖**任何外部中间件（无 Redis、无 MQ、无对象存储、无搜索引擎）。SQLite 为嵌入式数据库，4 个 DB 文件（km.db, platform.db, business.db, workorder.db）由 `start.sh` 自动创建。
 
 ---
 
@@ -58,8 +59,12 @@ ZHIPU_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxx
 在项目根目录下创建 `.env` 文件（所有子服务共享）：
 
 ```bash
-# 数据库（SQLite，文件自动创建）
-SQLITE_PATH=./data/telecom.db
+# 数据库（SQLite，4 个 DB 文件由 start.sh 自动创建在 data/ 目录下）
+# 通常无需配置，以下为默认值：
+# SQLITE_PATH=./data/km.db
+# PLATFORM_DB_PATH=./data/platform.db
+# BUSINESS_DB_PATH=./data/business.db
+# WORKORDER_DB_PATH=./data/workorder.db
 
 # SiliconFlow LLM
 SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1

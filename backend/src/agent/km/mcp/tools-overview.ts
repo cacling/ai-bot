@@ -49,7 +49,12 @@ interface RawToolRecord {
 
 function loadRawToolMap(): Map<string, { raw: RawToolRecord; serverName: string; serverStatus: string; enabled: boolean; disabled: boolean; mocked: boolean }> {
   const map = new Map<string, { raw: RawToolRecord; serverName: string; serverStatus: string; enabled: boolean; disabled: boolean; mocked: boolean }>();
-  const servers = db.select().from(mcpServers).all();
+  let servers: (typeof mcpServers.$inferSelect)[];
+  try {
+    servers = db.select().from(mcpServers).all();
+  } catch {
+    return map;
+  }
   for (const server of servers) {
     const tools: RawToolRecord[] = server.tools_json ? JSON.parse(server.tools_json) : [];
     const disabledTools: string[] = server.disabled_tools ? JSON.parse(server.disabled_tools) : [];

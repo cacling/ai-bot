@@ -10,7 +10,7 @@
 
 import { type Context, type Next } from 'hono';
 import { eq } from 'drizzle-orm';
-import { db } from '../db';
+import { platformDb as db } from '../db';
 import { users } from '../db/schema';
 import { logger } from './logger';
 

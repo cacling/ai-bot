@@ -5,11 +5,12 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import * as businessSchema from "@ai-bot/shared-db/schema/business";
 
-const dbUrl = process.env.SQLITE_PATH
-  ? (process.env.SQLITE_PATH.startsWith("file:") ? process.env.SQLITE_PATH : `file:${process.env.SQLITE_PATH}`)
-  : new URL("../../data/telecom.db", import.meta.url).href;
+const dbUrl = process.env.BUSINESS_DB_PATH
+  ? (process.env.BUSINESS_DB_PATH.startsWith("file:") ? process.env.BUSINESS_DB_PATH : `file:${process.env.BUSINESS_DB_PATH}`)
+  : new URL("../../data/business.db", import.meta.url).href;
 
 const client = createClient({ url: dbUrl });
+await client.execute('PRAGMA busy_timeout = 5000');
 
 export const db = drizzle(client, { schema: businessSchema });
 export const {

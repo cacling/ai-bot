@@ -7,7 +7,7 @@ import { createBunWebSocket } from 'hono/bun';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { eq } from 'drizzle-orm';
-import { db } from '../db';
+import { businessDb } from '../db';
 import { subscribers, plans } from '../db/schema';
 import { textToSpeech } from '../services/tts';
 import { translateText } from '../services/translate-lang';
@@ -38,13 +38,13 @@ When calling tools that accept a \`lang\` parameter (such as diagnose_network, d
 
 async function fetchSubscriberInfo(phone: string): Promise<{ name: string; gender: string; planName: string } | null> {
   try {
-    const rows = await db
+    const rows = await businessDb
       .select({ name: subscribers.name, gender: subscribers.gender, planId: subscribers.plan_id })
       .from(subscribers)
       .where(eq(subscribers.phone, phone))
       .limit(1);
     if (!rows.length) return null;
-    const planRows = await db
+    const planRows = await businessDb
       .select({ name: plans.name })
       .from(plans)
       .where(eq(plans.plan_id, rows[0].planId))

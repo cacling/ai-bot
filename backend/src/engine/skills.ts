@@ -265,73 +265,14 @@ let _lastScan = Date.now();
 /** skill_name → mtime (ms) 上次同步时的文件修改时间 */
 const _mtimeMap = new Map<string, number>();
 
-/** 轻量校验：检查磁盘文件和 DB 是否一致，不一致时自动同步 */
+/**
+ * 轻量校验：从 DB 重建内存缓存。
+ * 运行时只读 — 所有 DB 写入由 km_service 负责（engine-stubs.ts 有相同逻辑）。
+ * 这样 backend 对 km.db完全只读，消除写入竞争。
+ */
 function reconcileWithDisk(): void {
-  try {
-    const rows = db.select().from(skillRegistry).all()
-      .filter(r => r.published_version != null);
-    const publishedIds = new Set(rows.map(r => r.id));
-
-    // 1. 检查 DB 中的技能是否在磁盘上
-    for (const row of rows) {
-      const mdPath = join(SKILLS_DIR, row.id, 'SKILL.md');
-      if (!existsSync(mdPath)) {
-        // 文件被删除 → 清除元数据
-        db.update(skillRegistry).set({
-          channels: null, mode: null, trigger_keywords: null,
-          tool_names: null, mermaid: null, tags: null, reference_files: null,
-          updated_at: new Date().toISOString(),
-        }).where(eq(skillRegistry.id, row.id)).run();
-        _mtimeMap.delete(row.id);
-        logger.info('skills', 'reconcile_file_deleted', { skill: row.id });
-        continue;
-      }
-
-      // 比较 mtime
-      try {
-        const stat = statSync(mdPath);
-        const mtime = stat.mtimeMs;
-        const lastMtime = _mtimeMap.get(row.id);
-        if (lastMtime === undefined || mtime > lastMtime) {
-          // 文件有变更（或首次检查）→ 重新同步
-          const content = readFileSync(mdPath, 'utf-8');
-          syncSkillMetadata(row.id, content);
-          _mtimeMap.set(row.id, mtime);
-        }
-      } catch { /* ignore stat errors */ }
-    }
-
-    // 2. 检查磁盘上是否有新技能目录不在 DB 中 → 自动补录发布
-    try {
-      const dirs = readdirSync(SKILLS_DIR, { withFileTypes: true })
-        .filter(d => d.isDirectory() && !d.name.startsWith('_') && !d.name.startsWith('.'));
-      for (const dir of dirs) {
-        if (publishedIds.has(dir.name)) continue;
-        const mdPath = join(SKILLS_DIR, dir.name, 'SKILL.md');
-        if (!existsSync(mdPath)) continue;
-        // 磁盘上有 SKILL.md 但 DB 中没发布 → 自动补录（DB 重置后恢复）
-        try {
-          const content = readFileSync(mdPath, 'utf-8');
-          const meta = extractSkillMetadata(content);
-          db.insert(skillRegistry).values({
-            id: dir.name,
-            published_version: 1,
-            latest_version: 1,
-            description: meta.description,
-          }).onConflictDoUpdate({
-            target: skillRegistry.id,
-            set: { published_version: 1, updated_at: new Date().toISOString() },
-          }).run();
-          syncSkillMetadata(dir.name, content);
-          logger.info('skills', 'reconcile_auto_publish', { skill: dir.name });
-        } catch (e) {
-          logger.warn('skills', 'reconcile_auto_publish_error', { skill: dir.name, error: String(e) });
-        }
-      }
-    } catch { /* ignore */ }
-  } catch (e) {
-    logger.warn('skills', 'reconcile_error', { error: String(e) });
-  }
+  // no-op: km_service handles all skill metadata writes
+  // backend just rebuilds cache from whatever km_service has written
 }
 
 function ensureFresh(): SkillCache {

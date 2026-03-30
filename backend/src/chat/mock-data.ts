@@ -8,7 +8,7 @@
  */
 import { Hono } from 'hono';
 import { eq, asc } from 'drizzle-orm';
-import { db } from '../db';
+import { db, platformDb } from '../db';
 import { testPersonas, outboundTasks } from '../db/schema';
 
 const mockDataRoutes = new Hono();
@@ -32,8 +32,8 @@ mockDataRoutes.get('/test-personas', async (c) => {
 mockDataRoutes.get('/outbound-tasks', async (c) => {
   const typeFilter = c.req.query('type');
   const rows = typeFilter
-    ? db.select().from(outboundTasks).where(eq(outboundTasks.task_type, typeFilter)).all()
-    : db.select().from(outboundTasks).all();
+    ? platformDb.select().from(outboundTasks).where(eq(outboundTasks.task_type, typeFilter)).all()
+    : platformDb.select().from(outboundTasks).all();
   return c.json(rows.map(r => ({
     id: r.id,
     phone: r.phone,

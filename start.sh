@@ -134,33 +134,56 @@ ok "frontend 依赖就绪"
 echo -e "\n${BLU}══════ 数据库准备 ══════${NC}"
 
 mkdir -p "$BASE_DIR/data"
-export SQLITE_PATH="$BASE_DIR/data/telecom.db"
+export SQLITE_PATH="$BASE_DIR/data/km.db"
+export PLATFORM_DB_PATH="$BASE_DIR/data/platform.db"
+export BUSINESS_DB_PATH="$BASE_DIR/data/business.db"
+export WORKORDER_DB_PATH="$BASE_DIR/data/workorder.db"
 
-# Schema 同步（非交互模式：如果有破坏性变更，先删表再 push）
+# Schema 同步（4 DB：telecom/platform/business/workorder）
 log "同步数据库 Schema..."
+
+# 1) backend schema → km.db (platform + km 表)
 cd "$BASE_DIR/backend"
 PUSH_OUTPUT=$("$BUN" drizzle-kit push 2>&1 || true)
 if echo "$PUSH_OUTPUT" | grep -q "rename column\|created or renamed"; then
-  warn "检测到 Schema 破坏性变更，重建数据库表..."
+  warn "检测到 backend Schema 破坏性变更，重建表..."
   "$BUN" -e "
     import Database from 'bun:sqlite';
-    const db = new Database(process.env.SQLITE_PATH || '../data/telecom.db');
+    const db = new Database(process.env.SQLITE_PATH || '../data/km.db');
     const tables = db.prepare(\"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'\").all();
     for (const t of tables) { db.exec('DROP TABLE IF EXISTS ' + t.name); }
     console.log('Dropped', tables.length, 'tables');
   " 2>/dev/null
   "$BUN" drizzle-kit push 2>&1 | tail -3
 fi
-ok "数据库 Schema 就绪"
+
+# 1b) platform.db (backend 独占运行时表)
+PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" drizzle-kit push --config drizzle-platform.config.ts 2>&1 | tail -1
+
+# 2) km_service schema → km.db (km 表，与 backend 共享同一 DB)
+cd "$BASE_DIR/km_service"
+"$BUN" drizzle-kit push 2>&1 | tail -1
+
+# 3) mock_apis schema → business.db
+cd "$BASE_DIR/backend"
+BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" drizzle-kit push --config drizzle-business.config.ts 2>&1 | tail -1
+
+# 4) work_order_service schema → workorder.db
+cd "$BASE_DIR/backend"
+WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
+
+ok "数据库 Schema 就绪（km.db + business.db + workorder.db）"
 
 # 数据初始化
 if [[ "$RESET_MODE" == true ]]; then
   warn "重置模式：清空数据库 + 清理版本快照..."
   cd "$BASE_DIR/backend"
 
-  # 删除 DB + WAL/SHM（主数据库在项目根目录 data/，backend/data/ 可能有残留副本）
-  rm -f "$BASE_DIR/data/telecom.db" "$BASE_DIR/data/telecom.db-wal" "$BASE_DIR/data/telecom.db-shm"
-  rm -f "$BASE_DIR/backend/data/telecom.db" "$BASE_DIR/backend/data/telecom.db-wal" "$BASE_DIR/backend/data/telecom.db-shm"
+  # 删除所有 DB + WAL/SHM
+  for dbfile in km platform business workorder; do
+    rm -f "$BASE_DIR/data/${dbfile}.db" "$BASE_DIR/data/${dbfile}.db-wal" "$BASE_DIR/data/${dbfile}.db-shm"
+  done
+  rm -f "$BASE_DIR/backend/data/km.db" "$BASE_DIR/backend/data/km.db-wal" "$BASE_DIR/backend/data/km.db-shm"
   ok "数据库已删除"
 
   # 清理非默认技能（biz-skills 和 .versions 中只保留默认 7 个）
@@ -210,17 +233,20 @@ if [[ "$RESET_MODE" == true ]]; then
   find "$BASE_DIR/backend/skills" -name "*.draft" -delete 2>/dev/null
   ok "草稿文件已清理"
 
-  # 重新 push schema + seed
-  "$BUN" drizzle-kit push 2>&1 | tail -3
-  "$BUN" run db:seed 2>&1 | tail -5
-  # 工单系统 seed（共用同一个 SQLite）
-  cd "$BASE_DIR/work_order_service" && SQLITE_PATH="$SQLITE_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
+  # 重新 push schema + seed（多 DB）
+  cd "$BASE_DIR/backend" && "$BUN" drizzle-kit push 2>&1 | tail -3
+  cd "$BASE_DIR/backend" && PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" drizzle-kit push --config drizzle-platform.config.ts 2>&1 | tail -1
+  cd "$BASE_DIR/km_service" && "$BUN" drizzle-kit push 2>&1 | tail -1
+  cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" drizzle-kit push --config drizzle-business.config.ts 2>&1 | tail -1
+  cd "$BASE_DIR/backend" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
+  cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" run db:seed 2>&1 | tail -5
+  cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   ok "数据已重置为初始状态"
 else
   # 正常模式：upsert，保留用户数据
   log "写入/更新初始数据..."
-  cd "$BASE_DIR/backend" && "$BUN" run db:seed 2>&1 | tail -5
-  cd "$BASE_DIR/work_order_service" && SQLITE_PATH="$SQLITE_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
+  cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" run db:seed 2>&1 | tail -5
+  cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   ok "初始数据就绪"
 fi
 

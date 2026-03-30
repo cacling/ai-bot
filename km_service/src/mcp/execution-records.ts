@@ -97,4 +97,20 @@ app.get('/stats', async (c) => {
   }
 });
 
+// POST / — 接收 backend 代理的执行记录写入
+app.post('/', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { randomUUID } = await import('crypto');
+    db.insert(executionRecords).values({
+      id: randomUUID(),
+      ...body,
+    }).run();
+    return c.json({ ok: true });
+  } catch (err) {
+    logger.error('execution-records', 'insert_error', { error: String(err) });
+    return c.json({ error: String(err) }, 500);
+  }
+});
+
 export default app;
