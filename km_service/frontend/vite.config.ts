@@ -4,6 +4,10 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    include: ['tests/unittest/**/*.test.{ts,tsx}'],
+    exclude: ['tests/e2e/**'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

@@ -33,3 +33,21 @@ if (typeof URL.createObjectURL === 'undefined') {
   URL.createObjectURL = () => 'blob:mock-url';
   URL.revokeObjectURL = () => {};
 }
+
+// Mock ResizeObserver (not available in jsdom)
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  (globalThis as any).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
+// Mock IntersectionObserver (not available in jsdom)
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+  (globalThis as any).IntersectionObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

@@ -18,9 +18,9 @@ describe('CardPanel', () => {
   it('renders with initial card states', () => {
     const cards = buildInitialCardStates();
     render(<CardPanel cards={cards} lang="zh" onUpdate={mockOnUpdate} />);
-    // Should render the grid container
-    const grid = document.querySelector('.grid');
-    expect(grid).toBeInTheDocument();
+    // Should render the card container
+    const container = document.querySelector('.flex.flex-col');
+    expect(container).toBeInTheDocument();
   });
 
   it('renders closed card restore chips when cards are closed', () => {
