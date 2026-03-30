@@ -1,0 +1,22 @@
+# AI-Bot 语义评测 — SOP 约束验证 (skill-version-test provider)
+
+description: AI-Bot 语义评测 — SOP 约束
+
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:qwen-max
+      config:
+        apiBaseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+        apiKeyEnvar: SKILL_CREATOR_API_KEY
+  threshold: 0.6
+
+prompts:
+  - "{{message}}"
+
+providers:
+  - id: file://providers/skill-version-test.ts
+    label: version-test
+
+tests:
+  - file://datasets/sop-guard.yaml

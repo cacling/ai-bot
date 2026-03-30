@@ -1,0 +1,23 @@
+# fault-diagnosis 故障诊断技能 — 多轮对话评测
+# 来源: fault-diagnosis.sop.spec.ts
+
+- description: "FD-SOP-01: 网络诊断→方案建议→升级转人工"
+  vars:
+    message: "multi-turn"
+    turns:
+      - message: "手机号 13800000001，最近上网特别慢，看视频经常卡，帮我查一下什么原因"
+      - message: "你建议的我都试过了，还是很慢"
+      - message: "那帮我转人工处理吧"
+    user_phone: "13800000001"
+  assert:
+    - type: llm-rubric
+      value: |
+        3轮故障诊断对话。第一轮应包含网络诊断信息。
+        第二轮应给出解决建议。第三轮应响应转人工请求。
+        不应在未诊断完成时就声称"已修复""已恢复"。
+    - type: contains-any
+      value: [诊断, 网络, 信号, 基站, 网速, 检测, 排查]
+    - type: not-contains
+      value: "已修复"
+    - type: not-contains
+      value: "已恢复"

@@ -1,0 +1,62 @@
+# service-cancel 退订技能 — 多轮对话评测
+# 来源: service-cancel.sop.spec.ts
+
+- description: "SC-01: 查询→选择→确认→退订完整流程"
+  vars:
+    message: "multi-turn"
+    turns:
+      - message: "帮我看看我订了哪些增值业务，有不需要的想退掉"
+      - message: "帮我把视频会员流量包退掉"
+      - message: "确认退订"
+      - message: "没有了，谢谢"
+    user_phone: "13800000001"
+  assert:
+    - type: llm-rubric
+      value: |
+        这是一段4轮退订对话。第一轮回复应列出用户已订购的增值业务（如视频包、短信包等）。
+        第二轮应说明退订影响或请求确认。第三轮应有退订执行结果。
+        整个对话中不应在用户确认之前就出现"已退订成功"等完成信号。
+    - type: contains-any
+      value: [视频, 短信, 流量包, 增值业务, sms, video]
+    - type: contains-any
+      value: [退订, 取消, 生效, 成功, 处理]
+    - type: not-contains
+      value: "已退订成功"
+    - type: not-contains
+      value: "已为您退订"
+    - type: not-contains
+      value: "已成功退订"
+    - type: not-contains
+      value: "退订已生效"
+
+- description: "SC-02: 查询影响→用户取消→不执行退订"
+  vars:
+    message: "multi-turn"
+    turns:
+      - message: "帮我查一下短信百条包的退订影响"
+      - message: "算了，影响太大，我先不退了"
+    user_phone: "13800000001"
+  assert:
+    - type: llm-rubric
+      value: |
+        用户先询问退订影响，然后决定不退了。
+        回复应尊重用户决定，给出礼貌回应，不应执行退订操作。
+    - type: not-contains
+      value: "已退订成功"
+    - type: not-contains
+      value: "退订成功"
+    - type: not-contains
+      value: "已为您退订"
+
+- description: "SC-03: 流程中途转人工"
+  vars:
+    message: "multi-turn"
+    turns:
+      - message: "帮我查一下话费账单"
+      - message: "我要转人工"
+    user_phone: "13800000001"
+  assert:
+    - type: llm-rubric
+      value: "用户要求转人工，回复应包含转接/人工相关的响应。"
+    - type: contains-any
+      value: [转接, 人工, 稍候, 稍等, 正在, 客服, 为您, 处理, 服务]

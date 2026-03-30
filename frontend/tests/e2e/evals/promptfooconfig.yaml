@@ -1,0 +1,118 @@
+# AI-Bot 全技能 LLM 语义评测 — 主配置
+#
+# 用法:
+#   npx promptfoo eval -c evals/promptfooconfig.yaml                   # 全量 (live-chat)
+#   npx promptfoo eval -c evals/promptfooconfig.yaml --no-cache        # 不用缓存
+#   npx promptfoo eval -c evals/config-multi-turn.yaml                 # 多轮对话
+#   npx promptfoo eval -c evals/config-sop-guard.yaml                  # SOP 约束
+#   npx promptfoo eval -c evals/config-sandbox.yaml                    # 沙箱验证
+#   npx promptfoo view                                                  # 查看结果
+#
+# 依赖: 服务已启动 (./start.sh)
+#
+# 按 provider 拆分为多个配置文件，避免 promptfoo 对所有 provider × test 做笛卡尔积。
+
+description: AI-Bot 语义评测 — 单轮在线客服
+
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:qwen-max
+      config:
+        apiBaseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+        apiKeyEnvar: SKILL_CREATOR_API_KEY
+  threshold: 0.6
+
+prompts:
+  - "{{message}}"
+
+providers:
+  - id: file://providers/live-chat.ts
+    label: live-chat
+
+tests:
+  # 单轮意图识别 + 表达变体
+  - file://datasets/suspend-service.yaml
+  # service-cancel 表达变体 (仅 SC-V* 条目)
+  - description: "SC-V1: 口语化退订请求"
+    vars:
+      message: "有个什么视频包帮我退了吧，没用过"
+      user_phone: "13800000001"
+    assert:
+      - type: llm-rubric
+        value: "回复应识别为退订增值业务请求，并引导查询已订业务或确认退订，不应直接声称退订成功。"
+      - type: not-contains
+        value: "已退订成功"
+  - description: "SC-V2: 间接表达退订意图"
+    vars:
+      message: "我这个月多扣了好多钱，是不是有什么增值业务在扣费？帮我看看能不能退掉"
+      user_phone: "13800000001"
+    assert:
+      - type: llm-rubric
+        value: "回复应先帮用户查询账单或已订业务，再引导退订流程。"
+  - description: "SC-V3: 简洁直接退订"
+    vars:
+      message: "退订短信百条包"
+      user_phone: "13800000001"
+    assert:
+      - type: llm-rubric
+        value: "回复应围绕退订短信百条包展开，可能查询业务信息或说明影响并请求确认。"
+  # bill-inquiry 表达变体
+  - description: "BI-V1: 口语化账单查询"
+    vars:
+      message: "这个月手机费怎么这么贵，帮我看看扣了啥"
+      user_phone: "13800000001"
+    assert:
+      - type: llm-rubric
+        value: "回复应识别为账单查询/费用疑问，并展示账单信息或引导查询。"
+  - description: "BI-V2: 简洁直接查询"
+    vars:
+      message: "查话费"
+      user_phone: "13800000001"
+    assert:
+      - type: llm-rubric
+        value: "回复应展示用户的账单或费用信息。"
+  # fault-diagnosis 单轮 API 测试
+  - description: "FD-01: 无信号诊断"
+    vars:
+      message: "我的手机号是 13800000001，手机完全没有信号，帮我诊断一下"
+      user_phone: "13800000001"
+    assert:
+      - type: llm-rubric
+        value: "回复应针对无信号问题进行诊断，可能提及信号、基站、SIM卡、APN 等排查方向。"
+      - type: contains-any
+        value: [信号, 基站, SIM, APN, 诊断]
+  - description: "FD-02: 网速慢诊断"
+    vars:
+      message: "我的手机号是 13800000001，上网速度变得很慢，帮我看看怎么回事"
+      user_phone: "13800000001"
+    assert:
+      - type: llm-rubric
+        value: "回复应针对网速慢问题进行诊断。"
+      - type: contains-any
+        value: [流量, 网络, 网速, 拥塞, 诊断]
+  - description: "FD-03: 通话中断诊断"
+    vars:
+      message: "我的手机号是 13800000001，打电话经常断线，帮我排查一下"
+      user_phone: "13800000001"
+    assert:
+      - type: llm-rubric
+        value: "回复应针对通话中断问题进行诊断。"
+      - type: contains-any
+        value: [通话, VoLTE, 基站, 中断, 诊断]
+  - description: "FD-04: 停机用户诊断"
+    vars:
+      message: "我的手机号是 13800000003，网不能用了，帮我查查"
+      user_phone: "13800000003"
+    assert:
+      - type: llm-rubric
+        value: "回复应提及账户停机/欠费/暂停状态。"
+      - type: contains-any
+        value: [停机, 欠费, 暂停, 诊断]
+  - description: "FD-05: 不存在号码诊断"
+    vars:
+      message: "我的手机号是 19999999999，手机没信号，帮我查一下"
+      user_phone: "19999999999"
+    assert:
+      - type: llm-rubric
+        value: "回复应提示号码未找到或引导确认号码。"

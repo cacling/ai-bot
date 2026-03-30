@@ -1,0 +1,25 @@
+# AI-Bot 语义评测 — 多轮对话 (multi-turn-chat provider)
+
+description: AI-Bot 语义评测 — 多轮对话
+
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:qwen-max
+      config:
+        apiBaseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+        apiKeyEnvar: SKILL_CREATOR_API_KEY
+  threshold: 0.6
+
+prompts:
+  - "{{message}}"
+
+providers:
+  - id: file://providers/multi-turn-chat.ts
+    label: multi-turn-chat
+
+tests:
+  - file://datasets/service-cancel.yaml
+  - file://datasets/bill-inquiry.yaml
+  - file://datasets/fault-diagnosis.yaml
+  - file://datasets/plan-inquiry.yaml

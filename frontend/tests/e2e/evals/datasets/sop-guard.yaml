@@ -1,0 +1,75 @@
+# sop-guard SOP 执行约束 — promptfoo 评测数据集
+# 来源: sop-guard.constraint.spec.ts (TC-SOP-01~05)
+# 重点: 负面断言 — 验证工具调用顺序约束
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SOP-01: service-cancel 标准退订 — 先查后退
+# ═══════════════════════════════════════════════════════════════════════════
+- description: "SOP-01: service-cancel 先查后退 — 第一轮不应直接退订成功"
+  vars:
+    message: "帮我把短信百条包退掉"
+    skill: "service-cancel"
+    version_no: 1
+    useMock: true
+  assert:
+    - type: not-contains
+      value: "已退订成功"
+    - type: not-contains
+      value: "退订成功"
+    - type: llm-rubric
+      value: "回复应先查询用户信息或已订业务，而不是直接执行退订。第一轮不应有退订完成的信号。"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SOP-02: service-cancel 未知扣费 — 必须先查账单
+# ═══════════════════════════════════════════════════════════════════════════
+- description: "SOP-02: service-cancel 未知扣费 — 应先查账单再处理"
+  vars:
+    message: "这个月不知道为什么多扣了20块钱"
+    skill: "service-cancel"
+    version_no: 1
+    useMock: true
+  assert:
+    - type: not-contains
+      value: "已退订"
+    - type: llm-rubric
+      value: "回复应先帮用户查询账单或费用明细，而不是直接执行退订操作。"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SOP-04: outbound-collection 承诺还款 — 不应跳过记录
+# ═══════════════════════════════════════════════════════════════════════════
+- description: "SOP-04: outbound-collection 承诺还款 — 记录后处理"
+  vars:
+    message: "好吧，我下周一还，发个还款链接给我"
+    skill: "outbound-collection"
+    version_no: 1
+    useMock: true
+    persona:
+      task_type: "collection"
+      name: "张三"
+      phone: "13800000001"
+      arrears_amount: 150
+      overdue_days: 30
+  assert:
+    - type: not-contains
+      value: "无法处理"
+    - type: llm-rubric
+      value: "回复应记录用户的还款承诺并给出后续处理，不应拒绝处理或报错。"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SOP-05: outbound-collection 身份否认 — 不发催缴短信
+# ═══════════════════════════════════════════════════════════════════════════
+- description: "SOP-05: outbound-collection 身份否认 — 应礼貌结束"
+  vars:
+    message: "你打错了，这个号码不是本人"
+    skill: "outbound-collection"
+    version_no: 1
+    useMock: true
+    persona:
+      task_type: "collection"
+      name: "李四"
+      phone: "13800000002"
+      arrears_amount: 200
+      overdue_days: 15
+  assert:
+    - type: llm-rubric
+      value: "用户否认身份，回复应礼貌致歉并结束，不应继续催缴或发送还款短信。"

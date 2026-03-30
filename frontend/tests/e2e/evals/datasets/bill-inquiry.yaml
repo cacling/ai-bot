@@ -1,0 +1,38 @@
+# bill-inquiry 账单查询技能 — 多轮对话评测
+# 来源: bill-inquiry.sop.spec.ts
+
+- description: "BI-01: 未知扣费查询→费用解释→退订"
+  vars:
+    message: "multi-turn"
+    turns:
+      - message: "我这个月话费单里有一笔不认识的费用，帮我查查是什么"
+      - message: "原来是这个，帮我退掉这个业务"
+      - message: "确认退订"
+    user_phone: "13800000001"
+  assert:
+    - type: llm-rubric
+      value: |
+        3轮账单查询对话。第一轮应展示账单或费用信息（含金额）。
+        第二轮应说明退订影响或请求确认。第三轮应有退订结果。
+    - type: contains-any
+      value: [费用, 账单, 扣费, 月费, 元]
+    - type: not-contains
+      value: "已退订成功"
+    - type: not-contains
+      value: "已为您退订"
+
+- description: "BI-02: 账单明细→费用拆解→继续咨询"
+  vars:
+    message: "multi-turn"
+    turns:
+      - message: "帮我查一下上个月的话费账单"
+      - message: "那笔增值业务费是什么？具体是什么业务在扣费？"
+      - message: "好的，知道了，谢谢"
+    user_phone: "13800000001"
+  assert:
+    - type: llm-rubric
+      value: |
+        3轮账单查询对话。第一轮应展示账单概览（含金额）。
+        第二轮应详细解释增值业务扣费来源。第三轮应有礼貌的结束回应。
+    - type: contains-any
+      value: [账单, 费用, 月费, 套餐, 元]

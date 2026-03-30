@@ -1,0 +1,46 @@
+# 停机保号技能 — 在线客服意图识别评测
+# 来源: suspend-service.demo.spec.ts (DEMO-SS-05, DEMO-SS-06)
+
+- description: "SS-01: 在线客服应识别停机保号意图"
+  vars:
+    message: "我的卡暂时不用了，先帮我停一下，号码给我留着，不要销号。"
+    user_phone: "13800000002"
+  assert:
+    - type: llm-rubric
+      value: |
+        回复应识别用户意图为"停机保号"（暂停服务但保留号码），并给出相关响应。
+        不应该误认为"销号"或无关业务。
+    - type: contains-any
+      value: [停机保号, 保号, 保留号码, 验证码, 身份验证, 核验]
+
+- description: "SS-V1: 表达变体1"
+  vars:
+    message: "我想暂停服务，但是不想销号，号码先帮我保留。"
+    user_phone: "13800000002"
+  assert:
+    - type: llm-rubric
+      value: "回复应识别为停机保号相关诉求，而非销号或其他无关业务。"
+
+- description: "SS-V2: 表达变体2"
+  vars:
+    message: "最近不用这个手机号了，先留号，后面我再恢复。"
+    user_phone: "13800000002"
+  assert:
+    - type: llm-rubric
+      value: "回复应识别为停机保号相关诉求，而非销号或其他无关业务。"
+
+- description: "SS-V3: 表达变体3"
+  vars:
+    message: "号码先不注销，帮我暂停一下，以后还要用的。"
+    user_phone: "13800000002"
+  assert:
+    - type: llm-rubric
+      value: "回复应识别为停机保号相关诉求，而非销号或其他无关业务。"
+
+- description: "SS-V4: 口语化表达"
+  vars:
+    message: "这个号先别销了，停一停就行，过阵子还用。"
+    user_phone: "13800000002"
+  assert:
+    - type: llm-rubric
+      value: "回复应识别为停机保号相关诉求，而非销号或其他无关业务。"
