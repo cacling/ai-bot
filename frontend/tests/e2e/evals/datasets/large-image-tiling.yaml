@@ -1,0 +1,58 @@
+# large-image-tiling 大图处理 — promptfoo 评测
+# 用 LLM-as-Judge 对比 AI 生成的 Mermaid 与参考 flowchart 的结构覆盖率
+#
+# 注意：此评测读取 vision-cache 中的 merged.md 作为 AI 输出，
+# 不实际调用 vision API（太慢太贵）。需要先跑 TILE-01 E2E 生成缓存。
+
+- description: "TILE-EVAL-01: AI 生成的 Mermaid 应覆盖参考 flowchart 的核心结构"
+  vars:
+    message: "请评估以下 AI 生成的流程图与参考流程图的结构覆盖率"
+  assert:
+    - type: llm-rubric
+      value: |
+        以下是一张电信"套餐查询(Consulta de Plan)"流程图的参考结构和 AI 自动识别结果。
+        请评估 AI 结果是否覆盖了参考结构中的关键子流程（评分 0-1）。
+
+        参考结构包含以下 7 个核心子流程：
+        1. 入口与服务类型分流：Consulta de Plan → 识别 Plan Hogar(固网) / Plan Móvil(移动)
+        2. 固网价格上涨判断：BD Incremento de Precios 开关 → 播报/跳过
+        3. 固网套餐类型识别：MonoVoz / MonoTV / MonoInt(1000/800/400) / Duo(多种组合) / Trio
+        4. 固网权益与激活引导：Disney+ 检查 → TV App 检查 → APP 转接
+        5. 移动预付费/后付费分流：Prepago → 预计划 → 是否激活 / Postpago → 余额查询
+        6. 统一余额查询：RetrieveUsageConsum → 错误处理映射
+        7. 追加咨询与结束：关于价格/其他咨询/结束 → 返回主菜单
+
+        评估标准：
+        - 7 个子流程中至少 5 个被覆盖 = 0.7+
+        - 固网 11 种套餐类型至少识别出 6 种 = 额外 +0.1
+        - Mermaid 节点 ID 使用英文 = 额外 +0.1
+        - 流程描述准确无明显错误 = 额外 +0.1
+      threshold: 0.6
+    - type: contains-any
+      value:
+        - consulta
+        - plan
+        - hogar
+        - movil
+        - móvil
+    - type: contains-any
+      value:
+        - prepago
+        - postpago
+        - billing
+    - type: contains-any
+      value:
+        - incremento
+        - precio
+        - price
+    - type: contains-any
+      value:
+        - disney
+        - Disney
+    - type: contains-any
+      value:
+        - mono
+        - duo
+        - trio
+        - MonoVoz
+        - MonoTV

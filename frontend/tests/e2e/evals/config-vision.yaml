@@ -1,0 +1,23 @@
+# AI-Bot 语义评测 — 大图 vision 结构验证
+# 读取 vision-cache 中的 merged.md，用 LLM-as-Judge 对比参考 flowchart
+
+description: AI-Bot 语义评测 — 大图 Vision 结构验证
+
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:qwen-max
+      config:
+        apiBaseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+        apiKeyEnvar: SKILL_CREATOR_API_KEY
+  threshold: 0.6
+
+prompts:
+  - "{{message}}"
+
+providers:
+  - id: file://providers/vision-cache-reader.ts
+    label: vision-cache
+
+tests:
+  - file://datasets/large-image-tiling.yaml

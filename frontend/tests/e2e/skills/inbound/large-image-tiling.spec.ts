@@ -92,15 +92,50 @@ test.describe('large-image-tiling: 超大流程图处理', () => {
     // 应有 vision_result 事件
     const visionResult = events.find(e => e.type === 'vision_result') as Record<string, unknown> | undefined;
     expect(visionResult, '应返回 vision_result 事件').toBeTruthy();
-    expect((visionResult!.text as string).length, 'vision_result 不应为空').toBeGreaterThan(50);
-    console.log('[TILE-01] Vision result preview:', (visionResult!.text as string).slice(0, 300));
+    const visionText = visionResult!.text as string;
+    expect(visionText.length, 'vision_result 不应为空').toBeGreaterThan(50);
+    console.log('[TILE-01] Vision result length:', visionText.length);
 
     // 应有 done 事件
     const doneEvent = events.find(e => e.type === 'done') as Record<string, unknown> | undefined;
     expect(doneEvent, '应返回 done 事件').toBeTruthy();
     expect(doneEvent!.session_id).toBeTruthy();
     expect(doneEvent!.phase).toBeTruthy();
-    console.log('[TILE-01] Reply preview:', ((doneEvent!.reply as string) ?? '').slice(0, 200));
+
+    // ── 结构完整性验证 ──
+    // 第一层：关键节点覆盖率 — 7 个核心子流程的关键词必须出现
+    const visionLower = visionText.toLowerCase();
+
+    const REQUIRED_CONCEPTS = [
+      { name: '入口(Consulta de Plan)', keywords: ['consulta', 'plan', 'inicio', '开始', '起始'] },
+      { name: '服务类型分流', keywords: ['hogar', 'móvil', 'movil', 'fijo', '家庭', '移动', '固网', 'service_type', 'servicetype'] },
+      { name: '预付费/后付费', keywords: ['prepago', 'postpago', 'prepaid', 'postpaid', '预付费', '后付费', 'billing'] },
+      { name: '价格上涨', keywords: ['incremento', 'precio', 'price', '涨价', '上涨'] },
+      { name: '套餐类型', keywords: ['mono', 'duo', 'trio', '单语音', '单电视', '双人', '三合一'] },
+    ];
+
+    const conceptResults = REQUIRED_CONCEPTS.map(concept => {
+      const found = concept.keywords.some(kw => visionLower.includes(kw.toLowerCase()));
+      return { ...concept, found };
+    });
+
+    const hitCount = conceptResults.filter(c => c.found).length;
+    const missedConcepts = conceptResults.filter(c => !c.found).map(c => c.name);
+    console.log(`[TILE-01] Concept coverage: ${hitCount}/${REQUIRED_CONCEPTS.length}`);
+    if (missedConcepts.length > 0) {
+      console.log('[TILE-01] Missed concepts:', missedConcepts);
+    }
+    // 至少覆盖 80% 核心概念（4/5）
+    expect(hitCount, `核心概念覆盖不足: 命中 ${hitCount}/${REQUIRED_CONCEPTS.length}, 缺失: ${missedConcepts.join(', ')}`).toBeGreaterThanOrEqual(4);
+
+    // 第二层：Mermaid 存在性 — 输出中应包含 mermaid 代码块
+    const hasMermaid = visionText.includes('```mermaid') || visionText.includes('stateDiagram') || visionText.includes('flowchart');
+    expect(hasMermaid, 'vision_result 应包含 Mermaid 图').toBe(true);
+
+    // 第三层：节点数量级 — mermaid 中的节点/连接不应太少
+    const arrowCount = (visionText.match(/-->/g) || []).length + (visionText.match(/--\s/g) || []).length;
+    console.log(`[TILE-01] Mermaid arrows: ${arrowCount}`);
+    expect(arrowCount, `Mermaid 中的连接数不足（参考图有 80+ 节点，至少应有 20+ 连接，实际 ${arrowCount}）`).toBeGreaterThanOrEqual(20);
   });
 
   test('TILE-02: JSON body 发送纯文本仍兼容', async ({ request }) => {
