@@ -29,10 +29,8 @@ import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR, SKILLS_ROOT } from '../p
 import { db } from '../db';
 import { testCases } from '../db';
 import { getToolsOverview, getToolDetail } from '../mcp/tools-overview';
-// @ts-ignore — .ts extension imports handled by bun runtime
-import { runValidation } from '../../../backend/skills/tech-skills/skill-creator-spec/scripts/run_validation.ts';
-// @ts-ignore — .ts extension imports handled by bun runtime
-import type { ValidationCheck, ValidationResult } from '../../../backend/skills/tech-skills/skill-creator-spec/scripts/types.ts';
+import { runValidation } from '../../../backend/skills/tech-skills/skill-creator-spec/scripts/run_validation';
+import type { ValidationCheck, ValidationResult } from '../../../backend/skills/tech-skills/skill-creator-spec/scripts/types';
 
 // ── 类型定义 ──────────────────────────────────────────────────────────────────
 
@@ -573,34 +571,58 @@ async function autoReviewAndRepairDraft(params: {
 
 // ── Vision prompt 模板 ─────────────────────────────────────────────────────
 
-const VISION_PROMPT_SINGLE = `请仔细分析这张流程图/草图，完成以下任务：
+// ── 语言相关辅助 ───────────────────────────────────────────────────────────
 
-1. **文字描述**：用自然语言描述图中的完整流程，包括每个步骤、判断条件、分支走向。
+type OutputLang = 'zh' | 'en';
+
+const LANG_LABELS: Record<OutputLang, { desc: string; label: string; nodeRule: string }> = {
+  zh: {
+    desc: '用中文描述',
+    label: '中文标签',
+    nodeRule: '节点 ID 使用英文 snake_case（如 check_balance），转换标签用中文显示（如 "查询余额"）',
+  },
+  en: {
+    desc: 'Describe in English',
+    label: 'English labels',
+    nodeRule: 'Node IDs use English snake_case (e.g. check_balance), transition labels in English',
+  },
+};
+
+function buildVisionPromptSingle(lang: OutputLang = 'zh'): string {
+  const l = LANG_LABELS[lang];
+  return `请仔细分析这张流程图/草图，完成以下任务：
+
+1. **流程描述**：${l.desc}，描述图中的完整流程，包括每个步骤、判断条件、分支走向。
 2. **Mermaid 状态图**：将流程转换为 Mermaid stateDiagram-v2 格式，要求：
-   - 使用中文标签
+   - ${l.nodeRule}
    - 包含所有分支和判断条件
    - 用 [*] 标记起始和结束状态
 
 请按以下格式输出：
 
 ## 流程描述
-（自然语言描述）
+（${l.desc}）
 
 ## Mermaid 状态图
 \`\`\`mermaid
 stateDiagram-v2
   ...
 \`\`\``;
+}
 
-const VISION_PROMPT_OVERVIEW = `这是一张大型流程图的总览缩略图。请描述：
+function buildVisionPromptOverview(lang: OutputLang = 'zh'): string {
+  const l = LANG_LABELS[lang];
+  return `这是一张大型流程图的总览缩略图。${l.desc}：
 1. 整体流程结构和阅读方向（从哪到哪）
-2. 可识别的主要区域（如"顶部入口区""中部核心矩阵""底部收尾区"）
+2. 可识别的主要区域
 3. 大致的分支走向和主干路径
 不需要识别具体文字，重点描述结构布局。`;
+}
 
-function buildTilePrompt(index: number, total: number): string {
-  return `这是一张大型流程图的第 ${index + 1}/${total} 块切片。请尽可能识别并输出：
-- 本块包含的节点列表（含节点内文字）
+function buildTilePrompt(index: number, total: number, lang: OutputLang = 'zh'): string {
+  const l = LANG_LABELS[lang];
+  return `这是一张大型流程图的第 ${index + 1}/${total} 块切片。请${l.desc}，尽可能识别并输出：
+- 本块包含的节点列表（含节点内文字，保留原文并附${lang === 'zh' ? '中文翻译' : '英文翻译'}）
 - 判断节点及分支条件
 - 箭头连接关系（A → B）
 - 本块边缘的入口点和出口点（可能连接到相邻切片）
@@ -609,7 +631,8 @@ function buildTilePrompt(index: number, total: number): string {
 请按结构化格式输出，便于后续合并。`;
 }
 
-function buildMergePrompt(overviewText: string, tileTexts: string[]): string {
+function buildMergePrompt(overviewText: string, tileTexts: string[], lang: OutputLang = 'zh'): string {
+  const l = LANG_LABELS[lang];
   const tilesSection = tileTexts.map((t, i) => `### 切片 ${i + 1}\n${t}`).join('\n\n');
   return `以下是一张大型流程图的分析结果。请合并为完整流程。
 
@@ -621,8 +644,10 @@ ${tilesSection}
 
 ## 请输出
 
-1. **流程描述**：合并后的完整流程自然语言描述，去掉重复节点，按总览确定的阅读顺序排列。
-2. **Mermaid 状态图**：完整的 Mermaid stateDiagram-v2（中文标签，包含所有分支）。
+1. **流程描述**：${l.desc}，合并后的完整流程自然语言描述，去掉重复节点，按总览确定的阅读顺序排列。
+2. **Mermaid 状态图**：完整的 Mermaid stateDiagram-v2，要求：
+   - ${l.nodeRule}
+   - 包含所有分支和判断条件
 
 注意：
 - 重叠区域会出现重复节点，请去重合并为一个
@@ -662,6 +687,7 @@ async function callVisionModel(imageDataUrl: string, prompt: string): Promise<st
 async function parseFlowchartImage(
   imageInput: Buffer | string,
   onProgress?: (event: VisionProgressEvent) => void,
+  lang: OutputLang = 'zh',
 ): Promise<string> {
   // 统一转为 Buffer
   const buffer = typeof imageInput === 'string' ? fromDataUrl(imageInput) : imageInput;
@@ -677,7 +703,7 @@ async function parseFlowchartImage(
   // ── direct: 小图直接处理 ──
   if (analysis.strategy === 'direct') {
     const dataUrl = toDataUrl(buffer);
-    const text = await callVisionModel(dataUrl, VISION_PROMPT_SINGLE);
+    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang));
     logger.info('skill-creator', 'image_parsed', { strategy: 'direct', result_length: text.length });
     return text;
   }
@@ -686,13 +712,19 @@ async function parseFlowchartImage(
   if (analysis.strategy === 'resize') {
     const resized = await resizeImage(buffer, 2048);
     const dataUrl = toDataUrl(resized);
-    const text = await callVisionModel(dataUrl, VISION_PROMPT_SINGLE);
+    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang));
     logger.info('skill-creator', 'image_parsed', { strategy: 'resize', result_length: text.length });
     return text;
   }
 
   // ── tile: 大图分片处理 ──
   const totalSteps = analysis.tileCount + 2; // overview + tiles + merge
+
+  // 创建临时目录保存中间产物（调试 + 测试可读取）
+  const cacheId = `vision-${Date.now().toString(36)}`;
+  const cacheDir = join(SKILLS_ROOT, '..', 'data', 'vision-cache', cacheId);
+  mkdirSync(cacheDir, { recursive: true });
+  logger.info('skill-creator', 'vision_cache_dir', { path: cacheDir });
 
   // Step 1: 裁白边
   onProgress?.({ step: 'trim', current: 0, total: totalSteps });
@@ -703,15 +735,16 @@ async function parseFlowchartImage(
       original: `${analysis.width}x${analysis.height}`,
     });
   } catch {
-    // trim 可能失败（全白图等），降级用原图
     trimmed = buffer;
   }
 
   // Step 2: 总览
   onProgress?.({ step: 'overview', current: 1, total: totalSteps });
   const overviewBuf = await generateOverview(trimmed, 1024);
+  writeFileSync(join(cacheDir, 'overview.jpg'), overviewBuf);
   const overviewDataUrl = toDataUrl(overviewBuf);
-  const overviewText = await callVisionModel(overviewDataUrl, VISION_PROMPT_OVERVIEW);
+  const overviewText = await callVisionModel(overviewDataUrl, buildVisionPromptOverview(lang));
+  writeFileSync(join(cacheDir, 'overview.md'), overviewText);
   logger.info('skill-creator', 'overview_parsed', { result_length: overviewText.length });
 
   // Step 3: 切片
@@ -720,6 +753,11 @@ async function parseFlowchartImage(
     overlap: 0.15,
   });
   logger.info('skill-creator', 'tiles_generated', { count: tiles.length });
+
+  // 保存切片图片
+  for (let i = 0; i < tiles.length; i++) {
+    writeFileSync(join(cacheDir, `tile-${i + 1}.jpg`), tiles[i]);
+  }
 
   // 并行处理切片（concurrency=3）
   const tileTexts: string[] = new Array(tiles.length);
@@ -732,13 +770,14 @@ async function parseFlowchartImage(
       batch.map((tile, j) => {
         const idx = i + j;
         const dataUrl = toDataUrl(tile);
-        return callVisionModel(dataUrl, buildTilePrompt(idx, tiles.length));
+        return callVisionModel(dataUrl, buildTilePrompt(idx, tiles.length, lang));
       }),
     );
     for (let j = 0; j < results.length; j++) {
       const idx = i + j;
       tileTexts[idx] = results[j];
       completed++;
+      writeFileSync(join(cacheDir, `tile-${idx + 1}.md`), results[j]);
       onProgress?.({ step: 'slice', current: 1 + completed, total: totalSteps });
       logger.info('skill-creator', 'tile_parsed', { tile: idx + 1, total: tiles.length, result_length: results[j].length });
     }
@@ -746,13 +785,14 @@ async function parseFlowchartImage(
 
   // Step 4: 合并
   onProgress?.({ step: 'merge', current: totalSteps - 1, total: totalSteps });
-  const mergePrompt = buildMergePrompt(overviewText, tileTexts);
+  const mergePrompt = buildMergePrompt(overviewText, tileTexts, lang);
   const { text: mergedText } = await generateText({
     model: chatModel,
     messages: [{ role: 'user', content: mergePrompt }],
     temperature: 0.2,
     maxTokens: 16384,
   });
+  writeFileSync(join(cacheDir, 'merged.md'), mergedText);
   onProgress?.({ step: 'merge', current: totalSteps, total: totalSteps });
 
   logger.info('skill-creator', 'image_parsed', {
@@ -760,6 +800,7 @@ async function parseFlowchartImage(
     tiles: tiles.length,
     overview_length: overviewText.length,
     merge_length: mergedText.length,
+    cache_dir: cacheDir,
   });
 
   return mergedText;
@@ -781,6 +822,7 @@ skillCreator.post('/chat', async (c) => {
   let enableThinking = false;
   let imageBuffer: Buffer | null = null;
   let imageBase64: string | undefined;
+  let lang: OutputLang = 'zh';
 
   if (contentType.includes('multipart/form-data')) {
     const form = await c.req.parseBody();
@@ -789,6 +831,7 @@ skillCreator.post('/chat', async (c) => {
     skillId = (form.skill_id as string) || null;
     versionNo = form.version_no ? Number(form.version_no) : undefined;
     enableThinking = form.enable_thinking === 'true' || form.enable_thinking === '1';
+    lang = (form.lang as string) === 'en' ? 'en' : 'zh';
     const file = form.image as File | undefined;
     if (file && file.size > 0) {
       imageBuffer = Buffer.from(await file.arrayBuffer());
@@ -801,12 +844,14 @@ skillCreator.post('/chat', async (c) => {
       version_no?: number;
       enable_thinking?: boolean;
       image?: string;
+      lang?: string;
     }>();
     message = body.message ?? '';
     sessionId = body.session_id;
     skillId = body.skill_id;
     versionNo = body.version_no;
     enableThinking = !!body.enable_thinking;
+    lang = body.lang === 'en' ? 'en' : 'zh';
     imageBase64 = body.image;
     if (imageBase64) {
       try { imageBuffer = fromDataUrl(imageBase64); } catch { /* keep as base64 fallback */ }
@@ -838,7 +883,7 @@ skillCreator.post('/chat', async (c) => {
     try {
       const visionStartTs = Date.now();
       logger.info('skill-creator', 'vision_start', { session_id: sessionId ?? '(new)' });
-      imageDescription = await parseFlowchartImage(imageInput!);
+      imageDescription = await parseFlowchartImage(imageInput!, undefined, lang);
       logger.info('skill-creator', 'image_parsed', {
         result_length: imageDescription.length,
         duration_ms: Date.now() - visionStartTs,
@@ -1014,7 +1059,7 @@ skillCreator.post('/chat', async (c) => {
                 logger.info('skill-creator', 'vision_start_streaming', { session_id: session.id });
                 imageDescription = await parseFlowchartImage(imageInput, (evt) => {
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'vision_progress', ...evt })}\n\n`));
-                });
+                }, lang);
                 // 重新构造 finalMessage（因为之前 imageDescription 为 null）
                 const imageContext = `\n\n---\n**[用户上传了一张流程图，以下是 AI 视觉模型的解析结果]**\n\n${imageDescription}\n---\n`;
                 const origMessage = message.trim();

@@ -62,7 +62,7 @@ export function KnowledgeLayout() {
           <KnowledgeManagementPage />
         </div>
         <div className={`absolute inset-0 ${activeSub !== 'skills' ? 'hidden' : ''}`}>
-          <SkillManagerPage onOpenToolContract={(toolName) => { setPendingToolNav({ toolName }); navigate('/agent/operations/knowledge/tools'); }} />
+          <SkillManagerPage lang={lang} onOpenToolContract={(toolName) => { setPendingToolNav({ toolName }); navigate('/agent/operations/knowledge/tools'); }} />
         </div>
         <div className={`absolute inset-0 ${activeSub !== 'tools' ? 'hidden' : ''}`}>
           <McpManagementPage lang={lang} externalNavigateToTool={pendingToolNav} onExternalNavigateHandled={() => setPendingToolNav(null)} />

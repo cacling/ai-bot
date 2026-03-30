@@ -149,7 +149,7 @@ async function deleteDraft(path: string): Promise<void> {
 
 // ── 自定义 Hook ───────────────────────────────────────────────────────────────
 
-export function useSkillManager() {
+export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
   // 列表层
   const [view, setView] = useState<SkillManagerView>('list');
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -332,6 +332,13 @@ export function useSkillManager() {
     setDirtyState(true);
   }, []);
 
+  const updateEditorContent = useCallback((updater: (current: string) => string) => {
+    const next = updater(editorContentRef.current);
+    setEditorContent(next);
+    editorContentRef.current = next;
+    setDirtyState(true);
+  }, []);
+
   // ── 保存 ─────────────────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (!selectedFile || selectedFile.path === null || !isTextFile(selectedFile.name)) return;
@@ -445,6 +452,7 @@ export function useSkillManager() {
   function applyDraftToEditor(newDraft: Draft) {
     // 更新编辑器内容
     setEditorContent(newDraft.skill_md);
+    editorContentRef.current = newDraft.skill_md;
     lastSavedContentRef.current = ''; // 标记为未保存
     setDirtyState(true);
 
@@ -516,6 +524,7 @@ export function useSkillManager() {
           if (!isNew && activeSkillId) formData.append('skill_id', activeSkillId);
           if (!isNew && chatVersionRef.current) formData.append('version_no', String(chatVersionRef.current));
           formData.append('enable_thinking', showThinking ? 'true' : 'false');
+          formData.append('lang', lang);
           res = await fetch('/api/skill-creator/chat', { method: 'POST', body: formData });
         } else {
           // 无图片时用 JSON（现有逻辑）
@@ -528,6 +537,7 @@ export function useSkillManager() {
               skill_id: isNew ? null : activeSkillId,
               version_no: isNew ? undefined : chatVersionRef.current ?? undefined,
               enable_thinking: showThinking,
+              lang,
             }),
           });
         }
@@ -700,7 +710,7 @@ export function useSkillManager() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [inputValue, isTyping, activeSkillId, sessionId, showThinking, pendingImageFile, chatVersionNo]
+    [inputValue, isTyping, activeSkillId, sessionId, showThinking, pendingImageFile, chatVersionNo, lang]
   );
 
   // ── 发布新技能（将 draft 写入磁盘）─────────────────────────────────────────
@@ -800,7 +810,7 @@ export function useSkillManager() {
     // 文件树
     fileTree, fileTreeLoading, selectedFile, handleSelectFile,
     // 编辑器
-    editorContent, handleEditorChange,
+    editorContent, handleEditorChange, updateEditorContent,
     fileLoading, saveStatus, canSave, isDirty,
     viewMode, setViewMode,
     handleSave,

@@ -35,7 +35,9 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { MermaidRenderer } from '../shared/MermaidRenderer';
 import { ToolCallPlanPanel } from './components/ToolCallPlanPanel';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
+import { SkillDiagramWorkbench } from './components/SkillDiagramWorkbench';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
+import { findCustomerGuidanceDiagramSection, replaceCustomerGuidanceMermaid } from '../shared/skillMarkdown';
 import {
   useSkillManager,
   isMdFile,
@@ -59,6 +61,21 @@ function getCodeMirrorLang(name: string) {
   if (/\.py$/i.test(name)) return python();
   if (/\.json$/i.test(name)) return json();
   return undefined;
+}
+
+function collectDirFilenames(nodes: SkillFileNode[], dirName: string): string[] {
+  for (const node of nodes) {
+    if (node.type === 'dir' && node.name === dirName) {
+      return (node.children ?? [])
+        .filter((child) => child.type === 'file')
+        .map((child) => child.name);
+    }
+    if (node.children?.length) {
+      const nested = collectDirFilenames(node.children, dirName);
+      if (nested.length > 0) return nested;
+    }
+  }
+  return [];
 }
 
 // ── 文件图标 ──────────────────────────────────────────────────────────────────
@@ -259,10 +276,11 @@ function useVoiceInput(onTranscript: (text: string) => void) {
 // ── 主页面 ────────────────────────────────────────────────────────────────────
 
 interface SkillManagerProps {
+  lang?: 'zh' | 'en';
   onOpenToolContract?: (toolName: string) => void;
 }
 
-export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {}) {
+export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManagerProps = {}) {
   const {
     view,
     skills,
@@ -276,6 +294,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
     handleSelectFile,
 
     editorContent,
+    updateEditorContent,
     handleEditorChange,
     fileLoading,
     saveStatus,
@@ -313,7 +332,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
     // thinking 模式
     showThinking,
     setShowThinking,
-  } = useSkillManager();
+  } = useSkillManager(lang);
 
   const { isRecording, toggle: toggleVoice } = useVoiceInput((text) => setInputValue(text));
 
@@ -321,6 +340,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
 
   // Tool Call Plan 折叠状态
   const [toolPlanCollapsed, setToolPlanCollapsed] = useState(false);
+  const [skillEditorSurface, setSkillEditorSurface] = useState<'document' | 'diagram'>('document');
 
   // 点击工具跳转 MCP 管理前，先过未保存保护
   const handleOpenToolGuarded = useCallback((toolName: string) => {
@@ -691,6 +711,24 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
     if (listModeFilter !== 'all') list = list.filter(s => { const r = registry.find(x => x.id === s.id); return r?.mode === listModeFilter; });
     return list;
   }, [skills, registry, listSearch, quickFilter, listModeFilter]);
+
+  const selectedIsSkillMd = selectedFile?.name === 'SKILL.md';
+  const currentTreeNodes = viewingVersion !== null ? versionFileTree : fileTree;
+  const referenceFiles = useMemo(() => collectDirFilenames(currentTreeNodes, 'references'), [currentTreeNodes]);
+  const assetFiles = useMemo(() => collectDirFilenames(currentTreeNodes, 'assets'), [currentTreeNodes]);
+
+  useEffect(() => {
+    if (!selectedIsSkillMd && skillEditorSurface !== 'document') {
+      setSkillEditorSurface('document');
+    }
+  }, [selectedIsSkillMd, skillEditorSurface]);
+
+  const handleDiagramMermaidChange = useCallback((mermaid: string) => {
+    updateEditorContent((current) => replaceCustomerGuidanceMermaid(current, mermaid));
+    if (selectedFile?.path) {
+      setFileDirtyMap(prev => new Map(prev).set(selectedFile.path!, true));
+    }
+  }, [selectedFile, updateEditorContent]);
 
   if (view === 'list') {
     return (
@@ -1065,10 +1103,34 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
             <span className="text-xs text-muted-foreground truncate mr-2">
               {selectedFile ? selectedFile.name : ''}
             </span>
+            {centerMode === 'edit' && selectedIsSkillMd && (
+              <div className="flex items-center rounded-md border border-border p-0.5 mr-2">
+                <Button
+                  variant={skillEditorSurface === 'document' ? 'secondary' : 'ghost'}
+                  size="xs"
+                  className="text-[10px] h-6"
+                  onClick={() => setSkillEditorSurface('document')}
+                >
+                  文档
+                </Button>
+                <Button
+                  variant={skillEditorSurface === 'diagram' ? 'secondary' : 'ghost'}
+                  size="xs"
+                  className="text-[10px] h-6"
+                  onClick={() => setSkillEditorSurface('diagram')}
+                >
+                  状态图工作台
+                </Button>
+              </div>
+            )}
             {centerMode === 'edit' && selectedIsMd && (
               <>
-                <Button variant={viewMode === 'edit' ? 'secondary' : 'ghost'} size="xs" className="text-[10px] h-6" onClick={() => setViewMode('edit')}>编辑</Button>
-                <Button variant={viewMode === 'preview' ? 'secondary' : 'ghost'} size="xs" className="text-[10px] h-6" onClick={() => setViewMode('preview')}>只读</Button>
+                {skillEditorSurface === 'document' && (
+                  <>
+                    <Button variant={viewMode === 'edit' ? 'secondary' : 'ghost'} size="xs" className="text-[10px] h-6" onClick={() => setViewMode('edit')}>编辑</Button>
+                    <Button variant={viewMode === 'preview' ? 'secondary' : 'ghost'} size="xs" className="text-[10px] h-6" onClick={() => setViewMode('preview')}>只读</Button>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -1089,11 +1151,27 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
 
         {/* ── 编辑区 + 流程图（可拖动分隔） ── */}
         {centerMode === 'edit' && (() => {
+          if (selectedIsSkillMd && skillEditorSurface === 'diagram') {
+            return (
+              <SkillDiagramWorkbench
+                skillMd={editorContent}
+                skillId={activeSkill?.id ?? null}
+                versionNo={viewingVersion}
+                readOnly={isPublishedVersion}
+                references={referenceFiles}
+                assets={assetFiles}
+                onChangeMermaid={handleDiagramMermaidChange}
+              />
+            );
+          }
+
           // Diagram data computed from backend API (same source as agent workstation)
-          const fallbackMermaid = backendDiagramLoading ? null : (editorContent?.match(/```mermaid\s*\n([\s\S]*?)```/)?.[1]?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null);
+          const fallbackMermaid = backendDiagramLoading
+            ? null
+            : (findCustomerGuidanceDiagramSection(editorContent).mermaid?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null);
           const activeMermaid = testDiagram?.mermaid ?? backendDiagram?.mermaid ?? fallbackMermaid;
           const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? backendDiagram?.nodeTypeMap ?? undefined;
-          const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedFile?.name === 'SKILL.md' ? activeSkill?.id : null);
+          const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedIsSkillMd ? activeSkill?.id : null);
           const isTestMode = testingVersion !== null;
           const showDiagram = !!activeMermaid || isTestMode;
 
