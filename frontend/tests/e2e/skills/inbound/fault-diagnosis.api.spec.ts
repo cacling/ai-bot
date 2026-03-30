@@ -2,6 +2,7 @@
  * fault-diagnosis API 工具调用测试
  *
  * 验证 diagnose_network 工具在不同故障类型下的调用和响应。
+ * 语义正确性由 promptfoo eval 覆盖: evals/datasets/fault-diagnosis.yaml (FD-01~05)
  *
  * 依赖：服务已启动（./start.sh 或 ./start.sh --reset）
  */
@@ -24,7 +25,6 @@ test.describe('fault-diagnosis API: diagnose_network 工具调用', () => {
     const body = await res.json() as { response: string };
     expect(typeof body.response).toBe('string');
     expect(body.response.length).toBeGreaterThan(0);
-    expect(body.response).toMatch(/信号|基站|SIM|APN|诊断/);
   });
 
   test('TC-FD-02 用户报告网速慢，LLM 调用 diagnose_network(slow_data)', async ({ request }) => {
@@ -38,7 +38,6 @@ test.describe('fault-diagnosis API: diagnose_network 工具调用', () => {
     expect(res.ok()).toBeTruthy();
     const body = await res.json() as { response: string };
     expect(body.response.length).toBeGreaterThan(0);
-    expect(body.response).toMatch(/流量|网络|网速|拥塞|诊断/);
   });
 
   test('TC-FD-03 用户报告通话中断，LLM 调用 diagnose_network(call_drop)', async ({ request }) => {
@@ -52,7 +51,6 @@ test.describe('fault-diagnosis API: diagnose_network 工具调用', () => {
     expect(res.ok()).toBeTruthy();
     const body = await res.json() as { response: string };
     expect(body.response.length).toBeGreaterThan(0);
-    expect(body.response).toMatch(/通话|VoLTE|基站|中断|诊断/);
   });
 
   test('TC-FD-04 停机账号诊断结果包含停机提示', async ({ request }) => {
@@ -66,7 +64,6 @@ test.describe('fault-diagnosis API: diagnose_network 工具调用', () => {
     expect(res.ok()).toBeTruthy();
     const body = await res.json() as { response: string };
     expect(body.response.length).toBeGreaterThan(0);
-    expect(body.response).toMatch(/停机|欠费|暂停|诊断/);
   });
 
   test('TC-FD-05 不存在的手机号诊断返回未找到提示', async ({ request }) => {
@@ -80,6 +77,5 @@ test.describe('fault-diagnosis API: diagnose_network 工具调用', () => {
     expect(res.ok()).toBeTruthy();
     const body = await res.json() as { response: string };
     expect(body.response.length).toBeGreaterThan(0);
-    expect(body.response).toMatch(/未找到|不存在|查询不到|没有.*记录|无法|诊断|检查|号码/);
   });
 });

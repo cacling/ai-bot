@@ -26,10 +26,7 @@ test.describe.serial('SOP 执行计划驱动验证', () => {
     expect(res.ok()).toBeTruthy();
     const result = await res.json();
     expect(result.text).toBeTruthy();
-    // Bot 应该先查询用户信息（query_subscriber），不能直接退订
-    // 如果 SOP 生效，第一轮不应该出现"已退订"/"退订成功"等假闭环
-    expect(result.text).not.toContain('已退订成功');
-    expect(result.text).not.toContain('退订成功');
+    // 语义正确性由 promptfoo eval 覆盖: evals/datasets/sop-guard.yaml SOP-01
   });
 
   test('TC-SOP-02: service-cancel 未知扣费 — 必须先查账单', async ({ request }) => {
@@ -45,8 +42,7 @@ test.describe.serial('SOP 执行计划驱动验证', () => {
     expect(res.ok()).toBeTruthy();
     const result = await res.json();
     expect(result.text).toBeTruthy();
-    // 不应该直接退订，应该先查账单
-    expect(result.text).not.toContain('已退订');
+    // 语义正确性由 promptfoo eval 覆盖: evals/datasets/sop-guard.yaml SOP-02
   });
 
   test('TC-SOP-03: service-cancel 多轮对话 — 确认后才执行', async ({ request }) => {
@@ -105,8 +101,7 @@ test.describe.serial('SOP 执行计划驱动验证', () => {
     expect(res.ok()).toBeTruthy();
     const result = await res.json();
     expect(result.text).toBeTruthy();
-    // 不应该跳过记录直接发短信
-    expect(result.text).not.toContain('无法处理');
+    // 语义正确性由 promptfoo eval 覆盖: evals/datasets/sop-guard.yaml SOP-04
   });
 
   test('TC-SOP-05: outbound-collection 身份否认 — 不发催缴短信', async ({ request }) => {
