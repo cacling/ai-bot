@@ -17,8 +17,9 @@
 import { Hono } from 'hono';
 import { generateText, streamText, tool } from 'ai';
 import { z } from 'zod';
-import { skillCreatorModel, skillCreatorThinkingModel, skillCreatorVisionModel } from '../llm';
+import { skillCreatorModel, skillCreatorThinkingModel, skillCreatorVisionModel, chatModel } from '../llm';
 import { logger } from '../logger';
+import { analyzeImage, trimWhitespace, generateOverview, generateTiles, resizeImage, toDataUrl, fromDataUrl, type ImageStrategy } from './image-processor';
 import { createNewSkillVersion, createVersionFrom, getSkillRegistry } from './version-manager';
 import { refreshSkillsCache, syncSkillMetadata } from '../engine-stubs';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
@@ -570,20 +571,9 @@ async function autoReviewAndRepairDraft(params: {
 
 // ── 图片解析（调用视觉模型）─────────────────────────────────────────────────
 
-async function parseFlowchartImage(imageBase64: string): Promise<string> {
-  const { text } = await generateText({
-    model: skillCreatorVisionModel,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            image: imageBase64,
-          },
-          {
-            type: 'text',
-            text: `请仔细分析这张流程图/草图，完成以下任务：
+// ── Vision prompt 模板 ─────────────────────────────────────────────────────
+
+const VISION_PROMPT_SINGLE = `请仔细分析这张流程图/草图，完成以下任务：
 
 1. **文字描述**：用自然语言描述图中的完整流程，包括每个步骤、判断条件、分支走向。
 2. **Mermaid 状态图**：将流程转换为 Mermaid stateDiagram-v2 格式，要求：
@@ -600,16 +590,179 @@ async function parseFlowchartImage(imageBase64: string): Promise<string> {
 \`\`\`mermaid
 stateDiagram-v2
   ...
-\`\`\``,
-          },
+\`\`\``;
+
+const VISION_PROMPT_OVERVIEW = `这是一张大型流程图的总览缩略图。请描述：
+1. 整体流程结构和阅读方向（从哪到哪）
+2. 可识别的主要区域（如"顶部入口区""中部核心矩阵""底部收尾区"）
+3. 大致的分支走向和主干路径
+不需要识别具体文字，重点描述结构布局。`;
+
+function buildTilePrompt(index: number, total: number): string {
+  return `这是一张大型流程图的第 ${index + 1}/${total} 块切片。请尽可能识别并输出：
+- 本块包含的节点列表（含节点内文字）
+- 判断节点及分支条件
+- 箭头连接关系（A → B）
+- 本块边缘的入口点和出口点（可能连接到相邻切片）
+- 看不清或不确定的内容
+
+请按结构化格式输出，便于后续合并。`;
+}
+
+function buildMergePrompt(overviewText: string, tileTexts: string[]): string {
+  const tilesSection = tileTexts.map((t, i) => `### 切片 ${i + 1}\n${t}`).join('\n\n');
+  return `以下是一张大型流程图的分析结果。请合并为完整流程。
+
+## 总览（全局结构）
+${overviewText}
+
+## 各切片识别结果
+${tilesSection}
+
+## 请输出
+
+1. **流程描述**：合并后的完整流程自然语言描述，去掉重复节点，按总览确定的阅读顺序排列。
+2. **Mermaid 状态图**：完整的 Mermaid stateDiagram-v2（中文标签，包含所有分支）。
+
+注意：
+- 重叠区域会出现重复节点，请去重合并为一个
+- 接上跨切片的箭头连接
+- 如果某些连接不确定，标注为注释`;
+}
+
+// ── 进度事件 ───────────────────────────────────────────────────────────────
+
+export interface VisionProgressEvent {
+  step: 'trim' | 'overview' | 'slice' | 'merge';
+  current: number;
+  total: number;
+}
+
+// ── 单图 vision 调用 ──────────────────────────────────────────────────────
+
+async function callVisionModel(imageDataUrl: string, prompt: string): Promise<string> {
+  const { text } = await generateText({
+    model: skillCreatorVisionModel,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'image', image: imageDataUrl },
+          { type: 'text', text: prompt },
         ],
       },
     ],
     temperature: 0.2,
   });
-
-  logger.info('skill-creator', 'image_parsed', { result_length: text.length });
   return text;
+}
+
+// ── parseFlowchartImage — 支持大图分片 ──────────────────────────────────────
+
+async function parseFlowchartImage(
+  imageInput: Buffer | string,
+  onProgress?: (event: VisionProgressEvent) => void,
+): Promise<string> {
+  // 统一转为 Buffer
+  const buffer = typeof imageInput === 'string' ? fromDataUrl(imageInput) : imageInput;
+
+  const analysis = await analyzeImage(buffer);
+  logger.info('skill-creator', 'image_analysis', {
+    width: analysis.width,
+    height: analysis.height,
+    strategy: analysis.strategy,
+    tileCount: analysis.tileCount,
+  });
+
+  // ── direct: 小图直接处理 ──
+  if (analysis.strategy === 'direct') {
+    const dataUrl = toDataUrl(buffer);
+    const text = await callVisionModel(dataUrl, VISION_PROMPT_SINGLE);
+    logger.info('skill-creator', 'image_parsed', { strategy: 'direct', result_length: text.length });
+    return text;
+  }
+
+  // ── resize: 中图缩放后处理 ──
+  if (analysis.strategy === 'resize') {
+    const resized = await resizeImage(buffer, 2048);
+    const dataUrl = toDataUrl(resized);
+    const text = await callVisionModel(dataUrl, VISION_PROMPT_SINGLE);
+    logger.info('skill-creator', 'image_parsed', { strategy: 'resize', result_length: text.length });
+    return text;
+  }
+
+  // ── tile: 大图分片处理 ──
+  const totalSteps = analysis.tileCount + 2; // overview + tiles + merge
+
+  // Step 1: 裁白边
+  onProgress?.({ step: 'trim', current: 0, total: totalSteps });
+  let trimmed: Buffer;
+  try {
+    trimmed = await trimWhitespace(buffer);
+    logger.info('skill-creator', 'image_trimmed', {
+      original: `${analysis.width}x${analysis.height}`,
+    });
+  } catch {
+    // trim 可能失败（全白图等），降级用原图
+    trimmed = buffer;
+  }
+
+  // Step 2: 总览
+  onProgress?.({ step: 'overview', current: 1, total: totalSteps });
+  const overviewBuf = await generateOverview(trimmed, 1024);
+  const overviewDataUrl = toDataUrl(overviewBuf);
+  const overviewText = await callVisionModel(overviewDataUrl, VISION_PROMPT_OVERVIEW);
+  logger.info('skill-creator', 'overview_parsed', { result_length: overviewText.length });
+
+  // Step 3: 切片
+  const tiles = await generateTiles(trimmed, analysis.rows, analysis.cols, {
+    maxTileSide: 2048,
+    overlap: 0.15,
+  });
+  logger.info('skill-creator', 'tiles_generated', { count: tiles.length });
+
+  // 并行处理切片（concurrency=3）
+  const tileTexts: string[] = new Array(tiles.length);
+  const concurrency = 3;
+  let completed = 0;
+
+  for (let i = 0; i < tiles.length; i += concurrency) {
+    const batch = tiles.slice(i, i + concurrency);
+    const results = await Promise.all(
+      batch.map((tile, j) => {
+        const idx = i + j;
+        const dataUrl = toDataUrl(tile);
+        return callVisionModel(dataUrl, buildTilePrompt(idx, tiles.length));
+      }),
+    );
+    for (let j = 0; j < results.length; j++) {
+      const idx = i + j;
+      tileTexts[idx] = results[j];
+      completed++;
+      onProgress?.({ step: 'slice', current: 1 + completed, total: totalSteps });
+      logger.info('skill-creator', 'tile_parsed', { tile: idx + 1, total: tiles.length, result_length: results[j].length });
+    }
+  }
+
+  // Step 4: 合并
+  onProgress?.({ step: 'merge', current: totalSteps - 1, total: totalSteps });
+  const mergePrompt = buildMergePrompt(overviewText, tileTexts);
+  const { text: mergedText } = await generateText({
+    model: chatModel,
+    messages: [{ role: 'user', content: mergePrompt }],
+    temperature: 0.2,
+    maxTokens: 16384,
+  });
+  onProgress?.({ step: 'merge', current: totalSteps, total: totalSteps });
+
+  logger.info('skill-creator', 'image_parsed', {
+    strategy: 'tile',
+    tiles: tiles.length,
+    overview_length: overviewText.length,
+    merge_length: mergedText.length,
+  });
+
+  return mergedText;
 }
 
 // ── POST /api/skill-creator/chat ──────────────────────────────────────────────
@@ -618,39 +771,78 @@ const skillCreator = new Hono();
 
 skillCreator.post('/chat', async (c) => {
   const reqStartTs = Date.now();
-  const body = await c.req.json<{
-    message: string;
-    session_id?: string;
-    skill_id?: string | null;
-    version_no?: number; // 指定操作的版本号（编辑模式下从版本快照读取 SKILL.md）
-    enable_thinking?: boolean;
-    image?: string; // base64 编码的图片数据（data:image/xxx;base64,...）
-  }>();
+
+  // ── 解析请求（支持 JSON 和 multipart/form-data） ──
+  const contentType = c.req.header('content-type') ?? '';
+  let message = '';
+  let sessionId: string | undefined;
+  let skillId: string | null | undefined;
+  let versionNo: number | undefined;
+  let enableThinking = false;
+  let imageBuffer: Buffer | null = null;
+  let imageBase64: string | undefined;
+
+  if (contentType.includes('multipart/form-data')) {
+    const form = await c.req.parseBody();
+    message = (form.message as string) ?? '';
+    sessionId = (form.session_id as string) || undefined;
+    skillId = (form.skill_id as string) || null;
+    versionNo = form.version_no ? Number(form.version_no) : undefined;
+    enableThinking = form.enable_thinking === 'true' || form.enable_thinking === '1';
+    const file = form.image as File | undefined;
+    if (file && file.size > 0) {
+      imageBuffer = Buffer.from(await file.arrayBuffer());
+    }
+  } else {
+    const body = await c.req.json<{
+      message: string;
+      session_id?: string;
+      skill_id?: string | null;
+      version_no?: number;
+      enable_thinking?: boolean;
+      image?: string;
+    }>();
+    message = body.message ?? '';
+    sessionId = body.session_id;
+    skillId = body.skill_id;
+    versionNo = body.version_no;
+    enableThinking = !!body.enable_thinking;
+    imageBase64 = body.image;
+    if (imageBase64) {
+      try { imageBuffer = fromDataUrl(imageBase64); } catch { /* keep as base64 fallback */ }
+    }
+  }
+
+  const hasImage = !!imageBuffer || !!imageBase64;
 
   logger.info('skill-creator', 'chat_request_start', {
-    session_id: body.session_id ?? '(new)',
-    skill_id: body.skill_id ?? null,
-    version_no: body.version_no ?? null,
-    enable_thinking: !!body.enable_thinking,
-    has_image: !!body.image,
-    message_preview: (body.message ?? '').slice(0, 80),
+    session_id: sessionId ?? '(new)',
+    skill_id: skillId ?? null,
+    version_no: versionNo ?? null,
+    enable_thinking: enableThinking,
+    has_image: hasImage,
+    image_size: imageBuffer ? imageBuffer.length : 0,
+    message_preview: message.slice(0, 80),
   });
 
-  if (!body.message?.trim() && !body.image) {
+  if (!message.trim() && !hasImage) {
     return c.json({ error: 'message 或 image 不能为空' }, 400);
   }
 
-  // ── 图片解析（延迟到流式/非流式分支中处理，以便先返回解析结果）──
-  const hasImage = !!body.image;
+  // ── 图片解析（非流式模式：同步处理；流式模式：延迟到 SSE 流中处理） ──
   let imageDescription: string | null = null;
+  const imageInput: Buffer | string | null = imageBuffer ?? imageBase64 ?? null;
 
-  // 如果有图片，先解析视觉模型
-  if (hasImage) {
+  // 非流式模式下同步处理图片（流式模式在 SSE 流中处理以支持实时进度推送）
+  if (hasImage && !enableThinking) {
     try {
       const visionStartTs = Date.now();
-      logger.info('skill-creator', 'vision_start', { session_id: body.session_id ?? '(new)' });
-      imageDescription = await parseFlowchartImage(body.image!);
-      logger.info('skill-creator', 'image_parsed', { result_length: imageDescription.length, duration_ms: Date.now() - visionStartTs });
+      logger.info('skill-creator', 'vision_start', { session_id: sessionId ?? '(new)' });
+      imageDescription = await parseFlowchartImage(imageInput!);
+      logger.info('skill-creator', 'image_parsed', {
+        result_length: imageDescription.length,
+        duration_ms: Date.now() - visionStartTs,
+      });
     } catch (err) {
       logger.error('skill-creator', 'image_parse_error', { error: String(err), duration_ms: Date.now() - reqStartTs });
       return c.json({ error: `图片解析失败: ${String(err)}` }, 500);
@@ -658,7 +850,7 @@ skillCreator.post('/chat', async (c) => {
   }
 
   // 构造最终消息（注入图片解析结果）
-  let finalMessage = body.message?.trim() ?? '';
+  let finalMessage = message.trim();
   if (imageDescription) {
     const imageContext = `\n\n---\n**[用户上传了一张流程图，以下是 AI 视觉模型的解析结果]**\n\n${imageDescription}\n---\n`;
     finalMessage = finalMessage
@@ -667,14 +859,14 @@ skillCreator.post('/chat', async (c) => {
   }
 
   let session: Session;
-  if (body.session_id && sessions.has(body.session_id)) {
-    session = sessions.get(body.session_id)!;
+  if (sessionId && sessions.has(sessionId)) {
+    session = sessions.get(sessionId)!;
   } else {
     const id = `sc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     session = {
       id,
-      skill_id: body.skill_id ?? null,
-      version_no: body.version_no ?? null,
+      skill_id: skillId ?? null,
+      version_no: versionNo ?? null,
       history: [],
       phase: 'interview',
       draft: null,
@@ -789,10 +981,10 @@ skillCreator.post('/chat', async (c) => {
     }),
   };
 
-  const model = body.enable_thinking ? skillCreatorThinkingModel : skillCreatorModel;
+  const model = enableThinking ? skillCreatorThinkingModel : skillCreatorModel;
 
   // ── 流式模式（thinking 开启时）──
-  if (body.enable_thinking) {
+  if (enableThinking) {
     try {
       const llmStartTs = Date.now();
       logger.info('skill-creator', 'llm_stream_start', {
@@ -816,7 +1008,29 @@ skillCreator.post('/chat', async (c) => {
       const sseStream = new ReadableStream({
         async start(controller) {
           try {
-            // 如果有图片解析结果，先推送给前端
+            // 流式模式下在 SSE 中处理图片（支持实时进度推送）
+            if (hasImage && !imageDescription && imageInput) {
+              try {
+                logger.info('skill-creator', 'vision_start_streaming', { session_id: session.id });
+                imageDescription = await parseFlowchartImage(imageInput, (evt) => {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'vision_progress', ...evt })}\n\n`));
+                });
+                // 重新构造 finalMessage（因为之前 imageDescription 为 null）
+                const imageContext = `\n\n---\n**[用户上传了一张流程图，以下是 AI 视觉模型的解析结果]**\n\n${imageDescription}\n---\n`;
+                const origMessage = message.trim();
+                session.history[session.history.length - 1] = {
+                  role: 'user',
+                  content: origMessage
+                    ? `${origMessage}\n${imageContext}`
+                    : `我上传了一张手绘流程图，请根据以下解析结果帮我完善需求：${imageContext}`,
+                };
+              } catch (err) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: `图片解析失败: ${String(err)}` })}\n\n`));
+                controller.close();
+                return;
+              }
+            }
+            // 推送图片解析结果
             if (imageDescription) {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'vision_result', text: imageDescription })}\n\n`));
             }

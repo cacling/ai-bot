@@ -298,6 +298,8 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
     handleSubmit,
     pendingImage,
     setPendingImage,
+    pendingImageFile,
+    setPendingImageFile,
 
     openSkill,
     requestCloseEditor,
@@ -337,18 +339,15 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) return;
-    if (file.size > 10 * 1024 * 1024) {
-      alert('图片大小不能超过 10MB');
+    if (file.size > 20 * 1024 * 1024) {
+      alert('图片大小不能超过 20MB');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPendingImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-    // 重置 input 以便可以重复选同一张图
+    // 用 objectURL 做即时预览（不阻塞，不读 base64）
+    setPendingImage(URL.createObjectURL(file));
+    setPendingImageFile(file);
     e.target.value = '';
-  }, [setPendingImage]);
+  }, [setPendingImage, setPendingImageFile]);
 
   // ── 文件保存状态跟踪（per-file dirty map）──────────────────────────────────
   // true = 有未保存修改（黄点），false = 已保存（绿点），无 entry = 初始状态（无点）
@@ -1294,7 +1293,7 @@ export function SkillManagerPage({ onOpenToolContract }: SkillManagerProps = {})
                     <div className="px-3 pt-2 flex items-start gap-2">
                       <div className="relative group">
                         <img src={pendingImage} alt="待发送的流程图" className="max-h-24 rounded-lg border border-border object-contain" />
-                        <button type="button" onClick={() => setPendingImage(null)} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button type="button" onClick={() => { setPendingImage(null); setPendingImageFile(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                           <X className="w-2.5 h-2.5" />
                         </button>
                       </div>

@@ -162,7 +162,8 @@ export function useSkillManager() {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [pendingImage, setPendingImage] = useState<string | null>(null); // base64
+  const [pendingImage, setPendingImage] = useState<string | null>(null); // objectURL for preview
+  const [pendingImageFile, setPendingImageFile] = useState<File | null>(null); // actual File for upload
 
   // skill-creator 会话状态
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -475,20 +476,22 @@ export function useSkillManager() {
     async (e: React.FormEvent) => {
       e.preventDefault();
       const hasText = inputValue.trim().length > 0;
-      const hasImage = !!pendingImage;
+      const hasImage = !!pendingImageFile;
       if ((!hasText && !hasImage) || isTyping) return;
 
       // 先捕获当前值再清空，避免闭包竞争
       const submittedText = inputValue;
-      const submittedImage = pendingImage;
+      const submittedFile = pendingImageFile;
+      const submittedPreview = pendingImage;
       setInputValue('');
       setPendingImage(null);
+      setPendingImageFile(null);
 
       const userMsg: ChatMessage = {
         id: Date.now(),
         role: 'user',
         text: submittedText || (hasImage ? '（上传了一张流程图）' : ''),
-        image: submittedImage ?? undefined,
+        image: submittedPreview ?? undefined,
       };
       setMessages((prev) => [...prev, userMsg]);
       setIsTyping(true);
@@ -499,22 +502,35 @@ export function useSkillManager() {
         console.log('[skill-creator] sending chat request', {
           session_id: sessionId,
           enable_thinking: showThinking,
-          has_image: !!submittedImage,
+          has_image: !!submittedFile,
           message_len: submittedText.length,
         });
 
-        const res = await fetch('/api/skill-creator/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: submittedText,
-            session_id: sessionId,
-            skill_id: isNew ? null : activeSkillId,
-            version_no: isNew ? undefined : chatVersionRef.current ?? undefined,
-            enable_thinking: showThinking,
-            image: submittedImage ?? undefined,
-          }),
-        });
+        let res: Response;
+        if (submittedFile) {
+          // 有图片时用 FormData 上传（避免 base64 膨胀）
+          const formData = new FormData();
+          formData.append('message', submittedText);
+          formData.append('image', submittedFile);
+          if (sessionId) formData.append('session_id', sessionId);
+          if (!isNew && activeSkillId) formData.append('skill_id', activeSkillId);
+          if (!isNew && chatVersionRef.current) formData.append('version_no', String(chatVersionRef.current));
+          formData.append('enable_thinking', showThinking ? 'true' : 'false');
+          res = await fetch('/api/skill-creator/chat', { method: 'POST', body: formData });
+        } else {
+          // 无图片时用 JSON（现有逻辑）
+          res = await fetch('/api/skill-creator/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: submittedText,
+              session_id: sessionId,
+              skill_id: isNew ? null : activeSkillId,
+              version_no: isNew ? undefined : chatVersionRef.current ?? undefined,
+              enable_thinking: showThinking,
+            }),
+          });
+        }
 
         console.log('[skill-creator] response received', {
           status: res.status,
@@ -581,7 +597,18 @@ export function useSkillManager() {
                   });
                 }
 
-                if (data.type === 'vision_result') {
+                if (data.type === 'vision_progress') {
+                  // 大图处理进度：更新 AI 消息的占位文本
+                  const progressLabels: Record<string, string> = {
+                    trim: '正在裁剪空白区域…',
+                    overview: '正在生成总览…',
+                    slice: `正在解析切片 ${(data.current ?? 1) - 1}/${(data.total ?? 2) - 2}…`,
+                    merge: '正在合并识别结果…',
+                  };
+                  setMessages((prev) => prev.map((m) =>
+                    m.id === msgId ? { ...m, text: progressLabels[data.step] ?? '正在处理图片…' } : m
+                  ));
+                } else if (data.type === 'vision_result') {
                   // 图片解析结果：插入一条系统消息，在 AI 回复之前展示
                   setMessages((prev) => {
                     const aiMsgIndex = prev.findIndex(m => m.id === msgId);
@@ -673,7 +700,7 @@ export function useSkillManager() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [inputValue, isTyping, activeSkillId, sessionId, showThinking, pendingImage, chatVersionNo]
+    [inputValue, isTyping, activeSkillId, sessionId, showThinking, pendingImageFile, chatVersionNo]
   );
 
   // ── 发布新技能（将 draft 写入磁盘）─────────────────────────────────────────
@@ -781,7 +808,7 @@ export function useSkillManager() {
     showUnsavedDialog, saveAndProceed, confirmDiscard, cancelUnsaved,
     // 对话
     messages, inputValue, setInputValue, isTyping, messagesEndRef, handleSubmit,
-    pendingImage, setPendingImage,
+    pendingImage, setPendingImage, pendingImageFile, setPendingImageFile,
     // skill-creator 状态
     phase, draft, canPublish, publishSkill,
     chatVersionNo, setChatVersionNo,
