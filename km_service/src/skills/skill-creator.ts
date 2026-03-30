@@ -17,7 +17,7 @@
 import { Hono } from 'hono';
 import { generateText, streamText, tool } from 'ai';
 import { z } from 'zod';
-import { skillCreatorModel, skillCreatorThinkingModel, skillCreatorVisionModel, chatModel } from '../llm';
+import { skillCreatorModel, skillCreatorThinkingModel, skillCreatorVisionModel } from '../llm';
 import { logger } from '../logger';
 import { analyzeImage, trimWhitespace, generateOverview, generateTiles, resizeImage, toDataUrl, fromDataUrl, type ImageStrategy } from './image-processor';
 import { createNewSkillVersion, createVersionFrom, getSkillRegistry } from './version-manager';
@@ -776,7 +776,7 @@ async function parseFlowchartImage(
     } else {
       const pairPrompt = buildPairMergePrompt(pairTiles, i, lang);
       const { text: pairResult } = await generateText({
-        model: chatModel,
+        model: skillCreatorModel,
         messages: [{ role: 'user', content: pairPrompt }],
         temperature: 0.2,
         maxTokens: 8192,
@@ -790,7 +790,7 @@ async function parseFlowchartImage(
   // Step 4b: Final merge — 总览 + 各局部合并 → 完整流程图
   const finalPrompt = buildFinalMergePrompt(overviewText, partialMerges, lang);
   const { text: mergedText } = await generateText({
-    model: chatModel,
+    model: skillCreatorModel,
     messages: [{ role: 'user', content: finalPrompt }],
     temperature: 0.2,
     maxTokens: 16384,
