@@ -26,5 +26,9 @@ export const {
   workflowDefinitions,
   workflowRuns,
   workflowRunEvents,
+  workItemIntakes,
+  workItemDrafts,
+  issueThreads,
+  issueMergeReviews,
 } = workorderSchema;
 export { eq, and, desc, asc, sql } from "drizzle-orm";

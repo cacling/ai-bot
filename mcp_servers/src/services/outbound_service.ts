@@ -196,4 +196,4 @@ function createServer(): McpServer {
   return server;
 }
 
-startMcpHttpServer("outbound-service", Number(process.env.PORT ?? 18006), createServer);
+if (import.meta.main) startMcpHttpServer("outbound-service", Number(process.env.PORT ?? 18006), createServer);

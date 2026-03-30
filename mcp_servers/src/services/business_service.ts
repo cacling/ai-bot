@@ -80,4 +80,4 @@ function createServer(): McpServer {
   return server;
 }
 
-startMcpHttpServer("business-service", Number(process.env.PORT ?? 18004), createServer);
+if (import.meta.main) startMcpHttpServer("business-service", Number(process.env.PORT ?? 18004), createServer);

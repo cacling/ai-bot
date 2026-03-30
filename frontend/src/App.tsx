@@ -41,6 +41,7 @@ export interface FaqMessage {
   options: string[];
   title?: string;
   time: string;
+  loading?: boolean; // 占位态（skeleton）
 }
 
 export type Message = TextMessage | FaqMessage;
@@ -103,20 +104,28 @@ const MessageBubble = memo(function MessageBubble({ msg, isTyping, lang, onSend 
         {msg.type === 'faq' && (
           <div className="bg-background p-3 rounded-2xl rounded-tl-none shadow-sm border border-border w-full mb-1">
             <p className="text-sm text-muted-foreground mb-2 font-medium">{msg.title || t.chat_faq_hint}</p>
-            <div className="space-y-2">
-              {msg.options.map((opt, idx) => (
-                <Button
-                  key={idx}
-                  variant="outline"
-                  onClick={() => onSend(opt)}
-                  disabled={isTyping}
-                  className="w-full justify-between text-left px-3 py-2 text-sm text-primary hover:bg-accent rounded-lg h-auto"
-                >
-                  <span>{opt}</span>
-                  <ChevronRight size={14} />
-                </Button>
-              ))}
-            </div>
+            {msg.loading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-9 rounded-lg bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {msg.options.map((opt, idx) => (
+                  <Button
+                    key={idx}
+                    variant="outline"
+                    onClick={() => onSend(opt)}
+                    disabled={isTyping}
+                    className="w-full justify-between text-left px-3 py-2 text-sm text-primary hover:bg-accent rounded-lg h-auto"
+                  >
+                    <span>{opt}</span>
+                    <ChevronRight size={14} />
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -134,6 +143,9 @@ const MessageBubble = memo(function MessageBubble({ msg, isTyping, lang, onSend 
 
 // ── 常量 ──────────────────────────────────────────────────────────────────────
 
+/** 初始 FAQ 占位消息的固定 ID，用于后续替换 */
+const FAQ_PLACEHOLDER_ID = 2;
+
 function makeInitialMessages(lang: Lang = 'zh'): Message[] {
   const t = T[lang];
   const now = new Date();
@@ -146,6 +158,15 @@ function makeInitialMessages(lang: Lang = 'zh'): Message[] {
       text: t.chat_greeting,
       time: fmt(new Date(now.getTime() - 2000)),
     },
+    {
+      id: FAQ_PLACEHOLDER_ID,
+      sender: 'bot',
+      type: 'faq',
+      options: [],
+      title: t.chat_faq_hint,
+      time: fmt(now),
+      loading: true,
+    } as FaqMessage,
   ];
 }
 
@@ -187,7 +208,7 @@ export default function App() {
   const pendingBotIdRef = useRef<number | null>(null);
   const tSendRef = useRef<number>(0);
   const processedMsgIds = useRef(new Set<string>());
-  const msgIdCounter = useRef(0);
+  const msgIdCounter = useRef(FAQ_PLACEHOLDER_ID);
   const nextMsgId = () => ++msgIdCounter.current;
 
   // ── 初始加载用户数据 ──────────────────────────────────────────────────────────
@@ -274,17 +295,28 @@ export default function App() {
       } else if (msg.type === 'suggestions') {
         const options = ((msg.options ?? []) as Array<{ label: string }>).map(o => o.label);
         if (options.length > 0) {
-          setMessages(prev => [
-            ...prev,
-            {
-              id: nextMsgId(),
-              sender: 'bot',
-              type: 'faq',
-              options,
-              title: msg.title as string | undefined,
-              time: nowTime(),
-            } as FaqMessage,
-          ]);
+          setMessages(prev => {
+            // 替换占位 FAQ（loading 态）而非追加
+            const hasPlaceholder = prev.some(m => m.type === 'faq' && (m as FaqMessage).loading);
+            if (hasPlaceholder) {
+              return prev.map(m =>
+                m.type === 'faq' && (m as FaqMessage).loading
+                  ? { ...m, options, title: (msg.title as string | undefined) ?? (m as FaqMessage).title, loading: false } as FaqMessage
+                  : m
+              );
+            }
+            return [
+              ...prev,
+              {
+                id: nextMsgId(),
+                sender: 'bot',
+                type: 'faq',
+                options,
+                title: msg.title as string | undefined,
+                time: nowTime(),
+              } as FaqMessage,
+            ];
+          });
           setQuickFaqs(options);
         }
 

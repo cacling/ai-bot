@@ -40,4 +40,6 @@ export {
   skillInstances,
   skillInstanceEvents,
   executionRecords,
+  staffAccounts,
+  staffSessions,
 } from '../../../../packages/shared-db/src/schema/platform';

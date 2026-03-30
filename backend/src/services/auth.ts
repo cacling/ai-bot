@@ -38,18 +38,29 @@ export function requireRole(minRole: UserRole) {
   const minLevel = ROLE_LEVEL[minRole] ?? 0;
 
   return async (c: Context, next: Next) => {
+    // 优先：staffSessionMiddleware 已解析的 platformRole（避免重复 DB 查询）
+    const platformRole = c.get('platformRole') as string | undefined;
+    if (platformRole) {
+      const level = ROLE_LEVEL[platformRole] ?? 0;
+      if (level < minLevel) {
+        logger.warn('auth', 'permission_denied', { userId: c.get('userId'), platformRole, required: minRole });
+        return c.json({ error: `权限不足：当前角色 ${platformRole}，需要 ${minRole} 或更高权限` }, 403);
+      }
+      await next();
+      return;
+    }
+
+    // Fallback：X-User-Id header（兼容旧调用和子服务代理）
     const userId = c.req.header('X-User-Id');
 
-    // 开发模式：无认证头时放行（方便本地调试，生产环境必须提供认证）
     if (!userId) {
       if (process.env.NODE_ENV !== 'production') {
         await next();
         return;
       }
-      return c.json({ error: '需要提供 X-User-Id 请求头' }, 401);
+      return c.json({ error: '需要提供认证信息' }, 401);
     }
 
-    // 从 DB 查询用户角色
     const rows = await db
       .select({ role: users.role })
       .from(users)
@@ -66,12 +77,9 @@ export function requireRole(minRole: UserRole) {
 
     if (userLevel < minLevel) {
       logger.warn('auth', 'permission_denied', { userId, userRole, required: minRole });
-      return c.json({
-        error: `权限不足：当前角色 ${userRole}，需要 ${minRole} 或更高权限`,
-      }, 403);
+      return c.json({ error: `权限不足：当前角色 ${userRole}，需要 ${minRole} 或更高权限` }, 403);
     }
 
-    // 将用户信息注入上下文（供后续 handler 使用）
     c.set('userId', userId);
     c.set('userRole', userRole);
 

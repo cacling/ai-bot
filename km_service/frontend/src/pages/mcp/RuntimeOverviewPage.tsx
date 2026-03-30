@@ -10,13 +10,15 @@ import { Button } from '@/components/ui/button';
 import { Activity, CheckCircle, Clock, Layers, Settings, Plus, RefreshCw } from 'lucide-react';
 import { fetchRuntimeStats, mcpApi, type RuntimeStats, type McpServer, type McpToolRecord } from './api';
 import { ServerManageDialog } from './ServerManageDialog';
+import { t, type Lang } from './i18n';
 
 const EMPTY_STATS: RuntimeStats = {
   totalCalls: 0, successRate: 0, avgLatencyMs: 0,
   adapterDistribution: [], channelDistribution: [], topTools: [],
 };
 
-export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
+export const RuntimeOverviewPage = memo(function RuntimeOverviewPage({ lang = 'zh' as Lang }: { lang?: Lang }) {
+  const T = t(lang);
   const [stats, setStats] = useState<RuntimeStats>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
 
@@ -46,7 +48,7 @@ export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
     loadServers();
   }, [loadServers]);
 
-  if (loading) return <div className="p-6 text-xs text-muted-foreground">Loading stats...</div>;
+  if (loading) return <div className="p-6 text-xs text-muted-foreground">{T.loading_stats}</div>;
 
   const hasData = stats.totalCalls > 0;
 
@@ -54,17 +56,17 @@ export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
     <div className="p-6 space-y-6">
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard icon={<Activity size={16} />} label="Total Calls" value={stats.totalCalls.toLocaleString()} />
-        <StatCard icon={<CheckCircle size={16} />} label="Success Rate" value={`${stats.successRate}%`}
+        <StatCard icon={<Activity size={16} />} label={T.total_calls} value={stats.totalCalls.toLocaleString()} />
+        <StatCard icon={<CheckCircle size={16} />} label={T.success_rate} value={`${stats.successRate}%`}
           color={stats.successRate >= 95 ? 'text-green-600' : stats.successRate >= 80 ? 'text-yellow-600' : 'text-red-600'} />
-        <StatCard icon={<Clock size={16} />} label="Avg Latency" value={`${stats.avgLatencyMs}ms`} />
-        <StatCard icon={<Layers size={16} />} label="Adapters" value={String(stats.adapterDistribution.length)} />
+        <StatCard icon={<Clock size={16} />} label={T.avg_latency} value={`${stats.avgLatencyMs}ms`} />
+        <StatCard icon={<Layers size={16} />} label={T.adapters} value={String(stats.adapterDistribution.length)} />
       </div>
 
       {!hasData && (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground text-sm">
-            No execution records yet. Enable <code className="px-1 py-0.5 bg-muted rounded text-xs">TOOL_RUNTIME_ENABLED=true</code> to start collecting data.
+            {T.no_exec_records_hint}
           </CardContent>
         </Card>
       )}
@@ -73,20 +75,20 @@ export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm">Server Sources</CardTitle>
+            <CardTitle className="text-sm">{T.server_sources}</CardTitle>
             <div className="flex items-center gap-1.5">
               <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={loadServers}>
-                <RefreshCw size={11} /> Refresh
+                <RefreshCw size={11} /> {T.refresh}
               </Button>
               <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => { setDialogServer(null); setCreating(true); setDialogOpen(true); }}>
-                <Plus size={11} /> Add Server
+                <Plus size={11} /> {T.add_server}
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           {servers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No servers configured.</p>
+            <p className="text-sm text-muted-foreground">{T.no_servers}</p>
           ) : (
             <div className="space-y-1">
               {servers.map(s => {
@@ -105,10 +107,10 @@ export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
                       'bg-gray-50 text-gray-500'
                     }`}>{s.kind}</Badge>
                     <span className="text-[11px] text-muted-foreground w-16">
-                      {isActive ? 'Running' : s.kind === 'planned' ? 'Planned' : 'Disabled'}
+                      {isActive ? T.running : s.kind === 'planned' ? T.planned : T.disabled}
                     </span>
                     <span className="text-[11px] text-muted-foreground w-14 text-right">
-                      {toolCounts.get(s.id) ?? 0} tools
+                      {toolCounts.get(s.id) ?? 0} {T.tools_suffix}
                     </span>
                     <Settings size={12} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
@@ -124,13 +126,14 @@ export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
         server={creating ? null : dialogServer}
         onClose={() => { setDialogOpen(false); setDialogServer(null); setCreating(false); }}
         onSaved={() => { setDialogOpen(false); setDialogServer(null); setCreating(false); loadServers(); }}
+        lang={lang}
       />
 
       {hasData && (
         <div className="grid grid-cols-2 gap-4">
           {/* Adapter Distribution */}
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Adapter Distribution</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">{T.adapter_distribution}</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {stats.adapterDistribution.map(d => (
@@ -150,7 +153,7 @@ export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
 
           {/* Channel Distribution */}
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Channel Distribution</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">{T.channel_distribution}</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {stats.channelDistribution.map(d => (
@@ -170,14 +173,14 @@ export const RuntimeOverviewPage = memo(function RuntimeOverviewPage() {
 
           {/* Top Tools */}
           <Card className="col-span-2">
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Top 10 Tools</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">{T.top10_tools}</CardTitle></CardHeader>
             <CardContent>
               {stats.topTools.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No data</p>
+                <p className="text-sm text-muted-foreground">{T.no_data}</p>
               ) : (
                 <div className="space-y-1.5">
                   <div className="grid grid-cols-4 text-xs font-medium text-muted-foreground pb-1 border-b">
-                    <span>Tool</span><span className="text-right">Calls</span><span className="text-right">Success</span><span className="text-right">Avg Latency</span>
+                    <span>{T.col_tool}</span><span className="text-right">{T.col_calls}</span><span className="text-right">{T.col_success}</span><span className="text-right">{T.col_avg_latency}</span>
                   </div>
                   {stats.topTools.map(t => {
                     const rate = t.count > 0 ? Math.round((t.success_count / t.count) * 100) : 0;

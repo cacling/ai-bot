@@ -5,7 +5,7 @@
  */
 
 import { memo } from 'react';
-import { type Lang } from '../../../i18n';
+import { type Lang, T } from '../../../i18n';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Copy, ArrowRightToLine, XCircle } from 'lucide-react';
@@ -46,6 +46,7 @@ export const ReplyHintContent = memo(function ReplyHintContent({
   data: unknown;
   lang: Lang;
 }) {
+  const t = T[lang];
   const d = data as ReplyHintData | null;
 
   if (!d) {
@@ -53,7 +54,7 @@ export const ReplyHintContent = memo(function ReplyHintContent({
       <div className="flex flex-col items-center justify-center py-6 space-y-1.5 text-center select-none px-3">
         <span className="text-2xl opacity-30">💡</span>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          {lang === 'zh' ? '等待用户消息，自动生成回复提示...' : 'Waiting for user message to generate reply hints...'}
+          {t.reply_hint_empty}
         </p>
       </div>
     );
@@ -72,9 +73,9 @@ export const ReplyHintContent = memo(function ReplyHintContent({
     dispatchAction('reply_feedback', { event: 'dismiss', assetVersionId: d.asset_version_id });
   };
 
-  const confidenceLabel = lang === 'zh'
-    ? (d.confidence >= 0.7 ? '高置信' : d.confidence >= 0.4 ? '中置信' : '低置信')
-    : (d.confidence >= 0.7 ? 'High' : d.confidence >= 0.4 ? 'Medium' : 'Low');
+  const confidenceLabel = d.confidence >= 0.7 ? t.reply_confidence_high
+    : d.confidence >= 0.4 ? t.reply_confidence_mid
+    : t.reply_confidence_low;
 
   return (
     <div className="p-3 space-y-3 text-xs">
@@ -87,7 +88,7 @@ export const ReplyHintContent = memo(function ReplyHintContent({
         </Badge>
         {d.sources.length > 0 && (
           <span className="text-[10px] text-muted-foreground ml-auto truncate max-w-[200px]" title={d.sources.join(', ')}>
-            {lang === 'zh' ? '来源' : 'Source'}: {d.sources[0]}
+            {t.reply_source}: {d.sources[0]}
           </span>
         )}
       </div>
@@ -95,7 +96,7 @@ export const ReplyHintContent = memo(function ReplyHintContent({
       {/* Required Slots */}
       {d.required_slots.length > 0 && (
         <div>
-          <div className="text-[10px] text-muted-foreground mb-1">{lang === 'zh' ? '需先追问' : 'Ask first'}</div>
+          <div className="text-[10px] text-muted-foreground mb-1">{t.reply_ask_first}</div>
           <div className="flex flex-wrap gap-1">
             {d.required_slots.map(s => (
               <Badge key={s} variant="outline" className="text-[10px] bg-blue-50 dark:bg-blue-950">{s}</Badge>
@@ -107,10 +108,10 @@ export const ReplyHintContent = memo(function ReplyHintContent({
       {/* Recommended Terms */}
       {d.recommended_terms.length > 0 && (
         <div>
-          <div className="text-[10px] text-muted-foreground mb-1">{lang === 'zh' ? '推荐术语' : 'Recommended Terms'}</div>
+          <div className="text-[10px] text-muted-foreground mb-1">{t.reply_recommended}</div>
           <div className="flex flex-wrap gap-1">
-            {d.recommended_terms.map(t => (
-              <Badge key={t} variant="secondary" className="text-[10px] bg-primary/5">{t}</Badge>
+            {d.recommended_terms.map(term => (
+              <Badge key={term} variant="secondary" className="text-[10px] bg-primary/5">{term}</Badge>
             ))}
           </div>
         </div>
@@ -119,10 +120,10 @@ export const ReplyHintContent = memo(function ReplyHintContent({
       {/* Forbidden Terms */}
       {d.forbidden_terms.length > 0 && (
         <div>
-          <div className="text-[10px] text-muted-foreground mb-1">{lang === 'zh' ? '禁用术语' : 'Forbidden Terms'}</div>
+          <div className="text-[10px] text-muted-foreground mb-1">{t.reply_forbidden}</div>
           <div className="flex flex-wrap gap-1">
-            {d.forbidden_terms.map(t => (
-              <Badge key={t} variant="destructive" className="text-[10px]">{t}</Badge>
+            {d.forbidden_terms.map(term => (
+              <Badge key={term} variant="destructive" className="text-[10px]">{term}</Badge>
             ))}
           </div>
         </div>
@@ -131,17 +132,17 @@ export const ReplyHintContent = memo(function ReplyHintContent({
       {/* Reply Options */}
       {d.reply_options.length > 0 && (
         <div>
-          <div className="text-[10px] text-muted-foreground mb-1">{lang === 'zh' ? '推荐回复' : 'Recommended Replies'}</div>
+          <div className="text-[10px] text-muted-foreground mb-1">{t.reply_options}</div>
           <div className="space-y-1.5">
             {d.reply_options.map(opt => (
               <div key={opt.label} className="bg-muted rounded-lg px-2.5 py-2 group">
                 <div className="flex items-center justify-between mb-0.5">
                   <span className="text-[10px] font-medium text-muted-foreground">{opt.label}</span>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="xs" onClick={() => handleInsert(opt.text)} title={lang === 'zh' ? '带入输入框' : 'Insert'}>
+                    <Button variant="ghost" size="xs" onClick={() => handleInsert(opt.text)} title={t.reply_insert}>
                       <ArrowRightToLine size={10} />
                     </Button>
-                    <Button variant="ghost" size="xs" onClick={() => handleCopy(opt.text)} title={lang === 'zh' ? '复制' : 'Copy'}>
+                    <Button variant="ghost" size="xs" onClick={() => handleCopy(opt.text)} title={t.reply_copy}>
                       <Copy size={10} />
                     </Button>
                   </div>
@@ -156,7 +157,7 @@ export const ReplyHintContent = memo(function ReplyHintContent({
       {/* Next Actions */}
       {d.next_actions.length > 0 && (
         <div>
-          <div className="text-[10px] text-muted-foreground mb-1">{lang === 'zh' ? '下一步动作' : 'Next Actions'}</div>
+          <div className="text-[10px] text-muted-foreground mb-1">{t.reply_next_actions}</div>
           <div className="flex flex-wrap gap-1">
             {d.next_actions.map(a => (
               <Badge key={a} variant="outline" className="text-[10px]">{a}</Badge>
@@ -168,7 +169,7 @@ export const ReplyHintContent = memo(function ReplyHintContent({
       {/* Dismiss */}
       <div className="flex justify-end pt-1">
         <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={handleDismiss}>
-          <XCircle size={10} /> {lang === 'zh' ? '不准/无帮助' : 'Not helpful'}
+          <XCircle size={10} /> {t.reply_dismiss}
         </Button>
       </div>
     </div>

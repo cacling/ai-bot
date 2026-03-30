@@ -35,6 +35,44 @@ export const users = sqliteTable('users', {
   created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
 });
 
+// ── 员工账号 ──────────────────────────────────────────────────────────────
+
+export const staffAccounts = sqliteTable('staff_accounts', {
+  id: text('id').primaryKey(),
+  username: text('username').notNull().unique(),
+  display_name: text('display_name').notNull(),
+  password_hash: text('password_hash').notNull(),
+  /** 默认落地页视角：'agent' | 'operations' */
+  primary_staff_role: text('primary_staff_role').notNull(),
+  /** 可访问的业务角色集合 JSON：["agent"] 或 ["agent","operations"] */
+  staff_roles: text('staff_roles').notNull(),
+  /** 映射到现有 requireRole 层级：auditor, reviewer, config_editor, flow_manager, admin */
+  platform_role: text('platform_role').notNull(),
+  team_code: text('team_code'),
+  seat_code: text('seat_code'),
+  default_queue_code: text('default_queue_code'),
+  lang: text('lang').notNull().default('zh'),
+  /** 'active' | 'disabled' */
+  status: text('status').notNull().default('active'),
+  /** 演示账号标记 */
+  is_demo: integer('is_demo', { mode: 'boolean' }).notNull().default(false),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+  last_login_at: text('last_login_at'),
+});
+
+// ── 员工会话 ──────────────────────────────────────────────────────────────
+
+export const staffSessions = sqliteTable('staff_sessions', {
+  id: text('id').primaryKey(),
+  staff_id: text('staff_id').notNull().references(() => staffAccounts.id, { onDelete: 'cascade' }),
+  token_hash: text('token_hash').notNull(),
+  expires_at: text('expires_at').notNull(),
+  created_at: text('created_at').$defaultFn(() => new Date().toISOString()),
+  last_seen_at: text('last_seen_at'),
+  user_agent: text('user_agent'),
+  ip: text('ip'),
+});
+
 // ── 技能注册表 ──────────────────────────────────────────────────────────────
 
 export const skillRegistry = sqliteTable('skill_registry', {

@@ -1,5 +1,5 @@
 /**
- * workflow-policy.ts — Workflow Run 状态流转��函数
+ * workflow-policy.ts — Workflow Run 状态流转纯函数
  */
 import type { WorkflowRunStatus } from "../types.js";
 

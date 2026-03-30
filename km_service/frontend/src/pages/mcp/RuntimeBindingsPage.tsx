@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BindingEditor } from './BindingEditor';
+import { t, type Lang } from './i18n';
 
 type View = 'list' | 'edit';
 
@@ -21,6 +22,7 @@ interface Props {
   onOpenTool?: (toolId: string, step?: string) => void;
   navigateToBinding?: string | null;
   onNavigateHandled?: () => void;
+  lang?: Lang;
 }
 
 type StatusFilter = 'all' | 'active' | 'unbound' | 'misconfigured';
@@ -52,7 +54,8 @@ function needsConnector(adapterType: string | null): boolean {
   return adapterType === 'db' || adapterType === 'api_proxy';
 }
 
-export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateHandled }: Props) {
+export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateHandled, lang = 'zh' as Lang }: Props) {
+  const T = t(lang);
   const [items, setItems] = useState<RuntimeBindingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -125,19 +128,19 @@ export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateH
   function renderStatusBadges(b: RuntimeBindingRow) {
     const badges: Array<{ label: string; cls: string }> = [];
     if (b.disabled) {
-      badges.push({ label: 'Disabled', cls: 'bg-red-100 text-red-600' });
+      badges.push({ label: T.disabled, cls: 'bg-red-100 text-red-600' });
     } else if (b.mocked) {
-      badges.push({ label: 'Mocked', cls: 'bg-yellow-100 text-yellow-700' });
+      badges.push({ label: T.mocked, cls: 'bg-yellow-100 text-yellow-700' });
     }
     if (!b.impl_id) {
-      badges.push({ label: 'Unbound', cls: 'bg-gray-100 text-gray-500' });
+      badges.push({ label: T.unbound, cls: 'bg-gray-100 text-gray-500' });
     } else if (b.impl_status === 'active') {
-      badges.push({ label: 'Active', cls: 'bg-green-100 text-green-700' });
+      badges.push({ label: T.active, cls: 'bg-green-100 text-green-700' });
     } else {
-      badges.push({ label: b.impl_status ?? 'Unknown', cls: 'bg-gray-100 text-gray-500' });
+      badges.push({ label: b.impl_status ?? T.unknown, cls: 'bg-gray-100 text-gray-500' });
     }
     if (needsConnector(b.adapter_type) && !b.connector_id) {
-      badges.push({ label: 'No Connector', cls: 'bg-red-50 text-red-500' });
+      badges.push({ label: T.no_connector, cls: 'bg-red-50 text-red-500' });
     }
     return badges.map((bg, i) => (
       <Badge key={i} variant="outline" className={`text-[10px] px-1.5 py-0 ${bg.cls}`}>{bg.label}</Badge>
@@ -173,6 +176,7 @@ export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateH
             onBack={handleEditorBack}
             onSaved={() => { handleEditorBack(); load(); }}
             onOpenContract={onOpenTool ? (id) => onOpenTool(id, 'overview') : undefined}
+            lang={lang}
           />
         </div>
       )}
@@ -182,10 +186,10 @@ export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateH
         {/* Stats */}
         {!loading && items.length > 0 && (
           <div className="grid grid-cols-4 gap-3">
-            <StatCard label="Total Bindings" value={stats.total} onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
-            <StatCard label="Active" value={stats.active} onClick={() => setStatusFilter('active')} active={statusFilter === 'active'} />
-            <StatCard label="Unbound" value={stats.unbound} onClick={() => setStatusFilter('unbound')} active={statusFilter === 'unbound'} warn={stats.unbound > 0} />
-            <StatCard label="Misconfigured" value={stats.misconfigured} onClick={() => setStatusFilter('misconfigured')} active={statusFilter === 'misconfigured'} warn={stats.misconfigured > 0} />
+            <StatCard label={T.total_bindings} value={stats.total} onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
+            <StatCard label={T.active} value={stats.active} onClick={() => setStatusFilter('active')} active={statusFilter === 'active'} />
+            <StatCard label={T.unbound} value={stats.unbound} onClick={() => setStatusFilter('unbound')} active={statusFilter === 'unbound'} warn={stats.unbound > 0} />
+            <StatCard label={T.misconfigured} value={stats.misconfigured} onClick={() => setStatusFilter('misconfigured')} active={statusFilter === 'misconfigured'} warn={stats.misconfigured > 0} />
           </div>
         )}
 
@@ -196,41 +200,41 @@ export function RuntimeBindingsPage({ onOpenTool, navigateToBinding, onNavigateH
             <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search tool / server / connector..."
+              placeholder={T.search_binding}
               className="pl-8 text-xs h-8"
             />
           </div>
           <Select value={adapterFilter} onValueChange={v => setAdapterFilter(v as AdapterFilter)}>
             <SelectTrigger className="w-36 text-xs h-8">
-              <SelectValue placeholder="Adapter" />
+              <SelectValue placeholder={T.adapter_placeholder} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Adapters</SelectItem>
-              <SelectItem value="script">Script</SelectItem>
-              <SelectItem value="remote_mcp">MCP</SelectItem>
-              <SelectItem value="api_proxy">API</SelectItem>
-              <SelectItem value="db">DB</SelectItem>
-              <SelectItem value="mock">Mock</SelectItem>
+              <SelectItem value="all">{T.all_adapters}</SelectItem>
+              <SelectItem value="script">{T.adapter_script}</SelectItem>
+              <SelectItem value="remote_mcp">{T.adapter_mcp}</SelectItem>
+              <SelectItem value="api_proxy">{T.adapter_api}</SelectItem>
+              <SelectItem value="db">{T.adapter_db}</SelectItem>
+              <SelectItem value="mock">{T.adapter_mock}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         {/* Table */}
         {loading ? (
-          <div className="text-xs text-muted-foreground p-6">Loading...</div>
+          <div className="text-xs text-muted-foreground p-6">{T.loading}</div>
         ) : filtered.length === 0 ? (
-          <div className="text-xs text-muted-foreground p-6">No bindings found.</div>
+          <div className="text-xs text-muted-foreground p-6">{T.no_bindings}</div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow className="text-xs">
-                <TableHead className="w-[220px]">Tool</TableHead>
-                <TableHead className="w-[140px]">Server</TableHead>
-                <TableHead className="w-[80px]">Adapter</TableHead>
-                <TableHead className="w-[120px]">Connector</TableHead>
-                <TableHead className="w-[160px]">Handler</TableHead>
-                <TableHead className="w-[120px]">Policy</TableHead>
-                <TableHead className="w-[140px]">Status</TableHead>
+                <TableHead className="w-[220px]">{T.col_tool}</TableHead>
+                <TableHead className="w-[140px]">{T.col_server}</TableHead>
+                <TableHead className="w-[80px]">{T.col_adapter}</TableHead>
+                <TableHead className="w-[120px]">{T.col_connector}</TableHead>
+                <TableHead className="w-[160px]">{T.col_handler}</TableHead>
+                <TableHead className="w-[120px]">{T.col_policy}</TableHead>
+                <TableHead className="w-[140px]">{T.col_status}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

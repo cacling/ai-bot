@@ -110,4 +110,4 @@ function createServer(): McpServer {
   return server;
 }
 
-startMcpHttpServer("diagnosis-service", Number(process.env.PORT ?? 18005), createServer);
+if (import.meta.main) startMcpHttpServer("diagnosis-service", Number(process.env.PORT ?? 18005), createServer);

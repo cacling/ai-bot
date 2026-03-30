@@ -6,7 +6,7 @@
 
 import { memo } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { type Lang } from '../../../i18n';
+import { type Lang, T } from '../../../i18n';
 
 interface WorkOrderSummaryData {
   id?: string;
@@ -45,6 +45,7 @@ const PRIORITY_LABELS: Record<string, { zh: string; en: string; variant: 'defaul
 };
 
 export const WorkOrderSummaryContent = memo(function WorkOrderSummaryContent({ data, lang }: { data: unknown; lang: Lang }) {
+  const t = T[lang];
   const d = data as WorkOrderSummaryData | null;
 
   if (!d) {
@@ -52,7 +53,7 @@ export const WorkOrderSummaryContent = memo(function WorkOrderSummaryContent({ d
       <div className="flex flex-col items-center justify-center py-6 space-y-1.5 text-center select-none px-3">
         <span className="text-2xl opacity-30">📋</span>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          {lang === 'zh' ? '暂无关联工单' : 'No work orders'}
+          {t.wo_summary_empty}
         </p>
       </div>
     );
@@ -62,10 +63,10 @@ export const WorkOrderSummaryContent = memo(function WorkOrderSummaryContent({ d
   const priorityInfo = PRIORITY_LABELS[d.priority ?? ''] ?? { zh: d.priority, en: d.priority, variant: 'secondary' as const };
 
   const rows: { label: string; value: string | undefined }[] = [
-    { label: lang === 'zh' ? '客户' : 'Customer', value: d.customer_name ? `${d.customer_name} (${d.customer_phone})` : d.customer_phone },
-    { label: lang === 'zh' ? '队列' : 'Queue', value: d.queue_code },
-    { label: lang === 'zh' ? '负责人' : 'Owner', value: d.owner_id },
-    { label: lang === 'zh' ? '下次动作' : 'Next Action', value: d.next_action_at ? new Date(d.next_action_at).toLocaleString() : undefined },
+    { label: t.wo_summary_customer, value: d.customer_name ? `${d.customer_name} (${d.customer_phone})` : d.customer_phone },
+    { label: t.wo_summary_queue, value: d.queue_code },
+    { label: t.wo_summary_owner, value: d.owner_id },
+    { label: t.wo_summary_next_action, value: d.next_action_at ? new Date(d.next_action_at).toLocaleString() : undefined },
   ];
 
   return (
@@ -73,8 +74,8 @@ export const WorkOrderSummaryContent = memo(function WorkOrderSummaryContent({ d
       <div className="flex items-start justify-between gap-2">
         <p className="text-foreground font-medium text-sm leading-snug flex-1">{d.title}</p>
         <div className="flex gap-1 flex-shrink-0">
-          <Badge variant={priorityInfo.variant}>{lang === 'zh' ? priorityInfo.zh : priorityInfo.en}</Badge>
-          <Badge variant={statusInfo.variant}>{lang === 'zh' ? statusInfo.zh : statusInfo.en}</Badge>
+          <Badge variant={priorityInfo.variant}>{priorityInfo[lang]}</Badge>
+          <Badge variant={statusInfo.variant}>{statusInfo[lang]}</Badge>
         </div>
       </div>
 

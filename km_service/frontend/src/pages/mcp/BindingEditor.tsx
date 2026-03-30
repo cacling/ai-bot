@@ -13,20 +13,22 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { mcpApi, type ToolImplementation, type Connector, type McpHandler } from './api';
+import { t, type Lang } from './i18n';
 
 interface Props {
   toolId: string;
   onBack: () => void;
   onSaved: () => void;
   onOpenContract?: (toolId: string) => void;
+  lang?: Lang;
 }
 
-const ADAPTER_OPTIONS = [
-  { value: 'script', label: 'Script', desc: 'TypeScript handler，完全自定义实现' },
-  { value: 'api_proxy', label: 'API Proxy', desc: 'REST API 代理，支持请求/响应映射' },
-  { value: 'remote_mcp', label: 'Remote MCP', desc: '转发到远程 MCP Server' },
-  { value: 'db', label: 'DB Query', desc: '直接查询数据库' },
-  { value: 'mock', label: 'Mock', desc: '永远返回模拟数据' },
+const ADAPTER_OPTION_KEYS = [
+  { value: 'script', labelKey: 'adapter_script', descKey: 'desc_script' },
+  { value: 'api_proxy', labelKey: 'adapter_api_proxy', descKey: 'desc_api_proxy' },
+  { value: 'remote_mcp', labelKey: 'adapter_mcp', descKey: 'desc_remote_mcp' },
+  { value: 'db', labelKey: 'adapter_db', descKey: 'desc_db' },
+  { value: 'mock', labelKey: 'adapter_mock', descKey: 'desc_mock' },
 ] as const;
 
 const ADAPTER_COLORS: Record<string, string> = {
@@ -37,7 +39,9 @@ const ADAPTER_COLORS: Record<string, string> = {
   mock: 'bg-gray-100 text-gray-600',
 };
 
-export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props) {
+export function BindingEditor({ toolId, onBack, onSaved, onOpenContract, lang = 'zh' as Lang }: Props) {
+  const T = t(lang);
+  const ADAPTER_OPTIONS = ADAPTER_OPTION_KEYS.map(o => ({ value: o.value, label: T[o.labelKey], desc: T[o.descKey] }));
   const [impl, setImpl] = useState<ToolImplementation | null>(null);
   const [toolName, setToolName] = useState('');
   const [serverName, setServerName] = useState('');
@@ -148,7 +152,7 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
   };
 
   const handleSave = async () => {
-    if (adapterType === 'api_proxy' && !apiUrl.trim()) { alert('URL 不能为空'); return; }
+    if (adapterType === 'api_proxy' && !apiUrl.trim()) { alert(T.url_required); return; }
     setSaving(true);
     try {
       await mcpApi.updateToolImplementation(toolId, {
@@ -160,7 +164,7 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
       });
       onSaved();
     } catch (e) {
-      alert(`保存失败: ${e}`);
+      alert(`${T.save_failed} ${e}`);
     } finally {
       setSaving(false);
     }
@@ -172,14 +176,14 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
     adapterType === 'db' ? c.type === 'db' : true
   );
 
-  if (loading) return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">加载中...</div>;
+  if (loading) return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">{T.loading}</div>;
 
   return (
     <div className="flex flex-col h-full">
       {/* ── Header ── */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-background shrink-0">
         <Button variant="ghost" size="sm" onClick={onBack} className="gap-1 text-xs h-7">
-          <ArrowLeft size={14} /> 返回
+          <ArrowLeft size={14} /> {T.back}
         </Button>
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="font-mono font-semibold text-sm truncate">{toolName}</span>
@@ -195,11 +199,11 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
         </div>
         {onOpenContract && (
           <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => onOpenContract(toolId)}>
-            <ExternalLink size={12} /> Open Contract
+            <ExternalLink size={12} /> {T.open_contract}
           </Button>
         )}
         <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1 h-7">
-          <Save size={12} /> {saving ? 'Saving...' : 'Save'}
+          <Save size={12} /> {saving ? T.saving : T.save}
         </Button>
       </div>
 
@@ -211,7 +215,7 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
             <div className="max-w-2xl mx-auto space-y-6">
               {/* ── 1. Adapter Type ── */}
               <section className="space-y-2">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Adapter Type</h3>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{T.adapter_type}</h3>
                 <div className="grid grid-cols-3 gap-2">
                   {ADAPTER_OPTIONS.map(opt => (
                     <button
@@ -233,10 +237,10 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
               {/* ── 2. Script Handler ── */}
               {adapterType === 'script' && (
                 <section className="space-y-2">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Script Handler</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{T.script_handler}</h3>
                   <Select value={handlerKey} onValueChange={v => { if (v) setHandlerKey(v); }}>
                     <SelectTrigger className="text-xs h-8 font-mono">
-                      <SelectValue placeholder="选择 handler">{handlerKey || '选择...'}</SelectValue>
+                      <SelectValue placeholder={T.select_handler}>{handlerKey || T.select_handler}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {handlers.map(h => (
@@ -258,7 +262,7 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
               {/* ── 2b. API Proxy Config ── */}
               {adapterType === 'api_proxy' && (
                 <section className="space-y-3">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">API Configuration</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{T.api_config}</h3>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="col-span-2">
                       <label className="text-[11px] text-muted-foreground mb-0.5 block">URL</label>
@@ -286,7 +290,7 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
                     <Textarea value={apiHeaders} onChange={e => setApiHeaders(e.target.value)} className="text-[11px] font-mono h-20 resize-none" placeholder='{"Authorization": "Bearer ..."}' />
                   </div>
                   <div>
-                    <label className="text-[11px] text-muted-foreground mb-0.5 block">Body Template <span className="opacity-50">(空=直接转发参数)</span></label>
+                    <label className="text-[11px] text-muted-foreground mb-0.5 block">Body Template <span className="opacity-50">({T.body_template_hint})</span></label>
                     <Textarea value={apiBodyTemplate} onChange={e => setApiBodyTemplate(e.target.value)} className="text-[11px] font-mono h-20 resize-none" placeholder='{"phone": "{phone}"}' />
                   </div>
                   <div>
@@ -306,7 +310,7 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
                       </div>
                     ))}
                     <Button variant="ghost" size="sm" className="text-[11px] h-6" onClick={() => setApiErrorMappings([...apiErrorMappings, { status: '', error_code: '', message: '' }])}>
-                      <Plus size={11} /> Add mapping
+                      <Plus size={11} /> {T.add_mapping}
                     </Button>
                   </div>
                 </section>
@@ -315,13 +319,13 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
               {/* ── 3. Connector ── */}
               {(adapterType === 'api_proxy' || adapterType === 'db') && (
                 <section className="space-y-2">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Connector</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{T.connector}</h3>
                   <Select value={connectorId} onValueChange={v => setConnectorId(v ?? '')}>
                     <SelectTrigger className="text-xs h-8">
-                      <SelectValue placeholder="选择 Connector">{filteredConnectors.find(c => c.id === connectorId)?.name ?? '未选择'}</SelectValue>
+                      <SelectValue placeholder={T.select_connector}>{filteredConnectors.find(c => c.id === connectorId)?.name ?? T.not_selected}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="">{T.none}</SelectItem>
                       {filteredConnectors.map(c => (
                         <SelectItem key={c.id} value={c.id}>
                           <span className="text-xs">{c.name}</span>
@@ -347,7 +351,7 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
               {/* ── 4. Config (generic JSON for non-API adapters) ── */}
               {adapterType && adapterType !== 'api_proxy' && (
                 <section className="space-y-2">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Config</h3>
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{T.config}</h3>
                   <Textarea
                     value={configText}
                     onChange={e => setConfigText(e.target.value)}
@@ -359,14 +363,14 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
 
               {/* ── 5. Status ── */}
               <section className="space-y-2">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</h3>
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{T.col_status}</h3>
                 <Select value={status} onValueChange={v => { if (v) setStatus(v); }}>
                   <SelectTrigger className="text-xs h-8 w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="active">{T.active}</SelectItem>
+                    <SelectItem value="inactive">{T.disabled}</SelectItem>
                   </SelectContent>
                 </Select>
               </section>
@@ -380,7 +384,7 @@ export function BindingEditor({ toolId, onBack, onSaved, onOpenContract }: Props
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize={40} minSize={25}>
               <div className="p-4 overflow-y-auto h-full">
-                <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Source (read-only)</h4>
+                <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{T.source_readonly}</h4>
                 <pre className="text-[11px] font-mono bg-muted p-3 rounded-lg whitespace-pre-wrap">{scriptContent}</pre>
               </div>
             </ResizablePanel>

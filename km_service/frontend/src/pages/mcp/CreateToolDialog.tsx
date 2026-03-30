@@ -16,6 +16,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Loader2 } from 'lucide-react';
+import { t, type Lang } from './i18n';
 
 type CreateMode = 'blank' | 'handler';
 
@@ -23,6 +24,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (id: string, initialStep: string) => void;
+  lang?: Lang;
 }
 
 const NAME_PATTERN = /^[a-z][a-z0-9_]*$/;
@@ -32,7 +34,8 @@ const initialStepMap: Record<CreateMode, string> = {
   handler: 'impl',
 };
 
-export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
+export function CreateToolDialog({ open, onOpenChange, onCreated, lang = 'zh' as Lang }: Props) {
+  const T = t(lang);
   // Form state
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -97,9 +100,9 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
   // Validation
   const nameError = useMemo(() => {
     if (!name) return null;
-    if (!NAME_PATTERN.test(name)) return 'snake_case 格式（小写字母开头，仅含小写字母、数字、下划线）';
+    if (!NAME_PATTERN.test(name)) return T.name_validate_err;
     return null;
-  }, [name]);
+  }, [name, T]);
 
   const canSubmit =
     name.trim().length > 0 &&
@@ -130,7 +133,7 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
       onCreated(res.id, initialStepMap[createMode]);
       onOpenChange(false);
     } catch (err: any) {
-      const msg = err.message ?? '创建失败';
+      const msg = err.message ?? T.create_failed;
       setError(msg);
     } finally {
       setSubmitting(false);
@@ -141,26 +144,26 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>新建 Tool Contract</DialogTitle>
+          <DialogTitle>{T.create_tool_title}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
           {/* 创建方式 */}
           <div className="space-y-2">
-            <Label className="text-xs font-medium">创建方式</Label>
+            <Label className="text-xs font-medium">{T.create_mode_label}</Label>
             <RadioGroup value={createMode} onValueChange={(v) => setCreateMode(v as CreateMode)} className="flex gap-3">
               <label className={`flex-1 flex items-start gap-2.5 rounded-lg border p-3 cursor-pointer transition-colors ${createMode === 'blank' ? 'border-primary bg-primary/5' : 'hover:bg-accent'}`}>
                 <RadioGroupItem value="blank" className="mt-0.5" />
                 <div>
-                  <div className="text-xs font-medium">空白创建</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">从 0 定义 contract 和实现</div>
+                  <div className="text-xs font-medium">{T.create_blank}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{T.create_blank_desc}</div>
                 </div>
               </label>
               <label className={`flex-1 flex items-start gap-2.5 rounded-lg border p-3 cursor-pointer transition-colors ${createMode === 'handler' ? 'border-primary bg-primary/5' : 'hover:bg-accent'}`}>
                 <RadioGroupItem value="handler" className="mt-0.5" />
                 <div>
-                  <div className="text-xs font-medium">从 Handler 创建</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">已有脚本处理器，快速补齐契约</div>
+                  <div className="text-xs font-medium">{T.create_from_handler}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{T.create_handler_desc}</div>
                 </div>
               </label>
             </RadioGroup>
@@ -172,12 +175,12 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
               <Label className="text-xs font-medium">Handler <span className="text-destructive">*</span></Label>
               {dataLoading ? (
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground py-2">
-                  <Loader2 size={12} className="animate-spin" /> 加载中…
+                  <Loader2 size={12} className="animate-spin" /> {T.loading}
                 </div>
               ) : (
                 <Select value={handlerKey} onValueChange={(v) => { if (v) setHandlerKey(v); }}>
                   <SelectTrigger className="text-xs h-8">
-                    <SelectValue placeholder="选择脚本 Handler" />
+                    <SelectValue placeholder={T.select_script_handler} />
                   </SelectTrigger>
                   <SelectContent>
                     {filteredHandlers.map(h => (
@@ -189,7 +192,7 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
                       </SelectItem>
                     ))}
                     {filteredHandlers.length === 0 && (
-                      <div className="px-2 py-3 text-xs text-muted-foreground text-center">无可用 Handler</div>
+                      <div className="px-2 py-3 text-xs text-muted-foreground text-center">{T.no_handlers}</div>
                     )}
                   </SelectContent>
                 </Select>
@@ -199,7 +202,7 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
 
           {/* 工具名 */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">工具名 <span className="text-destructive">*</span></Label>
+            <Label className="text-xs font-medium">{T.tool_name_label} <span className="text-destructive">*</span></Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -216,11 +219,11 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
 
           {/* 描述 */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">描述</Label>
+            <Label className="text-xs font-medium">{T.description}</Label>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="一句话描述工具用途"
+              placeholder={T.desc_tool_ph}
               rows={2}
               className="text-xs resize-none"
             />
@@ -228,10 +231,10 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
 
           {/* 所属 Server */}
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">所属 Server</Label>
+            <Label className="text-xs font-medium">{T.server_label}</Label>
             {dataLoading ? (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground py-2">
-                <Loader2 size={12} className="animate-spin" /> 加载中…
+                <Loader2 size={12} className="animate-spin" /> {T.loading}
               </div>
             ) : (
               <Select
@@ -240,7 +243,7 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
                 disabled={createMode === 'handler' && !!selectedHandler}
               >
                 <SelectTrigger className="text-xs h-8">
-                  <SelectValue placeholder="可选，稍后也可在 Studio 中设置" />
+                  <SelectValue placeholder={T.server_select_hint} />
                 </SelectTrigger>
                 <SelectContent>
                   {servers.map(s => (
@@ -261,17 +264,17 @@ export function CreateToolDialog({ open, onOpenChange, onCreated }: Props) {
 
           {/* 底部说明 */}
           <p className="text-[10px] text-muted-foreground">
-            创建后会进入 Tool Studio 继续补充 Input/Output Schema、Implementation、Mock 和 Validation
+            {T.create_post_hint}
           </p>
 
           {/* 操作按钮 */}
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={submitting}>
-              取消
+              {T.cancel}
             </Button>
             <Button size="sm" onClick={handleSubmit} disabled={!canSubmit}>
               {submitting && <Loader2 size={12} className="animate-spin mr-1" />}
-              创建并进入 Studio
+              {T.create_enter_studio}
             </Button>
           </div>
         </div>

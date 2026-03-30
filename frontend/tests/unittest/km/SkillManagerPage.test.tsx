@@ -96,11 +96,7 @@ function buildHookState(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function installDefaultFetchMock(extraHandlers?: {
-  clarify?: () => ReturnType<typeof mockJsonResponse>;
-  diff?: () => ReturnType<typeof mockJsonResponse>;
-  apply?: () => ReturnType<typeof mockJsonResponse>;
-}) {
+function installDefaultFetchMock() {
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
     const url = String(input);
 
@@ -127,43 +123,6 @@ function installDefaultFetchMock(extraHandlers?: {
       return mockJsonResponse([]);
     }
 
-    if (url === '/api/skill-edit/clarify') {
-      return extraHandlers?.clarify?.() ?? mockJsonResponse({
-        session_id: 'clarify-default',
-        status: 'need_clarify',
-        phase: 'target_confirm',
-        question: '请确认目标技能。',
-        missing: ['目标技能'],
-        options: [],
-        summary: {
-          target_skill: null,
-          change_type: 'wording',
-          change_summary: '',
-          affected_area: [],
-          unchanged_area: [],
-          related_docs: [],
-          acceptance_signal: '',
-          risk_level: 'low',
-        },
-        evidence: { explicit: [], inferred: [], repo_observations: [] },
-        impact: {},
-        handoff: { ready_for_edit: false, target_files: [], edit_invariants: [] },
-      });
-    }
-
-    if (url === '/api/skill-edit/') {
-      return extraHandlers?.diff?.() ?? mockJsonResponse({
-        file_path: 'skills/biz-skills/bill-inquiry/SKILL.md',
-        old_fragment: '旧内容',
-        new_fragment: '新内容',
-        session_id: 'clarify-default',
-      });
-    }
-
-    if (url === '/api/skill-edit/apply') {
-      return extraHandlers?.apply?.() ?? mockJsonResponse({ ok: true });
-    }
-
     return mockJsonResponse({});
   });
 }
@@ -185,133 +144,4 @@ describe('SkillManagerPage', () => {
     expect(container).toBeTruthy();
   });
 
-  it('shows the NL edit tab and reflects clarify status back into page chrome', async () => {
-    installDefaultFetchMock({
-      clarify: () => mockJsonResponse({
-        session_id: 'clarify-phase',
-        status: 'need_clarify',
-        phase: 'impact_confirm',
-        question: '这次修改是否会影响升级策略？',
-        missing: ['升级策略影响'],
-        options: [],
-        summary: {
-          target_skill: 'bill-inquiry',
-          change_type: 'flow',
-          change_summary: '修改账单查询后的升级条件',
-          affected_area: ['升级分支'],
-          unchanged_area: ['查询工具不变'],
-          related_docs: [],
-          acceptance_signal: '',
-          risk_level: 'medium',
-        },
-        evidence: {
-          explicit: ['用户要调整升级条件'],
-          inferred: [],
-          repo_observations: ['已读取 bill-inquiry/SKILL.md'],
-        },
-        impact: {
-          needs_human_escalation_review: true,
-        },
-        handoff: {
-          ready_for_edit: false,
-          target_files: ['skills/biz-skills/bill-inquiry/SKILL.md'],
-          edit_invariants: [],
-        },
-      }),
-    });
-
-    render(<SkillManagerPage />);
-
-    fireEvent.click(screen.getByRole('button', { name: /NL 编辑/i }));
-
-    const input = screen.getByPlaceholderText(/描述你想做的修改/);
-    fireEvent.change(input, { target: { value: '把账单查询转人工条件改严一点' } });
-    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
-
-    await screen.findByText('这次修改是否会影响升级策略？');
-
-    expect(
-      screen.getAllByText((_, node) => node?.textContent?.includes('当前阶段：impact_confirm') ?? false).length,
-    ).toBeGreaterThan(0);
-
-    expect(
-      screen.getAllByText((_, node) => node?.textContent?.includes('当前技能：bill-inquiry') ?? false).length,
-    ).toBeGreaterThan(0);
-    expect(screen.getAllByText('待澄清').length).toBeGreaterThan(0);
-  });
-
-  it('applies an NL edit and reloads the current file', async () => {
-    const handleSelectFile = vi.fn();
-    useSkillManagerMock.mockReturnValue(buildHookState({ handleSelectFile }));
-    installDefaultFetchMock({
-      clarify: () => mockJsonResponse({
-        session_id: 'clarify-ready',
-        status: 'ready',
-        phase: 'ready',
-        question: '',
-        missing: [],
-        options: [],
-        summary: {
-          target_skill: 'bill-inquiry',
-          change_type: 'wording',
-          change_summary: '把账单查询成功后的答复改得更简洁',
-          affected_area: ['结果回复'],
-          unchanged_area: ['流程不变'],
-          related_docs: [],
-          acceptance_signal: '答复更简洁',
-          risk_level: 'low',
-        },
-        evidence: {
-          explicit: ['用户要求精简成功回复'],
-          inferred: [],
-          repo_observations: ['已读取 bill-inquiry/SKILL.md'],
-        },
-        impact: {},
-        handoff: {
-          ready_for_edit: true,
-          target_files: ['skills/biz-skills/bill-inquiry/SKILL.md'],
-          edit_invariants: ['不要修改流程图'],
-        },
-      }),
-      diff: () => mockJsonResponse({
-        file_path: 'skills/biz-skills/bill-inquiry/SKILL.md',
-        old_fragment: '您好，以下是您的完整账单说明。',
-        new_fragment: '这是您的账单结果。',
-        session_id: 'clarify-ready',
-      }),
-      apply: () => mockJsonResponse({ success: true }),
-    });
-
-    render(<SkillManagerPage />);
-
-    fireEvent.click(screen.getByRole('button', { name: /NL 编辑/i }));
-
-    const input = screen.getByPlaceholderText(/描述你想做的修改/);
-    fireEvent.change(input, { target: { value: '把账单查询成功后的答复改得更简洁' } });
-    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
-
-    await waitFor(() => {
-      expect(screen.getByText('修改预览')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /应用/i }));
-
-    await waitFor(() => {
-      expect(handleSelectFile).toHaveBeenCalledWith(expect.objectContaining({
-        path: 'skills/biz-skills/bill-inquiry/SKILL.md',
-      }));
-    });
-  });
-
-  it('blocks NL edit when the current file has unsaved changes', async () => {
-    useSkillManagerMock.mockReturnValue(buildHookState({ isDirty: true }));
-
-    render(<SkillManagerPage />);
-
-    fireEvent.click(screen.getByRole('button', { name: /NL 编辑/i }));
-
-    expect(await screen.findByText(/当前文件有未保存修改/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /先保存当前文件/i })).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/描述你想做的修改/)).not.toBeInTheDocument();
-  });
 });

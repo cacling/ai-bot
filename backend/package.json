@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "test": "bun test tests/unittest/",
-    "test:coverage": "bun test tests/unittest/ --coverage",
+    "test": "bun test tests/unittest/ tests/integration/",
+    "test:coverage": "bun test tests/unittest/ tests/integration/ --coverage",
     "test:diagnosis": "bun test skills/fault-diagnosis/scripts/run_diagnosis.test.ts",
     "test:diagram": "bun test src/agent/runner.diagram.test.ts",
     "db:push": "drizzle-kit push",

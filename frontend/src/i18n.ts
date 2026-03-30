@@ -142,6 +142,44 @@ interface Translations {
   agent_status_active:   string;
   agent_tab_chat:        string;
   agent_tab_editor:      string;
+
+  // ── 坐席侧导航菜单 ──────────────────────────────
+  nav_workbench:         string;
+  nav_operations:        string;
+  nav_knowledge:         string;
+  nav_workorders:        string;
+
+  // ── 工单管理 ─────────────────────────────────────
+  wo_tab_list:           string;
+  wo_tab_intakes:        string;
+  wo_tab_threads:        string;
+  wo_search_placeholder: string;
+  wo_filter_status:      string;
+  wo_filter_all:         string;
+  wo_filter_reset:       string;
+  wo_detail_title:       string;
+  wo_empty:              string;
+  wo_loading:            string;
+  wo_preview_empty:      string;
+  wo_col_id:             string;
+  wo_col_title:          string;
+  wo_col_phone:          string;
+  wo_col_type:           string;
+  wo_col_updated:        string;
+  wo_col_created:        string;
+  wo_col_source:         string;
+  wo_col_summary:        string;
+  wo_col_items:          string;
+  wo_basic_info:         string;
+  wo_assignee:           string;
+  wo_description:        string;
+  wo_relations:          string;
+  wo_appointments:       string;
+  wo_sub_tasks:          string;
+  wo_timeline:           string;
+  wo_intake_info:        string;
+  wo_issue_thread:       string;
+  wo_work_items:         string;
   agent_dialog_title:    string;
   agent_empty_title:     string;
   agent_empty_subtitle:  string;
@@ -154,6 +192,72 @@ interface Translations {
   card_emotion_empty:    string;
   card_handoff_empty:    string;
   card_outbound_empty:   string;
+
+  // ── TopBar / Layout ───────────────────────────────
+  topbar_search:         string;
+  topbar_logout:         string;
+
+  // ── OperationsPane tabs ───────────────────────────
+  ops_tab_knowledge:     string;
+  ops_tab_skills:        string;
+
+  // ── UserDetailContent ─────────────────────────────
+  user_waiting:          string;
+  user_male:             string;
+  user_female:           string;
+  user_active:           string;
+  user_suspended:        string;
+  user_phone:            string;
+  user_plan:             string;
+  user_status:           string;
+  user_region:           string;
+  user_contract_end:     string;
+  user_email:            string;
+
+  // ── ComplianceContent ─────────────────────────────
+  compliance_empty:      string;
+
+  // ── WorkOrderSummaryContent ───────────────────────
+  wo_summary_empty:      string;
+  wo_summary_customer:   string;
+  wo_summary_queue:      string;
+  wo_summary_owner:      string;
+  wo_summary_next_action: string;
+
+  // ── WorkOrderTimelineContent ──────────────────────
+  wo_timeline_empty:     string;
+
+  // ── AppointmentPanelContent ───────────────────────
+  appt_empty:            string;
+  appt_type:             string;
+  appt_scheduled:        string;
+  appt_location:         string;
+  appt_resource:         string;
+  appt_actual_start:     string;
+  appt_actual_end:       string;
+  appt_reschedules:      string;
+  appt_no_show_reason:   string;
+
+  // ── ReplyHintContent ──────────────────────────────
+  reply_hint_empty:      string;
+  reply_confidence_high: string;
+  reply_confidence_mid:  string;
+  reply_confidence_low:  string;
+  reply_source:          string;
+  reply_ask_first:       string;
+  reply_recommended:     string;
+  reply_forbidden:       string;
+  reply_options:         string;
+  reply_insert:          string;
+  reply_copy:            string;
+  reply_next_actions:    string;
+  reply_dismiss:         string;
+
+  // ── OutboundTaskContent ───────────────────────────
+  outbound_mr:           string;
+  outbound_ms:           string;
+  outbound_days_suffix:  string;
+  outbound_month_suffix: string;
 
   // ── 情绪标签映射（key = 中文标签）────────────────
   emotion_labels: Record<string, string>;
@@ -336,10 +440,46 @@ export const T: Record<Lang, Translations> = {
     card_handoff_reason:        '转接原因',
     card_handoff_actions_taken: '已执行操作',
 
-    agent_title:          '坐席工作台',
+    agent_title:          '坐席侧',
     agent_status_active:  '对话中',
     agent_tab_chat:       '客户对话',
     agent_tab_editor:     '知识库',
+
+    nav_workbench:        '坐席工作台',
+    nav_operations:       '运营管理',
+    nav_knowledge:        '知识库',
+    nav_workorders:       '工单管理',
+
+    wo_tab_list:          '工单列表',
+    wo_tab_intakes:       '线索与草稿',
+    wo_tab_threads:       '事项主线',
+    wo_search_placeholder: '工单号/标题/手机号',
+    wo_filter_status:     '状态',
+    wo_filter_all:        '全部',
+    wo_filter_reset:      '重置',
+    wo_detail_title:      '工单详情',
+    wo_empty:             '暂无数据',
+    wo_loading:           '加载中…',
+    wo_preview_empty:     '选择一条记录查看详情',
+    wo_col_id:            '工单 ID',
+    wo_col_title:         '标题',
+    wo_col_phone:         '手机号',
+    wo_col_type:          '类型',
+    wo_col_updated:       '更新时间',
+    wo_col_created:       '创建时间',
+    wo_col_source:        '来源',
+    wo_col_summary:       '摘要',
+    wo_col_items:         '关联工单数',
+    wo_basic_info:        '基本信息',
+    wo_assignee:          '处理人',
+    wo_description:       '描述',
+    wo_relations:         '来源关系',
+    wo_appointments:      '关联预约',
+    wo_sub_tasks:         '子任务',
+    wo_timeline:          '时间线',
+    wo_intake_info:       '线索信息',
+    wo_issue_thread:      '事项主线',
+    wo_work_items:        '关联工单',
     agent_dialog_title:   '客户对话记录',
     agent_empty_title:    '等待客服对话接入',
     agent_empty_subtitle: '在 /chat 发起对话后，此处将实时同步显示',
@@ -351,6 +491,63 @@ export const T: Record<Lang, Translations> = {
     card_emotion_empty:  '等待客户发言…',
     card_handoff_empty:  '转人工后将自动显示工单摘要',
     card_outbound_empty: '切换外呼客户后将自动显示任务详情',
+
+    topbar_search:       '全局搜索…',
+    topbar_logout:       '退出登录',
+
+    ops_tab_knowledge:   '知识管理',
+    ops_tab_skills:      '技能管理',
+
+    user_waiting:        '等待客户接入',
+    user_male:           '男',
+    user_female:         '女',
+    user_active:         '正常',
+    user_suspended:      '已停机',
+    user_phone:          '手机号',
+    user_plan:           '套餐',
+    user_status:         '状态',
+    user_region:         '归属地',
+    user_contract_end:   '合约到期',
+    user_email:          '邮箱',
+
+    compliance_empty:    '暂无合规告警',
+
+    wo_summary_empty:    '暂无关联工单',
+    wo_summary_customer: '客户',
+    wo_summary_queue:    '队列',
+    wo_summary_owner:    '负责人',
+    wo_summary_next_action: '下次动作',
+
+    wo_timeline_empty:   '暂无事件记录',
+
+    appt_empty:          '暂无预约',
+    appt_type:           '类型',
+    appt_scheduled:      '计划时间',
+    appt_location:       '地点',
+    appt_resource:       '资源',
+    appt_actual_start:   '实际开始',
+    appt_actual_end:     '实际结束',
+    appt_reschedules:    '改约次数',
+    appt_no_show_reason: '爽约原因',
+
+    reply_hint_empty:    '等待用户消息，自动生成回复提示...',
+    reply_confidence_high: '高置信',
+    reply_confidence_mid: '中置信',
+    reply_confidence_low: '低置信',
+    reply_source:        '来源',
+    reply_ask_first:     '需先追问',
+    reply_recommended:   '推荐术语',
+    reply_forbidden:     '禁用术语',
+    reply_options:       '推荐回复',
+    reply_insert:        '带入输入框',
+    reply_copy:          '复制',
+    reply_next_actions:  '下一步动作',
+    reply_dismiss:       '不准/无帮助',
+
+    outbound_mr:         '先生',
+    outbound_ms:         '女士',
+    outbound_days_suffix: '天',
+    outbound_month_suffix: '月',
 
     emotion_labels: {
       '平静': '平静', '礼貌': '礼貌', '焦虑': '焦虑', '不满': '不满', '愤怒': '愤怒',
@@ -533,10 +730,46 @@ export const T: Record<Lang, Translations> = {
     card_handoff_reason:        'Transfer Reason',
     card_handoff_actions_taken: 'Actions Taken',
 
-    agent_title:          'Agent Workstation',
+    agent_title:          'Agent Side',
     agent_status_active:  'In conversation',
     agent_tab_chat:       'Customer Chat',
     agent_tab_editor:     'Knowledge Base',
+
+    nav_workbench:        'Agent Workbench',
+    nav_operations:       'Operations',
+    nav_knowledge:        'Knowledge Base',
+    nav_workorders:       'Work Orders',
+
+    wo_tab_list:          'Work Items',
+    wo_tab_intakes:       'Intakes & Drafts',
+    wo_tab_threads:       'Issue Threads',
+    wo_search_placeholder: 'ID / Title / Phone',
+    wo_filter_status:     'Status',
+    wo_filter_all:        'All',
+    wo_filter_reset:      'Reset',
+    wo_detail_title:      'Work Item Detail',
+    wo_empty:             'No data',
+    wo_loading:           'Loading…',
+    wo_preview_empty:     'Select a record to preview',
+    wo_col_id:            'ID',
+    wo_col_title:         'Title',
+    wo_col_phone:         'Phone',
+    wo_col_type:          'Type',
+    wo_col_updated:       'Updated',
+    wo_col_created:       'Created',
+    wo_col_source:        'Source',
+    wo_col_summary:       'Summary',
+    wo_col_items:         'Items',
+    wo_basic_info:        'Basic Info',
+    wo_assignee:          'Assignee',
+    wo_description:       'Description',
+    wo_relations:         'Relations',
+    wo_appointments:      'Appointments',
+    wo_sub_tasks:         'Sub Tasks',
+    wo_timeline:          'Timeline',
+    wo_intake_info:       'Intake Info',
+    wo_issue_thread:      'Issue Thread',
+    wo_work_items:        'Work Items',
     agent_dialog_title:   'Customer Chat',
     agent_empty_title:    'Waiting for customer to connect',
     agent_empty_subtitle: 'Start a chat from /chat — messages will sync here in real time',
@@ -548,6 +781,63 @@ export const T: Record<Lang, Translations> = {
     card_emotion_empty:  'Waiting for customer…',
     card_handoff_empty:  'Handoff summary will appear here after transfer',
     card_outbound_empty: 'Switch to an outbound customer to see task details',
+
+    topbar_search:       'Search…',
+    topbar_logout:       'Logout',
+
+    ops_tab_knowledge:   'Knowledge',
+    ops_tab_skills:      'Skills',
+
+    user_waiting:        'Waiting for customer',
+    user_male:           'Male',
+    user_female:         'Female',
+    user_active:         'Active',
+    user_suspended:      'Suspended',
+    user_phone:          'Phone',
+    user_plan:           'Plan',
+    user_status:         'Status',
+    user_region:         'Region',
+    user_contract_end:   'Contract End',
+    user_email:          'Email',
+
+    compliance_empty:    'No compliance alerts',
+
+    wo_summary_empty:    'No work orders',
+    wo_summary_customer: 'Customer',
+    wo_summary_queue:    'Queue',
+    wo_summary_owner:    'Owner',
+    wo_summary_next_action: 'Next Action',
+
+    wo_timeline_empty:   'No events yet',
+
+    appt_empty:          'No appointments',
+    appt_type:           'Type',
+    appt_scheduled:      'Scheduled',
+    appt_location:       'Location',
+    appt_resource:       'Resource',
+    appt_actual_start:   'Actual Start',
+    appt_actual_end:     'Actual End',
+    appt_reschedules:    'Reschedules',
+    appt_no_show_reason: 'No Show Reason',
+
+    reply_hint_empty:    'Waiting for user message to generate reply hints...',
+    reply_confidence_high: 'High',
+    reply_confidence_mid: 'Medium',
+    reply_confidence_low: 'Low',
+    reply_source:        'Source',
+    reply_ask_first:     'Ask first',
+    reply_recommended:   'Recommended Terms',
+    reply_forbidden:     'Forbidden Terms',
+    reply_options:       'Recommended Replies',
+    reply_insert:        'Insert',
+    reply_copy:          'Copy',
+    reply_next_actions:  'Next Actions',
+    reply_dismiss:       'Not helpful',
+
+    outbound_mr:         'Mr.',
+    outbound_ms:         'Ms.',
+    outbound_days_suffix: ' days',
+    outbound_month_suffix: 'mo',
 
     emotion_labels: {
       '平静': 'Calm', '礼貌': 'Polite', '焦虑': 'Anxious', '不满': 'Dissatisfied', '愤怒': 'Angry',

@@ -6,7 +6,7 @@
 
 import { memo } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { type Lang } from '../../../i18n';
+import { type Lang, T } from '../../../i18n';
 
 interface AppointmentData {
   id?: string;
@@ -49,6 +49,7 @@ function formatDateTime(iso?: string): string {
 }
 
 export const AppointmentPanelContent = memo(function AppointmentPanelContent({ data, lang }: { data: unknown; lang: Lang }) {
+  const t = T[lang];
   const d = data as AppointmentData | null;
 
   if (!d) {
@@ -56,7 +57,7 @@ export const AppointmentPanelContent = memo(function AppointmentPanelContent({ d
       <div className="flex flex-col items-center justify-center py-6 space-y-1.5 text-center select-none px-3">
         <span className="text-2xl opacity-30">📅</span>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          {lang === 'zh' ? '暂无预约' : 'No appointments'}
+          {t.appt_empty}
         </p>
       </div>
     );
@@ -66,29 +67,29 @@ export const AppointmentPanelContent = memo(function AppointmentPanelContent({ d
   const statusInfo = STATUS_LABELS[d.booking_status ?? ''] ?? { zh: d.booking_status, en: d.booking_status, variant: 'secondary' as const };
 
   const rows: { label: string; value: string | undefined }[] = [
-    { label: lang === 'zh' ? '类型' : 'Type', value: lang === 'zh' ? typeInfo.zh : typeInfo.en },
-    { label: lang === 'zh' ? '计划时间' : 'Scheduled', value: `${formatDateTime(d.scheduled_start_at)} ~ ${formatDateTime(d.scheduled_end_at)}` },
-    { label: lang === 'zh' ? '地点' : 'Location', value: d.location_text },
-    { label: lang === 'zh' ? '资源' : 'Resource', value: d.resource_id },
+    { label: t.appt_type, value: typeInfo[lang] },
+    { label: t.appt_scheduled, value: `${formatDateTime(d.scheduled_start_at)} ~ ${formatDateTime(d.scheduled_end_at)}` },
+    { label: t.appt_location, value: d.location_text },
+    { label: t.appt_resource, value: d.resource_id },
   ];
 
   if (d.actual_start_at) {
-    rows.push({ label: lang === 'zh' ? '实际开始' : 'Actual Start', value: formatDateTime(d.actual_start_at) });
+    rows.push({ label: t.appt_actual_start, value: formatDateTime(d.actual_start_at) });
   }
   if (d.actual_end_at) {
-    rows.push({ label: lang === 'zh' ? '实际结束' : 'Actual End', value: formatDateTime(d.actual_end_at) });
+    rows.push({ label: t.appt_actual_end, value: formatDateTime(d.actual_end_at) });
   }
   if (d.reschedule_count && d.reschedule_count > 0) {
-    rows.push({ label: lang === 'zh' ? '改约次数' : 'Reschedules', value: String(d.reschedule_count) });
+    rows.push({ label: t.appt_reschedules, value: String(d.reschedule_count) });
   }
   if (d.no_show_reason) {
-    rows.push({ label: lang === 'zh' ? '爽约原因' : 'No Show Reason', value: d.no_show_reason });
+    rows.push({ label: t.appt_no_show_reason, value: d.no_show_reason });
   }
 
   return (
     <div className="p-3 space-y-2.5 text-xs">
       <div className="flex items-center justify-between">
-        <Badge variant={statusInfo.variant}>{lang === 'zh' ? statusInfo.zh : statusInfo.en}</Badge>
+        <Badge variant={statusInfo.variant}>{statusInfo[lang]}</Badge>
       </div>
 
       {rows.filter(r => r.value).map(r => (

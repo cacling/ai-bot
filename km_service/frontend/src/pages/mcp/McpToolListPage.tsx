@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { t, tpl, type Lang } from './i18n';
 
 type View = 'list' | 'edit';
 type QuickFilter = 'all' | 'no_contract' | 'mock_on' | 'has_risk' | 'ready';
@@ -21,9 +22,11 @@ interface Props {
   navigateToTool?: { toolId: string; step?: string; fromServer?: string; toolName?: string } | null;
   onNavigateHandled?: () => void;
   onOpenBinding?: (toolId: string) => void;
+  lang?: Lang;
 }
 
-export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBinding }: Props = {}) {
+export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBinding, lang = 'zh' as Lang }: Props = {}) {
+  const T = t(lang);
   const [tools, setTools] = useState<McpToolRecord[]>([]);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,30 +93,30 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
 
   const implLabel = (tool: McpToolRecord) => {
     if (!tool.adapter_type) return null;
-    if (tool.adapter_type === 'script') return '脚本';
-    if (tool.adapter_type === 'remote_mcp') return 'MCP';
-    if (tool.adapter_type === 'api_proxy') return 'API';
-    if (tool.adapter_type === 'db') return 'DB';
-    if (tool.adapter_type === 'mock') return 'Mock';
+    if (tool.adapter_type === 'script') return T.adapter_script;
+    if (tool.adapter_type === 'remote_mcp') return T.adapter_mcp;
+    if (tool.adapter_type === 'api_proxy') return T.adapter_api;
+    if (tool.adapter_type === 'db') return T.adapter_db;
+    if (tool.adapter_type === 'mock') return T.adapter_mock;
     return tool.adapter_type;
   };
 
   const toolStatus = (tool: McpToolRecord) => {
-    if (tool.disabled) return { label: '已禁用', variant: 'secondary' as const };
-    if (tool.mocked) return { label: 'Mock 中', variant: 'secondary' as const };
-    if (!tool.adapter_type || (!tool.output_schema && !tool.input_schema)) return { label: '待配置', variant: 'outline' as const };
-    if (!tool.output_schema) return { label: '缺契约', variant: 'destructive' as const };
-    if (tool.risk_flags && tool.risk_flags.length > 0) return { label: '有风险', variant: 'destructive' as const };
-    if (tool.mock_aligned === false) return { label: 'Mock 漂移', variant: 'destructive' as const };
-    return { label: '已就绪', variant: 'default' as const };
+    if (tool.disabled) return { label: T.status_disabled, variant: 'secondary' as const };
+    if (tool.mocked) return { label: T.status_mocked, variant: 'secondary' as const };
+    if (!tool.adapter_type || (!tool.output_schema && !tool.input_schema)) return { label: T.status_pending, variant: 'outline' as const };
+    if (!tool.output_schema) return { label: T.status_no_contract, variant: 'destructive' as const };
+    if (tool.risk_flags && tool.risk_flags.length > 0) return { label: T.status_has_risk, variant: 'destructive' as const };
+    if (tool.mock_aligned === false) return { label: T.status_mock_drift, variant: 'destructive' as const };
+    return { label: T.status_ready, variant: 'default' as const };
   };
 
   const contractStatus = (tool: McpToolRecord): { label: string; ok: boolean } => {
-    if (!tool.input_schema && !tool.output_schema) return { label: '未定义', ok: false };
-    if (!tool.output_schema) return { label: '缺输出', ok: false };
-    if (!tool.input_schema) return { label: '缺输入', ok: false };
-    if (tool.mock_aligned === false) return { label: '已定义(漂移)', ok: false };
-    return { label: '已定义', ok: true };
+    if (!tool.input_schema && !tool.output_schema) return { label: T.contract_undefined, ok: false };
+    if (!tool.output_schema) return { label: T.contract_no_output, ok: false };
+    if (!tool.input_schema) return { label: T.contract_no_input, ok: false };
+    if (tool.mock_aligned === false) return { label: T.contract_defined_drift, ok: false };
+    return { label: T.contract_defined_ok, ok: true };
   };
 
   const getToolRisks = (tool: McpToolRecord): string[] => {
@@ -126,9 +129,9 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
     const noContract = tools.filter(t => !t.output_schema).length;
     const mockOn = tools.filter(t => t.mocked).length;
     const hasRisks = tools.filter(t => (t.risk_flags?.length ?? 0) > 0 || t.mock_aligned === false).length;
-    const ready = tools.filter(t => toolStatus(t).label === '已就绪').length;
+    const ready = tools.filter(t => toolStatus(t).label === T.status_ready).length;
     return { total: tools.length, noContract, mockOn, hasRisks, ready };
-  }, [tools]);
+  }, [tools, T]);
 
   // ── Filtered list ───────────────────────────────────────────────────────────
 
@@ -150,7 +153,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
     if (quickFilter === 'no_contract') list = list.filter(t => !t.output_schema);
     else if (quickFilter === 'mock_on') list = list.filter(t => t.mocked);
     else if (quickFilter === 'has_risk') list = list.filter(t => (t.risk_flags?.length ?? 0) > 0 || t.mock_aligned === false);
-    else if (quickFilter === 'ready') list = list.filter(t => toolStatus(t).label === '已就绪');
+    else if (quickFilter === 'ready') list = list.filter(t => toolStatus(t).label === T.status_ready);
 
     // Impl filter
     if (filterImpl !== 'all') list = list.filter(t => (t.adapter_type ?? 'none') === filterImpl);
@@ -159,22 +162,27 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
     if (filterServer !== 'all') list = list.filter(t => t.server_id === filterServer);
 
     return list;
-  }, [tools, search, quickFilter, filterImpl, filterServer]);
+  }, [tools, search, quickFilter, filterImpl, filterServer, T]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleDelete = async (tool: McpToolRecord) => {
-    if (!confirm(`确定删除工具「${tool.name}」？`)) return;
+    if (!confirm(tpl(T.confirm_delete_tool, { name: tool.name }))) return;
     await mcpApi.deleteTool(tool.id);
     load();
   };
 
   const handleToggleMock = async (tool: McpToolRecord) => {
     if (!tool.mocked && !tool.mock_rules) {
-      alert('请先配置 Mock 规则');
+      alert(T.mock_rules_required);
       return;
     }
     await mcpApi.toggleToolMock(tool.id);
+    load();
+  };
+
+  const handleToggleDisable = async (tool: McpToolRecord) => {
+    await mcpApi.toggleToolDisable(tool.id);
     load();
   };
 
@@ -201,6 +209,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
           initialStep={editInitialStep as any}
           fromServer={editFromServer}
           onOpenBinding={onOpenBinding}
+          lang={lang}
         />
       </div>
     )}
@@ -211,18 +220,18 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
       {/* Header */}
       <div className="flex items-center justify-between">
         <div /> {/* Tab 标题已在上层显示 */}
-        <Button size="sm" onClick={() => setShowCreateDialog(true)}><Plus size={13} /> 新建</Button>
+        <Button size="sm" onClick={() => setShowCreateDialog(true)}><Plus size={13} /> {T.create}</Button>
       </div>
 
       {/* Stats cards */}
       {!loading && tools.length > 0 && (
         <div className="grid grid-cols-5 gap-2">
           {([
-            { key: 'all' as QuickFilter, label: '全部', value: stats.total, color: 'text-foreground' },
-            { key: 'no_contract' as QuickFilter, label: '待补契约', value: stats.noContract, color: 'text-destructive' },
-            { key: 'has_risk' as QuickFilter, label: '有风险', value: stats.hasRisks, color: 'text-destructive' },
-            { key: 'mock_on' as QuickFilter, label: 'Mock 中', value: stats.mockOn, color: 'text-amber-600' },
-            { key: 'ready' as QuickFilter, label: '已就绪', value: stats.ready, color: 'text-emerald-600' },
+            { key: 'all' as QuickFilter, label: T.stat_all, value: stats.total, color: 'text-foreground' },
+            { key: 'no_contract' as QuickFilter, label: T.stat_no_contract, value: stats.noContract, color: 'text-destructive' },
+            { key: 'has_risk' as QuickFilter, label: T.stat_has_risk, value: stats.hasRisks, color: 'text-destructive' },
+            { key: 'mock_on' as QuickFilter, label: T.status_mocked, value: stats.mockOn, color: 'text-amber-600' },
+            { key: 'ready' as QuickFilter, label: T.stat_ready, value: stats.ready, color: 'text-emerald-600' },
           ]).map(card => (
             <button
               key={card.key}
@@ -246,31 +255,31 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
             <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="搜索工具名 / Skill / Server"
+              placeholder={T.search_tool_hint}
               className="pl-8 text-xs h-8"
             />
           </div>
           <Select value={filterImpl} onValueChange={v => setFilterImpl(v ?? 'all')}>
-            <SelectTrigger className="w-32 text-xs h-8"><SelectValue placeholder="Adapter 类型" /></SelectTrigger>
+            <SelectTrigger className="w-32 text-xs h-8"><SelectValue placeholder={T.adapter_type} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部 Adapter</SelectItem>
-              <SelectItem value="script">Script</SelectItem>
-              <SelectItem value="remote_mcp">Remote MCP</SelectItem>
-              <SelectItem value="api_proxy">API Proxy</SelectItem>
-              <SelectItem value="db">DB</SelectItem>
-              <SelectItem value="none">未配置</SelectItem>
+              <SelectItem value="all">{T.all_adapters}</SelectItem>
+              <SelectItem value="script">{T.adapter_script}</SelectItem>
+              <SelectItem value="remote_mcp">{T.adapter_mcp}</SelectItem>
+              <SelectItem value="api_proxy">{T.adapter_api_proxy}</SelectItem>
+              <SelectItem value="db">{T.adapter_db}</SelectItem>
+              <SelectItem value="none">{T.not_configured}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={filterServer} onValueChange={v => setFilterServer(v ?? 'all')}>
             <SelectTrigger className="w-36 text-xs h-8"><SelectValue placeholder="Server" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部 Server</SelectItem>
+              <SelectItem value="all">{T.all_servers}</SelectItem>
               {servers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
             </SelectContent>
           </Select>
           {(search || quickFilter !== 'all' || filterImpl !== 'all' || filterServer !== 'all') && (
             <Button variant="ghost" size="xs" onClick={() => { setSearch(''); setQuickFilter('all'); setFilterImpl('all'); setFilterServer('all'); }}>
-              清除筛选
+              {T.clear_filters}
             </Button>
           )}
         </div>
@@ -278,23 +287,23 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
 
       {/* Table */}
       {loading ? (
-        <div className="text-sm text-muted-foreground">加载中...</div>
+        <div className="text-sm text-muted-foreground">{T.loading}</div>
       ) : tools.length === 0 ? (
-        <div className="text-sm text-muted-foreground text-center py-8">暂无工具</div>
+        <div className="text-sm text-muted-foreground text-center py-8">{T.no_tools}</div>
       ) : (
         <div className="rounded-lg border overflow-hidden">
           <Table className="text-xs">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-40">工具名</TableHead>
+                <TableHead className="w-40">{T.tool_name_label}</TableHead>
                 <TableHead className="w-24">Server</TableHead>
                 <TableHead className="w-16 text-center">Adapter</TableHead>
-                <TableHead className="w-24 text-center">Skill</TableHead>
-                <TableHead className="w-20 text-center">契约</TableHead>
-                <TableHead className="w-28 text-center">模式</TableHead>
-                <TableHead className="w-20 text-center">状态</TableHead>
-                <TableHead className="w-24 text-center">风险</TableHead>
-                <TableHead className="w-16 text-center">操作</TableHead>
+                <TableHead className="w-24 text-center">{T.col_skill}</TableHead>
+                <TableHead className="w-20 text-center">{T.col_contract}</TableHead>
+                <TableHead className="w-28 text-center">{T.col_mode}</TableHead>
+                <TableHead className="w-20 text-center">{T.col_status}</TableHead>
+                <TableHead className="w-24 text-center">{T.col_risk}</TableHead>
+                <TableHead className="w-16 text-center">{T.col_actions}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -330,14 +339,14 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
                     </TableCell>
                     <TableCell className="text-center" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-center gap-1.5">
-                        <span className={`text-[11px] ${!tool.mocked ? 'font-medium text-emerald-600' : 'text-muted-foreground'}`}>Real</span>
+                        <span className={`text-[11px] ${!tool.mocked ? 'font-medium text-emerald-600' : 'text-muted-foreground'}`}>{T.mode_real}</span>
                         <button
                           onClick={() => handleToggleMock(tool)}
                           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${tool.mocked ? 'bg-amber-500' : 'bg-emerald-500'}`}
                         >
                           <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${tool.mocked ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
                         </button>
-                        <span className={`text-[11px] ${tool.mocked ? 'font-medium text-amber-600' : 'text-muted-foreground'}`}>Mock</span>
+                        <span className={`text-[11px] ${tool.mocked ? 'font-medium text-amber-600' : 'text-muted-foreground'}`}>{T.mode_mock}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -350,14 +359,19 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
                       }
                     </TableCell>
                     <TableCell className="text-center" onClick={e => e.stopPropagation()}>
-                      <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive" onClick={() => handleDelete(tool)}>删除</Button>
+                      <div className="flex items-center justify-center gap-1">
+                        <Button variant="ghost" size="xs" onClick={() => handleToggleDisable(tool)}>
+                          {tool.disabled ? T.enable_tool : T.disable_tool}
+                        </Button>
+                        <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive" onClick={() => handleDelete(tool)}>{T.delete}</Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-6">无匹配工具</TableCell>
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-6">{T.no_match_tools}</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -374,6 +388,7 @@ export function McpToolListPage({ navigateToTool, onNavigateHandled, onOpenBindi
           setView('edit');
           load();
         }}
+        lang={lang}
       />
     </div>
     </div>

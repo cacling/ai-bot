@@ -101,4 +101,4 @@ function createServer(): McpServer {
   return server;
 }
 
-startMcpHttpServer("account-service", Number(process.env.PORT ?? 18007), createServer);
+if (import.meta.main) startMcpHttpServer("account-service", Number(process.env.PORT ?? 18007), createServer);

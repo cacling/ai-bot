@@ -112,7 +112,7 @@ function BillCard({ data, lang = 'zh' }: { data: BillCardData; lang?: Lang }) {
       <div className="px-4 py-3">
         <div className="flex items-end justify-between mb-3">
           <span className="text-xs text-muted-foreground">{tc.card_bill_total}</span>
-          <span className="text-2xl font-bold text-foreground">¥{data.total.toFixed(2)}</span>
+          <span className="text-2xl font-bold text-foreground">¥{(data.total ?? 0).toFixed(2)}</span>
         </div>
         <div className="space-y-1.5 border-t border-border pt-3">
           {[
@@ -124,7 +124,7 @@ function BillCard({ data, lang = 'zh' }: { data: BillCardData; lang?: Lang }) {
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between text-sm">
               <span className="text-muted-foreground">{label}</span>
-              <span className={value > 0 ? 'text-foreground' : 'text-muted-foreground/50'}>¥{value.toFixed(2)}</span>
+              <span className={(value ?? 0) > 0 ? 'text-foreground' : 'text-muted-foreground/50'}>¥{(value ?? 0).toFixed(2)}</span>
             </div>
           ))}
         </div>

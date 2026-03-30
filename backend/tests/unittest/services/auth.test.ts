@@ -71,7 +71,7 @@ describe('requireRole — RBAC middleware', () => {
     const res = await app.request('/test');
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error).toContain('X-User-Id');
+    expect(body.error).toContain('认证');
     process.env.NODE_ENV = originalEnv;
   });
 

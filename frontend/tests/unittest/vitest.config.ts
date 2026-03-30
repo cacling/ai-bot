@@ -42,6 +42,7 @@ export default defineConfig({
       '@base-ui/react/tabs': path.resolve(__dirname, '__mocks__/@base-ui/react/tabs.ts'),
       'react-resizable-panels': path.resolve(__dirname, '__mocks__/react-resizable-panels.ts'),
       'lucide-react': path.resolve(__dirname, '__mocks__/lucide-react.tsx'),
+      '@ai-bot/km-frontend': path.resolve(__dirname, '__mocks__/@ai-bot/km-frontend.tsx'),
     },
   },
 });

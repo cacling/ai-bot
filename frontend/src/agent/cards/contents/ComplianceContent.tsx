@@ -28,7 +28,7 @@ export const ComplianceContent = memo(function ComplianceContent({ data, lang }:
     return (
       <div className="px-4 py-6 text-center">
         <span className="text-[11px] text-muted-foreground">
-          {lang === 'zh' ? '暂无合规告警' : 'No compliance alerts'}
+          {T[lang].compliance_empty}
         </span>
       </div>
     );

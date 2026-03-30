@@ -4,13 +4,24 @@
  * feature-map: 4. 坐席工作台
  * 入口: /agent
  * WS: /ws/agent?phone=<phone>&lang=<lang>
+ *
+ * 布局: 左侧树形菜单 + 右侧内容区
+ * 一级菜单: 坐席工作台 / 运营管理
+ * 二级菜单（运营管理下）: 知识库 / 工单管理
  */
 import { test, expect } from '@playwright/test';
 
 test.describe('工作台页面加载', () => {
-  test.skip('AGENT-UI-01: /agent 路径加载坐席工作台布局', async ({ page }) => {});
-  test.skip('AGENT-UI-02: 左侧对话区 + 右侧卡片区可调整大小', async ({ page }) => {});
-  test.skip('AGENT-UI-03: 顶部 Tab 可切换 对话/技能编辑/知识库/工具管理', async ({ page }) => {});
+  test.skip('AGENT-UI-01: /agent 路径加载坐席工作台，左侧菜单可见', async ({ page }) => {});
+  test.skip('AGENT-UI-02: 坐席工作台视图——左侧对话区 + 右侧卡片区可调整大小', async ({ page }) => {});
+  test.skip('AGENT-UI-03: 左侧一级菜单"坐席工作台"/"运营管理"可切换，"运营管理"默认展开', async ({ page }) => {});
+});
+
+test.describe('菜单导航 (sidebar)', () => {
+  test.skip('AGENT-UI-NAV-01: 点击"坐席工作台"切换到聊天+卡片视图', async ({ page }) => {});
+  test.skip('AGENT-UI-NAV-02: 点击"运营管理 > 知识库"切换到知识管理页', async ({ page }) => {});
+  test.skip('AGENT-UI-NAV-03: 点击"运营管理 > 工单管理"切换到工单管理页', async ({ page }) => {});
+  test.skip('AGENT-UI-NAV-04: 工单管理内部 3 个页签可切换', async ({ page }) => {});
 });
 
 test.describe('实时对话监控 (4.1)', () => {

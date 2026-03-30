@@ -14,15 +14,18 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { RefreshCw, Trash2, Save } from 'lucide-react';
+import { t, tpl, type Lang } from './i18n';
 
 interface Props {
   open: boolean;
   server: McpServer | null; // null = create mode
   onClose: () => void;
   onSaved: () => void;
+  lang?: Lang;
 }
 
-export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
+export function ServerManageDialog({ open, server, onClose, onSaved, lang = 'zh' as Lang }: Props) {
+  const T = t(lang);
   const isCreate = !server;
   const isInternal = server?.kind === 'internal';
 
@@ -47,7 +50,7 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
   }, [open, server]);
 
   const handleSave = async () => {
-    if (!name.trim()) return alert('Name is required');
+    if (!name.trim()) return alert(T.name_required);
     setSaving(true);
     try {
       if (isCreate) {
@@ -59,7 +62,7 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
       }
       onSaved();
     } catch (e) {
-      alert(`Save failed: ${e}`);
+      alert(`${T.save_failed} ${e}`);
     } finally {
       setSaving(false);
     }
@@ -71,7 +74,7 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
     setDiscoverResult(null);
     try {
       const res = await mcpApi.discoverTools(server.id);
-      setDiscoverResult(`Discovered ${res.tools.length} tools`);
+      setDiscoverResult(tpl(T.discovered_tools, { n: res.tools.length }));
     } catch (e) {
       setDiscoverResult(`Failed: ${e}`);
     } finally {
@@ -81,12 +84,12 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
 
   const handleDelete = async () => {
     if (!server) return;
-    if (!confirm(`Delete server "${server.name}"? This cannot be undone.`)) return;
+    if (!confirm(tpl(T.confirm_delete_server, { name: server.name }))) return;
     try {
       await mcpApi.deleteServer(server.id);
       onSaved();
     } catch (e) {
-      alert(`Delete failed: ${e}`);
+      alert(`${T.delete_failed} ${e}`);
     }
   };
 
@@ -95,7 +98,7 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
-            {isCreate ? 'Add Server' : server.name}
+            {isCreate ? T.add_server : server.name}
             {server && (
               <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${
                 server.kind === 'internal' ? 'bg-sky-50 text-sky-700' :
@@ -109,7 +112,7 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
         <div className="space-y-3 pt-2">
           {/* Name */}
           <div>
-            <Label className="text-xs">Name</Label>
+            <Label className="text-xs">{T.name}</Label>
             <Input
               value={name}
               onChange={e => setName(e.target.value)}
@@ -121,18 +124,18 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
 
           {/* Description */}
           <div>
-            <Label className="text-xs">Description</Label>
+            <Label className="text-xs">{T.description}</Label>
             <Input
               value={description}
               onChange={e => setDescription(e.target.value)}
               className="text-xs h-8 mt-1"
-              placeholder="Service description"
+              placeholder={T.desc_placeholder}
             />
           </div>
 
           {/* URL */}
           <div>
-            <Label className="text-xs">URL</Label>
+            <Label className="text-xs">{T.url}</Label>
             <Input
               value={url}
               onChange={e => setUrl(e.target.value)}
@@ -145,27 +148,27 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
           {/* Kind + Enabled */}
           <div className="flex gap-3">
             <div className="flex-1">
-              <Label className="text-xs">Kind</Label>
+              <Label className="text-xs">{T.kind}</Label>
               <Select value={kind} onValueChange={v => setKind(v as typeof kind)} disabled={isInternal}>
                 <SelectTrigger className="text-xs h-8 mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="internal">Internal</SelectItem>
-                  <SelectItem value="external">External</SelectItem>
-                  <SelectItem value="planned">Planned</SelectItem>
+                  <SelectItem value="internal">{T.internal}</SelectItem>
+                  <SelectItem value="external">{T.external}</SelectItem>
+                  <SelectItem value="planned">{T.planned}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="flex-1">
-              <Label className="text-xs">Enabled</Label>
+              <Label className="text-xs">{T.enabled}</Label>
               <Select value={enabled ? 'true' : 'false'} onValueChange={v => setEnabled(v === 'true')}>
                 <SelectTrigger className="text-xs h-8 mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="true">Yes</SelectItem>
-                  <SelectItem value="false">No</SelectItem>
+                  <SelectItem value="true">{T.yes}</SelectItem>
+                  <SelectItem value="false">{T.no}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -174,7 +177,7 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
           {/* Last connected */}
           {server?.last_connected_at && (
             <p className="text-[11px] text-muted-foreground">
-              Last connected: {new Date(server.last_connected_at).toLocaleString()}
+              {T.last_connected} {new Date(server.last_connected_at).toLocaleString()}
             </p>
           )}
 
@@ -191,7 +194,7 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
           <div className="flex gap-2">
             {server && !isInternal && (
               <Button variant="ghost" size="sm" className="text-xs text-red-500 hover:text-red-600 h-7" onClick={handleDelete}>
-                <Trash2 size={12} /> Delete
+                <Trash2 size={12} /> {T.delete}
               </Button>
             )}
           </div>
@@ -199,11 +202,11 @@ export function ServerManageDialog({ open, server, onClose, onSaved }: Props) {
             {server && server.kind !== 'planned' && (
               <Button variant="outline" size="sm" className="text-xs h-7 gap-1" onClick={handleDiscover} disabled={discovering}>
                 <RefreshCw size={11} className={discovering ? 'animate-spin' : ''} />
-                {discovering ? 'Discovering...' : 'Discover Tools'}
+                {discovering ? T.discovering : T.discover_tools}
               </Button>
             )}
             <Button size="sm" className="text-xs h-7 gap-1" onClick={handleSave} disabled={saving}>
-              <Save size={11} /> {saving ? 'Saving...' : 'Save'}
+              <Save size={11} /> {saving ? T.saving : T.save}
             </Button>
           </div>
         </div>

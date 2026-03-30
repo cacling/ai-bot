@@ -11,7 +11,6 @@ import filesRoutes from "./skills/files";
 import skillsRoutes from "./skills/skills";
 import skillVersionsRoute from "./skills/skill-versions";
 import sandboxRoutes from "./skills/sandbox";
-import skillEditRoutes from "./skills/skill-edit";
 import canaryRoutes from "./skills/canary";
 import changeRequestRoutes from "./skills/change-requests";
 import testCaseRoutes from "./skills/test-cases";
@@ -54,7 +53,6 @@ export function createApp() {
   app.route('/api/skills', toolBindingsRoutes);
   app.route('/api/skill-versions', skillVersionsRoute);
   app.route('/api/sandbox', sandboxRoutes);
-  app.route('/api/skill-edit', skillEditRoutes);
   app.route('/api/canary', canaryRoutes);
   app.route('/api/change-requests', changeRequestRoutes);
   app.route('/api/test-cases', testCaseRoutes);

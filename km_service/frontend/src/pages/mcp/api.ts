@@ -174,6 +174,8 @@ export const mcpApi = {
     request<{ ok: boolean }>(`/tool-management/${id}/mock-rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
   toggleToolMock: (id: string) =>
     request<{ ok: boolean; mocked: boolean }>(`/tool-management/${id}/toggle-mock`, { method: 'PUT' }),
+  toggleToolDisable: (id: string) =>
+    request<{ ok: boolean; disabled: boolean }>(`/tool-management/${id}/toggle-disable`, { method: 'PUT' }),
 
   // Handlers
   listHandlers: () =>

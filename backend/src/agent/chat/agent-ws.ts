@@ -33,6 +33,7 @@ import { setAgentLang, getLangs } from '../../services/lang-session';
 import { translateText } from '../../services/translate-lang';
 import { checkCompliance } from '../../services/keyword-filter';
 import { t, TOOL_LABELS } from '../../services/i18n';
+import { getCookie } from 'hono/cookie';
 
 const agentWs = new Hono();
 
@@ -82,6 +83,16 @@ async function runHandoffAnalysis(
 }
 
 agentWs.get('/ws/agent', upgradeWebSocket((c) => {
+  // Staff session 校验（PROD 必须，DEV 仅 warn）
+  const staffSessionCookie = getCookie(c, 'staff_session');
+  if (!staffSessionCookie && process.env.NODE_ENV === 'production') {
+    logger.warn('agent-ws', 'rejected_no_session', {});
+    return { onOpen: (_, ws) => { ws.close(4401, 'Unauthorized'); } };
+  }
+  if (!staffSessionCookie) {
+    logger.warn('agent-ws', 'no_session_dev_mode', {});
+  }
+
   const phone     = c.req.query('phone') ?? '13800000001';
   const langParam = (c.req.query('lang') === 'en' ? 'en' : 'zh') as 'zh' | 'en';
 

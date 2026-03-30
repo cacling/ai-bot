@@ -3,13 +3,14 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import '@milkdown/kit/prose/view/style/prosemirror.css'
 import App from './App.tsx'
-import { AgentWorkstationPage } from './agent/AgentWorkstationPage.tsx'
+import { StaffRouter } from './agent/router/StaffRouter.tsx'
 
-const isAgent = window.location.pathname.startsWith('/agent');
-document.title = isAgent ? '坐席侧' : '客户侧';
+const pathname = window.location.pathname;
+const isStaff = pathname.startsWith('/staff') || pathname.startsWith('/agent');
+document.title = isStaff ? '坐席侧' : '客户侧';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isAgent ? <AgentWorkstationPage /> : <App />}
+    {isStaff ? <StaffRouter /> : <App />}
   </StrictMode>,
 )

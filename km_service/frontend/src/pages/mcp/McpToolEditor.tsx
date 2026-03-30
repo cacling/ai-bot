@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { t, tpl, type Lang } from './i18n';
 
 /**
  * 从 MCP 工具调用结果中提取业务数据。
@@ -45,21 +46,24 @@ interface Props {
   onOpenBinding?: (toolId: string) => void;
   initialStep?: Step;
   fromServer?: string;
+  lang?: Lang;
 }
 
 type Step = 'overview' | 'input' | 'output' | 'mock' | 'test';
 
 type StepGroup = 'contract' | 'implementation';
 
-const STEPS: Array<{ id: Step; label: string; group: StepGroup }> = [
-  { id: 'overview', label: 'Contract', group: 'contract' },
-  { id: 'input', label: 'Input Schema', group: 'contract' },
-  { id: 'output', label: 'Output Schema', group: 'contract' },
-  { id: 'mock', label: 'Mock Scenarios', group: 'implementation' },
-  { id: 'test', label: 'Validation', group: 'implementation' },
+const STEP_DEFS: Array<{ id: Step; labelKey: 'step_contract' | 'step_input_schema' | 'step_output_schema' | 'step_mock_scenarios' | 'step_validation'; group: StepGroup }> = [
+  { id: 'overview', labelKey: 'step_contract', group: 'contract' },
+  { id: 'input', labelKey: 'step_input_schema', group: 'contract' },
+  { id: 'output', labelKey: 'step_output_schema', group: 'contract' },
+  { id: 'mock', labelKey: 'step_mock_scenarios', group: 'implementation' },
+  { id: 'test', labelKey: 'step_validation', group: 'implementation' },
 ];
 
-export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initialStep, fromServer }: Props) {
+export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initialStep, fromServer, lang = 'zh' as Lang }: Props) {
+  const T = t(lang);
+  const STEPS = STEP_DEFS.map(s => ({ ...s, label: T[s.labelKey] }));
   const [tool, setTool] = useState<McpToolRecord | null>(null);
   const [servers, setServers] = useState<McpServer[]>([]);
   const [step, setStep] = useState<Step>(initialStep ?? 'overview');
@@ -74,7 +78,7 @@ export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initia
 
   useEffect(reload, [toolId]);
 
-  if (!tool) return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">加载中...</div>;
+  if (!tool) return <div className="flex items-center justify-center h-full text-sm text-muted-foreground">{T.loading}</div>;
 
   const handleUpdated = () => { reload(); onUpdated?.(); };
 
@@ -106,14 +110,14 @@ export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initia
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-4 px-6 py-4 bg-background border-b shadow-sm">
         <Button variant="ghost" size="sm" onClick={onBack} className="flex-shrink-0">
-          <ArrowLeft size={14} /> {fromServer ? `返回 ${fromServer}` : '返回'}
+          <ArrowLeft size={14} /> {fromServer ? tpl(T.back_to, { name: fromServer }) : T.back}
         </Button>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">
             <span className="font-mono">{tool.name}</span>
           </h1>
           <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
-            <span>{servers.find(s => s.id === tool.server_id)?.name ?? '未分配 Server'}</span>
+            <span>{servers.find(s => s.id === tool.server_id)?.name ?? T.no_server_assigned}</span>
             {tool.skills && tool.skills.length > 0 && (
               <>
                 <span className="text-muted-foreground/40">·</span>
@@ -124,13 +128,13 @@ export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initia
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[10px] px-2">
-            {tool.mocked ? 'Mock' : 'Real'}
+            {tool.mocked ? T.mode_mock : T.mode_real}
           </Badge>
           <Badge variant={tool.adapter_type ? 'outline' : 'destructive'} className="text-[10px] px-2">
-            {tool.adapter_type === 'script' ? 'Script' : tool.adapter_type === 'remote_mcp' ? 'MCP' : tool.adapter_type === 'api_proxy' ? 'API' : tool.adapter_type ?? '未配置'}
+            {tool.adapter_type === 'script' ? T.adapter_script : tool.adapter_type === 'remote_mcp' ? T.adapter_mcp : tool.adapter_type === 'api_proxy' ? T.adapter_api : tool.adapter_type ?? T.not_configured}
           </Badge>
           <Badge variant={tool.output_schema ? 'outline' : 'destructive'} className="text-[10px] px-2">
-            {tool.output_schema ? '契约已定义' : '契约未定义'}
+            {tool.output_schema ? T.contract_defined : T.contract_undefined}
           </Badge>
         </div>
       </div>
@@ -142,7 +146,7 @@ export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initia
         <div className="h-full border-r bg-background flex flex-col">
           <div className="p-4 space-y-1 flex-1">
             {/* Contract 组 */}
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 pt-1 pb-1">Tool Contract</div>
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 pt-1 pb-1">{T.group_contract}</div>
             {STEPS.filter(s => s.group === 'contract').map((s, i) => {
               const status = stepStatus(s.id);
               const isCurrent = status === 'current';
@@ -172,7 +176,7 @@ export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initia
             })}
             {/* Implementation 组 */}
             <div className="border-t my-2" />
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 pt-1 pb-1">Implementation</div>
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 pt-1 pb-1">{T.group_implementation}</div>
             {STEPS.filter(s => s.group === 'implementation').map((s, i) => {
               const globalIdx = STEPS.findIndex(st => st.id === s.id);
               const status = stepStatus(s.id);
@@ -230,11 +234,11 @@ export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initia
         <ResizablePanel id="tool-center" defaultSize="60%" minSize="30%">
         <div className="h-full overflow-auto p-6 pb-20">
           <div className="max-w-[760px] mx-auto">
-            {step === 'overview' && <OverviewStep tool={tool} servers={servers} onUpdated={handleUpdated} onOpenBinding={onOpenBinding} />}
-            {step === 'input' && <InputContractStep tool={tool} onUpdated={handleUpdated} />}
-            {step === 'output' && <OutputContractStep tool={tool} onUpdated={handleUpdated} />}
-            {step === 'mock' && <MockStep tool={tool} onUpdated={handleUpdated} />}
-            {step === 'test' && <TestStep tool={tool} onTestResult={setLastTestPassed} />}
+            {step === 'overview' && <OverviewStep tool={tool} servers={servers} onUpdated={handleUpdated} onOpenBinding={onOpenBinding} lang={lang} />}
+            {step === 'input' && <InputContractStep tool={tool} onUpdated={handleUpdated} lang={lang} />}
+            {step === 'output' && <OutputContractStep tool={tool} onUpdated={handleUpdated} lang={lang} />}
+            {step === 'mock' && <MockStep tool={tool} onUpdated={handleUpdated} lang={lang} />}
+            {step === 'test' && <TestStep tool={tool} onTestResult={setLastTestPassed} lang={lang} />}
           </div>
         </div>
         </ResizablePanel>
@@ -244,7 +248,7 @@ export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initia
         {/* Right: Summary sidebar */}
         <ResizablePanel id="tool-right" defaultSize="25%" minSize="15%" maxSize="35%">
         <div className="h-full border-l bg-background p-4 overflow-auto">
-          <SummarySidebar tool={tool} servers={servers} onOpenBinding={onOpenBinding} />
+          <SummarySidebar tool={tool} servers={servers} onOpenBinding={onOpenBinding} lang={lang} />
         </div>
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -257,18 +261,18 @@ export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initia
           onClick={prevStep}
           disabled={stepIdx === 0}
         >
-          <ArrowLeft size={12} /> 上一步
+          <ArrowLeft size={12} /> {T.prev_step}
         </Button>
         <div className="text-xs text-muted-foreground">
           {stepIdx + 1} / {STEPS.length} · {STEPS[stepIdx].label}
         </div>
         {stepIdx < STEPS.length - 1 ? (
           <Button size="sm" onClick={nextStep}>
-            下一步 <ChevronRight size={12} />
+            {T.next_step} <ChevronRight size={12} />
           </Button>
         ) : (
           <Button size="sm" variant={tool.output_schema && tool.adapter_type ? 'default' : 'outline'} disabled={!tool.output_schema}>
-            <Check size={12} /> 发布工具
+            <Check size={12} /> {T.publish_tool}
           </Button>
         )}
       </div>
@@ -278,7 +282,8 @@ export function McpToolEditor({ toolId, onBack, onUpdated, onOpenBinding, initia
 
 // ── Step 1: Overview ─────────────────────────────────────────────────────────
 
-function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpToolRecord; servers: McpServer[]; onUpdated: () => void; onOpenBinding?: (toolId: string) => void }) {
+function OverviewStep({ tool, servers, onUpdated, onOpenBinding, lang = 'zh' as Lang }: { tool: McpToolRecord; servers: McpServer[]; onUpdated: () => void; onOpenBinding?: (toolId: string) => void; lang?: Lang }) {
+  const T = t(lang);
   const [name, setName] = useState(tool.name);
   const [description, setDescription] = useState(tool.description);
   const [serverId, setServerId] = useState(tool.server_id ?? '');
@@ -294,7 +299,7 @@ function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpTo
     try {
       await mcpApi.updateTool(tool.id, { name, description, server_id: serverId || undefined } as any);
       onUpdated();
-    } catch (e) { alert(`保存失败: ${e}`); }
+    } catch (e) { alert(`${T.save_failed} ${e}`); }
     finally { setSaving(false); }
   };
 
@@ -311,17 +316,17 @@ function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpTo
 
   type StatusLevel = 'done' | 'warn' | 'empty';
   const statusItems: Array<{ label: string; level: StatusLevel; detail?: string }> = [
-    { label: 'Input Schema', level: tool.input_schema ? 'done' : 'empty' },
-    { label: 'Output Schema', level: tool.output_schema ? 'done' : 'empty' },
+    { label: T.checklist_input, level: tool.input_schema ? 'done' : 'empty' },
+    { label: T.checklist_output, level: tool.output_schema ? 'done' : 'empty' },
     {
-      label: 'Binding',
+      label: T.checklist_binding,
       level: tool.adapter_type ? 'done' : 'empty',
-      detail: tool.adapter_type ? undefined : '未绑定',
+      detail: tool.adapter_type ? undefined : T.unbound,
     },
     {
-      label: 'Mock Alignment',
+      label: T.checklist_mock_align,
       level: mockRules.length === 0 ? 'empty' : allMocksAligned ? 'done' : 'warn',
-      detail: mockRules.length === 0 ? '无场景' : someMocksDrifted ? '有漂移' : undefined,
+      detail: mockRules.length === 0 ? T.no_scenes : someMocksDrifted ? T.has_drift : undefined,
     },
   ];
   const doneCount = statusItems.filter(s => s.level === 'done').length;
@@ -329,14 +334,14 @@ function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpTo
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold mb-1">概览</h2>
-        <p className="text-xs text-muted-foreground">定义工具的基本元数据，了解当前配置完整度。</p>
+        <h2 className="text-lg font-semibold mb-1">{T.overview_title}</h2>
+        <p className="text-xs text-muted-foreground">{T.overview_desc}</p>
       </div>
 
       {/* Quick completion status */}
       <div className="bg-background rounded-xl border p-4">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-medium">配置完成度</span>
+          <span className="text-xs font-medium">{T.config_completeness}</span>
           <span className="text-xs text-muted-foreground">{doneCount} / {statusItems.length}</span>
         </div>
         <div className="flex gap-1.5 mb-3">
@@ -364,35 +369,35 @@ function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpTo
       <div className="bg-background rounded-xl border p-5 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">工具名</label>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">{T.tool_name_label}</label>
             <Input value={name} onChange={e => setName(e.target.value)} className="text-sm font-mono" />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">所属 Server</label>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">{T.server_label}</label>
             <Select value={serverId} onValueChange={v => { if (v) setServerId(v); }}>
-              <SelectTrigger className="text-sm h-9"><SelectValue placeholder="选择 Server">{servers.find(s => s.id === serverId)?.name ?? '—'}</SelectValue></SelectTrigger>
+              <SelectTrigger className="text-sm h-9"><SelectValue placeholder={T.select_server}>{servers.find(s => s.id === serverId)?.name ?? '—'}</SelectValue></SelectTrigger>
               <SelectContent>{servers.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         </div>
         <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1 block">描述</label>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">{T.description}</label>
           <Textarea value={description} onChange={e => setDescription(e.target.value)} className="text-sm resize-none h-16" />
         </div>
 
         {/* Current config summary */}
         <div className="grid grid-cols-3 gap-3 pt-2 border-t">
           <div className="text-[11px]">
-            <span className="text-muted-foreground block mb-0.5">当前模式</span>
-            <Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[9px]">{tool.mocked ? 'Mock' : 'Real'}</Badge>
+            <span className="text-muted-foreground block mb-0.5">{T.current_mode}</span>
+            <Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[9px]">{tool.mocked ? T.mode_mock : T.mode_real}</Badge>
           </div>
           <div className="text-[11px]">
-            <span className="text-muted-foreground block mb-0.5">实现方式</span>
-            <span className="font-medium">{tool.adapter_type === 'script' ? 'Script' : tool.adapter_type === 'remote_mcp' ? 'MCP' : tool.adapter_type === 'api_proxy' ? 'API' : tool.adapter_type ?? '未配置'}</span>
+            <span className="text-muted-foreground block mb-0.5">{T.impl_method}</span>
+            <span className="font-medium">{tool.adapter_type === 'script' ? T.adapter_script : tool.adapter_type === 'remote_mcp' ? T.adapter_mcp : tool.adapter_type === 'api_proxy' ? T.adapter_api : tool.adapter_type ?? T.not_configured}</span>
           </div>
           <div className="text-[11px]">
-            <span className="text-muted-foreground block mb-0.5">Mock 场景</span>
-            <span className="font-medium">{tool.mock_rules ? `${JSON.parse(tool.mock_rules).length} 个` : '无'}</span>
+            <span className="text-muted-foreground block mb-0.5">{T.mock_scenes_label}</span>
+            <span className="font-medium">{tool.mock_rules ? tpl(T.n_count, { n: JSON.parse(tool.mock_rules).length }) : T.none}</span>
           </div>
         </div>
       </div>
@@ -402,11 +407,11 @@ function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpTo
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Link2 size={14} className="text-muted-foreground" />
-            <h3 className="text-xs font-semibold">Runtime Binding</h3>
+            <h3 className="text-xs font-semibold">{T.runtime_binding}</h3>
           </div>
           {onOpenBinding && (
             <Button variant="ghost" size="sm" className="text-xs h-7 gap-1 text-primary" onClick={() => onOpenBinding(tool.id)}>
-              Open in Runtime Bindings <ChevronRight size={10} />
+              {T.open_in_bindings} <ChevronRight size={10} />
             </Button>
           )}
         </div>
@@ -433,10 +438,10 @@ function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpTo
           </div>
         ) : (
           <div className="text-[11px] text-muted-foreground py-2">
-            No runtime binding configured.
+            {T.no_binding_hint}
             {onOpenBinding && (
               <Button variant="link" size="sm" className="text-xs h-auto p-0 ml-1" onClick={() => onOpenBinding(tool.id)}>
-                Configure in Runtime Bindings
+                {T.configure_binding}
               </Button>
             )}
           </div>
@@ -446,7 +451,7 @@ function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpTo
       {/* Skills & usage */}
       {tool.skills && tool.skills.length > 0 && (
         <div className="bg-background rounded-xl border p-5 space-y-3">
-          <label className="text-xs font-medium text-muted-foreground block">关联 Skill（此工具被以下业务场景使用）</label>
+          <label className="text-xs font-medium text-muted-foreground block">{T.related_skills}</label>
           <div className="flex gap-1.5 flex-wrap">
             {tool.skills.map(s => <Badge key={s} variant="secondary" className="text-[11px]">{s}</Badge>)}
           </div>
@@ -454,17 +459,18 @@ function OverviewStep({ tool, servers, onUpdated, onOpenBinding }: { tool: McpTo
       )}
 
       <div className="flex justify-end">
-        <Button size="sm" onClick={handleSave} disabled={saving}><Save size={12} /> {saving ? '保存中...' : '保存'}</Button>
+        <Button size="sm" onClick={handleSave} disabled={saving}><Save size={12} /> {saving ? T.saving : T.save}</Button>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">下一步：定义输入契约</p>
+      <p className="text-[11px] text-muted-foreground">{T.next_define_input}</p>
     </div>
   );
 }
 
 // ── Step 2: Input Contract ───────────────────────────────────────────────────
 
-function InputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => void }) {
+function InputContractStep({ tool, onUpdated, lang = 'zh' as Lang }: { tool: McpToolRecord; onUpdated: () => void; lang?: Lang }) {
+  const T = t(lang);
   const schema = tool.input_schema ? JSON.parse(tool.input_schema) as Record<string, unknown> : null;
   const [dirty, setDirty] = useState(false);
   const [pendingSchema, setPendingSchema] = useState<Record<string, unknown> | null>(null);
@@ -482,7 +488,7 @@ function InputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated
       await mcpApi.updateTool(tool.id, { input_schema: JSON.stringify(pendingSchema) } as any);
       setDirty(false);
       onUpdated();
-    } catch (e) { alert(`保存失败: ${e}`); }
+    } catch (e) { alert(`${T.save_failed} ${e}`); }
     finally { setSaving(false); }
   };
 
@@ -490,12 +496,12 @@ function InputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold mb-1">输入契约</h2>
-          <p className="text-xs text-muted-foreground">定义调用此工具时需要的参数。</p>
+          <h2 className="text-lg font-semibold mb-1">{T.input_contract}</h2>
+          <p className="text-xs text-muted-foreground">{T.input_contract_desc}</p>
         </div>
         {dirty && (
           <Button size="sm" onClick={handleSave} disabled={saving}>
-            <Save size={12} /> {saving ? '保存中...' : '保存'}
+            <Save size={12} /> {saving ? T.saving : T.save}
           </Button>
         )}
       </div>
@@ -504,18 +510,19 @@ function InputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated
         <SchemaTableEditor
           schema={schema}
           onChange={handleChange}
-          emptyText="无参数定义"
+          emptyText={T.no_params}
         />
       </div>
 
-      <p className="text-[11px] text-muted-foreground">下一步：定义输出契约</p>
+      <p className="text-[11px] text-muted-foreground">{T.next_define_output}</p>
     </div>
   );
 }
 
 // ── Step 3: Output Contract ──────────────────────────────────────────────────
 
-function OutputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => void }) {
+function OutputContractStep({ tool, onUpdated, lang = 'zh' as Lang }: { tool: McpToolRecord; onUpdated: () => void; lang?: Lang }) {
+  const T = t(lang);
   const schemaContent = (tool.output_schema_content ?? null) as Record<string, unknown> | null;
   const [dirty, setDirty] = useState(false);
   const [pendingSchema, setPendingSchema] = useState<Record<string, unknown> | null>(null);
@@ -549,19 +556,19 @@ function OutputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdate
       await mcpApi.updateTool(tool.id, { output_schema: JSON.stringify(toSave) } as any);
       setDirty(false);
       onUpdated();
-    } catch (e) { alert(`保存失败: ${e}`); }
+    } catch (e) { alert(`${T.save_failed} ${e}`); }
     finally { setSaving(false); }
   };
 
   const handleInferFromExample = async () => {
-    if (!exampleText.trim()) { alert('请先填写返回示例'); return; }
+    if (!exampleText.trim()) { alert(T.fill_example_first); return; }
     setInferring(true);
     try {
       const example = JSON.parse(exampleText);
       const { schema } = await mcpApi.inferSchema(example);
       setPendingSchema(schema);
       setDirty(true);
-    } catch (e) { alert(`推断失败: ${e}`); }
+    } catch (e) { alert(`${T.infer_failed} ${e}`); }
     finally { setInferring(false); }
   };
 
@@ -572,14 +579,14 @@ function OutputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdate
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold mb-1">输出契约</h2>
+          <h2 className="text-lg font-semibold mb-1">{T.output_contract}</h2>
           <p className="text-xs text-muted-foreground">
-            定义 Tool 返回结果中的 <code className="bg-muted px-1 rounded">data</code> 结构，不包含 success/message/error_code 外层包裹。
+            {T.output_contract_desc}
           </p>
         </div>
         {dirty && (
           <Button size="sm" onClick={handleSave} disabled={saving}>
-            <Save size={12} /> {saving ? '保存中...' : '保存 Schema'}
+            <Save size={12} /> {saving ? T.saving : T.save_schema}
           </Button>
         )}
       </div>
@@ -588,14 +595,14 @@ function OutputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdate
         <SchemaTableEditor
           schema={displaySchema}
           onChange={handleChange}
-          emptyText="尚未定义输出契约"
+          emptyText={T.no_output_schema}
         />
       </div>
 
       {/* 返回示例 + 推断 */}
       <div className="bg-background rounded-xl border p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground">返回示例</span>
+          <span className="text-xs font-medium text-muted-foreground">{T.return_example}</span>
           <div className="flex gap-2">
             {tool.mock_rules && (
               <Button variant="ghost" size="xs" onClick={() => {
@@ -603,7 +610,7 @@ function OutputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdate
                   const rules = JSON.parse(tool.mock_rules!) as Array<{ response: string }>;
                   if (rules.length > 0) setExampleText(JSON.stringify(JSON.parse(rules[0].response), null, 2));
                 } catch { /* ignore */ }
-              }}>从 Mock 填充</Button>
+              }}>{T.fill_from_mock}</Button>
             )}
             {tool.server_id && (
               <Button variant="ghost" size="xs" onClick={async () => {
@@ -621,11 +628,11 @@ function OutputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdate
                     : await mcpApi.invokeTool(tool.server_id!, tool.name, args);
                   const businessData = extractBusinessData(res.result);
                   setExampleText(JSON.stringify(businessData, null, 2));
-                } catch (e) { alert(`调用失败: ${e}`); }
-              }}>从真实调用获取</Button>
+                } catch (e) { alert(`${T.call_failed} ${e}`); }
+              }}>{T.fetch_from_real}</Button>
             )}
             <Button variant="outline" size="xs" onClick={handleInferFromExample} disabled={inferring}>
-              {inferring ? '推断中...' : '从示例生成 Schema'}
+              {inferring ? T.inferring : T.infer_schema}
             </Button>
           </div>
         </div>
@@ -637,20 +644,21 @@ function OutputContractStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdate
           />
         ) : (
           <div className="text-xs text-muted-foreground text-center py-6 border border-dashed rounded-lg">
-            <p>暂无返回示例</p>
-            <p className="mt-1 text-[11px]">可以从 Mock 场景填充、从真实调用获取，或直接粘贴 JSON</p>
+            <p>{T.no_example}</p>
+            <p className="mt-1 text-[11px]">{T.no_example_hint}</p>
           </div>
         )}
       </div>
 
-      <p className="text-[11px] text-muted-foreground">下一步：选择实现方式</p>
+      <p className="text-[11px] text-muted-foreground">{T.next_choose_impl}</p>
     </div>
   );
 }
 
 // ── Step 5: Mock Scenarios ───────────────────────────────────────────────────
 
-function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => void }) {
+function MockStep({ tool, onUpdated, lang = 'zh' as Lang }: { tool: McpToolRecord; onUpdated: () => void; lang?: Lang }) {
+  const T = t(lang);
   const [rules, setRules] = useState<MockRule[]>(tool.mock_rules ? JSON.parse(tool.mock_rules) : []);
   const [saving, setSaving] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -660,7 +668,7 @@ function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
   const handleSave = async () => {
     setSaving(true);
     try { await mcpApi.updateToolMockRules(tool.id, rules); onUpdated(); }
-    catch (e) { alert(`保存失败: ${e}`); }
+    catch (e) { alert(`${T.save_failed} ${e}`); }
     finally { setSaving(false); }
   };
 
@@ -671,7 +679,7 @@ function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
   };
 
   const handleValidateAll = async () => {
-    if (!tool.output_schema) { alert('请先定义输出契约'); return; }
+    if (!tool.output_schema) { alert(T.define_output_first); return; }
     setValidating(true);
     const results: Record<number, { valid: boolean; errors?: string[] }> = {};
     for (let i = 0; i < rules.length; i++) {
@@ -680,7 +688,7 @@ function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
         const r = await mcpApi.validateOutput(tool.id, data);
         results[i] = r;
       } catch {
-        results[i] = { valid: false, errors: ['JSON 格式不合法'] };
+        results[i] = { valid: false, errors: [T.json_invalid] };
       }
     }
     setValidationResults(results);
@@ -699,23 +707,23 @@ function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
 
   const guessSceneName = (rule: MockRule, index: number): string => {
     if (rule.scene_name) return rule.scene_name;
-    if (!rule.match) return '默认兜底';
-    return `场景 ${index + 1}`;
+    if (!rule.match) return T.default_fallback;
+    return tpl(T.scene_n, { n: index + 1 });
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold mb-1">Mock 场景</h2>
-          <p className="text-xs text-muted-foreground">定义调试、演示、回归测试用的模拟返回。</p>
+          <h2 className="text-lg font-semibold mb-1">{T.mock_scenes_title}</h2>
+          <p className="text-xs text-muted-foreground">{T.mock_scenes_desc}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="xs" onClick={handleValidateAll} disabled={validating || rules.length === 0}>
-            {validating ? '校验中...' : '校验全部 Mock'}
+            {validating ? T.validating_mock : T.validate_all_mock}
           </Button>
           <Button size="xs" onClick={handleSave} disabled={saving}>
-            <Save size={11} /> {saving ? '保存中...' : '保存'}
+            <Save size={11} /> {saving ? T.saving : T.save}
           </Button>
         </div>
       </div>
@@ -740,18 +748,18 @@ function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-medium truncate">{guessSceneName(rule, i)}</span>
-                    {!rule.match && <Badge variant="secondary" className="text-[9px]">默认</Badge>}
+                    {!rule.match && <Badge variant="secondary" className="text-[9px]">{T.default_badge}</Badge>}
                     {alignment && (
                       <ContractAlignmentCard alignment={alignment} compact />
                     )}
                     {vr && (
                       <Badge variant={vr.valid ? 'default' : 'destructive'} className="text-[9px]">
-                        {vr.valid ? '值校验通过' : '值校验失败'}
+                        {vr.valid ? T.value_valid : T.value_invalid}
                       </Badge>
                     )}
                   </div>
                   <div className="text-[11px] text-muted-foreground truncate">
-                    {rule.match ? <span className="font-mono">{rule.match}</span> : <span className="italic">匹配所有</span>}
+                    {rule.match ? <span className="font-mono">{rule.match}</span> : <span className="italic">{T.match_all}</span>}
                     <span className="mx-1.5">→</span>
                     <span className="font-mono">{getResponseSummary(rule.response)}</span>
                   </div>
@@ -763,16 +771,16 @@ function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
               {isExpanded && (
                 <div className="border-t px-4 pb-4 pt-3 space-y-3">
                   <div>
-                    <label className="text-[11px] text-muted-foreground mb-0.5 block">场景名称</label>
+                    <label className="text-[11px] text-muted-foreground mb-0.5 block">{T.scene_name_label}</label>
                     <Input
                       value={rule.scene_name ?? ''}
                       onChange={e => updateRule(i, { scene_name: e.target.value })}
-                      placeholder="如: 正常用户、欠费用户、号码不存在"
+                      placeholder={T.scene_name_hint}
                       className="text-[11px]"
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-muted-foreground mb-0.5 block">匹配条件 <span className="opacity-50">(留空=默认兜底)</span></label>
+                    <label className="text-[11px] text-muted-foreground mb-0.5 block">{T.match_condition} <span className="opacity-50">({T.match_empty_hint})</span></label>
                     <Input
                       value={rule.match}
                       onChange={e => updateRule(i, { match: e.target.value })}
@@ -781,7 +789,7 @@ function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-muted-foreground mb-0.5 block">返回数据 (JSON)</label>
+                    <label className="text-[11px] text-muted-foreground mb-0.5 block">{T.response_json}</label>
                     <Textarea
                       value={rule.response}
                       onChange={e => updateRule(i, { response: e.target.value })}
@@ -794,14 +802,14 @@ function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
                     </div>
                   )}
                   {alignment && (alignment.missing.length > 0 || alignment.extra.length > 0) && (
-                    <ContractAlignmentCard alignment={alignment} title="字段对齐" />
+                    <ContractAlignmentCard alignment={alignment} title={T.field_alignment} />
                   )}
                   <div className="flex justify-between">
-                    <Button variant="ghost" size="xs" onClick={() => setRules([...rules.slice(0, i + 1), { ...rule, scene_name: (rule.scene_name ?? '') + ' (副本)', tool_name: rule.tool_name }, ...rules.slice(i + 1)])}>
-                      复制
+                    <Button variant="ghost" size="xs" onClick={() => setRules([...rules.slice(0, i + 1), { ...rule, scene_name: (rule.scene_name ?? '') + ` ${T.copy_suffix}`, tool_name: rule.tool_name }, ...rules.slice(i + 1)])}>
+                      {T.copy_scene}
                     </Button>
                     <Button variant="ghost" size="xs" className="text-destructive" onClick={() => { setRules(rules.filter((_, j) => j !== i)); setExpandedIndex(null); }}>
-                      <Trash2 size={11} /> 删除
+                      <Trash2 size={11} /> {T.delete}
                     </Button>
                   </div>
                 </div>
@@ -813,31 +821,33 @@ function MockStep({ tool, onUpdated }: { tool: McpToolRecord; onUpdated: () => v
 
       <div className="flex gap-2">
         <Button variant="outline" size="sm" onClick={() => { setRules([...rules, { tool_name: tool.name, scene_name: '', match: '', response: '{}' }]); setExpandedIndex(rules.length); }}>
-          <Plus size={12} /> 新增场景
+          <Plus size={12} /> {T.add_scene}
         </Button>
-        <GenerateMockFromReal tool={tool} onGenerated={(scene_name, response) => {
+        <GenerateMockFromReal tool={tool} lang={lang} onGenerated={(scene_name, response) => {
           const newRule: MockRule = { tool_name: tool.name, scene_name, match: '', response };
           setRules([...rules, newRule]);
           setExpandedIndex(rules.length);
         }} />
       </div>
 
-      <p className="text-[11px] text-muted-foreground">下一步：运行测试</p>
+      <p className="text-[11px] text-muted-foreground">{T.next_run_test}</p>
     </div>
   );
 }
 
 /** 从真实调用结果生成 Mock 场景 */
-function GenerateMockFromReal({ tool, onGenerated }: {
+function GenerateMockFromReal({ tool, onGenerated, lang = 'zh' as Lang }: {
   tool: McpToolRecord;
   onGenerated: (sceneName: string, response: string) => void;
+  lang?: Lang;
 }) {
+  const T = t(lang);
   const [open, setOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [argsText, setArgsText] = useState('{}');
 
   const handleRun = async () => {
-    if (!tool.server_id) { alert('此工具未分配 Server'); return; }
+    if (!tool.server_id) { alert(T.no_server_hint); return; }
     setRunning(true);
     try {
       const args = JSON.parse(argsText);
@@ -846,17 +856,17 @@ function GenerateMockFromReal({ tool, onGenerated }: {
       const responseStr = typeof businessData === 'string' ? businessData : JSON.stringify(businessData, null, 2);
       // Build a scene name from args
       const argSummary = Object.entries(args).map(([k, v]) => `${k}=${v}`).join(', ');
-      onGenerated(argSummary ? `真实结果: ${argSummary}` : '真实结果', responseStr);
+      onGenerated(argSummary ? tpl(T.real_result_args, { args: argSummary }) : T.real_result, responseStr);
       setOpen(false);
       setArgsText('{}');
-    } catch (e) { alert(`调用失败: ${e}`); }
+    } catch (e) { alert(`${T.call_failed} ${e}`); }
     finally { setRunning(false); }
   };
 
   if (!open) {
     return (
       <Button variant="outline" size="sm" onClick={() => setOpen(true)} disabled={!tool.server_id}>
-        <Play size={12} /> 从真实结果生成
+        <Play size={12} /> {T.gen_from_real}
       </Button>
     );
   }
@@ -864,11 +874,11 @@ function GenerateMockFromReal({ tool, onGenerated }: {
   return (
     <div className="bg-background rounded-xl border p-4 space-y-3 w-full">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium">从真实调用结果生成 Mock</span>
-        <button onClick={() => setOpen(false)} className="text-[11px] text-muted-foreground hover:text-foreground">取消</button>
+        <span className="text-xs font-medium">{T.gen_mock_title}</span>
+        <button onClick={() => setOpen(false)} className="text-[11px] text-muted-foreground hover:text-foreground">{T.cancel}</button>
       </div>
       <div>
-        <label className="text-[11px] text-muted-foreground mb-0.5 block">调用参数 (JSON)</label>
+        <label className="text-[11px] text-muted-foreground mb-0.5 block">{T.call_args}</label>
         <Textarea
           value={argsText}
           onChange={e => setArgsText(e.target.value)}
@@ -877,7 +887,7 @@ function GenerateMockFromReal({ tool, onGenerated }: {
         />
       </div>
       <Button size="xs" onClick={handleRun} disabled={running}>
-        <Play size={11} /> {running ? '调用中...' : '执行并生成'}
+        <Play size={11} /> {running ? T.calling : T.execute_and_gen}
       </Button>
     </div>
   );
@@ -885,7 +895,8 @@ function GenerateMockFromReal({ tool, onGenerated }: {
 
 // ── Step 6: Test & Publish ───────────────────────────────────────────────────
 
-function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: (passed: boolean) => void }) {
+function TestStep({ tool, onTestResult, lang = 'zh' as Lang }: { tool: McpToolRecord; onTestResult?: (passed: boolean) => void; lang?: Lang }) {
+  const T = t(lang);
   const inputSchema = tool.input_schema ? JSON.parse(tool.input_schema) as Record<string, any> : null;
   const inputProperties = inputSchema?.properties ?? {};
   const [testMode, setTestMode] = useState<'real' | 'mock'>(tool.mocked ? 'mock' : 'real');
@@ -915,7 +926,7 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
   const [result, setResult] = useState<{ success: boolean; data: unknown; elapsed_ms: number; path: string; contractValid?: boolean; contractErrors?: string[] } | null>(null);
 
   const handleRun = async () => {
-    if (!tool.server_id) { alert('此工具未分配 Server，无法执行'); return; }
+    if (!tool.server_id) { alert(T.no_server_run); return; }
     setRunning(true);
     setResult(null);
     try {
@@ -933,7 +944,7 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
 
       if (testMode === 'mock') {
         response = await mcpApi.mockInvokeTool(tool.server_id, tool.name, parsedArgs);
-        path = `Mock → ${(response as any).matched_rule || '匹配规则'}`;
+        path = `Mock → ${(response as any).matched_rule || T.match_rule}`;
       } else {
         response = await mcpApi.invokeTool(tool.server_id, tool.name, parsedArgs);
         path = `Real → ${tool.adapter_type ?? 'unknown'}`;
@@ -971,36 +982,36 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
   };
 
   const checks = [
-    { label: 'Input Schema 已定义', ok: !!tool.input_schema },
-    { label: 'Output Schema 已定义', ok: !!tool.output_schema },
-    { label: 'Runtime Binding 已配置', ok: !!tool.adapter_type },
-    { label: '至少一条 Mock Scenario', ok: !!tool.mock_rules },
-    { label: '最近测试通过', ok: result?.success === true && result?.contractValid !== false },
+    { label: T.check_input, ok: !!tool.input_schema },
+    { label: T.check_output, ok: !!tool.output_schema },
+    { label: T.check_binding, ok: !!tool.adapter_type },
+    { label: T.check_mock, ok: !!tool.mock_rules },
+    { label: T.check_test_pass, ok: result?.success === true && result?.contractValid !== false },
   ];
   const allGreen = checks.every(c => c.ok);
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold mb-1">测试与发布</h2>
-        <p className="text-xs text-muted-foreground">运行测试并验证契约。</p>
+        <h2 className="text-lg font-semibold mb-1">{T.test_publish}</h2>
+        <p className="text-xs text-muted-foreground">{T.test_desc}</p>
       </div>
 
       {/* Test runner */}
       <div className="bg-background rounded-xl border p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">测试运行</h3>
+          <h3 className="text-sm font-semibold">{T.test_runner}</h3>
           <div className="flex rounded-lg border overflow-hidden">
             <button
               type="button"
               onClick={() => setTestMode('real')}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${testMode === 'real' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
-            >Real</button>
+            >{T.mode_real}</button>
             <button
               type="button"
               onClick={() => setTestMode('mock')}
               className={`px-3 py-1.5 text-xs font-medium transition-colors border-l ${testMode === 'mock' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
-            >Mock</button>
+            >{T.mode_mock}</button>
           </div>
         </div>
 
@@ -1020,40 +1031,40 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
             ))}
           </div>
         ) : (
-          <p className="text-[11px] text-muted-foreground">此工具无输入参数</p>
+          <p className="text-[11px] text-muted-foreground">{T.no_input_params}</p>
         )}
 
         <Button size="sm" onClick={handleRun} disabled={running || !tool.server_id}>
-          <Play size={12} /> {running ? '执行中...' : '运行测试'}
+          <Play size={12} /> {running ? T.executing : T.run_test}
         </Button>
       </div>
 
       {/* Result */}
       {result && (
         <div className={`bg-background rounded-xl border p-5 space-y-3 ${result.success ? 'border-emerald-200' : 'border-destructive/30'}`}>
-          <h3 className="text-sm font-semibold">执行结果</h3>
+          <h3 className="text-sm font-semibold">{T.exec_result}</h3>
           <div className="text-xs space-y-1.5">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">状态</span>
+              <span className="text-muted-foreground">{T.col_status}</span>
               <Badge variant={result.success ? 'default' : 'destructive'} className="text-[9px]">
-                {result.success ? '成功' : '失败'}
+                {result.success ? T.success : T.failed}
               </Badge>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">执行路径</span>
+              <span className="text-muted-foreground">{T.exec_path}</span>
               <span className="font-mono">{result.path}</span>
             </div>
             {result.elapsed_ms > 0 && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">耗时</span>
+                <span className="text-muted-foreground">{T.duration}</span>
                 <span>{result.elapsed_ms}ms</span>
               </div>
             )}
             {result.contractValid !== undefined && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">契约校验</span>
+                <span className="text-muted-foreground">{T.contract_check}</span>
                 <Badge variant={result.contractValid ? 'default' : 'destructive'} className="text-[9px]">
-                  {result.contractValid ? '通过' : '不匹配'}
+                  {result.contractValid ? T.check_passed : T.check_not_matched}
                 </Badge>
               </div>
             )}
@@ -1067,11 +1078,11 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
           {result.success && tool.output_schema_content && typeof result.data === 'object' && result.data !== null && (
             <ContractAlignmentCard
               alignment={alignSchemaWithData(tool.output_schema_content as Record<string, unknown>, result.data)}
-              title="字段对齐"
+              title={T.field_alignment}
             />
           )}
           <div>
-            <label className="text-[11px] text-muted-foreground mb-1 block">返回 JSON</label>
+            <label className="text-[11px] text-muted-foreground mb-1 block">{T.return_json}</label>
             <pre className="text-[11px] font-mono bg-muted p-3 rounded-lg overflow-auto max-h-60">
               {typeof result.data === 'string' ? result.data : JSON.stringify(result.data, null, 2)}
             </pre>
@@ -1081,7 +1092,7 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
 
       {/* Publish checklist */}
       <div className="bg-background rounded-xl border p-5">
-        <h3 className="text-sm font-semibold mb-3">发布检查</h3>
+        <h3 className="text-sm font-semibold mb-3">{T.publish_checklist}</h3>
         <div className="space-y-2 text-xs">
           {checks.map((c, i) => (
             <div key={i} className="flex items-center gap-2">
@@ -1092,7 +1103,7 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
         </div>
         {allGreen && (
           <div className="mt-4 p-3 bg-emerald-50 rounded-lg text-xs text-emerald-700 font-medium">
-            所有检查通过，工具已就绪。
+            {T.all_checks_ok}
           </div>
         )}
       </div>
@@ -1102,7 +1113,8 @@ function TestStep({ tool, onTestResult }: { tool: McpToolRecord; onTestResult?: 
 
 // ── Right Sidebar ────────────────────────────────────────────────────────────
 
-function SummarySidebar({ tool, servers, onOpenBinding }: { tool: McpToolRecord; servers: McpServer[]; onOpenBinding?: (toolId: string) => void }) {
+function SummarySidebar({ tool, servers, onOpenBinding, lang = 'zh' as Lang }: { tool: McpToolRecord; servers: McpServer[]; onOpenBinding?: (toolId: string) => void; lang?: Lang }) {
+  const T = t(lang);
   const mockRules: MockRule[] = tool.mock_rules ? JSON.parse(tool.mock_rules) : [];
   const inputSchema = tool.input_schema ? JSON.parse(tool.input_schema) : null;
   const inputFieldCount = inputSchema?.properties ? Object.keys(inputSchema.properties).length : 0;
@@ -1111,46 +1123,46 @@ function SummarySidebar({ tool, servers, onOpenBinding }: { tool: McpToolRecord;
 
   // Risk checks
   const risks: string[] = [];
-  if (!tool.output_schema) risks.push('输出契约未定义');
-  if (!tool.adapter_type) risks.push('Runtime Binding 未配置');
-  if (tool.adapter_type && mockRules.length === 0) risks.push('无 Mock 场景');
+  if (!tool.output_schema) risks.push(T.contract_undefined);
+  if (!tool.adapter_type) risks.push(T.risk_no_binding);
+  if (tool.adapter_type && mockRules.length === 0) risks.push(T.step_mock_scenarios);
 
   return (
     <div className="space-y-5 text-xs">
       <div>
-        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">Tool Summary</h3>
+        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">{T.tool_summary}</h3>
         <div className="space-y-1.5">
           <div className="flex justify-between"><span className="text-muted-foreground">Server</span><span className="font-medium">{servers.find(s => s.id === tool.server_id)?.name ?? '—'}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Mode</span><Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[9px]">{tool.mocked ? 'Mock' : 'Real'}</Badge></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Adapter</span><span className="font-medium">{tool.adapter_type === 'script' ? 'Script' : tool.adapter_type === 'remote_mcp' ? 'MCP' : tool.adapter_type === 'api_proxy' ? 'API Proxy' : tool.adapter_type ?? '—'}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">{T.mode}</span><Badge variant={tool.mocked ? 'secondary' : 'default'} className="text-[9px]">{tool.mocked ? T.mode_mock : T.mode_real}</Badge></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">{T.col_adapter}</span><span className="font-medium">{tool.adapter_type === 'script' ? T.adapter_script : tool.adapter_type === 'remote_mcp' ? T.adapter_mcp : tool.adapter_type === 'api_proxy' ? T.adapter_api_proxy : tool.adapter_type ?? '—'}</span></div>
           {onOpenBinding && (
             <button onClick={() => onOpenBinding(tool.id)} className="flex items-center gap-1 text-[10px] text-primary hover:underline mt-1">
-              <Link2 size={9} /> Open in Runtime Bindings
+              <Link2 size={9} /> {T.open_in_bindings}
             </button>
           )}
         </div>
       </div>
 
       <div className="border-t pt-4">
-        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">Contract Status</h3>
+        <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">{T.contract_status_title}</h3>
         <div className="space-y-1.5">
-          <div className="flex justify-between"><span className="text-muted-foreground">Input Schema</span><Badge variant={tool.input_schema ? 'default' : 'outline'} className="text-[9px]">{tool.input_schema ? `${inputFieldCount} params` : '未定义'}</Badge></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Output Schema</span><Badge variant={tool.output_schema ? 'default' : 'destructive'} className="text-[9px]">{tool.output_schema ? `${outputFieldCount} fields` : '未定义'}</Badge></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">{T.input_contract}</span><Badge variant={tool.input_schema ? 'default' : 'outline'} className="text-[9px]">{tool.input_schema ? tpl(T.params_count, { n: inputFieldCount }) : T.contract_undefined}</Badge></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">{T.output_contract}</span><Badge variant={tool.output_schema ? 'default' : 'destructive'} className="text-[9px]">{tool.output_schema ? tpl(T.fields_count, { n: outputFieldCount }) : T.contract_undefined}</Badge></div>
         </div>
       </div>
 
       <div className="border-t pt-4">
         <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">Mock</h3>
         <div className="space-y-1.5">
-          <div className="flex justify-between"><span className="text-muted-foreground">场景数</span><span>{mockRules.length}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">{T.scene_count}</span><span>{mockRules.length}</span></div>
           {mockRules.length > 0 && (
             <div className="space-y-0.5 mt-1">
               {mockRules.slice(0, 4).map((r, i) => (
                 <div key={i} className="text-[10px] text-muted-foreground truncate">
-                  {r.scene_name || (r.match ? r.match.slice(0, 30) : '默认兜底')}
+                  {r.scene_name || (r.match ? r.match.slice(0, 30) : T.default_fallback)}
                 </div>
               ))}
-              {mockRules.length > 4 && <div className="text-[10px] text-muted-foreground">...还有 {mockRules.length - 4} 个</div>}
+              {mockRules.length > 4 && <div className="text-[10px] text-muted-foreground">{tpl(T.more_scenes, { n: mockRules.length - 4 })}</div>}
             </div>
           )}
         </div>
@@ -1158,14 +1170,14 @@ function SummarySidebar({ tool, servers, onOpenBinding }: { tool: McpToolRecord;
 
       {tool.skills && tool.skills.length > 0 && (
         <div className="border-t pt-4">
-          <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">关联 Skill</h3>
+          <h3 className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider mb-2">{T.related_skill_title}</h3>
           <div className="flex gap-1 flex-wrap">{tool.skills.map(s => <Badge key={s} variant="secondary" className="text-[9px]">{s}</Badge>)}</div>
         </div>
       )}
 
       {risks.length > 0 && (
         <div className="border-t pt-4">
-          <h3 className="font-semibold text-[11px] text-amber-600 uppercase tracking-wider mb-2">风险提示</h3>
+          <h3 className="font-semibold text-[11px] text-amber-600 uppercase tracking-wider mb-2">{T.risk_alert}</h3>
           <div className="space-y-1">
             {risks.map((r, i) => (
               <div key={i} className="flex items-center gap-1.5 text-[11px] text-amber-600">

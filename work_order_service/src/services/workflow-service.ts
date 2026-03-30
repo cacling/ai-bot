@@ -1,7 +1,7 @@
 /**
  * workflow-service.ts — Workflow 编排引擎
  *
- * 驱动 work_item 的自动创��、状态流转、信号等待
+ * 驱动 work_item 的自动创建、状态流转、信号等待
  */
 import { db, workflowDefinitions, workflowRuns, workflowRunEvents, workItems, eq, and } from "../db.js";
 import { validateWorkflowRunTransition } from "../policies/workflow-policy.js";
@@ -120,7 +120,7 @@ export async function advanceWorkflow(runId: string): Promise<void> {
 
     const node = spec.nodes[nodeId];
     if (!node) {
-      await failRun(runId, `节点 "${nodeId}" 不存���于 spec_json`);
+      await failRun(runId, `节点 "${nodeId}" 不存在于 spec_json`);
       break;
     }
 

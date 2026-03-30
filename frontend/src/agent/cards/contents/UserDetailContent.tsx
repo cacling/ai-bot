@@ -6,17 +6,18 @@
 
 import { memo } from 'react';
 import { User } from 'lucide-react';
-import type { Lang } from '../../../i18n';
+import { type Lang, T } from '../../../i18n';
 import type { TestPersona } from '../../../chat/testPersonas';
 
 export const UserDetailContent = memo(function UserDetailContent({ data, lang }: { data: unknown; lang: Lang }) {
+  const t = T[lang];
   const persona = data as TestPersona | null;
 
   if (!persona) {
     return (
       <div className="flex flex-col items-center justify-center py-6 space-y-1.5 text-center select-none px-3">
         <span className="text-2xl opacity-30">👤</span>
-        <p className="text-[11px] text-muted-foreground">等待客户接入</p>
+        <p className="text-[11px] text-muted-foreground">{t.user_waiting}</p>
       </div>
     );
   }
@@ -31,21 +32,19 @@ export const UserDetailContent = memo(function UserDetailContent({ data, lang }:
   const email = (ctx.email as string) ?? '';
   const contractEnd = (ctx.contract_end_date as string) ?? '';
 
-  const genderLabel = gender === 'male' ? (lang === 'zh' ? '男' : 'Male')
-    : gender === 'female' ? (lang === 'zh' ? '女' : 'Female')
+  const genderLabel = gender === 'male' ? t.user_male
+    : gender === 'female' ? t.user_female
     : '';
-  const statusLabel = status === 'active'
-    ? (lang === 'zh' ? '正常' : 'Active')
-    : (lang === 'zh' ? '已停机' : 'Suspended');
+  const statusLabel = status === 'active' ? t.user_active : t.user_suspended;
 
   const rows: { label: string; value: string; highlight?: boolean }[] = [
-    { label: lang === 'zh' ? '手机号' : 'Phone',  value: phone },
-    { label: lang === 'zh' ? '套餐'   : 'Plan',   value: plan, highlight: true },
-    { label: lang === 'zh' ? '状态'   : 'Status', value: statusLabel },
+    { label: t.user_phone,  value: phone },
+    { label: t.user_plan,   value: plan, highlight: true },
+    { label: t.user_status, value: statusLabel },
   ];
-  if (region) rows.push({ label: lang === 'zh' ? '归属地' : 'Region', value: region });
-  if (contractEnd) rows.push({ label: lang === 'zh' ? '合约到期' : 'Contract End', value: contractEnd });
-  if (email) rows.push({ label: lang === 'zh' ? '邮箱' : 'Email', value: email });
+  if (region) rows.push({ label: t.user_region, value: region });
+  if (contractEnd) rows.push({ label: t.user_contract_end, value: contractEnd });
+  if (email) rows.push({ label: t.user_email, value: email });
 
   return (
     <div className="p-3 space-y-2">

@@ -5,7 +5,7 @@
  */
 
 import { memo } from 'react';
-import { type Lang } from '../../../i18n';
+import { type Lang, T } from '../../../i18n';
 
 interface TimelineEvent {
   event_type: string;
@@ -56,7 +56,7 @@ export const WorkOrderTimelineContent = memo(function WorkOrderTimelineContent({
       <div className="flex flex-col items-center justify-center py-6 space-y-1.5 text-center select-none px-3">
         <span className="text-2xl opacity-30">🕐</span>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          {lang === 'zh' ? '暂无事件记录' : 'No events yet'}
+          {T[lang].wo_timeline_empty}
         </p>
       </div>
     );
@@ -80,7 +80,7 @@ export const WorkOrderTimelineContent = memo(function WorkOrderTimelineContent({
 
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-foreground font-medium">
-                  {lang === 'zh' ? info.zh : info.en}
+                  {info[lang]}
                 </span>
                 <span className="text-muted-foreground/60 text-[10px] flex-shrink-0">
                   {formatTime(ev.created_at)}

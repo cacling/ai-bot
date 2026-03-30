@@ -32,6 +32,7 @@ const LABELS: Record<Lang, {
 };
 
 export const OutboundTaskContent = memo(function OutboundTaskContent({ data, lang }: { data: unknown; lang: Lang }) {
+  const t = T[lang];
   const d = data as OutboundTaskCardData | null;
   const lb = LABELS[lang];
 
@@ -39,13 +40,13 @@ export const OutboundTaskContent = memo(function OutboundTaskContent({ data, lan
     return (
       <div className="flex flex-col items-center justify-center py-6 space-y-1.5 text-center select-none px-3">
         <span className="text-2xl opacity-30">📋</span>
-        <p className="text-[11px] text-muted-foreground leading-relaxed">{T[lang].card_outbound_empty}</p>
+        <p className="text-[11px] text-muted-foreground leading-relaxed">{t.card_outbound_empty}</p>
       </div>
     );
   }
 
-  const genderTitle = d.gender === 'male' ? (lang === 'zh' ? '先生' : 'Mr.')
-    : d.gender === 'female' ? (lang === 'zh' ? '女士' : 'Ms.')
+  const genderTitle = d.gender === 'male' ? t.outbound_mr
+    : d.gender === 'female' ? t.outbound_ms
     : '';
   const displayName = genderTitle ? `${d.name} ${genderTitle}` : d.name;
 
@@ -55,7 +56,7 @@ export const OutboundTaskContent = memo(function OutboundTaskContent({ data, lan
         <Row label={lb.name}    value={displayName} highlight />
         <Row label={lb.product} value={d.product[lang]} />
         <Row label={lb.amount}  value={`¥${d.amount.toLocaleString()}`} highlight />
-        <Row label={lb.days}    value={lang === 'zh' ? `${d.days} 天` : `${d.days} days`} />
+        <Row label={lb.days}    value={`${d.days} ${t.outbound_days_suffix}`} />
       </div>
     );
   }
@@ -65,7 +66,7 @@ export const OutboundTaskContent = memo(function OutboundTaskContent({ data, lan
     <div className="p-3 space-y-1">
       <Row label={lb.name}         value={displayName} highlight />
       <Row label={lb.current_plan} value={d.currentPlan[lang]} />
-      <Row label={lb.target_plan}  value={`${d.targetPlan[lang]}  ¥${d.targetFee}/${lang === 'zh' ? '月' : 'mo'}`} highlight />
+      <Row label={lb.target_plan}  value={`${d.targetPlan[lang]}  ¥${d.targetFee}/${t.outbound_month_suffix}`} highlight />
       <Row label={lb.campaign}     value={d.campaignName[lang]} />
     </div>
   );

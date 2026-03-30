@@ -134,8 +134,10 @@ export type EventType =
 
 // ── 关系 ────────────────────────────────────────────────────────────────────
 
-export type RelatedType = 'session' | 'message' | 'skill_instance' | 'execution_record' | 'outbound_task';
-export type RelationKind = 'source' | 'context' | 'child' | 'blocking' | 'derived_from';
+export type RelatedType = 'session' | 'message' | 'skill_instance' | 'execution_record' | 'outbound_task'
+  | 'source_intake' | 'source_draft' | 'source_issue_thread' | 'work_item';
+export type RelationKind = 'source' | 'context' | 'child' | 'blocking' | 'derived_from'
+  | 'merged_into' | 'same_issue_as' | 'duplicate_of';
 
 // ── 队列 ────────────────────────────────────────────────────────────────────
 
@@ -150,3 +152,13 @@ export interface AllowedChildRule {
   child_type: WorkItemType;
   child_categories: string[];
 }
+
+// ── Intake 流水线 ──────────────────────────────────────────────────────────
+
+export type SourceKind = 'agent_after_service' | 'self_service_form' | 'handoff_overflow' | 'external_monitoring' | 'emotion_escalation';
+export type IntakeStatus = 'new' | 'analyzed' | 'matched' | 'draft_created' | 'materialized' | 'discarded' | 'failed';
+export type DraftStatus = 'draft' | 'pending_review' | 'confirmed' | 'discarded' | 'published';
+export type IssueThreadStatus = 'open' | 'resolved' | 'closed';
+export type MergeReviewStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'expired';
+export type ResolutionAction = 'create_new_thread' | 'append_followup' | 'merge_master' | 'reopen_master' | 'ignored_duplicate';
+export type DecisionMode = 'manual_confirm' | 'auto_create' | 'auto_create_if_confident' | 'auto_create_and_schedule';

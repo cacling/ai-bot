@@ -8,6 +8,7 @@
  * DELETE /:id                  — 删除工具
  * PUT    /:id/mock-rules       — 更新 Mock 规则
  * PUT    /:id/toggle-mock      — 切换 Mock/Real 模式
+ * PUT    /:id/toggle-disable   — 切换 启用/禁用
  * GET    /bindings             — Runtime Bindings 联表视图
  */
 import { Hono } from 'hono';
@@ -295,6 +296,18 @@ app.put('/:id/toggle-mock', async (c) => {
   db.update(mcpTools).set({ mocked: newMocked, updated_at: now() }).where(eq(mcpTools.id, id)).run();
   logger.info('mcp', 'tool_mock_toggled', { id, mocked: newMocked });
   return c.json({ ok: true, mocked: newMocked });
+});
+
+// ── Toggle disable/enable ────────────────────────────────────────────────────
+app.put('/:id/toggle-disable', async (c) => {
+  const id = c.req.param('id');
+  const existing = db.select().from(mcpTools).where(eq(mcpTools.id, id)).get();
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  const newDisabled = !existing.disabled;
+  db.update(mcpTools).set({ disabled: newDisabled, updated_at: now() }).where(eq(mcpTools.id, id)).run();
+  logger.info('mcp', 'tool_disable_toggled', { id, disabled: newDisabled });
+  return c.json({ ok: true, disabled: newDisabled });
 });
 
 // ── SQL preview（根据 DB Binding 配置生成 SQL 预览）─────────────────────────

@@ -11,10 +11,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchExecutionRecords, type ExecutionRecord } from './api';
+import { t, type Lang } from './i18n';
 
 const PAGE_SIZE = 30;
 
-export const ExecutionRecordsPage = memo(function ExecutionRecordsPage() {
+export const ExecutionRecordsPage = memo(function ExecutionRecordsPage({ lang = 'zh' as Lang }: { lang?: Lang }) {
+  const T = t(lang);
   const [records, setRecords] = useState<ExecutionRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -48,16 +50,16 @@ export const ExecutionRecordsPage = memo(function ExecutionRecordsPage() {
     <div className="p-6 space-y-4">
       {/* Filters */}
       <div className="flex items-center gap-3">
-        <Input placeholder="Tool name..." value={toolName} onChange={e => { setToolName(e.target.value); setPage(0); }}
+        <Input placeholder={T.tool_name_placeholder} value={toolName} onChange={e => { setToolName(e.target.value); setPage(0); }}
           className="w-48 h-8 text-xs" />
         <Select value={channel} onValueChange={v => {
           const nextChannel = v ?? '__all__';
           setChannel(nextChannel === '__all__' ? '' : nextChannel);
           setPage(0);
         }}>
-          <SelectTrigger className="w-32 h-8 text-xs"><SelectValue placeholder="Channel" /></SelectTrigger>
+          <SelectTrigger className="w-32 h-8 text-xs"><SelectValue placeholder={T.channel} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">All Channels</SelectItem>
+            <SelectItem value="__all__">{T.all_channels}</SelectItem>
             <SelectItem value="online">online</SelectItem>
             <SelectItem value="voice">voice</SelectItem>
             <SelectItem value="outbound">outbound</SelectItem>
@@ -69,17 +71,17 @@ export const ExecutionRecordsPage = memo(function ExecutionRecordsPage() {
           setSuccess(nextSuccess === '__all__' ? '' : nextSuccess);
           setPage(0);
         }}>
-          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-28 h-8 text-xs"><SelectValue placeholder={T.status} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="__all__">All</SelectItem>
-            <SelectItem value="true">Success</SelectItem>
-            <SelectItem value="false">Failed</SelectItem>
+            <SelectItem value="__all__">{T.all}</SelectItem>
+            <SelectItem value="true">{T.success}</SelectItem>
+            <SelectItem value="false">{T.failed}</SelectItem>
           </SelectContent>
         </Select>
         <Button variant="ghost" size="sm" className="h-8" onClick={() => load()}>
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
         </Button>
-        <span className="text-xs text-muted-foreground ml-auto">{total} records</span>
+        <span className="text-xs text-muted-foreground ml-auto">{total} {T.records_suffix}</span>
       </div>
 
       {/* Table */}
@@ -89,19 +91,19 @@ export const ExecutionRecordsPage = memo(function ExecutionRecordsPage() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="text-left p-2 font-medium">Time</th>
-                  <th className="text-left p-2 font-medium">Tool</th>
-                  <th className="text-left p-2 font-medium">Channel</th>
-                  <th className="text-left p-2 font-medium">Adapter</th>
-                  <th className="text-left p-2 font-medium">Status</th>
-                  <th className="text-right p-2 font-medium">Latency</th>
-                  <th className="text-left p-2 font-medium">Trace</th>
+                  <th className="text-left p-2 font-medium">{T.col_time}</th>
+                  <th className="text-left p-2 font-medium">{T.col_tool}</th>
+                  <th className="text-left p-2 font-medium">{T.col_channel}</th>
+                  <th className="text-left p-2 font-medium">{T.col_adapter}</th>
+                  <th className="text-left p-2 font-medium">{T.col_status}</th>
+                  <th className="text-right p-2 font-medium">{T.col_latency}</th>
+                  <th className="text-left p-2 font-medium">{T.col_trace}</th>
                 </tr>
               </thead>
               <tbody>
                 {records.length === 0 && (
                   <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">
-                    {loading ? 'Loading...' : 'No records found'}
+                    {loading ? T.loading : T.no_records}
                   </td></tr>
                 )}
                 {records.map(r => (
@@ -112,8 +114,8 @@ export const ExecutionRecordsPage = memo(function ExecutionRecordsPage() {
                     <td className="p-2"><Badge variant="secondary" className="text-[10px]">{r.adapter_type}</Badge></td>
                     <td className="p-2">
                       {r.success
-                        ? <Badge className="bg-green-100 text-green-700 text-[10px]">OK</Badge>
-                        : <Badge variant="destructive" className="text-[10px]">{r.error_code ?? 'FAIL'}</Badge>}
+                        ? <Badge className="bg-green-100 text-green-700 text-[10px]">{T.ok}</Badge>
+                        : <Badge variant="destructive" className="text-[10px]">{r.error_code ?? T.fail}</Badge>}
                     </td>
                     <td className="p-2 text-right text-muted-foreground">{r.latency_ms}ms</td>
                     <td className="p-2 font-mono text-muted-foreground truncate max-w-[120px]" title={r.trace_id}>{r.trace_id.slice(0, 12)}</td>
