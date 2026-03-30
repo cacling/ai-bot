@@ -1,7 +1,7 @@
 /**
  * outbound-text-session.test.ts — Tests for text-mode outbound session
  */
-import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, test, expect, mock, beforeEach, afterAll } from 'bun:test';
 import { OutboundTextSession, type OutboundTextConfig } from '../../../src/services/outbound-text-session';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
@@ -56,20 +56,15 @@ mock.module('../../../src/services/voice-common', () => ({
   triggerHandoff: () => null,
 }));
 
-mock.module('../../../src/services/voice-session', () => ({
-  VoiceSessionState: class {
-    turns: any[] = [];
-    toolCalls: any[] = [];
-    addUserTurn(t: string) { this.turns.push({ role: 'user', text: t, ts: Date.now() }); }
-    addAssistantTurn(t: string) { this.turns.push({ role: 'assistant', text: t, ts: Date.now() }); }
-    recordTool(name: string, args: any, result: string, success: boolean) { this.toolCalls.push({ tool: name, args, result_summary: result.slice(0, 150), success }); }
-  },
-}));
+// 不 mock voice-session —— VoiceSessionState 是纯逻辑类，无外部依赖，使用真实实现
 
 mock.module('../../../src/services/i18n', () => ({
   t: (...args: any[]) => args.join('_'),
   OUTBOUND_TOOL_LABELS: { zh: {}, en: {} },
 }));
+
+// 清理所有 mock，防止污染后续测试文件的模块缓存
+afterAll(() => { mock.restore(); });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

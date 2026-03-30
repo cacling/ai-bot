@@ -5,7 +5,7 @@
  */
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 import { Hono } from 'hono';
-import { db } from '../../../src/db';
+import { platformDb as db } from '../../../src/db';
 import { staffAccounts, staffSessions } from '../../../src/db/schema';
 import { eq } from 'drizzle-orm';
 import { staffAuthRoutes, staffSessionMiddleware } from '../../../src/services/staff-auth';

@@ -1,7 +1,7 @@
 /**
  * tts-override.test.ts — Tests for TtsOverride sentence-splitting + translate + TTS pipeline
  */
-import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, test, expect, mock, beforeEach, afterAll } from 'bun:test';
 import { TtsOverride, type TtsOverrideOpts } from '../../../src/services/tts-override';
 
 // ── mock translateText & textToSpeech ────────────────────────────────────────
@@ -22,6 +22,8 @@ mock.module('../../../src/services/logger', () => ({
     debug: () => {},
   },
 }));
+
+afterAll(() => { mock.restore(); });
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 

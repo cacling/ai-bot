@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
-import { db } from '../../../src/db';
+import { platformDb as db } from '../../../src/db';
 import { skillInstances, skillInstanceEvents, sessions } from '../../../src/db/schema';
 import { eq } from 'drizzle-orm';
 import * as store from '../../../src/engine/skill-instance-store';

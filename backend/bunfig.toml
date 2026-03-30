@@ -1,6 +1,10 @@
 [install]
 registry = "https://registry.npmmirror.com/"
 
+[test]
+# 每个测试文件运行前加载，确保 afterAll 自动清理 mock
+preload = ["./tests/unittest/setup.ts"]
+
 # ── 覆盖率排除项说明 ──
 # 以下文件的未覆盖代码均为 LLM/外部服务调用路径，bun:test 的 mock.module
 # 会污染全局模块缓存导致其他测试失败，因此这些路径的 LLM 调用分支
