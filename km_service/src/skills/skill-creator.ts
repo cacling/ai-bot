@@ -636,9 +636,58 @@ function buildFinalMergePrompt(overviewText: string, partialMerges: string[], la
 // ── 进度事件 ───────────────────────────────────────────────────────────────
 
 export interface VisionProgressEvent {
-  step: 'trim' | 'overview' | 'slice' | 'merge';
+  step: 'trim' | 'overview' | 'slice' | 'merge' | 'render';
   current: number;
   total: number;
+  elapsed_ms: number;
+  stage_label: string;
+  overall_percent: number;
+}
+
+// 各阶段权重（用于计算 overall_percent）
+const STAGE_WEIGHTS = { trim: 5, overview: 15, slice: 60, merge: 15, render: 5 };
+
+function buildProgressEvent(
+  step: VisionProgressEvent['step'],
+  current: number,
+  total: number,
+  startTs: number,
+  sliceCurrent?: number,
+  sliceTotal?: number,
+): VisionProgressEvent {
+  const elapsed_ms = Date.now() - startTs;
+
+  // 阶段标签
+  const labels: Record<string, string> = {
+    trim: '预处理图片',
+    overview: '生成总览',
+    slice: sliceTotal ? `分片识别 ${sliceCurrent}/${sliceTotal}` : '分片识别',
+    merge: '合并结果',
+    render: '生成最终结果',
+  };
+
+  // 计算总进度百分比
+  let percent = 0;
+  const stages: VisionProgressEvent['step'][] = ['trim', 'overview', 'slice', 'merge', 'render'];
+  const currentIdx = stages.indexOf(step);
+  for (let i = 0; i < currentIdx; i++) {
+    percent += STAGE_WEIGHTS[stages[i]];
+  }
+  // 当前阶段内部进度
+  if (step === 'slice' && sliceTotal && sliceCurrent) {
+    percent += STAGE_WEIGHTS.slice * (sliceCurrent / sliceTotal);
+  } else if (current > 0 && total > 0) {
+    percent += STAGE_WEIGHTS[step] * Math.min(current / total, 1);
+  }
+
+  return {
+    step,
+    current,
+    total,
+    elapsed_ms,
+    stage_label: labels[step] ?? step,
+    overall_percent: Math.round(Math.min(percent, 100)),
+  };
 }
 
 // ── 单图 vision 调用 ──────────────────────────────────────────────────────
@@ -667,6 +716,7 @@ async function parseFlowchartImage(
   onProgress?: (event: VisionProgressEvent) => void,
   lang: OutputLang = 'zh',
 ): Promise<string> {
+  const visionStartTs = Date.now();
   // 统一转为 Buffer
   const buffer = typeof imageInput === 'string' ? fromDataUrl(imageInput) : imageInput;
 
@@ -705,7 +755,7 @@ async function parseFlowchartImage(
   logger.info('skill-creator', 'vision_cache_dir', { path: cacheDir });
 
   // Step 1: 裁白边
-  onProgress?.({ step: 'trim', current: 0, total: totalSteps });
+  onProgress?.(buildProgressEvent('trim', 0, totalSteps, visionStartTs));
   let trimmed: Buffer;
   try {
     trimmed = await trimWhitespace(buffer);
@@ -717,7 +767,7 @@ async function parseFlowchartImage(
   }
 
   // Step 2: 总览
-  onProgress?.({ step: 'overview', current: 1, total: totalSteps });
+  onProgress?.(buildProgressEvent('overview', 1, totalSteps, visionStartTs));
   const overviewBuf = await generateOverview(trimmed, 1024);
   writeFileSync(join(cacheDir, 'overview.jpg'), overviewBuf);
   const overviewDataUrl = toDataUrl(overviewBuf);
@@ -756,13 +806,13 @@ async function parseFlowchartImage(
       tileTexts[idx] = results[j];
       completed++;
       writeFileSync(join(cacheDir, `tile-${idx + 1}.md`), results[j]);
-      onProgress?.({ step: 'slice', current: 1 + completed, total: totalSteps });
+      onProgress?.(buildProgressEvent('slice', 1 + completed, totalSteps, visionStartTs, completed, tiles.length));
       logger.info('skill-creator', 'tile_parsed', { tile: idx + 1, total: tiles.length, result_length: results[j].length });
     }
   }
 
   // Step 4: 两步合并 — 先相邻切片 pairwise merge，再全局 final merge
-  onProgress?.({ step: 'merge', current: totalSteps - 1, total: totalSteps });
+  onProgress?.(buildProgressEvent('merge', totalSteps - 1, totalSteps, visionStartTs));
 
   // Step 4a: Pairwise merge — 将相邻 2-3 个切片合并为局部流程
   const pairSize = tiles.length <= 4 ? 2 : 3;
@@ -796,7 +846,7 @@ async function parseFlowchartImage(
     maxTokens: 16384,
   });
   writeFileSync(join(cacheDir, 'merged.md'), mergedText);
-  onProgress?.({ step: 'merge', current: totalSteps, total: totalSteps });
+  onProgress?.(buildProgressEvent('render', totalSteps, totalSteps, visionStartTs));
 
   logger.info('skill-creator', 'image_parsed', {
     strategy: 'tile',

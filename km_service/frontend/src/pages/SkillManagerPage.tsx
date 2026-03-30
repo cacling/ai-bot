@@ -34,6 +34,7 @@ import { Label } from '@/components/ui/label';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { MermaidRenderer } from '../shared/MermaidRenderer';
 import { ToolCallPlanPanel } from './components/ToolCallPlanPanel';
+import { VisionTaskCard } from './components/VisionTaskCard';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { SkillDiagramWorkbench } from './components/SkillDiagramWorkbench';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
@@ -319,6 +320,8 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
     setPendingImage,
     pendingImageFile,
     setPendingImageFile,
+    visionTask,
+    setVisionTask,
 
     openSkill,
     requestCloseEditor,
@@ -1344,7 +1347,13 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
                   </div>
                 )
               ))}
-              {isTyping && (
+              {isTyping && visionTask && visionTask.status !== 'completed' ? (
+                <VisionTaskCard
+                  task={visionTask}
+                  onCollapse={() => setVisionTask(prev => prev ? { ...prev, collapsed: !prev.collapsed } : null)}
+                  onCancel={() => setVisionTask(null)}
+                />
+              ) : isTyping ? (
                 <div className="flex gap-2">
                   <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
                   <div className="bg-background border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
@@ -1353,7 +1362,7 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
                     <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
                   </div>
                 </div>
-              )}
+              ) : null}
               <div ref={messagesEndRef} />
             </div>
             {canPublish && (
@@ -1368,13 +1377,20 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
               <form onSubmit={handleSubmit}>
                 <div className="rounded-xl border border-border focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/20 bg-muted transition-all overflow-hidden">
                   {pendingImage && (
-                    <div className="px-3 pt-2 flex items-start gap-2">
-                      <div className="relative group">
-                        <img src={pendingImage} alt="待发送的流程图" className="max-h-24 rounded-lg border border-border object-contain" />
-                        <button type="button" onClick={() => { setPendingImage(null); setPendingImageFile(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <X className="w-2.5 h-2.5" />
-                        </button>
+                    <div className="px-3 pt-2">
+                      <div className="flex items-start gap-2">
+                        <div className="relative group">
+                          <img src={pendingImage} alt="待发送的流程图" className="max-h-24 rounded-lg border border-border object-contain" />
+                          <button type="button" onClick={() => { setPendingImage(null); setPendingImageFile(null); }} className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
                       </div>
+                      {pendingImageFile && pendingImageFile.size > 2 * 1024 * 1024 && (
+                        <div className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] text-amber-700 leading-relaxed dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                          已检测到大尺寸图片（{(pendingImageFile.size / 1024 / 1024).toFixed(1)}MB），解析预计需要 5-10 分钟。系统会自动裁边、分片、合并。你可以继续编辑技能内容。
+                        </div>
+                      )}
                     </div>
                   )}
                   <Textarea

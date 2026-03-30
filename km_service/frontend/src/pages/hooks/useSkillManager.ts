@@ -32,6 +32,18 @@ export interface ChatMessage {
   image?: string; // base64 图片预览（仅用户消息）
 }
 
+export interface VisionTaskState {
+  status: 'processing' | 'completed' | 'failed';
+  step: string;
+  stageLabel: string;
+  current: number;
+  total: number;
+  percent: number;
+  elapsedMs: number;
+  startedAt: number;
+  collapsed: boolean;
+}
+
 export interface Skill extends SkillMeta {
   messages: ChatMessage[];
 }
@@ -164,6 +176,9 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [pendingImage, setPendingImage] = useState<string | null>(null); // objectURL for preview
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null); // actual File for upload
+
+  // vision 长任务状态（独立于 ChatMessage）
+  const [visionTask, setVisionTask] = useState<VisionTaskState | null>(null);
 
   // skill-creator 会话状态
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -494,6 +509,18 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
       setInputValue('');
       setPendingImage(null);
       setPendingImageFile(null);
+      // 如果有大图，初始化 vision 任务状态
+      if (submittedFile && submittedFile.size > 2 * 1024 * 1024) {
+        setVisionTask({
+          status: 'processing',
+          step: 'uploading',
+          stageLabel: '正在提交图片',
+          current: 0, total: 1, percent: 0,
+          elapsedMs: 0,
+          startedAt: Date.now(),
+          collapsed: false,
+        });
+      }
 
       const userMsg: ChatMessage = {
         id: Date.now(),
@@ -608,17 +635,21 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
                 }
 
                 if (data.type === 'vision_progress') {
-                  // 大图处理进度：更新 AI 消息的占位文本
-                  const progressLabels: Record<string, string> = {
-                    trim: '正在裁剪空白区域…',
-                    overview: '正在生成总览…',
-                    slice: `正在解析切片 ${(data.current ?? 1) - 1}/${(data.total ?? 2) - 2}…`,
-                    merge: '正在合并识别结果…',
-                  };
-                  setMessages((prev) => prev.map((m) =>
-                    m.id === msgId ? { ...m, text: progressLabels[data.step] ?? '正在处理图片…' } : m
-                  ));
+                  // 大图处理进度：更新独立的 visionTask 状态
+                  setVisionTask((prev) => ({
+                    status: 'processing',
+                    step: data.step ?? 'trim',
+                    stageLabel: data.stage_label ?? data.step ?? '',
+                    current: data.current ?? 0,
+                    total: data.total ?? 1,
+                    percent: data.overall_percent ?? 0,
+                    elapsedMs: data.elapsed_ms ?? 0,
+                    startedAt: prev?.startedAt ?? Date.now(),
+                    collapsed: prev?.collapsed ?? false,
+                  }));
                 } else if (data.type === 'vision_result') {
+                  // 标记 vision 任务完成
+                  setVisionTask((prev) => prev ? { ...prev, status: 'completed', percent: 100 } : null);
                   // 图片解析结果：插入一条系统消息，在 AI 回复之前展示
                   setMessages((prev) => {
                     const aiMsgIndex = prev.findIndex(m => m.id === msgId);
@@ -635,6 +666,7 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
                     m.id === msgId ? { ...m, thinking: (m.thinking ?? '') + data.text } : m
                   ));
                 } else if (data.type === 'done') {
+                  setVisionTask(null); // 清理长任务状态
                   setSessionId(data.session_id);
                   setPhase(data.phase);
                   setMessages((prev) => prev.map((m) =>
@@ -645,6 +677,7 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
                     applyDraftToEditor(data.draft);
                   }
                 } else if (data.type === 'error') {
+                  setVisionTask((prev) => prev ? { ...prev, status: 'failed' } : null);
                   setMessages((prev) => prev.map((m) =>
                     m.id === msgId ? { ...m, text: `请求失败: ${data.error}。请重试。`, thinking: undefined } : m
                   ));
@@ -819,6 +852,7 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
     // 对话
     messages, inputValue, setInputValue, isTyping, messagesEndRef, handleSubmit,
     pendingImage, setPendingImage, pendingImageFile, setPendingImageFile,
+    visionTask, setVisionTask,
     // skill-creator 状态
     phase, draft, canPublish, publishSkill,
     chatVersionNo, setChatVersionNo,
