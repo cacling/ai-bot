@@ -398,7 +398,7 @@
 ### E2E 集成
 
 - [x] T205 E2E test: real backend health + multi-turn context (11 tests) `tests/e2e/05-real-backend.spec.ts`
-- [x] T206 Create test scripts (start.sh, stop.sh, seed.sh) `tests/scripts/`
+- [x] T206 ~~Create test scripts~~ (已移除，统一使用根目录 `start.sh` / `stop.sh`)
 - [x] T207 Configure Playwright (chrome, workers:1, retries:1, 90s timeout) `tests/e2e/playwright.config.ts`
 
 ### 前端 API 与路由

@@ -8,8 +8,8 @@ delete process.env.HTTPS_PROXY;
 
 /**
  * 测试配置
- * - 需要先通过 tests/scripts/start.sh 启动服务
- * - backend(:18472) + telecom-mcp(:8003) + frontend(:5173)
+ * - 需要先通过项目根目录 ./start.sh 启动全栈服务
+ * - backend(:18472) + MCP(:18003) + frontend(:5173) + km_service(:18010)
  * - Chat API 调用真实 LLM，单次响应最长 90s
  *
  * 运行方式：

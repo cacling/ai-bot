@@ -3,7 +3,7 @@
  *
  * 验证：创建技能 → 沙盒验证 → 发布到生产 → 在线客服中生效
  *
- * 前置条件：后端服务已启动（localhost:5173 → localhost:8000）
+ * 前置条件：全栈服务已启动（./start.sh），frontend(:5173) + backend(:18472) + km_service(:18010)
  */
 import { test, expect } from '@playwright/test';
 

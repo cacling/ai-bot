@@ -354,11 +354,12 @@ frontend/src/shared/
 
 ### 测试脚本
 
-```
-tests/scripts/
-├── start.sh                     # 启动全栈服务（后台，含健康检查）
-├── stop.sh                      # 停止所有测试服务
-└── seed.sh                      # 重置测试数据（schema sync + seed）
+测试前使用项目根目录脚本启动服务：
+
+```bash
+./start.sh            # 启动全栈服务（含依赖安装、DB 初始化、健康检查）
+./start.sh --reset    # 重置模式（清空 DB + 重新 seed）
+./stop.sh             # 停止所有服务
 ```
 
 ### 前端 E2E 测试（Playwright）
@@ -685,7 +686,7 @@ tests/unittest/frontend/
 | **技术技能** | `backend/skills/tech-skills/<skill-name>/SKILL.md` |
 | **MCP Server** | `mcp_servers/src/services/<service>.ts`（5 个文件） |
 | **启动/停止脚本** | 根目录 `start.sh` / `stop.sh` |
-| **测试脚本** | `tests/scripts/start.sh` / `stop.sh` / `seed.sh` |
+| **LLM 语义评测** | `frontend/tests/e2e/evals/`（promptfoo） |
 | **后端测试** | `tests/unittest/backend/`（Bun:test） |
 | **前端测试** | `tests/unittest/frontend/`（Vitest） |
 | **E2E 测试** | `tests/e2e/`（Playwright） |

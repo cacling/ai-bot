@@ -299,7 +299,7 @@ seed 自动写入 3 个测试用户：
 cd backend && rm -f data/telecom.db && bunx drizzle-kit push && bun run db:seed
 
 # 方式三：测试专用（保留服务运行）
-bash tests/scripts/seed.sh
+cd backend && bun run db:seed
 ```
 
 ### 运行测试
@@ -315,9 +315,8 @@ cd frontend/tests/unittest && npx vitest run
 cd frontend/tests/unittest && npx vitest run --coverage
 
 # E2E 测试（需先启动服务，耗时较长）
-bash frontend/tests/e2e/scripts/start.sh
+# 先用项目根目录 ./start.sh 启动全栈服务
 cd frontend/tests/e2e && npx playwright test
-bash frontend/tests/e2e/scripts/stop.sh
 
 # E2E 有头模式（调试，Chrome 146）
 cd frontend/tests/e2e && npx playwright test --headed
