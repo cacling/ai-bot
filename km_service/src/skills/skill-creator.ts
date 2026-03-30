@@ -571,88 +571,66 @@ async function autoReviewAndRepairDraft(params: {
 
 // ── Vision prompt 模板 ─────────────────────────────────────────────────────
 
-// ── 语言相关辅助 ───────────────────────────────────────────────────────────
+// ── 语言相关辅助 + Prompt 模板加载 ──────────────────────────────────────────
 
 type OutputLang = 'zh' | 'en';
 
-const LANG_LABELS: Record<OutputLang, { desc: string; label: string; nodeRule: string }> = {
+const LANG_VARS: Record<OutputLang, Record<string, string>> = {
   zh: {
-    desc: '用中文描述',
-    label: '中文标签',
-    nodeRule: '节点 ID 使用英文 snake_case（如 check_balance），转换标签用中文显示（如 "查询余额"）',
+    DESC_LANG: '用中文描述',
+    LABEL_LANG: '中文标签',
+    NODE_RULE: '节点 ID 使用英文 snake_case（如 check_balance），转换标签用中文显示（如 "查询余额"）',
+    TRANSLATE_HINT: '中文翻译',
   },
   en: {
-    desc: 'Describe in English',
-    label: 'English labels',
-    nodeRule: 'Node IDs use English snake_case (e.g. check_balance), transition labels in English',
+    DESC_LANG: 'Describe in English',
+    LABEL_LANG: 'English labels',
+    NODE_RULE: 'Node IDs use English snake_case (e.g. check_balance), transition labels in English',
+    TRANSLATE_HINT: 'English translation',
   },
 };
 
+const PROMPTS_DIR = join(import.meta.dir ?? __dirname, 'prompts');
+
+function loadPrompt(name: string): string {
+  return readFileSync(join(PROMPTS_DIR, `${name}.md`), 'utf-8');
+}
+
+function fillTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
+}
+
 function buildVisionPromptSingle(lang: OutputLang = 'zh'): string {
-  const l = LANG_LABELS[lang];
-  return `请仔细分析这张流程图/草图，完成以下任务：
-
-1. **流程描述**：${l.desc}，描述图中的完整流程，包括每个步骤、判断条件、分支走向。
-2. **Mermaid 状态图**：将流程转换为 Mermaid stateDiagram-v2 格式，要求：
-   - ${l.nodeRule}
-   - 包含所有分支和判断条件
-   - 用 [*] 标记起始和结束状态
-
-请按以下格式输出：
-
-## 流程描述
-（${l.desc}）
-
-## Mermaid 状态图
-\`\`\`mermaid
-stateDiagram-v2
-  ...
-\`\`\``;
+  return fillTemplate(loadPrompt('vision-single'), LANG_VARS[lang]);
 }
 
 function buildVisionPromptOverview(lang: OutputLang = 'zh'): string {
-  const l = LANG_LABELS[lang];
-  return `这是一张大型流程图的总览缩略图。${l.desc}：
-1. 整体流程结构和阅读方向（从哪到哪）
-2. 可识别的主要区域
-3. 大致的分支走向和主干路径
-不需要识别具体文字，重点描述结构布局。`;
+  return fillTemplate(loadPrompt('vision-overview'), LANG_VARS[lang]);
 }
 
 function buildTilePrompt(index: number, total: number, lang: OutputLang = 'zh'): string {
-  const l = LANG_LABELS[lang];
-  return `这是一张大型流程图的第 ${index + 1}/${total} 块切片。请${l.desc}，尽可能识别并输出：
-- 本块包含的节点列表（含节点内文字，保留原文并附${lang === 'zh' ? '中文翻译' : '英文翻译'}）
-- 判断节点及分支条件
-- 箭头连接关系（A → B）
-- 本块边缘的入口点和出口点（可能连接到相邻切片）
-- 看不清或不确定的内容
-
-请按结构化格式输出，便于后续合并。`;
+  return fillTemplate(loadPrompt('vision-tile'), {
+    ...LANG_VARS[lang],
+    TILE_INDEX: String(index + 1),
+    TILE_TOTAL: String(total),
+  });
 }
 
-function buildMergePrompt(overviewText: string, tileTexts: string[], lang: OutputLang = 'zh'): string {
-  const l = LANG_LABELS[lang];
-  const tilesSection = tileTexts.map((t, i) => `### 切片 ${i + 1}\n${t}`).join('\n\n');
-  return `以下是一张大型流程图的分析结果。请合并为完整流程。
+function buildPairMergePrompt(tileTexts: string[], startIdx: number, lang: OutputLang = 'zh'): string {
+  const tilesSection = tileTexts.map((t, i) => `### 切片 ${startIdx + i + 1}\n${t}`).join('\n\n');
+  return fillTemplate(loadPrompt('vision-pair-merge'), {
+    ...LANG_VARS[lang],
+    TILES_SECTION: tilesSection,
+  });
+}
 
-## 总览（全局结构）
-${overviewText}
-
-## 各切片识别结果
-${tilesSection}
-
-## 请输出
-
-1. **流程描述**：${l.desc}，合并后的完整流程自然语言描述，去掉重复节点，按总览确定的阅读顺序排列。
-2. **Mermaid 状态图**：完整的 Mermaid stateDiagram-v2，要求：
-   - ${l.nodeRule}
-   - 包含所有分支和判断条件
-
-注意：
-- 重叠区域会出现重复节点，请去重合并为一个
-- 接上跨切片的箭头连接
-- 如果某些连接不确定，标注为注释`;
+function buildFinalMergePrompt(overviewText: string, partialMerges: string[], lang: OutputLang = 'zh'): string {
+  const partsSection = partialMerges.map((t, i) => `### 区域 ${i + 1}\n${t}`).join('\n\n');
+  return fillTemplate(loadPrompt('vision-final-merge'), {
+    ...LANG_VARS[lang],
+    OVERVIEW: overviewText,
+    PARTS_SECTION: partsSection,
+  });
 }
 
 // ── 进度事件 ───────────────────────────────────────────────────────────────
@@ -783,12 +761,37 @@ async function parseFlowchartImage(
     }
   }
 
-  // Step 4: 合并
+  // Step 4: 两步合并 — 先相邻切片 pairwise merge，再全局 final merge
   onProgress?.({ step: 'merge', current: totalSteps - 1, total: totalSteps });
-  const mergePrompt = buildMergePrompt(overviewText, tileTexts, lang);
+
+  // Step 4a: Pairwise merge — 将相邻 2-3 个切片合并为局部流程
+  const pairSize = tiles.length <= 4 ? 2 : 3;
+  const partialMerges: string[] = [];
+
+  for (let i = 0; i < tileTexts.length; i += pairSize) {
+    const pairTiles = tileTexts.slice(i, i + pairSize);
+    if (pairTiles.length === 1) {
+      // 只有一个切片，直接用
+      partialMerges.push(pairTiles[0]);
+    } else {
+      const pairPrompt = buildPairMergePrompt(pairTiles, i, lang);
+      const { text: pairResult } = await generateText({
+        model: chatModel,
+        messages: [{ role: 'user', content: pairPrompt }],
+        temperature: 0.2,
+        maxTokens: 8192,
+      });
+      partialMerges.push(pairResult);
+      writeFileSync(join(cacheDir, `pair-${Math.floor(i / pairSize) + 1}.md`), pairResult);
+      logger.info('skill-creator', 'pair_merged', { pair: Math.floor(i / pairSize) + 1, input_tiles: pairTiles.length, result_length: pairResult.length });
+    }
+  }
+
+  // Step 4b: Final merge — 总览 + 各局部合并 → 完整流程图
+  const finalPrompt = buildFinalMergePrompt(overviewText, partialMerges, lang);
   const { text: mergedText } = await generateText({
     model: chatModel,
-    messages: [{ role: 'user', content: mergePrompt }],
+    messages: [{ role: 'user', content: finalPrompt }],
     temperature: 0.2,
     maxTokens: 16384,
   });
@@ -798,6 +801,7 @@ async function parseFlowchartImage(
   logger.info('skill-creator', 'image_parsed', {
     strategy: 'tile',
     tiles: tiles.length,
+    pair_merges: partialMerges.length,
     overview_length: overviewText.length,
     merge_length: mergedText.length,
     cache_dir: cacheDir,
