@@ -4,7 +4,7 @@
  * 替代 typing dots，展示分阶段进度、耗时、当前步骤。
  * 支持收起/展开和取消操作。
  */
-import { memo, useMemo } from 'react';
+import { memo, useState, useEffect } from 'react';
 import { CheckCircle2, Loader2, Circle, ChevronDown, ChevronUp, X, ScanEye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { type VisionTaskState } from '../hooks/useSkillManager';
@@ -32,19 +32,35 @@ function formatDuration(ms: number): string {
 }
 
 export const VisionTaskCard = memo(function VisionTaskCard({ task, onCollapse, onCancel }: VisionTaskCardProps) {
-  const elapsed = useMemo(() => {
-    return task.elapsedMs > 0 ? task.elapsedMs : Date.now() - task.startedAt;
-  }, [task.elapsedMs, task.startedAt]);
+  // 本地每秒 tick，让已耗时/ETA 实时跳动
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (task.status !== 'processing') return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [task.status]);
+
+  const localElapsed = now - task.startedAt;
+  // 优先用后端 SSE 报告的 elapsed，两次事件间用本地计时填补
+  const elapsed = task.elapsedMs > 0 ? Math.max(task.elapsedMs, localElapsed) : localElapsed;
+  // ETA = 预估总耗时 - 已耗时（线性倒计时）
+  const eta = task.estimatedTotalMs > 0
+    ? Math.max(0, task.estimatedTotalMs - localElapsed)
+    : 0;
+  // 超时判定：已耗时 > 预估 × 3
+  const isOvertime = task.estimatedTotalMs > 0 && localElapsed > task.estimatedTotalMs * 3;
 
   // 收起态
   if (task.collapsed && task.status === 'processing') {
     return (
-      <div className="mx-2 mb-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-[11px]">
-        <Loader2 className="w-3 h-3 animate-spin text-primary" />
-        <span className="text-foreground font-medium">流程图解析 {task.percent}%</span>
+      <div className={`mx-2 mb-2 flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[11px] ${isOvertime ? 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/20' : 'border-primary/20 bg-primary/5'}`}>
+        <Loader2 className={`w-3 h-3 animate-spin ${isOvertime ? 'text-amber-500' : 'text-primary'}`} />
+        <span className="text-foreground font-medium">{isOvertime ? '处理时间较长' : `流程图解析 ${task.percent}%`}</span>
         <span className="text-muted-foreground">· {task.stageLabel}</span>
         <span className="text-muted-foreground">· {formatDuration(elapsed)}</span>
-        {task.etaMs > 0 && <span className="text-muted-foreground">· 约剩 {formatDuration(task.etaMs)}</span>}
+        {isOvertime
+          ? <span className="text-amber-600 dark:text-amber-400">· 已超出预计时间</span>
+          : eta > 0 && <span className="text-muted-foreground">· 约剩 {formatDuration(eta)}</span>}
         <Button variant="ghost" size="icon-sm" className="ml-auto h-5 w-5" onClick={onCollapse}>
           <ChevronDown className="w-3 h-3" />
         </Button>
@@ -97,10 +113,10 @@ export const VisionTaskCard = memo(function VisionTaskCard({ task, onCollapse, o
       <div className="flex-1 max-w-[85%] rounded-2xl rounded-tl-none border border-primary/20 bg-background shadow-sm overflow-hidden">
         {/* 头部 */}
         <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-          <span className="text-xs font-medium text-foreground">流程图解析中</span>
-          <span className="text-[10px] text-muted-foreground ml-auto">
-            已耗时 {formatDuration(elapsed)}{task.etaMs > 0 ? ` · 预计还需 ${formatDuration(task.etaMs)}` : ''}
+          <Loader2 className={`w-3.5 h-3.5 animate-spin ${isOvertime ? 'text-amber-500' : 'text-primary'}`} />
+          <span className="text-xs font-medium text-foreground">{isOvertime ? '处理时间较长' : '流程图解析中'}</span>
+          <span className={`text-[10px] ml-auto ${isOvertime ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}`}>
+            已耗时 {formatDuration(elapsed)}{isOvertime ? ' · 已超出预计时间' : eta > 0 ? ` · 预计还需 ${formatDuration(eta)}` : ''}
           </span>
         </div>
 

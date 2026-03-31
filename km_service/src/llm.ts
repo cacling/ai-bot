@@ -158,14 +158,13 @@ const openaiVisionModel: LanguageModelV1 = openaiProvider(
   process.env.SKILL_CREATOR_OPENAI_VISION_MODEL ?? process.env.SKILL_CREATOR_OPENAI_MODEL ?? 'gpt-5.4-2026-03-05'
 );
 
-// GPT-5.4 原生支持 reasoning.effort，@ai-sdk/openai 已内置适配，
-// 无需 DashScope 那套 reasoning_content → <think> 转换。
-const openaiThinkingModel: LanguageModelV1 = wrapLanguageModel({
-  model: openaiProvider(process.env.SKILL_CREATOR_OPENAI_MODEL ?? 'gpt-5.4-2026-03-05', {
-    reasoningEffort: 'high',
-  }),
-  middleware: extractReasoningMiddleware({ tagName: 'think' }),
-});
+// GPT-5.4 原生支持 reasoning.effort，但推理过程是内部的、不对外暴露文本
+// （providerMetadata.openai.reasoningTokens > 0 证明确实在推理）。
+// 因此 UI 上「思考」开关仍可启用以获得更好的推理质量，但不会显示思考过程。
+const openaiThinkingModel: LanguageModelV1 = openaiProvider(
+  process.env.SKILL_CREATOR_OPENAI_MODEL ?? 'gpt-5.4-2026-03-05',
+  { reasoningEffort: 'high' },
+);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Provider 选择

@@ -17,7 +17,7 @@
 import { Hono } from 'hono';
 import { generateText, streamText, tool } from 'ai';
 import { z } from 'zod';
-import { skillCreatorModel, skillCreatorThinkingModel, skillCreatorVisionModel } from '../llm';
+import { getSkillCreatorModels, type SkillCreatorProvider } from '../llm';
 import { logger } from '../logger';
 import { analyzeImage, trimWhitespace, generateOverview, generateTiles, resizeImage, toDataUrl, fromDataUrl, type ImageStrategy } from './image-processor';
 import { createNewSkillVersion, createVersionFrom, getSkillRegistry } from './version-manager';
@@ -486,7 +486,7 @@ ${formatValidationForInternalReview(validation)}`;
 async function autoReviewAndRepairDraft(params: {
   session: Session;
   parsed: ParsedSkillCreatorResponse;
-  model: typeof skillCreatorModel;
+  model: import('ai').LanguageModelV1;
   skillIndex: Array<{ name: string; description: string }>;
   tools: Record<string, unknown>;
 }): Promise<{ parsed: ParsedSkillCreatorResponse; validation: ValidationResult | null; attempts: number }> {
@@ -644,7 +644,31 @@ export interface VisionProgressEvent {
   stage_label: string;
   detail_label: string;
   overall_percent: number;
+  /** 基于图片面积的整体预估总耗时（毫秒），前端用于线性 ETA */
+  estimated_total_ms: number;
 }
+
+// ── 基于图片面积的线性时间估算 ─────────────────────────────────────────────
+// 基准：15081×10429 (157M px) ≈ 533s；公式 = BASE + RATE × megapixels
+const ETA_BASE_S = 30;
+const ETA_RATE_S_PER_MP = 3.2;
+const TIMEOUT_MULTIPLIER = 3;
+
+function estimateTotalMs(width: number, height: number): number {
+  const mp = (width * height) / 1_000_000;
+  return Math.round((ETA_BASE_S + ETA_RATE_S_PER_MP * mp) * 1000);
+}
+
+class VisionTimeoutError extends Error {
+  constructor(elapsedMs: number, timeoutMs: number, stage: string) {
+    const elapsedS = Math.round(elapsedMs / 1000);
+    const timeoutS = Math.round(timeoutMs / 1000);
+    super(`VISION_TIMEOUT: 图片处理超时（已耗时 ${elapsedS}s，超时阈值 ${timeoutS}s，阶段 ${stage}）。建议上传小于 8000×6000 的图片。`);
+    this.name = 'VisionTimeoutError';
+  }
+}
+
+
 
 // 各阶段权重（用于计算 overall_percent）
 const STAGE_WEIGHTS = { trim: 5, overview: 15, slice: 60, merge: 15, render: 5 };
@@ -657,6 +681,7 @@ function buildProgressEvent(
   sliceCurrent?: number,
   sliceTotal?: number,
   detailLabel?: string,
+  estimatedTotalMs: number = 0,
 ): VisionProgressEvent {
   const elapsed_ms = Date.now() - startTs;
 
@@ -699,6 +724,7 @@ function buildProgressEvent(
     stage_label: labels[step] ?? step,
     detail_label: detailLabel ?? labels[step] ?? step,
     overall_percent,
+    estimated_total_ms: estimatedTotalMs,
   };
 }
 
@@ -728,14 +754,36 @@ function parseVisionResult(text: string): ParsedVisionResult {
 
 // ── 单图 vision 调用 ──────────────────────────────────────────────────────
 
-async function callVisionModel(imageDataUrl: string, prompt: string, label?: string): Promise<string> {
+/** LLM 返回内容过短，视为无效输出 */
+class VisionOutputError extends Error {
+  constructor(tag: string, length: number) {
+    super(`LLM 输出质量异常（${tag}：仅 ${length} 字符），可能模型未正确识别图片内容`);
+    this.name = 'VisionOutputError';
+  }
+}
+
+/** 每步 LLM 调用的最小有效输出长度 */
+const MIN_OUTPUT_LENGTH: Record<string, number> = {
+  overview: 30,
+  tile: 20,
+  pair: 30,
+  final: 50,
+};
+
+async function callVisionModel(
+  imageDataUrl: string,
+  prompt: string,
+  label?: string,
+  provider: SkillCreatorProvider = 'qwen',
+  signal?: AbortSignal,
+): Promise<string> {
   const callTs = Date.now();
   const imageSize = Math.round(imageDataUrl.length / 1024);
   const tag = label ?? 'vision';
-  logger.info('skill-creator', 'llm_vision_call_start', { tag, prompt_length: prompt.length, image_base64_kb: imageSize });
+  logger.info('skill-creator', 'llm_vision_call_start', { tag, prompt_length: prompt.length, image_base64_kb: imageSize, provider });
   try {
     const { text, usage } = await generateText({
-      model: skillCreatorVisionModel,
+      model: getSkillCreatorModels(provider).visionModel,
       messages: [
         {
           role: 'user',
@@ -746,11 +794,19 @@ async function callVisionModel(imageDataUrl: string, prompt: string, label?: str
         },
       ],
       temperature: 0.2,
+      abortSignal: signal,
     });
     logger.info('skill-creator', 'llm_vision_call_done', {
       tag, duration_ms: Date.now() - callTs, result_length: text.length,
       input_tokens: usage?.promptTokens, output_tokens: usage?.completionTokens,
     });
+    // 输出质量校验
+    const category = tag.startsWith('tile') ? 'tile' : tag;
+    const minLen = MIN_OUTPUT_LENGTH[category] ?? 20;
+    if (text.trim().length < minLen) {
+      logger.warn('skill-creator', 'llm_vision_output_too_short', { tag, length: text.trim().length, min: minLen });
+      throw new VisionOutputError(tag, text.trim().length);
+    }
     return text;
   } catch (err) {
     logger.error('skill-creator', 'llm_vision_call_error', { tag, duration_ms: Date.now() - callTs, error: String(err) });
@@ -764,6 +820,9 @@ async function parseFlowchartImage(
   imageInput: Buffer | string,
   onProgress?: (event: VisionProgressEvent) => void,
   lang: OutputLang = 'zh',
+  provider: SkillCreatorProvider = 'qwen',
+  /** 外部取消信号（用户点取消 / SSE 断开时触发） */
+  externalSignal?: AbortSignal,
 ): Promise<string> {
   const visionStartTs = Date.now();
   // 统一转为 Buffer
@@ -780,7 +839,7 @@ async function parseFlowchartImage(
   // ── direct: 小图直接处理 ──
   if (analysis.strategy === 'direct') {
     const dataUrl = toDataUrl(buffer);
-    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang), 'direct');
+    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang), 'direct', provider, externalSignal);
     logger.info('skill-creator', 'image_parsed', { strategy: 'direct', result_length: text.length });
     return text;
   }
@@ -789,13 +848,38 @@ async function parseFlowchartImage(
   if (analysis.strategy === 'resize') {
     const resized = await resizeImage(buffer, 2048);
     const dataUrl = toDataUrl(resized);
-    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang), 'resize');
+    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang), 'resize', provider, externalSignal);
     logger.info('skill-creator', 'image_parsed', { strategy: 'resize', result_length: text.length });
     return text;
   }
 
   // ── tile: 大图分片处理 ──
   const totalSteps = analysis.tileCount + 2; // overview + tiles + merge
+  const estimatedTotalMs = estimateTotalMs(analysis.width, analysis.height);
+  const timeoutMs = estimatedTotalMs * TIMEOUT_MULTIPLIER;
+  logger.info('skill-creator', 'vision_eta', {
+    megapixels: Math.round((analysis.width * analysis.height) / 1_000_000),
+    estimated_total_s: Math.round(estimatedTotalMs / 1000),
+    timeout_s: Math.round(timeoutMs / 1000),
+  });
+
+  // 组合信号：超时 + 外部取消（任一触发即中止全部 LLM 调用）
+  const timeoutAbort = AbortSignal.timeout(timeoutMs);
+  const combinedAbort = externalSignal
+    ? AbortSignal.any([timeoutAbort, externalSignal])
+    : timeoutAbort;
+
+  /** 检查中止状态，每步入口调用 */
+  const checkAborted = (stage: string) => {
+    if (combinedAbort.aborted) {
+      const reason = externalSignal?.aborted ? 'user_cancel' : 'timeout';
+      logger.warn('skill-creator', 'vision_aborted', { stage, reason, elapsed_ms: Date.now() - visionStartTs });
+      if (reason === 'user_cancel') {
+        throw new Error('用户已取消图片处理');
+      }
+      throw new VisionTimeoutError(Date.now() - visionStartTs, timeoutMs, stage);
+    }
+  };
 
   // 创建临时目录保存中间产物（调试 + 测试可读取）
   const cacheId = `vision-${Date.now().toString(36)}`;
@@ -804,7 +888,7 @@ async function parseFlowchartImage(
   logger.info('skill-creator', 'vision_cache_dir', { path: cacheDir });
 
   // Step 1: 裁白边
-  onProgress?.(buildProgressEvent('trim', 0, totalSteps, visionStartTs, undefined, undefined, '裁剪空白区域并检查尺寸'));
+  onProgress?.(buildProgressEvent('trim', 0, totalSteps, visionStartTs, undefined, undefined, '裁剪空白区域并检查尺寸', estimatedTotalMs));
   let trimmed: Buffer;
   const trimStartTs = Date.now();
   try {
@@ -821,16 +905,17 @@ async function parseFlowchartImage(
   }
 
   // Step 2: 总览
-  onProgress?.(buildProgressEvent('overview', 1, totalSteps, visionStartTs, undefined, undefined, '生成缩略图，识别整体结构'));
+  onProgress?.(buildProgressEvent('overview', 1, totalSteps, visionStartTs, undefined, undefined, '生成缩略图，识别整体结构', estimatedTotalMs));
   const overviewResizeTs = Date.now();
   const overviewBuf = await generateOverview(trimmed, 1024);
   writeFileSync(join(cacheDir, 'overview.jpg'), overviewBuf);
   logger.info('skill-creator', 'overview_thumbnail', { size_kb: Math.round(overviewBuf.length / 1024), resize_ms: Date.now() - overviewResizeTs });
   const overviewDataUrl = toDataUrl(overviewBuf);
   const overviewLlmTs = Date.now();
-  const overviewText = await callVisionModel(overviewDataUrl, buildVisionPromptOverview(lang), 'overview');
+  const overviewText = await callVisionModel(overviewDataUrl, buildVisionPromptOverview(lang), 'overview', provider, combinedAbort);
   writeFileSync(join(cacheDir, 'overview.md'), overviewText);
   logger.info('skill-creator', 'overview_parsed', { result_length: overviewText.length, llm_ms: Date.now() - overviewLlmTs, total_overview_ms: Date.now() - overviewResizeTs });
+  checkAborted('after_overview');
 
   // Step 3: 切片
   const tileGenTs = Date.now();
@@ -844,37 +929,73 @@ async function parseFlowchartImage(
     duration_ms: Date.now() - tileGenTs,
   });
 
-  // 保存切片图片
+  // 过滤过小的切片（< 60KB 内容极少，跳过独立 LLM 调用以节省时间）
+  const MIN_TILE_SIZE = 60 * 1024;
+  const effectiveTiles: Buffer[] = [];
+  const skippedTiles: number[] = [];
+  for (let i = 0; i < tiles.length; i++) {
+    if (tiles[i].length < MIN_TILE_SIZE && tiles.length > 2) {
+      skippedTiles.push(i + 1);
+      logger.info('skill-creator', 'tile_skipped_small', { tile: i + 1, size_kb: Math.round(tiles[i].length / 1024) });
+    } else {
+      effectiveTiles.push(tiles[i]);
+    }
+  }
+  if (skippedTiles.length > 0) {
+    logger.info('skill-creator', 'tiles_after_filter', { original: tiles.length, effective: effectiveTiles.length, skipped: skippedTiles });
+  }
+
+  // 保存切片图片（含跳过的，用于调试）
   for (let i = 0; i < tiles.length; i++) {
     writeFileSync(join(cacheDir, `tile-${i + 1}.jpg`), tiles[i]);
   }
-
-  // 全并行处理切片（所有 tile 同时发起 LLM 调用）
   const slicePhaseTs = Date.now();
   let sliceCompleted = 0;
-  logger.info('skill-creator', 'slice_phase_start', { total_tiles: tiles.length, strategy: 'all_parallel' });
+  logger.info('skill-creator', 'slice_phase_start', { total_tiles: effectiveTiles.length, strategy: 'all_parallel' });
 
-  const tileTexts: string[] = await Promise.all(
-    tiles.map((tile, idx) => {
+  const tileResults = await Promise.allSettled(
+    effectiveTiles.map((tile, idx) => {
       const dataUrl = toDataUrl(tile);
-      return callVisionModel(dataUrl, buildTilePrompt(idx, tiles.length, lang), `tile-${idx + 1}/${tiles.length}`)
+      return callVisionModel(dataUrl, buildTilePrompt(idx, effectiveTiles.length, lang), `tile-${idx + 1}/${effectiveTiles.length}`, provider, combinedAbort)
         .then(text => {
           writeFileSync(join(cacheDir, `tile-${idx + 1}.md`), text);
           sliceCompleted++;
-          onProgress?.(buildProgressEvent('slice', 1 + sliceCompleted, totalSteps, visionStartTs, sliceCompleted, tiles.length, `正在解析切片 ${sliceCompleted}/${tiles.length}`));
-          logger.info('skill-creator', 'tile_parsed', { tile: idx + 1, total: tiles.length, result_length: text.length, completed: sliceCompleted, elapsed_since_start_ms: Date.now() - slicePhaseTs });
+          onProgress?.(buildProgressEvent('slice', 1 + sliceCompleted, totalSteps, visionStartTs, sliceCompleted, effectiveTiles.length, `正在解析切片 ${sliceCompleted}/${effectiveTiles.length}`, estimatedTotalMs));
+          logger.info('skill-creator', 'tile_parsed', { tile: idx + 1, total: effectiveTiles.length, result_length: text.length, completed: sliceCompleted, elapsed_since_start_ms: Date.now() - slicePhaseTs });
           return text;
         });
     }),
   );
-  logger.info('skill-creator', 'slice_phase_done', { total_tiles: tiles.length, total_slice_ms: Date.now() - slicePhaseTs });
+
+  // 统计切片结果：容忍少量失败（≤ 1/3），超过则整体失败
+  const tileTexts: string[] = [];
+  const failedTiles: number[] = [];
+  for (let i = 0; i < tileResults.length; i++) {
+    const r = tileResults[i];
+    if (r.status === 'fulfilled') {
+      tileTexts.push(r.value);
+    } else {
+      failedTiles.push(i + 1);
+      tileTexts.push(`[切片 ${i + 1} 解析失败，已跳过]`);
+      logger.warn('skill-creator', 'tile_failed', { tile: i + 1, error: String(r.reason) });
+    }
+  }
+  const maxAllowedFails = Math.floor(effectiveTiles.length / 3);
+  if (failedTiles.length > maxAllowedFails) {
+    throw new Error(`过多切片解析失败（${failedTiles.length}/${effectiveTiles.length} 失败，切片: ${failedTiles.join(',')}），请重试或上传更清晰的图片`);
+  }
+  if (failedTiles.length > 0) {
+    logger.warn('skill-creator', 'slice_partial_failure', { failed: failedTiles, total: effectiveTiles.length, allowed: maxAllowedFails });
+  }
+  logger.info('skill-creator', 'slice_phase_done', { total_tiles: effectiveTiles.length, succeeded: effectiveTiles.length - failedTiles.length, failed: failedTiles.length, total_slice_ms: Date.now() - slicePhaseTs });
+  checkAborted('after_slice');
 
   // Step 4: 两步合并 — 先相邻切片 pairwise merge，再全局 final merge
   const mergePhaseTs = Date.now();
-  onProgress?.(buildProgressEvent('merge', totalSteps - 1, totalSteps, visionStartTs, undefined, undefined, `正在合并 ${tiles.length} 个区域的识别结果`));
+  onProgress?.(buildProgressEvent('merge', totalSteps - 1, totalSteps, visionStartTs, undefined, undefined, `正在合并 ${effectiveTiles.length} 个区域的识别结果`, estimatedTotalMs));
 
   // Step 4a: Pairwise merge — 将相邻 2-3 个切片并行合并为局部流程
-  const pairSize = tiles.length <= 4 ? 2 : 3;
+  const pairSize = effectiveTiles.length <= 4 ? 2 : 3;
   const totalPairs = Math.ceil(tileTexts.length / pairSize);
   logger.info('skill-creator', 'pair_merge_start', { pair_size: pairSize, total_pairs: totalPairs, strategy: 'all_parallel', input_tile_lengths: tileTexts.map(t => t.length) });
 
@@ -885,7 +1006,7 @@ async function parseFlowchartImage(
   }
 
   // 全并行执行 pair merge
-  const partialMerges: string[] = await Promise.all(
+  const pairResults = await Promise.allSettled(
     pairGroups.map(async ({ idx: pairIdx, tiles: pairTiles, startOffset }) => {
       if (pairTiles.length === 1) {
         logger.info('skill-creator', 'pair_skipped_single', { pair: pairIdx });
@@ -895,11 +1016,16 @@ async function parseFlowchartImage(
       const pairTs = Date.now();
       logger.info('skill-creator', 'pair_merge_llm_start', { pair: pairIdx, input_tiles: pairTiles.length, prompt_length: pairPrompt.length, input_lengths: pairTiles.map(t => t.length) });
       const { text: pairResult, usage: pairUsage } = await generateText({
-        model: skillCreatorModel,
+        model: getSkillCreatorModels(provider).model,
         messages: [{ role: 'user', content: pairPrompt }],
         temperature: 0.2,
-        maxTokens: 8192,
+        maxTokens: 4096,
+        abortSignal: combinedAbort,
       });
+      // pair merge 输出质量校验
+      if (pairResult.trim().length < MIN_OUTPUT_LENGTH.pair) {
+        throw new VisionOutputError(`pair-${pairIdx}`, pairResult.trim().length);
+      }
       writeFileSync(join(cacheDir, `pair-${pairIdx}.md`), pairResult);
       logger.info('skill-creator', 'pair_merged', {
         pair: pairIdx, input_tiles: pairTiles.length, result_length: pairResult.length, llm_ms: Date.now() - pairTs,
@@ -908,24 +1034,48 @@ async function parseFlowchartImage(
       return pairResult;
     }),
   );
-  logger.info('skill-creator', 'pair_merge_phase_done', { total_pairs: partialMerges.length, pair_merge_ms: Date.now() - mergePhaseTs });
+
+  // pair merge 容错：至少需要 50% 成功
+  const partialMerges: string[] = [];
+  const failedPairs: number[] = [];
+  for (let i = 0; i < pairResults.length; i++) {
+    const r = pairResults[i];
+    if (r.status === 'fulfilled') {
+      partialMerges.push(r.value);
+    } else {
+      failedPairs.push(i + 1);
+      // 回退到原始 tile 文本拼接
+      const fallback = pairGroups[i].tiles.join('\n\n---\n\n');
+      partialMerges.push(fallback);
+      logger.warn('skill-creator', 'pair_merge_failed_fallback', { pair: i + 1, error: String(r.reason) });
+    }
+  }
+  if (failedPairs.length > Math.ceil(pairGroups.length / 2)) {
+    throw new Error(`过多合并失败（${failedPairs.length}/${pairGroups.length}），请重试`);
+  }
+  logger.info('skill-creator', 'pair_merge_phase_done', { total_pairs: partialMerges.length, failed: failedPairs.length, pair_merge_ms: Date.now() - mergePhaseTs });
+  checkAborted('after_pair_merge');
 
   // Step 4b: Final merge — 总览 + 各局部合并 → 完整流程图
   const finalPrompt = buildFinalMergePrompt(overviewText, partialMerges, lang);
   const finalMergeTs = Date.now();
   logger.info('skill-creator', 'final_merge_llm_start', { prompt_length: finalPrompt.length, partial_merge_lengths: partialMerges.map(p => p.length), overview_length: overviewText.length });
   const { text: mergedText, usage: finalUsage } = await generateText({
-    model: skillCreatorModel,
+    model: getSkillCreatorModels(provider).model,
     messages: [{ role: 'user', content: finalPrompt }],
     temperature: 0.2,
-    maxTokens: 16384,
+    maxTokens: 8192,
+    abortSignal: combinedAbort,
   });
+  if (mergedText.trim().length < MIN_OUTPUT_LENGTH.final) {
+    throw new VisionOutputError('final_merge', mergedText.trim().length);
+  }
   writeFileSync(join(cacheDir, 'merged.md'), mergedText);
   logger.info('skill-creator', 'final_merge_done', {
     result_length: mergedText.length, llm_ms: Date.now() - finalMergeTs,
     input_tokens: finalUsage?.promptTokens, output_tokens: finalUsage?.completionTokens,
   });
-  onProgress?.(buildProgressEvent('render', totalSteps, totalSteps, visionStartTs, undefined, undefined, '正在生成 Mermaid 流程图与中文说明'));
+  onProgress?.(buildProgressEvent('render', totalSteps, totalSteps, visionStartTs, undefined, undefined, '正在生成 Mermaid 流程图与中文说明', estimatedTotalMs));
 
   const totalDurationMs = Date.now() - visionStartTs;
   logger.info('skill-creator', 'image_parsed', {
@@ -959,6 +1109,7 @@ skillCreator.post('/chat', async (c) => {
   let imageBuffer: Buffer | null = null;
   let imageBase64: string | undefined;
   let lang: OutputLang = 'zh';
+  let provider: SkillCreatorProvider = 'qwen';
 
   if (contentType.includes('multipart/form-data')) {
     const form = await c.req.parseBody();
@@ -968,6 +1119,7 @@ skillCreator.post('/chat', async (c) => {
     versionNo = form.version_no ? Number(form.version_no) : undefined;
     enableThinking = form.enable_thinking === 'true' || form.enable_thinking === '1';
     lang = (form.lang as string) === 'en' ? 'en' : 'zh';
+    provider = (form.provider as string) === 'openai' ? 'openai' : 'qwen';
     const file = form.image as File | undefined;
     if (file && file.size > 0) {
       imageBuffer = Buffer.from(await file.arrayBuffer());
@@ -981,6 +1133,7 @@ skillCreator.post('/chat', async (c) => {
       enable_thinking?: boolean;
       image?: string;
       lang?: string;
+      provider?: string;
     }>();
     message = body.message ?? '';
     sessionId = body.session_id;
@@ -988,6 +1141,7 @@ skillCreator.post('/chat', async (c) => {
     versionNo = body.version_no;
     enableThinking = !!body.enable_thinking;
     lang = body.lang === 'en' ? 'en' : 'zh';
+    provider = body.provider === 'openai' ? 'openai' : 'qwen';
     imageBase64 = body.image;
     if (imageBase64) {
       try { imageBuffer = fromDataUrl(imageBase64); } catch { /* keep as base64 fallback */ }
@@ -1001,6 +1155,7 @@ skillCreator.post('/chat', async (c) => {
     skill_id: skillId ?? null,
     version_no: versionNo ?? null,
     enable_thinking: enableThinking,
+    provider,
     has_image: hasImage,
     image_size: imageBuffer ? imageBuffer.length : 0,
     message_preview: message.slice(0, 80),
@@ -1019,7 +1174,7 @@ skillCreator.post('/chat', async (c) => {
     try {
       const visionStartTs = Date.now();
       logger.info('skill-creator', 'vision_start', { session_id: sessionId ?? '(new)' });
-      imageDescription = await parseFlowchartImage(imageInput!, undefined, lang);
+      imageDescription = await parseFlowchartImage(imageInput!, undefined, lang, provider);
       logger.info('skill-creator', 'image_parsed', {
         result_length: imageDescription.length,
         duration_ms: Date.now() - visionStartTs,
@@ -1162,7 +1317,8 @@ skillCreator.post('/chat', async (c) => {
     }),
   };
 
-  const model = enableThinking ? skillCreatorThinkingModel : skillCreatorModel;
+  const models = getSkillCreatorModels(provider);
+  const model = enableThinking ? models.thinkingModel : models.model;
 
   // ── 流式模式（thinking 开启时）──
   if (enableThinking) {
@@ -1186,6 +1342,8 @@ skillCreator.post('/chat', async (c) => {
       });
 
       const encoder = new TextEncoder();
+      // AbortController：用户取消或连接断开时中止所有进行中的 LLM 调用
+      const visionAbort = new AbortController();
       const sseStream = new ReadableStream({
         async start(controller) {
           try {
@@ -1195,7 +1353,7 @@ skillCreator.post('/chat', async (c) => {
                 logger.info('skill-creator', 'vision_start_streaming', { session_id: session.id });
                 imageDescription = await parseFlowchartImage(imageInput, (evt) => {
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'vision_progress', ...evt })}\n\n`));
-                }, lang);
+                }, lang, provider, visionAbort.signal);
                 // 重新构造 finalMessage（因为之前 imageDescription 为 null）
                 const imageContext = `\n\n---\n**[用户上传了一张流程图，以下是 AI 视觉模型的解析结果]**\n\n${imageDescription}\n---\n`;
                 const origMessage = message.trim();
@@ -1206,7 +1364,32 @@ skillCreator.post('/chat', async (c) => {
                     : `我上传了一张手绘流程图，请根据以下解析结果帮我完善需求：${imageContext}`,
                 };
               } catch (err) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: `图片解析失败: ${String(err)}` })}\n\n`));
+                // 用户取消（abort）：静默关闭，不推错误
+                if (visionAbort.signal.aborted && !(err instanceof VisionTimeoutError)) {
+                  logger.info('skill-creator', 'vision_cancelled_by_user', { session_id: session.id });
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                    type: 'error',
+                    error: '图片处理已取消',
+                    code: 'vision_cancelled',
+                  })}\n\n`));
+                  controller.close();
+                  return;
+                }
+                const isTimeout = err instanceof VisionTimeoutError;
+                const isQuality = err instanceof VisionOutputError;
+                let errorMsg: string;
+                let code: string;
+                if (isTimeout) {
+                  errorMsg = '图片处理超时，建议上传小于 8000×6000 的图片后重试';
+                  code = 'vision_timeout';
+                } else if (isQuality) {
+                  errorMsg = `图片识别质量异常：${err.message}。建议上传更清晰的流程图`;
+                  code = 'vision_quality';
+                } else {
+                  errorMsg = `图片解析失败: ${String(err)}`;
+                  code = 'vision_error';
+                }
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: errorMsg, code })}\n\n`));
                 controller.close();
                 return;
               }
@@ -1360,6 +1543,11 @@ skillCreator.post('/chat', async (c) => {
           } finally {
             controller.close();
           }
+        },
+        cancel() {
+          // 客户端断开连接时中止所有进行中的 LLM 调用
+          logger.info('skill-creator', 'sse_client_disconnected', { session_id: session?.id });
+          visionAbort.abort();
         },
       });
 

@@ -326,6 +326,7 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
     setPendingImageFile,
     visionTask,
     setVisionTask,
+    cancelVision,
 
     openSkill,
     requestCloseEditor,
@@ -339,6 +340,8 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
     // thinking 模式
     showThinking,
     setShowThinking,
+    provider,
+    setProvider,
   } = useSkillManager(lang);
 
   const { isRecording, toggle: toggleVoice } = useVoiceInput((text) => setInputValue(text));
@@ -1343,10 +1346,21 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
             测试{testingVersion !== null ? ` v${testingVersion}` : selectedVersion ? ` v${selectedVersion.version_no}` : ''}
           </Button>
           {rightTab === 'chat' && (
-            <Label className="ml-auto flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer select-none font-normal pr-2">
-              <Checkbox checked={showThinking} onCheckedChange={(v: boolean) => setShowThinking(v)} className="size-3" />
-              思考
-            </Label>
+            <div className="ml-auto flex items-center gap-2 pr-2">
+              <Select value={provider} onValueChange={v => setProvider(v === 'openai' ? 'openai' : 'qwen')}>
+                <SelectTrigger className="h-6 w-[88px] text-[10px] px-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="qwen" className="text-[11px]">Qwen3</SelectItem>
+                  <SelectItem value="openai" className="text-[11px]">GPT-5.4</SelectItem>
+                </SelectContent>
+              </Select>
+              <Label className="flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer select-none font-normal">
+                <Checkbox checked={showThinking} onCheckedChange={(v: boolean) => setShowThinking(v)} className="size-3" />
+                思考
+              </Label>
+            </div>
           )}
         </div>
 
@@ -1387,7 +1401,7 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
                 <VisionTaskCard
                   task={visionTask}
                   onCollapse={() => setVisionTask(prev => prev ? { ...prev, collapsed: !prev.collapsed } : null)}
-                  onCancel={() => setVisionTask(null)}
+                  onCancel={cancelVision}
                 />
               ) : isTyping ? (
                 <div className="flex gap-2">

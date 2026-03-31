@@ -47,6 +47,11 @@ mock.module('../../../src/llm', () => ({
   skillCreatorThinkingModel: 'mock-thinking-model',
   skillCreatorVisionModel: 'mock-vision-model',
   chatModel: 'mock-chat-model',
+  getSkillCreatorModels: () => ({
+    model: 'mock-model',
+    thinkingModel: 'mock-thinking-model',
+    visionModel: 'mock-vision-model',
+  }),
 }));
 
 // ── Mock version-manager ────────────────────────────────────────────────────

@@ -51,6 +51,8 @@ export interface VisionTaskState {
   etaMs: number;
   startedAt: number;
   collapsed: boolean;
+  /** 基于图片面积的整体预估总耗时（毫秒），前端用于线性 ETA 倒计时 */
+  estimatedTotalMs: number;
 }
 
 export interface Skill extends SkillMeta {
@@ -188,12 +190,17 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
 
   // vision 长任务状态（独立于 ChatMessage）
   const [visionTask, setVisionTask] = useState<VisionTaskState | null>(null);
+  // SSE fetch AbortController — 用户点取消时中止请求，后端感知断开后停止 LLM 调用
+  const chatAbortRef = useRef<AbortController | null>(null);
 
   // skill-creator 会话状态
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('capture');
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showThinking, setShowThinking] = useState(true);
+  const [provider, setProvider] = useState<'qwen' | 'openai'>(
+    () => (localStorage.getItem('skill-creator-provider') as 'qwen' | 'openai') ?? 'qwen'
+  );
   // AI 助手当前操作的版本号（由页面同步设置，切换版本时重置会话）
   const [chatVersionNo, _setChatVersionNo] = useState<number | null>(null);
   const chatVersionRef = useRef<number | null>(null);
@@ -232,6 +239,8 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
   const pendingActionRef = useRef<(() => void) | null>(null);
 
   // ── 初始加载 ────────────────────────────────────────────────────────────────
+  useEffect(() => { localStorage.setItem('skill-creator-provider', provider); }, [provider]);
+
   useEffect(() => {
     setLoading(true);
     fetchSkillList()
@@ -530,6 +539,7 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
           etaMs: 0,
           startedAt: Date.now(),
           collapsed: false,
+          estimatedTotalMs: 0,
         });
       }
 
@@ -552,6 +562,10 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
           message_len: submittedText.length,
         });
 
+        // 创建 AbortController，用户取消时可中止请求
+        const abortCtrl = new AbortController();
+        chatAbortRef.current = abortCtrl;
+
         let res: Response;
         if (submittedFile) {
           // 有图片时用 FormData 上传（避免 base64 膨胀）
@@ -562,8 +576,9 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
           if (!isNew && activeSkillId) formData.append('skill_id', activeSkillId);
           if (!isNew && chatVersionRef.current) formData.append('version_no', String(chatVersionRef.current));
           formData.append('enable_thinking', showThinking ? 'true' : 'false');
+          formData.append('provider', provider);
           formData.append('lang', lang);
-          res = await fetch('/api/skill-creator/chat', { method: 'POST', body: formData });
+          res = await fetch('/api/skill-creator/chat', { method: 'POST', body: formData, signal: abortCtrl.signal });
         } else {
           // 无图片时用 JSON（现有逻辑）
           res = await fetch('/api/skill-creator/chat', {
@@ -575,8 +590,10 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
               skill_id: isNew ? null : activeSkillId,
               version_no: isNew ? undefined : chatVersionRef.current ?? undefined,
               enable_thinking: showThinking,
+              provider,
               lang,
             }),
+            signal: abortCtrl.signal,
           });
         }
 
@@ -659,6 +676,7 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
                     etaMs: data.eta_ms ?? 0,
                     startedAt: prev?.startedAt ?? Date.now(),
                     collapsed: prev?.collapsed ?? false,
+                    estimatedTotalMs: data.estimated_total_ms ?? prev?.estimatedTotalMs ?? 0,
                   }));
                 } else if (data.type === 'vision_result') {
                   // 标记 vision 任务完成
@@ -743,6 +761,11 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
           }
         }
       } catch (err: any) {
+        // 用户主动取消（AbortError）：静默处理，不显示错误
+        if (err.name === 'AbortError') {
+          console.info('[skill-creator] request cancelled by user');
+          return;
+        }
         console.error('[skill-creator] request failed', {
           error: err.message,
           stack: err.stack?.slice(0, 300),
@@ -758,10 +781,11 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
         ]);
       } finally {
         setIsTyping(false);
+        chatAbortRef.current = null;
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [inputValue, isTyping, activeSkillId, sessionId, showThinking, pendingImageFile, chatVersionNo, lang]
+    [inputValue, isTyping, activeSkillId, sessionId, showThinking, provider, pendingImageFile, chatVersionNo, lang]
   );
 
   // ── 发布新技能（将 draft 写入磁盘）─────────────────────────────────────────
@@ -855,6 +879,14 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
   // 是否处于可发布状态（有 draft + phase 为 confirm 或 done）
   const canPublish = !!draft && (phase === 'confirm' || phase === 'done' || phase === 'draft');
 
+  /** 取消进行中的图片处理：中止 SSE fetch → 后端感知断开 → 停止 LLM 调用 */
+  const cancelVision = useCallback(() => {
+    chatAbortRef.current?.abort();
+    chatAbortRef.current = null;
+    setVisionTask(null);
+    setIsTyping(false);
+  }, []);
+
   return {
     // 列表
     view, skills, loading, loadError, activeSkill,
@@ -870,12 +902,13 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
     // 对话
     messages, inputValue, setInputValue, isTyping, messagesEndRef, handleSubmit,
     pendingImage, setPendingImage, pendingImageFile, setPendingImageFile,
-    visionTask, setVisionTask,
+    visionTask, setVisionTask, cancelVision,
     // skill-creator 状态
     phase, draft, canPublish, publishSkill,
     chatVersionNo, setChatVersionNo,
     // thinking 模式
     showThinking, setShowThinking,
+    provider, setProvider,
     // 导航
     openSkill, requestCloseEditor, createNewSkill, deleteSkill,
   };
