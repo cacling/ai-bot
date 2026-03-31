@@ -20,8 +20,9 @@
 import { Hono } from 'hono';
 import { asc, eq } from 'drizzle-orm';
 import { type CoreMessage } from 'ai';
-import { platformDb as db, businessDb } from '../db';
-import { messages, sessions, subscribers, plans } from '../db/schema';
+import { platformDb as db } from '../db';
+import { messages, sessions } from '../db/schema';
+import { getSubscriberInfo } from '../services/cdp-client';
 import { runAgent, getMcpToolsForRuntime } from '../engine/runner';
 import { buildNodeTypeMap, stripMermaidMarkers } from '../services/mermaid';
 import { routeSkill, shouldUseRuntime } from '../engine/skill-router';
@@ -106,27 +107,15 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       // 只在首次创建 session 且 phone 非空时发送 greeting（避免重连/React re-render 重复推送）
       if (!phone || existing.length > 0) return;
 
-      // 查询用户身份，推送个性化问候
+      // 查询用户身份（via CDP），推送个性化问候
       try {
-        const subRows = await businessDb
-          .select({ name: subscribers.name, gender: subscribers.gender, planId: subscribers.plan_id })
-          .from(subscribers)
-          .where(eq(subscribers.phone, phone))
-          .limit(1);
+        const subscriberInfo = await getSubscriberInfo(phone);
         let greetingText: string;
-        if (subRows.length) {
-          const planRows = await businessDb
-            .select({ name: plans.name })
-            .from(plans)
-            .where(eq(plans.plan_id, subRows[0].planId))
-            .limit(1);
-          cachedSubscriberName = subRows[0].name;
-          cachedPlanName = planRows[0]?.name ?? '';
-          cachedGender = subRows[0].gender;
-          const name = cachedSubscriberName;
-          const planName = cachedPlanName;
-          const gender = cachedGender;
-          greetingText = t('greeting_with_subscriber', langParam, name, planName, gender);
+        if (subscriberInfo) {
+          cachedSubscriberName = subscriberInfo.name;
+          cachedPlanName = subscriberInfo.planName;
+          cachedGender = subscriberInfo.gender;
+          greetingText = t('greeting_with_subscriber', langParam, cachedSubscriberName, cachedPlanName, cachedGender);
         } else {
           greetingText = t('greeting_generic', langParam);
         }

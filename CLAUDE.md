@@ -4,7 +4,7 @@
 > 修改内容请更新 spec-kit 源文档后重新运行脚本（或 `/sync-docs`）。
 > 编码规范按路径分区在 `.claude/rules/` 中，编辑对应目录文件时自动加载。
 
-**自动生成于**: 2026-03-25
+**自动生成于**: 2026-03-31
 
 ## 项目简介
 
@@ -29,14 +29,12 @@
 ## 关键命令
 
 ```bash
-./start.sh              # 一键启动全部服务（MCP → km_service → 后端 → 前端）
+./start.sh              # 一键启动全部服务（MCP → 后端 → 前端）
 ./start.sh --reset      # 重置 DB + 重新 seed + 启动
 ./stop.sh               # 停止全部服务
 
 cd backend && bun test tests/unittest/                # 后端单元测试
-cd km_service && bun test tests/unittest/             # KM 后端单元测试
-cd km_service/frontend && npx vitest run              # KM 前端单元测试
-cd frontend/tests/unittest && npx vitest run          # 主前端单元测试
+cd frontend/tests/unittest && npx vitest run          # 前端单元测试
 cd frontend/tests/e2e && npx playwright test          # E2E 测试（需先启动服务）
 
 cd backend && bunx drizzle-kit push    # 应用 Schema 变更
@@ -100,18 +98,27 @@ cd backend && bunx drizzle-kit studio  # 数据库可视化管理
 
 ### 新增一个 KMS 子模块
 
-KM 已独立为 `km_service/`（端口 18010），前端在 `km_service/frontend/`。
+| 步骤 | 文件 | 说明 |
+|------|------|------|
+| 1 | `backend/src/db/schema/platform.ts` | 添加 km_ 表 |
+| 2 | `backend/src/agent/km/kms/xxx.ts` | 实现 API 路由 |
+| 3 | `backend/src/agent/km/kms/index.ts` | 注册路由 |
+| 4 | `frontend/src/km/XxxPage.tsx` | 前端页面 |
+| 5 | `frontend/src/km/api.ts` | API 辅助函数 |
+| 6 | `frontend/src/App.tsx` | 添加路由 |
+| 7 | `tests/` | 后端 + 前端测试 |
+
+### 新增 CDP 子模块
+
+CDP 已独立为 `cdp_service/`（端口 18020），Schema 在 `packages/shared-db/src/schema/cdp.ts`。
 
 | 步骤 | 文件 | 说明 |
 |------|------|------|
-| 1 | `packages/shared-db/src/schema/km.ts` | 添加 km_ 表 |
-| 2 | `km_service/src/routes/xxx.ts` | 实现 API 路由 |
-| 3 | `km_service/src/routes/index.ts` | 注册路由 |
-| 4 | `km_service/frontend/src/pages/XxxPage.tsx` | 前端页面 |
-| 5 | `km_service/frontend/src/pages/api.ts` | API 辅助函数 |
-| 6 | `km_service/frontend/src/App.tsx` | 添加页面路由 |
-| 7 | `km_service/tests/` | 后端测试（unittest + apitest + integration） |
-| 8 | `km_service/frontend/tests/` | 前端测试 |
+| 1 | `packages/shared-db/src/schema/cdp.ts` | 添加 cdp_ 表 |
+| 2 | `cdp_service/src/routes/xxx.ts` | 实现 API 路由 |
+| 3 | `cdp_service/src/routes/index.ts` | 注册路由 |
+| 4 | `cdp_service/src/seed.ts` | 添加种子数据映射 |
+| 5 | `cdp_service/tests/` | API 测试 |
 
 ### 修改系统提示词
 
@@ -261,4 +268,3 @@ metadata:
 | `rules/frontend.md` | `frontend/src/**` | 前端命名、导出、组件结构 |
 | `rules/mcp.md` | `mcp_servers/**` | MCP 工具定义、Zod 校验、返回格式 |
 | `rules/skills.md` | `backend/skills/**` | Skill 目录结构、SKILL.md 编写、状态图标记 |
-| `rules/general.md` | `km_service/**` | KM 服务遵循通用规则 + 后端规则 |

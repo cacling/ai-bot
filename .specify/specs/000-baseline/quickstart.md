@@ -139,11 +139,11 @@ start.sh 执行流程：
 | 服务 | 端口 | 日志文件 | 运行时 |
 |------|------|---------|--------|
 | 后端 API + WS | :18472 | logs/backend.log | Bun |
-| user-info-service | :18003 | logs/mcp-user-info.log | Node.js |
-| business-service | :18004 | logs/mcp-business.log | Node.js |
-| diagnosis-service | :18005 | logs/mcp-diagnosis.log | Node.js |
-| outbound-service | :18006 | logs/mcp-outbound.log | Node.js |
-| account-service | :18007 | logs/mcp-account.log | Node.js |
+| MCP 内部服务 (internal_service) | :18003 | logs/内部服务-mcp.log | Node.js |
+| Mock APIs | :18008 | logs/mock-apis.log | Node.js |
+| Work Order Service | :18009 | logs/work-order.log | Node.js |
+| KM Service | :18010 | logs/km-service.log | Bun |
+| CDP Service | :18020 | logs/cdp-service.log | Bun |
 | 前端 Vite | :5173 | logs/frontend.log | Node.js |
 
 ---
@@ -154,19 +154,21 @@ start.sh 执行流程：
 # 步骤一：初始化数据库（仅本地/演示环境）
 cd backend && bunx drizzle-kit push && bun run db:seed
 
-# 步骤二：启动 5 个 MCP Server（各开一个终端或后台运行）
-cd mcp_servers/src/services && npm install
-node --import tsx/esm user_info_service.ts     # → :18003
-node --import tsx/esm business_service.ts      # → :18004
-node --import tsx/esm diagnosis_service.ts     # → :18005
-node --import tsx/esm outbound_service.ts      # → :18006
-node --import tsx/esm account_service.ts       # → :18007
+# 步骤二：启动 MCP Server（已合并为单个内部服务）
+cd mcp_servers && bun install
+node --import tsx/esm src/services/internal_service.ts  # → :18003
 
-# 步骤三：启动后端（等待 MCP 就绪后自动 warmup）
-cd backend && bun run --watch src/index.ts
+# 步骤三：启动微服务
+cd mock_apis && node --import tsx/esm src/server.ts     # → :18008
+cd work_order_service && node --import tsx/esm src/server.ts  # → :18009
+cd km_service && bun src/server.ts                      # → :18010
+cd cdp_service && bun src/server.ts                     # → :18020
 
-# 步骤四：启动前端
-cd frontend && npm install && npm run dev
+# 步骤四：启动后端（等待 MCP 就绪后自动 warmup）
+cd backend && bun run --watch src/index.ts              # → :18472
+
+# 步骤五：启动前端
+cd frontend && npm install && npm run dev               # → :5173
 ```
 
 ---

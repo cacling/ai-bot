@@ -665,6 +665,18 @@ tests/unittest/frontend/
 | 6 | `frontend/src/App.tsx` | 添加路由 |
 | 7 | `tests/` | 后端 + 前端测试 |
 
+### 新增 CDP 子模块
+
+CDP 已独立为 `cdp_service/`（端口 18020），Schema 在 `packages/shared-db/src/schema/cdp.ts`。
+
+| 步骤 | 文件 | 说明 |
+|------|------|------|
+| 1 | `packages/shared-db/src/schema/cdp.ts` | 添加 cdp_ 表 |
+| 2 | `cdp_service/src/routes/xxx.ts` | 实现 API 路由 |
+| 3 | `cdp_service/src/routes/index.ts` | 注册路由 |
+| 4 | `cdp_service/src/seed.ts` | 添加种子数据映射 |
+| 5 | `cdp_service/tests/` | API 测试 |
+
 ### 修改系统提示词
 
 | 步骤 | 文件 | 说明 |
@@ -679,7 +691,7 @@ tests/unittest/frontend/
 | 类型 | 位置 |
 |------|------|
 | **环境配置** | `.env`（项目根目录，不入库） |
-| **数据库 Schema** | `backend/src/db/schema/business.ts`（业务）、`platform.ts`（平台） |
+| **数据库 Schema** | `backend/src/db/schema/business.ts`（业务）、`platform.ts`（平台）、`packages/shared-db/src/schema/cdp.ts`（CDP） |
 | **种子数据** | `backend/src/db/seed.ts` |
 | **系统提示词** | `backend/src/engine/*-system-prompt.md`（5 个文件） |
 | **业务技能** | `backend/skills/biz-skills/<skill-name>/SKILL.md` |

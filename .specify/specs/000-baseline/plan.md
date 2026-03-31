@@ -187,8 +187,9 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 | `mock_apis/` | — | 电信业务模拟后端 | `business.db`（独占） |
 | `work_order_service/` | — | 工单/工作流管理 | `workorder.db`（独占） |
 | `frontend/` | — | 客服 React UI | — |
-| `mcp_servers/` | @ai-bot/mcp-servers | 5 个 MCP 执行服务（无 DB） | — |
-| `packages/shared-db/` | @ai-bot/shared-db | 共享 Drizzle schema（4 域） | — |
+| `cdp_service/` | @ai-bot/cdp-service | 客户数据平台（16 张表，party-centric 语义层） | `cdp.db`（独占） |
+| `mcp_servers/` | @ai-bot/mcp-servers | MCP 内部服务（已合并为 internal_service，端口 :18003） | — |
+| `packages/shared-db/` | @ai-bot/shared-db | 共享 Drizzle schema（5 域） | — |
 
 ### 2.4 已知边界违反（待清理）
 
@@ -218,8 +219,9 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 |---------|-----------|------|-------------|
 | **km.db** | km_service（独占写入） | platform 表（skill_registry, mcp_servers, mcp_tools 等）+ km_* 表 | backend（只读，用于技能缓存和 tool registry） |
 | **platform.db** | backend（独占） | sessions, messages, staff_accounts, staff_sessions, users, outbound_tasks, skill_instances | 无 |
-| **business.db** | mock_apis（独占） | subscribers, bills, plans, contracts 等 24 张电信业务表 | backend（只读，用于 chat/voice 个性化问候） |
+| **business.db** | mock_apis（独占） | subscribers, bills, plans, contracts 等 24 张电信业务表 | cdp_service seed（只读导入） |
 | **workorder.db** | work_order_service（独占） | work_items, work_orders, appointments, tickets, workflows 等 16 张工单表 | backend（通过 HTTP work-order-proxy 代理） |
+| **cdp.db** | cdp_service（独占） | party, identity, contact_point, account, subscription 等 16 张 CDP 表 | backend（通过 HTTP cdp-client 代理） |
 
 **关键设计决策：**
 
@@ -228,7 +230,8 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 - **HTTP 代理**：backend 的 `/api/skills/`, `/api/mcp/`, `/api/km/` 等管理路由通过 `km-proxy.ts` 代理到 km_service
 - **busy_timeout**：所有 DB 连接启用 `PRAGMA busy_timeout = 5000`，即使偶发竞争也不会立即失败
 - **Drizzle 配置**：每个域有独立的 `drizzle.config.ts`，`start.sh` 按序 push schema + seed
-- **共享 Schema 包**：`packages/shared-db/` 按域分文件（`business.ts`, `platform.ts`, `workorder.ts`, `km.ts`），各服务只导入所需域
+- **共享 Schema 包**：`packages/shared-db/` 按域分文件（`business.ts`, `platform.ts`, `workorder.ts`, `km.ts`, `cdp.ts`），各服务只导入所需域
+- **CDP 客户语义层**：backend 不再直接读 business.db 获取客户信息，改为通过 `cdp-client.ts` 调用 CDP Service API
 
 ---
 

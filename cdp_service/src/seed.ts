@@ -17,6 +17,7 @@ import {
   cdpCommunicationPreferences,
   cdpConsentRecords,
   cdpServiceSummaries,
+  cdpCustomerProfiles,
   eq,
   and,
 } from './db';
@@ -35,8 +36,10 @@ const businessDb = new Database(businessDbPath, { readonly: true });
 interface SubscriberRow {
   phone: string;
   name: string;
+  gender: string;
   email: string | null;
   customer_tier: string;
+  preferred_language: string;
   plan_id: string;
   plan_name: string | null;
   plan_type: string | null;
@@ -51,7 +54,7 @@ interface SubscriberRow {
 
 const rows = businessDb.prepare(`
   SELECT
-    s.phone, s.name, s.email, s.customer_tier,
+    s.phone, s.name, s.gender, s.email, s.customer_tier, s.preferred_language,
     s.plan_id, p.name as plan_name, p.plan_type,
     s.status, s.balance, s.household_id, s.region,
     s.activated_at, s.contract_end_date, s.overdue_days
@@ -191,6 +194,28 @@ for (const row of rows) {
       target_entity_type: 'party',
       target_entity_id: partyId,
       link_type: 'imported',
+    }).onConflictDoNothing();
+
+    // 9. customer_profile — 基础画像（含 gender、tier、language 等）
+    await db.insert(cdpCustomerProfiles).values({
+      customer_profile_id: crypto.randomUUID(),
+      tenant_id: TENANT_ID,
+      party_id: partyId,
+      basic_profile_json: JSON.stringify({
+        gender: row.gender,
+        customer_tier: row.customer_tier,
+        preferred_language: row.preferred_language,
+        region: row.region,
+      }),
+      contact_profile_json: JSON.stringify({
+        phone: row.phone,
+        email: row.email,
+      }),
+      service_profile_json: JSON.stringify({
+        plan_id: row.plan_id,
+        plan_name: row.plan_name,
+        plan_type: row.plan_type,
+      }),
     }).onConflictDoNothing();
 
     created++;

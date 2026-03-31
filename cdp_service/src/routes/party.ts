@@ -10,6 +10,7 @@ import {
   cdpServiceSubscriptions,
   cdpCustomerAccounts,
   cdpPartySubscriptionRelations,
+  cdpCustomerProfiles,
   eq,
   and,
 } from '../db';
@@ -91,7 +92,7 @@ router.get('/:partyId', async (c) => {
 router.get('/:partyId/context', async (c) => {
   const partyId = c.req.param('partyId');
 
-  const [partyRows, identities, contacts, relations] = await Promise.all([
+  const [partyRows, identities, contacts, relations, profileRows] = await Promise.all([
     db.select().from(cdpParties).where(eq(cdpParties.party_id, partyId)).limit(1),
     db.select().from(cdpPartyIdentities).where(
       and(eq(cdpPartyIdentities.party_id, partyId), eq(cdpPartyIdentities.status, 'active')),
@@ -132,6 +133,7 @@ router.get('/:partyId/context', async (c) => {
           eq(cdpPartySubscriptionRelations.status, 'active'),
         ),
       ),
+    db.select().from(cdpCustomerProfiles).where(eq(cdpCustomerProfiles.party_id, partyId)).limit(1),
   ]);
 
   if (partyRows.length === 0) {
@@ -143,6 +145,7 @@ router.get('/:partyId/context', async (c) => {
     identities,
     contact_points: contacts,
     subscriptions: relations,
+    profile: profileRows[0] ?? null,
   });
 });
 

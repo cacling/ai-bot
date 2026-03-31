@@ -6,9 +6,7 @@ import { Hono } from 'hono';
 import { createBunWebSocket } from 'hono/bun';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { eq } from 'drizzle-orm';
-import { businessDb } from '../db';
-import { subscribers, plans } from '../db/schema';
+import { getSubscriberInfo } from '../services/cdp-client';
 import { textToSpeech } from '../services/tts';
 import { translateText } from '../services/translate-lang';
 import { t, TOOL_LABELS } from '../services/i18n';
@@ -37,22 +35,9 @@ You MUST respond ONLY in English for this entire conversation. All spoken respon
 When calling tools that accept a \`lang\` parameter (such as diagnose_network, diagnose_app), always pass \`lang: "en"\` to receive English diagnostic output.`;
 
 async function fetchSubscriberInfo(phone: string): Promise<{ name: string; gender: string; planName: string } | null> {
-  try {
-    const rows = await businessDb
-      .select({ name: subscribers.name, gender: subscribers.gender, planId: subscribers.plan_id })
-      .from(subscribers)
-      .where(eq(subscribers.phone, phone))
-      .limit(1);
-    if (!rows.length) return null;
-    const planRows = await businessDb
-      .select({ name: plans.name })
-      .from(plans)
-      .where(eq(plans.plan_id, rows[0].planId))
-      .limit(1);
-    return { name: rows[0].name, gender: rows[0].gender, planName: planRows[0]?.name ?? '' };
-  } catch {
-    return null;
-  }
+  const info = await getSubscriberInfo(phone);
+  if (!info) return null;
+  return { name: info.name, gender: info.gender, planName: info.planName };
 }
 
 function buildVoicePrompt(phone: string, lang: 'zh' | 'en' = 'zh', subscriberName?: string, planName?: string, gender?: string): string {

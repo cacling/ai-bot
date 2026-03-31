@@ -4,12 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:user-info": "node --import tsx/esm src/services/user_info_service.ts",
-    "dev:business": "node --import tsx/esm src/services/business_service.ts",
-    "dev:diagnosis": "node --import tsx/esm src/services/diagnosis_service.ts",
-    "dev:outbound": "node --import tsx/esm src/services/outbound_service.ts",
-    "dev:account": "node --import tsx/esm src/services/account_service.ts",
-    "dev:all": "node --import tsx/esm src/all.ts",
+    "dev": "node --import tsx/esm src/services/internal_service.ts",
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "bun test tests/"
