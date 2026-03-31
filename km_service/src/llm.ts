@@ -2,7 +2,8 @@
  * LLM 配置 — KM Service 独立的模型实例
  *
  * 读取与主后端相同的环境变量，创建独立的 provider/model 实例。
- * Thinking 模式需要 DashScope reasoning_content → <think> 标签转换。
+ * 支持 Qwen（DashScope）和 OpenAI（GPT-5.4）两套 provider，
+ * 通过 getSkillCreatorModels(provider) 按需选择。
  */
 import { createOpenAI } from '@ai-sdk/openai';
 import { wrapLanguageModel, extractReasoningMiddleware, type LanguageModelV1 } from 'ai';
@@ -16,25 +17,26 @@ export const chatModel: LanguageModelV1 = siliconflow(
   process.env.SILICONFLOW_CHAT_MODEL ?? 'Qwen/Qwen2.5-72B-Instruct'
 );
 
-const skillCreatorProvider = createOpenAI({
+// ══════════════════════════════════════════════════════════════════════════════
+// Skill Creator — Qwen（DashScope）
+// ══════════════════════════════════════════════════════════════════════════════
+
+const qwenProvider = createOpenAI({
   baseURL: process.env.SKILL_CREATOR_BASE_URL ?? process.env.SILICONFLOW_BASE_URL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   apiKey: process.env.SKILL_CREATOR_API_KEY ?? process.env.SILICONFLOW_API_KEY ?? '',
 });
 
-export const skillCreatorModel: LanguageModelV1 = skillCreatorProvider(
+const qwenModel: LanguageModelV1 = qwenProvider(
   process.env.SKILL_CREATOR_MODEL ?? 'qwen3-max'
 );
 
-// 视觉模型（图片解析专用）
-export const skillCreatorVisionModel: LanguageModelV1 = skillCreatorProvider(
+const qwenVisionModel: LanguageModelV1 = qwenProvider(
   process.env.SKILL_CREATOR_VISION_MODEL ?? process.env.SKILL_CREATOR_MODEL ?? 'qwen3-max'
 );
 
-// ── Thinking 模式 ───────────────────────────────────────────────────────────
-// DashScope 的 reasoning_content 是独立字段（非流式在 message.reasoning_content，
-// 流式在 delta.reasoning_content），需要转换为 <think> 标签包裹到 content 中，
+// DashScope 的 reasoning_content 是独立字段，需要转换为 <think> 标签
 // 以便 extractReasoningMiddleware 能正确提取。
-const skillCreatorThinkingProvider = createOpenAI({
+const qwenThinkingProvider = createOpenAI({
   baseURL: process.env.SKILL_CREATOR_BASE_URL ?? process.env.SILICONFLOW_BASE_URL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1',
   apiKey: process.env.SKILL_CREATOR_API_KEY ?? process.env.SILICONFLOW_API_KEY ?? '',
   fetch: (async (url: RequestInfo | URL, init: RequestInit | undefined) => {
@@ -134,7 +136,59 @@ const skillCreatorThinkingProvider = createOpenAI({
   }) as typeof fetch,
 });
 
-export const skillCreatorThinkingModel: LanguageModelV1 = wrapLanguageModel({
-  model: skillCreatorThinkingProvider(process.env.SKILL_CREATOR_MODEL ?? 'qwen3-max'),
+const qwenThinkingModel: LanguageModelV1 = wrapLanguageModel({
+  model: qwenThinkingProvider(process.env.SKILL_CREATOR_MODEL ?? 'qwen3-max'),
   middleware: extractReasoningMiddleware({ tagName: 'think' }),
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Skill Creator — OpenAI（GPT-5.4）
+// ══════════════════════════════════════════════════════════════════════════════
+
+const openaiProvider = createOpenAI({
+  baseURL: process.env.SKILL_CREATOR_OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
+  apiKey: process.env.SKILL_CREATOR_OPENAI_API_KEY ?? '',
+});
+
+const openaiModel: LanguageModelV1 = openaiProvider(
+  process.env.SKILL_CREATOR_OPENAI_MODEL ?? 'gpt-5.4-2026-03-05'
+);
+
+const openaiVisionModel: LanguageModelV1 = openaiProvider(
+  process.env.SKILL_CREATOR_OPENAI_VISION_MODEL ?? process.env.SKILL_CREATOR_OPENAI_MODEL ?? 'gpt-5.4-2026-03-05'
+);
+
+// GPT-5.4 原生支持 reasoning.effort，@ai-sdk/openai 已内置适配，
+// 无需 DashScope 那套 reasoning_content → <think> 转换。
+const openaiThinkingModel: LanguageModelV1 = wrapLanguageModel({
+  model: openaiProvider(process.env.SKILL_CREATOR_OPENAI_MODEL ?? 'gpt-5.4-2026-03-05', {
+    reasoningEffort: 'high',
+  }),
+  middleware: extractReasoningMiddleware({ tagName: 'think' }),
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Provider 选择
+// ══════════════════════════════════════════════════════════════════════════════
+
+export type SkillCreatorProvider = 'qwen' | 'openai';
+
+interface SkillCreatorModels {
+  model: LanguageModelV1;
+  thinkingModel: LanguageModelV1;
+  visionModel: LanguageModelV1;
+}
+
+const modelsMap: Record<SkillCreatorProvider, SkillCreatorModels> = {
+  qwen: { model: qwenModel, thinkingModel: qwenThinkingModel, visionModel: qwenVisionModel },
+  openai: { model: openaiModel, thinkingModel: openaiThinkingModel, visionModel: openaiVisionModel },
+};
+
+export function getSkillCreatorModels(provider: SkillCreatorProvider = 'qwen'): SkillCreatorModels {
+  return modelsMap[provider] ?? modelsMap.qwen;
+}
+
+// 向后兼容：保留原有导出名（默认 qwen）
+export const skillCreatorModel = qwenModel;
+export const skillCreatorThinkingModel = qwenThinkingModel;
+export const skillCreatorVisionModel = qwenVisionModel;

@@ -23,6 +23,7 @@ node_modules/
 dist/
 build/
 .vite/
+*.tsbuildinfo
 
 # 测试产生的临时文件
 backend/skills/.sandbox/
@@ -31,3 +32,6 @@ backend/skills/biz-skills/test-skill-*/
 # 测试产物
 **/test-results/
 **/playwright-report/
+
+# KM E2E 测试的 npm lock（npx playwright 产生的副作用）
+km_service/frontend/tests/e2e/package-lock.json
