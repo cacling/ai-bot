@@ -46,6 +46,68 @@ app.route('/api', mockDataRoutes);
 // Mount compliance routes: GET/POST/DELETE /api/compliance/keywords, POST /api/compliance/check
 app.route('/api/compliance', complianceRoutes);
 
+// ── 技能测试 — Agent 调用接口 ────────────────────────────────────────────────
+// km_service 的技能测试通过此接口调用 backend Agent 引擎
+app.post('/api/test/run-agent', async (c) => {
+  const body = await c.req.json<{
+    message: string;
+    history?: Array<{ role: string; content: string }>;
+    phone?: string;
+    lang?: 'zh' | 'en';
+    subscriberName?: string;
+    planName?: string;
+    subscriberGender?: string;
+    overrideSkillsDir?: string;
+    useMock?: boolean;
+    skillContent?: string;
+    skillName?: string;
+    sessionId?: string;
+  }>();
+  if (!body.message) return c.json({ error: 'message 不能为空' }, 400);
+
+  try {
+    logger.info('test', 'run_agent_start', {
+      message_len: body.message.length,
+      history_len: body.history?.length ?? 0,
+      skill: body.skillName,
+      override_dir: body.overrideSkillsDir,
+    });
+    const result = await runAgent(
+      body.message,
+      (body.history ?? []) as import('ai').CoreMessage[],
+      body.phone ?? '13800000001',
+      body.lang ?? 'zh',
+      undefined, // onDiagramUpdate
+      undefined, // onTextDelta
+      body.subscriberName,
+      body.planName,
+      body.subscriberGender,
+      body.overrideSkillsDir,
+      {
+        useMock: body.useMock !== false,
+        skillContent: body.skillContent,
+        skillName: body.skillName,
+        sessionId: body.sessionId,
+      },
+    );
+    logger.info('test', 'run_agent_done', {
+      text_len: result.text.length,
+      has_card: !!result.card,
+      tool_count: result.toolRecords?.length ?? 0,
+    });
+    return c.json({
+      text: result.text,
+      card: result.card ?? null,
+      skill_diagram: result.skill_diagram ?? null,
+      toolRecords: result.toolRecords ?? [],
+      transferData: result.transferData ?? null,
+    });
+  } catch (err) {
+    logger.error('test', 'run_agent_error', { error: String(err) });
+    return c.json({ error: `Agent 执行失败: ${String(err)}` }, 500);
+  }
+});
+
 // ── KM Service Proxy ─────────────────────────────────────────────────────────
 // Routes for KM, MCP, Skills, Sandbox, etc. are served by km_service (port 18010).
 // In production, the frontend proxy sends these directly to km_service.

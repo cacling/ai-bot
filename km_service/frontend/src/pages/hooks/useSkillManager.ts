@@ -6,6 +6,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+// SSE 长连接直连 km_service，绕过 Vite dev proxy（proxy 会缓冲 SSE 导致进度事件延迟）
+const KM_DIRECT_URL = 'http://127.0.0.1:18010';
+
 // ── 类型 ──────────────────────────────────────────────────────────────────────
 
 export interface SkillMeta {
@@ -578,7 +581,8 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
           formData.append('enable_thinking', showThinking ? 'true' : 'false');
           formData.append('provider', provider);
           formData.append('lang', lang);
-          res = await fetch('/api/skill-creator/chat', { method: 'POST', body: formData, signal: abortCtrl.signal });
+          // 大图 SSE 直连 km_service，绕过 Vite proxy（proxy 缓冲会导致进度事件无法实时推送）
+          res = await fetch(`${KM_DIRECT_URL}/api/skill-creator/chat`, { method: 'POST', body: formData, signal: abortCtrl.signal });
         } else {
           // 无图片时用 JSON（现有逻辑）
           res = await fetch('/api/skill-creator/chat', {
@@ -635,7 +639,11 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
               break;
             }
 
-            buffer += decoder.decode(value, { stream: true });
+            const chunk = decoder.decode(value, { stream: true });
+            if (sseEventCount === 0 || chunk.includes('vision_progress') || chunk.includes('vision_result') || chunk.includes('"done"')) {
+              console.log(`[skill-creator] SSE chunk received: ${chunk.length} bytes, events_so_far=${sseEventCount}, elapsed=${Math.round(performance.now() - streamStartTs)}ms`);
+            }
+            buffer += chunk;
             const parts = buffer.split('\n\n');
             buffer = parts.pop() ?? '';
 
@@ -663,6 +671,9 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
                 }
 
                 if (data.type === 'vision_progress') {
+                  console.log(`[skill-creator] vision_progress: step=${data.step} percent=${data.overall_percent}% elapsed=${data.elapsed_ms}ms`, {
+                    time_since_stream_start_ms: Math.round(performance.now() - streamStartTs),
+                  });
                   // 大图处理进度：更新独立的 visionTask 状态
                   setVisionTask((prev) => ({
                     status: 'processing',

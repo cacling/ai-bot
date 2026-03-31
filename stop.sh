@@ -6,6 +6,7 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GRN='\033[0;32m'; RED='\033[0;31m'; BLU='\033[0;34m'; NC='\033[0m'
 log()  { echo -e "${BLU}[$(date '+%H:%M:%S')]${NC} $*"; }
 ok()   { echo -e "  ${GRN}✓${NC} $*"; }
+fail() { echo -e "  ${RED}✗${NC} $*"; }
 
 # ── 加载 .env 端口配置 ─────────────────────────────────────────────────────
 if [[ -f "$BASE_DIR/.env" ]]; then
@@ -28,7 +29,16 @@ kill_port() {
   pids=$(lsof -ti :"$port" 2>/dev/null) || true
   if [[ -n "$pids" ]]; then
     echo "$pids" | xargs kill -9 2>/dev/null || true
-    ok "端口 $port 已释放"
+    # 等待端口真正释放（最多 5 秒）
+    for _ in $(seq 1 50); do
+      lsof -ti :"$port" >/dev/null 2>&1 || break
+      sleep 0.1
+    done
+    if lsof -ti :"$port" >/dev/null 2>&1; then
+      fail "端口 $port 释放超时"
+    else
+      ok "端口 $port 已释放"
+    fi
   else
     echo "  - 端口 $port 无进程"
   fi
@@ -48,10 +58,10 @@ for port in 5174 5175 5176 5177 5178; do
   [[ -n "$pids" ]] && echo "$pids" | xargs kill -9 2>/dev/null && ok "端口 $port 已释放" || true
 done
 
-# 杀掉 start.sh 的 wrapper 循环
+# 杀掉 start.sh 的 wrapper 循环（用 kill -9 确保死透）
 wrapper_pids=$(pgrep -f "bash.*start.sh" 2>/dev/null) || true
 if [[ -n "$wrapper_pids" ]]; then
-  echo "$wrapper_pids" | xargs kill 2>/dev/null || true
+  echo "$wrapper_pids" | xargs kill -9 2>/dev/null || true
   ok "start.sh wrapper 进程已停止"
 fi
 

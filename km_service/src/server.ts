@@ -4,6 +4,7 @@
  * 提供知识文档、候选、审批、资产、MCP 管理、Skills 管理的 REST API
  */
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
 import kmRoutes from "./routes/index";
 import mcpRoutes from "./mcp/index";
@@ -19,6 +20,14 @@ import toolBindingsRoutes from "./skills/tool-bindings";
 
 export function createApp() {
   const app = new Hono();
+
+  // CORS：允许前端 dev server 直连（绕过 Vite proxy 的 SSE 缓冲问题）
+  app.use('/api/skill-creator/*', cors({
+    origin: (origin) => origin ?? '*',
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['Content-Type'],
+    exposeHeaders: ['Content-Type', 'X-Accel-Buffering'],
+  }));
 
   app.get("/health", (c) => c.json({
     status: "ok",

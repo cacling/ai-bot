@@ -59,16 +59,25 @@ kill_port() {
   local port=$1
   local pids
   pids=$(lsof -ti :"$port" 2>/dev/null) || true
-  [[ -n "$pids" ]] && echo "$pids" | xargs kill -9 2>/dev/null || true
+  if [[ -n "$pids" ]]; then
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+    # 等待端口释放（最多 5 秒）
+    for _ in $(seq 1 50); do
+      lsof -ti :"$port" >/dev/null 2>&1 || break
+      sleep 0.1
+    done
+  fi
 }
 
 # ── 退出清理 ────────────────────────────────────────────────────────────────
 cleanup() {
   echo ""
   log "${YEL}正在停止所有服务...${NC}"
+  # 先杀 wrapper 循环（防止它们重启子进程）
   for pid in "${WRAPPER_PIDS[@]}"; do
-    kill "$pid" 2>/dev/null || true
+    kill -9 "$pid" 2>/dev/null || true
   done
+  # 再杀端口上的进程
   for port in "${ALL_PORTS[@]}"; do
     kill_port "$port"
   done
@@ -254,16 +263,34 @@ fi
 # 3. 启动服务
 # ════════════════════════════════════════════════════════════════════════════
 
+MAX_RESTARTS=5
+RESTART_WINDOW=60  # 秒，在此窗口内的连续失败才计入重启次数
+
 start_service() {
   local name="$1" dir="$2" cmd="$3"
   local logfile="${LOG_DIR}/${name}.log"
   (
     set +e
+    local fail_count=0
+    local window_start
+    window_start=$(date +%s)
     while true; do
       echo "[$(date '+%H:%M:%S')] ▶ Starting ${name}..." >> "$logfile"
       cd "$dir" && eval "$cmd" >> "$logfile" 2>&1
       EXIT_CODE=$?
-      echo "[$(date '+%H:%M:%S')] ⚠ ${name} exited (code=${EXIT_CODE}), restarting in ${RESTART_DELAY}s..." >> "$logfile"
+      local now
+      now=$(date +%s)
+      # 如果运行时间超过窗口，说明之前是正常运行后才退出，重置计数
+      if (( now - window_start > RESTART_WINDOW )); then
+        fail_count=0
+        window_start=$now
+      fi
+      fail_count=$((fail_count + 1))
+      if (( fail_count >= MAX_RESTARTS )); then
+        echo "[$(date '+%H:%M:%S')] ✗ ${name} 在 ${RESTART_WINDOW}s 内连续失败 ${fail_count} 次，停止重启" >> "$logfile"
+        break
+      fi
+      echo "[$(date '+%H:%M:%S')] ⚠ ${name} exited (code=${EXIT_CODE}), restarting in ${RESTART_DELAY}s... (${fail_count}/${MAX_RESTARTS})" >> "$logfile"
       sleep "$RESTART_DELAY"
     done
   ) &

@@ -1554,8 +1554,10 @@ skillCreator.post('/chat', async (c) => {
       return new Response(sseStream, {
         headers: {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-cache, no-transform',
           'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',         // nginx/proxy 禁止缓冲
+          'Content-Encoding': 'identity',     // 禁止压缩（压缩会导致缓冲）
         },
       });
     } catch (err) {

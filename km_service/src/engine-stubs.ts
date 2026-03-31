@@ -266,7 +266,7 @@ export const SOP_ENFORCEMENT_SUFFIX = `
 
 // ── runAgent proxy ───────────────────────────────────────────────────────────
 
-const BACKEND_BASE = process.env.BACKEND_URL ?? 'http://localhost:18001';
+const BACKEND_BASE = process.env.BACKEND_URL ?? `http://localhost:${process.env.BACKEND_PORT ?? 18472}`;
 
 interface AgentResult {
   text: string;
@@ -305,7 +305,7 @@ export async function runAgent(
   }
 
   try {
-    const res = await fetch(`${BACKEND_BASE}/api/sandbox/run-agent`, {
+    const res = await fetch(`${BACKEND_BASE}/api/test/run-agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
