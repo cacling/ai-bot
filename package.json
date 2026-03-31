@@ -10,6 +10,7 @@
     "work_order_service/frontend",
     "km_service",
     "km_service/frontend",
+    "cdp_service",
     "packages/*"
   ],
   "scripts": {

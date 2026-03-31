@@ -45,12 +45,13 @@ BACKEND_PORT="${BACKEND_PORT:-18472}"
 KM_SERVICE_PORT="${KM_SERVICE_PORT:-18010}"
 MOCK_APIS_PORT="${MOCK_APIS_PORT:-18008}"
 WORK_ORDER_PORT="${WORK_ORDER_PORT:-18009}"
+CDP_SERVICE_PORT="${CDP_SERVICE_PORT:-18020}"
 MCP_INTERNAL_PORT="${MCP_INTERNAL_PORT:-18003}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 MCP_PORTS=("$MCP_INTERNAL_PORT")
 MCP_SERVICES=("internal_service")
 MCP_LABELS=("内部服务")
-ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$FRONTEND_PORT")
+ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$CDP_SERVICE_PORT" "$FRONTEND_PORT")
 
 # ── PID 记录 ────────────────────────────────────────────────────────────────
 WRAPPER_PIDS=()
@@ -133,6 +134,10 @@ log "km_service: bun install"
 cd "$BASE_DIR/km_service" && "$BUN" install 2>&1 | tail -3
 ok "km_service 依赖就绪"
 
+log "cdp_service: bun install"
+cd "$BASE_DIR/cdp_service" && "$BUN" install 2>&1 | tail -3
+ok "cdp_service 依赖就绪"
+
 log "frontend: bun install"
 cd "$BASE_DIR/frontend" && "$BUN" install 2>&1 | tail -3
 ok "frontend 依赖就绪"
@@ -147,8 +152,9 @@ export SQLITE_PATH="$BASE_DIR/data/km.db"
 export PLATFORM_DB_PATH="$BASE_DIR/data/platform.db"
 export BUSINESS_DB_PATH="$BASE_DIR/data/business.db"
 export WORKORDER_DB_PATH="$BASE_DIR/data/workorder.db"
+export CDP_DB_PATH="$BASE_DIR/data/cdp.db"
 
-# Schema 同步（4 DB：telecom/platform/business/workorder）
+# Schema 同步（5 DB：telecom/platform/business/workorder/cdp）
 log "同步数据库 Schema..."
 
 # 1) backend schema → km.db (platform + km 表)
@@ -181,7 +187,11 @@ BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" drizzle-kit push --config drizzle-bu
 cd "$BASE_DIR/backend"
 WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
 
-ok "数据库 Schema 就绪（km.db + business.db + workorder.db）"
+# 5) cdp_service schema → cdp.db
+cd "$BASE_DIR/cdp_service"
+CDP_DB_PATH="$CDP_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+
+ok "数据库 Schema 就绪（km.db + business.db + workorder.db + cdp.db）"
 
 # 数据初始化
 if [[ "$RESET_MODE" == true ]]; then
@@ -189,7 +199,7 @@ if [[ "$RESET_MODE" == true ]]; then
   cd "$BASE_DIR/backend"
 
   # 删除所有 DB + WAL/SHM
-  for dbfile in km platform business workorder; do
+  for dbfile in km platform business workorder cdp; do
     rm -f "$BASE_DIR/data/${dbfile}.db" "$BASE_DIR/data/${dbfile}.db-wal" "$BASE_DIR/data/${dbfile}.db-shm"
   done
   rm -f "$BASE_DIR/backend/data/km.db" "$BASE_DIR/backend/data/km.db-wal" "$BASE_DIR/backend/data/km.db-shm"
@@ -219,23 +229,21 @@ if [[ "$RESET_MODE" == true ]]; then
   done
   ok "非默认技能清理完成"
 
-  # 清理 .versions/：每个 skill 只保留最新 2 个版本
+  # 清理 .versions/：reset 模式下只保留 v1（seed 只创建 v1）
   if [[ -d "$VERSIONS_DIR" ]]; then
     for skill_dir in "$VERSIONS_DIR"/*/; do
       [[ ! -d "$skill_dir" ]] && continue
       skill_name=$(basename "$skill_dir")
-      # 列出版本目录，按版本号排序（v1, v2, v3...），删除最旧的（只保留最新2个）
-      versions=($(ls -d "${skill_dir}"v* 2>/dev/null | sort -t'v' -k2 -n))
-      count=${#versions[@]}
-      if [[ $count -gt 2 ]]; then
-        to_delete=$((count - 2))
-        for ((i=0; i<to_delete; i++)); do
-          rm -rf "${versions[$i]}"
-          ok "删除 ${skill_name}/$(basename ${versions[$i]})"
-        done
-      fi
+      for vdir in "${skill_dir}"v*/; do
+        [[ ! -d "$vdir" ]] && continue
+        vname=$(basename "$vdir")
+        if [[ "$vname" != "v1" ]]; then
+          rm -rf "$vdir"
+          ok "删除 ${skill_name}/${vname}"
+        fi
+      done
     done
-    ok "版本快照清理完成（每个 skill 保留最新 2 个版本）"
+    ok "版本快照清理完成（每个 skill 仅保留 v1）"
   fi
 
   # 删除所有 .draft 文件
@@ -248,14 +256,17 @@ if [[ "$RESET_MODE" == true ]]; then
   cd "$BASE_DIR/km_service" && "$BUN" drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" drizzle-kit push --config drizzle-business.config.ts 2>&1 | tail -1
   cd "$BASE_DIR/backend" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
+  cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" run db:seed 2>&1 | tail -5
   cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
+  cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   ok "数据已重置为初始状态"
 else
   # 正常模式：upsert，保留用户数据
   log "写入/更新初始数据..."
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" run db:seed 2>&1 | tail -5
   cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
+  cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   ok "初始数据就绪"
 fi
 
@@ -319,6 +330,10 @@ start_service "work-order" "$BASE_DIR/work_order_service" \
 start_service "km-service" "$BASE_DIR/km_service" \
   "$BUN src/server.ts"
 
+# CDP Service (客户数据平台，使用 bun:sqlite 需 bun 运行时)
+start_service "cdp-service" "$BASE_DIR/cdp_service" \
+  "CDP_SERVICE_PORT=$CDP_SERVICE_PORT CDP_DB_PATH=$CDP_DB_PATH $BUN src/server.ts"
+
 # Backend
 start_service "backend" "$BASE_DIR/backend" "PORT=$BACKEND_PORT $BUN src/index.ts"
 
@@ -345,6 +360,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 if [[ "$READY" == true ]]; then
   ok "Backend      → http://127.0.0.1:${BACKEND_PORT}"
   ok "KM Service   → http://127.0.0.1:${KM_SERVICE_PORT}"
+  ok "CDP Service  → http://127.0.0.1:${CDP_SERVICE_PORT}"
   ok "Frontend     → http://localhost:${FRONTEND_PORT}"
 
   # 检查每个 MCP 服务

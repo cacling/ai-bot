@@ -10,6 +10,7 @@
     "./schema/platform": "./src/schema/platform.ts",
     "./schema/workorder": "./src/schema/workorder.ts",
     "./schema/km": "./src/schema/km.ts",
+    "./schema/cdp": "./src/schema/cdp.ts",
     "./env": "./src/env.ts"
   },
   "scripts": {
