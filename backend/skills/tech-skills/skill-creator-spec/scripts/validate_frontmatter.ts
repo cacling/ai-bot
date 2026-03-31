@@ -2,8 +2,8 @@
  * validate_frontmatter.ts
  * 校验 SKILL.md 的 YAML frontmatter 完整性和格式
  */
-import type { ValidationCheck, ParsedFrontmatter } from './types.ts';
-import { VALID_MODES, VALID_TRIGGERS, VALID_CHANNELS } from './types.ts';
+import type { ValidationCheck, ParsedFrontmatter } from './types';
+import { VALID_MODES, VALID_TRIGGERS, VALID_CHANNELS } from './types';
 
 const SEMVER_RE = /^\d+\.\d+\.\d+$/;
 const SKILL_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;

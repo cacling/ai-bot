@@ -2,8 +2,8 @@
  * detect_asset_need.ts
  * 检测技能是否需要 assets 回复模板（同一操作工具可能被多次调用）
  */
-import type { ValidationCheck, DraftInput } from './types.ts';
-import { extractMermaidBlock, parseStateDiagram } from './validate_statediagram.ts';
+import type { ValidationCheck, DraftInput } from './types';
+import { extractMermaidBlock, parseStateDiagram } from './validate_statediagram';
 
 /** 查询类工具前缀——这些工具被多次调用是正常的，不需要 assets */
 const QUERY_PREFIXES = ['query_', 'check_', 'diagnose_', 'get_', 'list_', 'search_', 'verify_'];

@@ -320,6 +320,7 @@ cd frontend/tests/unittest && npx vitest run
 cd frontend/tests/unittest && npx vitest run --coverage
 
 # E2E 测试（需先启动服务，耗时较长）
+# 规范详见 e2e-conventions.md
 # 先用项目根目录 ./start.sh 启动全栈服务
 cd frontend/tests/e2e && npx playwright test
 

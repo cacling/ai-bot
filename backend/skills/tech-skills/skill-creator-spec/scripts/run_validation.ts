@@ -2,12 +2,12 @@
  * run_validation.ts
  * 技能草稿校验汇总入口
  */
-import type { ValidationCheck, ValidationResult, DraftInput, SkillMode } from './types.ts';
-import { validateFrontmatter, parseFrontmatter, extractFrontmatterRaw } from './validate_frontmatter.ts';
-import { validateSections } from './validate_sections.ts';
-import { validateStatediagram } from './validate_statediagram.ts';
-import { validateRefs } from './validate_refs.ts';
-import { detectAssetNeed } from './detect_asset_need.ts';
+import type { ValidationCheck, ValidationResult, DraftInput, SkillMode } from './types';
+import { validateFrontmatter, parseFrontmatter, extractFrontmatterRaw } from './validate_frontmatter';
+import { validateSections } from './validate_sections';
+import { validateStatediagram } from './validate_statediagram';
+import { validateRefs } from './validate_refs';
+import { detectAssetNeed } from './detect_asset_need';
 
 /** 从 frontmatter 中提取 mode，用于状态图校验 */
 function extractMode(skillMd: string): SkillMode {

@@ -4,10 +4,33 @@
  * 提取、高亮 mermaid 图表，支持 sequenceDiagram（rect）和 stateDiagram（classDef）。
  */
 
+const CUSTOMER_GUIDANCE_SECTION_RE = /^##\s+客户引导状态图\s*$/m;
+
+/**
+ * Extract the primary mermaid block from SKILL.md content.
+ * Prefers the `## 客户引导状态图` section; falls back to the first mermaid block in the document.
+ */
+export function extractPrimaryMermaidBlock(markdown: string): string | null {
+  const sectionMatch = CUSTOMER_GUIDANCE_SECTION_RE.exec(markdown);
+  if (sectionMatch) {
+    const bodyStart = sectionMatch.index + sectionMatch[0].length;
+    const nextHeadingRe = /^##\s+/gm;
+    nextHeadingRe.lastIndex = bodyStart;
+    const nextHeading = nextHeadingRe.exec(markdown);
+    const sectionEnd = nextHeading ? nextHeading.index : markdown.length;
+    const sectionBody = markdown.slice(bodyStart, sectionEnd);
+    const scoped = sectionBody.match(/```mermaid\s*\r?\n([\s\S]*?)```/);
+    if (scoped) return scoped[1];
+  }
+
+  const fallback = markdown.match(/```mermaid\s*\r?\n([\s\S]*?)```/);
+  return fallback ? fallback[1] : null;
+}
+
 /** Extract the first ```mermaid ... ``` block from markdown (with label sanitization). */
 export function extractMermaidFromContent(markdown: string): string | null {
-  const match = markdown.match(/```mermaid\r?\n([\s\S]*?)```/);
-  return match ? sanitizeStateDiagramLabels(match[1].trim()) : null;
+  const match = extractPrimaryMermaidBlock(markdown);
+  return match ? sanitizeStateDiagramLabels(match.trim()) : null;
 }
 
 /** Highlight the line annotated with `%% tool:<toolName>` (yellow). */

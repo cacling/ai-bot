@@ -8,6 +8,7 @@ import { db } from '../db';
 import { skillRegistry, skillWorkflowSpecs } from '../db/schema';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
+import { extractPrimaryMermaidBlock } from '../services/mermaid';
 
 export const SOP_ENFORCEMENT_SUFFIX = `
 
@@ -141,7 +142,7 @@ export function extractSkillMetadata(content: string): {
   const descMatch = content.match(/^description:\s*(.+)$/m);
   const modeMatch = content.match(/^\s*mode:\s*(.+)$/m);
   const tagsMatch = content.match(/^\s*tags:\s*\[([^\]]*)\]/m);
-  const mermaidMatch = content.match(/```mermaid\r?\n([\s\S]*?)```/);
+  const mermaid = extractPrimaryMermaidBlock(content);
 
   // 触发条件：提取 ## 触发条件 后面的列表项（支持普通 bullet 和带引号的列表项）
   const triggerSection = content.match(/## 触发条件\s*\n([\s\S]*?)(?=\n##|\n---|\Z)/);
@@ -178,7 +179,7 @@ export function extractSkillMetadata(content: string): {
     mode: modeMatch?.[1]?.trim() ?? 'inbound',
     triggerKeywords,
     toolNames,
-    mermaid: mermaidMatch?.[1] ?? null,
+    mermaid,
     tags,
   };
 }

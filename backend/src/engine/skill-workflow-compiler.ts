@@ -38,6 +38,8 @@ const RE_ANNOTATION_KIND = /%%\s*kind:(\w+)/g;
 const RE_ANNOTATION_GUARD = /%%\s*guard:([\w.]+)/g;
 const RE_ANNOTATION_OUTPUT = /%%\s*output:(\w+)/g;
 
+import { extractPrimaryMermaidBlock } from '../services/mermaid';
+
 const VALID_KINDS: ReadonlySet<string> = new Set<StepKind>([
   // New NodeType-aligned values
   'start', 'end', 'llm', 'classifier', 'extractor', 'retriever',
@@ -122,8 +124,7 @@ function extractAnnotations(line: string): RawAnnotation[] {
 }
 
 function extractMermaidBlock(skillMd: string): string | null {
-  const m = skillMd.match(/```mermaid\s*\n([\s\S]*?)```/);
-  return m ? m[1] : null;
+  return extractPrimaryMermaidBlock(skillMd);
 }
 
 function inferGuard(label: string): GuardType {

@@ -2,8 +2,8 @@
  * validate_sections.ts
  * 校验 SKILL.md 的章节顺序和必要章节存在性
  */
-import type { ValidationCheck } from './types.ts';
-import { REQUIRED_SECTIONS } from './types.ts';
+import type { ValidationCheck } from './types';
+import { REQUIRED_SECTIONS } from './types';
 
 interface SectionInfo {
   title: string;

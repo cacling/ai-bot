@@ -2,8 +2,8 @@
  * validate_refs.ts
  * 校验状态图中 %% ref: 和 %% tool: 注释与实际文件/工具的一致性
  */
-import type { ValidationCheck, DraftInput } from './types.ts';
-import { extractMermaidBlock, parseStateDiagram } from './validate_statediagram.ts';
+import type { ValidationCheck, DraftInput } from './types';
+import { extractMermaidBlock, parseStateDiagram } from './validate_statediagram';
 
 export function validateRefs(input: DraftInput): ValidationCheck[] {
   const checks: ValidationCheck[] = [];

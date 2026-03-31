@@ -26,6 +26,7 @@ import { logger } from '../logger';
 import { SKILLS_ROOT } from '../paths';
 import { db } from '../db';
 import { eq, and } from 'drizzle-orm';
+import { extractPrimaryMermaidBlock, findCustomerGuidanceDiagramSection } from '../skill-markdown';
 
 import { REPO_ROOT } from '../paths';
 const PROJECT_ROOT = REPO_ROOT;
@@ -70,6 +71,64 @@ app.get('/:skill/diagram-data', async (c) => {
     return c.json({ mermaid, nodeTypeMap });
   } catch (err) {
     return c.json({ error: String(err) }, 500);
+  }
+});
+
+// POST /api/skill-versions/diagram-preview — 用当前 draft SKILL.md 实时预览状态图和诊断
+app.post('/diagram-preview', async (c) => {
+  type PreviewBody = {
+    skill?: string;
+    version_no?: number | null;
+    skill_md?: string;
+    references?: Array<{ filename: string }>;
+    assets?: Array<{ filename: string }>;
+  };
+
+  const body = await c.req.json<PreviewBody>();
+  if (!body || typeof body.skill_md !== 'string') return c.json({ error: 'skill_md 必须为字符串' }, 400);
+  const skillMd = body.skill_md;
+  if (!skillMd.trim()) return c.json({ error: 'skill_md 不能为空' }, 400);
+
+  try {
+    const [{ compileWorkflow }, { stripMermaidMarkers, buildNodeTypeMap }, { runValidation }, { parseStateDiagram }] = await Promise.all([
+      import('../engine-stubs'),
+      import('../mermaid'),
+      import('../../../backend/skills/tech-skills/skill-creator-spec/scripts/run_validation'),
+      import('../../../backend/skills/tech-skills/skill-creator-spec/scripts/validate_statediagram'),
+    ]);
+
+    const skillId = body.skill?.trim() || 'skill-preview';
+    const versionNo = Number(body.version_no ?? 0) || 0;
+    const compileResult = compileWorkflow(skillMd, skillId, versionNo);
+    const validation = runValidation({
+      skill_name: skillId,
+      skill_md: skillMd,
+      references: body.references ?? [],
+      assets: body.assets ?? [],
+    });
+
+    const section = findCustomerGuidanceDiagramSection(skillMd);
+    const rawMermaid = section.mermaid ?? extractPrimaryMermaidBlock(skillMd);
+    const mermaid = rawMermaid ? stripMermaidMarkers(rawMermaid) : null;
+    const nodeTypeMap = compileResult.spec ? buildNodeTypeMap(compileResult.spec) : null;
+    const structure = rawMermaid ? parseStateDiagram(rawMermaid) : null;
+
+    return c.json({
+      mermaid,
+      nodeTypeMap,
+      section: {
+        hasSection: section.hasSection,
+        hasMermaidBlock: section.hasMermaidBlock,
+      },
+      compile: {
+        errors: compileResult.errors,
+        warnings: compileResult.warnings,
+      },
+      validation,
+      structure,
+    });
+  } catch (err) {
+    return c.json({ error: `状态图预览失败: ${String(err)}` }, 500);
   }
 });
 

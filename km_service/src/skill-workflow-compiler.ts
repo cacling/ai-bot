@@ -23,6 +23,7 @@ import {
   type GuardType,
   type CompileResult,
 } from './skill-workflow-types';
+import { extractPrimaryMermaidBlock } from './skill-markdown';
 
 // ── Regex patterns (copied from validate_statediagram.ts) ──
 
@@ -122,8 +123,7 @@ function extractAnnotations(line: string): RawAnnotation[] {
 }
 
 function extractMermaidBlock(skillMd: string): string | null {
-  const m = skillMd.match(/```mermaid\s*\n([\s\S]*?)```/);
-  return m ? m[1] : null;
+  return extractPrimaryMermaidBlock(skillMd);
 }
 
 function inferGuard(label: string): GuardType {

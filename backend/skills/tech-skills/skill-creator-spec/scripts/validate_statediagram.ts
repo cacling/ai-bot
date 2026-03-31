@@ -2,7 +2,7 @@
  * validate_statediagram.ts
  * 解析 Mermaid stateDiagram-v2 并校验分支完备性
  */
-import type { ValidationCheck, ParsedStateDiagram, StateNode, StateTransition, MermaidAnnotation, SkillMode } from './types.ts';
+import type { ValidationCheck, ParsedStateDiagram, StateNode, StateTransition, MermaidAnnotation, SkillMode } from './types';
 
 // ── Mermaid 解析 ──
 
@@ -16,6 +16,7 @@ const RE_ANNOTATION_STEP = /%%\s*step:([\w-]+)/g;
 const RE_ANNOTATION_KIND = /%%\s*kind:(\w+)/g;
 const RE_ANNOTATION_GUARD = /%%\s*guard:([\w.]+)/g;
 const RE_ANNOTATION_OUTPUT = /%%\s*output:(\w+)/g;
+import { extractPrimaryMermaidBlock as _extractPrimaryMermaidBlock } from '../../../../src/services/mermaid';
 
 /** 清理状态名：去除引号和前后空格 */
 function cleanStateName(raw: string): string {
@@ -60,8 +61,7 @@ function extractAnnotations(line: string, lineNum: number, targetState?: string)
 
 /** 提取 mermaid 代码块内容 */
 export function extractMermaidBlock(skillMd: string): string | null {
-  const m = skillMd.match(/```mermaid\s*\n([\s\S]*?)```/);
-  return m ? m[1] : null;
+  return _extractPrimaryMermaidBlock(skillMd);
 }
 
 /** 解析 stateDiagram-v2 为结构化数据 */

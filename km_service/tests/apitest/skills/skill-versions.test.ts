@@ -90,6 +90,32 @@ mock.module('../../../src/skill-workflow-compiler', () => ({
   }),
 }));
 
+// Mock validation scripts (dynamic import from backend)
+let mockValidationResult = {
+  valid: true,
+  errors: [] as Array<{ rule: string; severity: string; message: string }>,
+  warnings: [] as Array<{ rule: string; severity: string; message: string }>,
+  infos: [] as Array<{ rule: string; severity: string; message: string }>,
+};
+
+let mockParsedStructure = {
+  states: [{ name: '接收请求', isChoice: false, isNested: false, line: 2 }],
+  transitions: [{ from: '[*]', to: '接收请求', label: '用户发起咨询', annotations: [], line: 2 }],
+  annotations: [],
+  hasStart: true,
+  hasEnd: true,
+};
+
+mock.module('../../../../backend/skills/tech-skills/skill-creator-spec/scripts/run_validation', () => ({
+  runValidation: () => mockValidationResult,
+}));
+
+mock.module('../../../../backend/skills/tech-skills/skill-creator-spec/scripts/validate_statediagram', () => ({
+  parseStateDiagram: () => mockParsedStructure,
+  extractMermaidBlock: (md: string) => md.match(/```mermaid\s*\r?\n([\s\S]*?)```/)?.[1] ?? null,
+  validateStatediagram: () => [],
+}));
+
 mock.module('../../../src/engine-stubs', () => ({ ...engineStubs,
   runAgent: async () => mockRunAgentResult,
 }));
@@ -300,6 +326,124 @@ describe('POST /api/skill-versions/create-from', () => {
     expect(status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.versionNo).toBe(3);
+  });
+});
+
+// ── Diagram Preview ────────────────────────────────────────────────────────
+
+const SKILL_MD_WITH_DIAGRAM = `---
+name: bill-inquiry
+description: 查询话费账单
+metadata:
+  mode: inbound
+  channels: ["online"]
+---
+
+## 客户引导状态图
+
+\`\`\`mermaid
+stateDiagram-v2
+    [*] --> 接收请求: 用户发起咨询
+    接收请求 --> [*]: 已完成
+\`\`\`
+
+## 流程说明
+
+按步骤处理。
+`;
+
+describe('POST /api/skill-versions/diagram-preview', () => {
+  beforeEach(async () => {
+    mockValidationResult = { valid: true, errors: [], warnings: [], infos: [] };
+    mockParsedStructure = {
+      states: [{ name: '接收请求', isChoice: false, isNested: false, line: 2 }],
+      transitions: [{ from: '[*]', to: '接收请求', label: '用户发起咨询', annotations: [], line: 2 }],
+      annotations: [],
+      hasStart: true,
+      hasEnd: true,
+    };
+    await setupApp();
+  });
+
+  test('returns mermaid, compile, validation, and structure for valid SKILL.md', async () => {
+    const { status, body } = await postJSON(app, '/api/skill-versions/diagram-preview', {
+      skill: 'bill-inquiry',
+      version_no: 1,
+      skill_md: SKILL_MD_WITH_DIAGRAM,
+    });
+    expect(status).toBe(200);
+    expect(body.mermaid).toBeDefined();
+    expect(typeof body.mermaid).toBe('string');
+    expect(body.mermaid).toContain('接收请求');
+    expect(body.section).toEqual({ hasSection: true, hasMermaidBlock: true });
+    expect(body.compile).toBeDefined();
+    expect(Array.isArray(body.compile.errors)).toBe(true);
+    expect(Array.isArray(body.compile.warnings)).toBe(true);
+    expect(body.validation).toBeDefined();
+    expect(body.validation.valid).toBe(true);
+    expect(body.structure).toBeDefined();
+    expect(body.structure.hasStart).toBe(true);
+    expect(body.structure.hasEnd).toBe(true);
+  });
+
+  test('returns 400 when skill_md is missing', async () => {
+    const { status, body } = await postJSON(app, '/api/skill-versions/diagram-preview', {
+      skill: 'bill-inquiry',
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('skill_md');
+  });
+
+  test('returns 400 when skill_md is empty string', async () => {
+    const { status, body } = await postJSON(app, '/api/skill-versions/diagram-preview', {
+      skill_md: '   ',
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('skill_md');
+  });
+
+  test('returns 400 when skill_md is not a string', async () => {
+    const { status, body } = await postJSON(app, '/api/skill-versions/diagram-preview', {
+      skill_md: 12345,
+    });
+    expect(status).toBe(400);
+    expect(body.error).toContain('skill_md');
+  });
+
+  test('uses default skill id when skill param is omitted', async () => {
+    const { status, body } = await postJSON(app, '/api/skill-versions/diagram-preview', {
+      skill_md: SKILL_MD_WITH_DIAGRAM,
+    });
+    expect(status).toBe(200);
+    expect(body.mermaid).toBeDefined();
+  });
+
+  test('returns section info when no mermaid block in section', async () => {
+    const mdWithoutBlock = `---
+name: test
+---
+
+## 客户引导状态图
+
+这里没有 mermaid 代码块。
+
+## 其他章节
+`;
+    const { status, body } = await postJSON(app, '/api/skill-versions/diagram-preview', {
+      skill_md: mdWithoutBlock,
+    });
+    expect(status).toBe(200);
+    expect(body.section.hasSection).toBe(true);
+    expect(body.section.hasMermaidBlock).toBe(false);
+  });
+
+  test('returns nodeTypeMap when compile produces spec', async () => {
+    const { status, body } = await postJSON(app, '/api/skill-versions/diagram-preview', {
+      skill_md: SKILL_MD_WITH_DIAGRAM,
+    });
+    expect(status).toBe(200);
+    // The mocked compileWorkflow returns spec: { states: [] }, so buildNodeTypeMap will be called
+    expect(body.nodeTypeMap).toBeDefined();
   });
 });
 

@@ -10,6 +10,7 @@ import { eq, and } from 'drizzle-orm';
 import { db, skillRegistry, skillWorkflowSpecs } from './db';
 import { logger } from './logger';
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from './paths';
+import { extractPrimaryMermaidBlock } from './skill-markdown';
 
 // Re-export workflow types/compiler for dynamic imports
 export { compileWorkflow } from './skill-workflow-compiler';
@@ -88,7 +89,7 @@ export function extractSkillMetadata(content: string) {
   const descMatch = content.match(/^description:\s*(.+)$/m);
   const modeMatch = content.match(/^\s*mode:\s*(.+)$/m);
   const tagsMatch = content.match(/^\s*tags:\s*\[([^\]]*)\]/m);
-  const mermaidMatch = content.match(/```mermaid\r?\n([\s\S]*?)```/);
+  const mermaid = extractPrimaryMermaidBlock(content);
 
   const triggerSection = content.match(/## 触发条件\s*\n([\s\S]*?)(?=\n##|\n---|\Z)/);
   const triggerKeywords: string[] = [];
@@ -120,7 +121,7 @@ export function extractSkillMetadata(content: string) {
     mode: modeMatch?.[1]?.trim() ?? 'inbound',
     triggerKeywords,
     toolNames,
-    mermaid: mermaidMatch?.[1] ?? null,
+    mermaid,
     tags,
   };
 }
