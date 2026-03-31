@@ -36,10 +36,20 @@ mock.module(SHARED_SERVER_PATH, () => ({
 
 const _captured = new Map<string, () => McpServer>();
 
+/** Path mapping: old service paths → consolidated internal_service */
+const PATH_MAP: Record<string, string> = {
+  'src/services/user_info_service.ts': 'src/services/internal_service.ts',
+  'src/services/business_service.ts': 'src/services/internal_service.ts',
+  'src/services/diagnosis_service.ts': 'src/services/internal_service.ts',
+  'src/services/outbound_service.ts': 'src/services/internal_service.ts',
+  'src/services/account_service.ts': 'src/services/internal_service.ts',
+};
+
 export async function loadService(servicePath: string): Promise<() => McpServer> {
-  const resolved = resolve(__dirname, '../../../', servicePath);
+  const actualPath = PATH_MAP[servicePath] ?? servicePath;
+  const resolved = resolve(__dirname, '../../../', actualPath);
   await import(resolved);
-  const name = servicePath.replace(/.*\//, '').replace(/\.(ts|js)$/, '').replace(/_/g, '-');
+  const name = actualPath.replace(/.*\//, '').replace(/\.(ts|js)$/, '').replace(/_/g, '-');
   const fn = _captured.get(name);
   if (!fn) throw new Error(`Service ${name} not captured. Have: ${[..._captured.keys()]}`);
   return fn;

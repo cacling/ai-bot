@@ -5,7 +5,7 @@
  * 重构2：MCP Server = 防腐层，调用 mock_apis (demo backend)
  * 诊断逻辑已迁移到 mock_apis/src/diagnosis/，由 /api/diagnosis/* 端点执行
  */
-import { backendPost, mcpLog, startMcpHttpServer, z, McpServer, performance } from "../shared/server.js";
+import { backendPost, mcpLog, z, McpServer, performance } from "../shared/server.js";
 
 export function registerDiagnosisTools(server: McpServer): void {
   server.tool("diagnose_network", "对指定手机号进行网络故障诊断，检查信号、基站、DNS、路由等状态", {
@@ -103,11 +103,3 @@ export function registerDiagnosisTools(server: McpServer): void {
   });
 
 }
-
-function createServer(): McpServer {
-  const server = new McpServer({ name: "diagnosis-service", version: "2.0.0" });
-  registerDiagnosisTools(server);
-  return server;
-}
-
-if (import.meta.main) startMcpHttpServer("diagnosis-service", Number(process.env.PORT ?? 18005), createServer);

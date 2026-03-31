@@ -5,11 +5,11 @@
  * 各域的领域规则和工具注册逻辑仍保留在各自文件中。
  */
 import { McpServer, startMcpHttpServer } from "../shared/server.js";
-import { registerUserInfoTools } from "./user_info_service.js";
-import { registerBusinessTools } from "./business_service.js";
-import { registerDiagnosisTools } from "./diagnosis_service.js";
-import { registerOutboundTools } from "./outbound_service.js";
-import { registerAccountTools } from "./account_service.js";
+import { registerUserInfoTools } from "../tools/user_info_tools.js";
+import { registerBusinessTools } from "../tools/business_tools.js";
+import { registerDiagnosisTools } from "../tools/diagnosis_tools.js";
+import { registerOutboundTools } from "../tools/outbound_tools.js";
+import { registerAccountTools } from "../tools/account_tools.js";
 
 function createServer(): McpServer {
   const server = new McpServer({ name: "internal-service", version: "2.0.0" });

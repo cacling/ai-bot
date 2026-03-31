@@ -4,7 +4,7 @@
  *
  * 重构2：MCP Server = 防腐层，不再直查 SQLite，改为调用 mock_apis (demo backend)
  */
-import { backendGet, backendPost, mcpLog, monthLabel, startMcpHttpServer, z, McpServer, performance } from "../shared/server.js";
+import { backendGet, backendPost, mcpLog, monthLabel, z, McpServer, performance } from "../shared/server.js";
 
 // ── 领域规则（保留在 MCP Server 内，属于 Skill→Tool 的语义适配）────────────
 const OVERDUE_NORMAL_MAX = 90;
@@ -236,11 +236,3 @@ export function registerUserInfoTools(server: McpServer): void {
   });
 
 }
-
-function createServer(): McpServer {
-  const server = new McpServer({ name: "user-info-service", version: "2.0.0" });
-  registerUserInfoTools(server);
-  return server;
-}
-
-if (import.meta.main) startMcpHttpServer("user-info-service", Number(process.env.MCP_INTERNAL_PORT ?? 18003), createServer);

@@ -4,7 +4,7 @@
  *
  * 领域规则内置：PTP 日期校验、静默时段、结果分类标签、转化标签、DND 标记、SMS 类型校验
  */
-import { backendPost, mcpLog, startMcpHttpServer, z, McpServer } from "../shared/server.js";
+import { backendPost, mcpLog, z, McpServer } from "../shared/server.js";
 
 // ── 领域规则 ─────────────────────────────────────────────────────────────────
 const MAX_PTP_DAYS = 7;
@@ -189,11 +189,3 @@ export function registerOutboundTools(server: McpServer): void {
   });
 
 }
-
-function createServer(): McpServer {
-  const server = new McpServer({ name: "outbound-service", version: "1.0.0" });
-  registerOutboundTools(server);
-  return server;
-}
-
-if (import.meta.main) startMcpHttpServer("outbound-service", Number(process.env.PORT ?? 18006), createServer);

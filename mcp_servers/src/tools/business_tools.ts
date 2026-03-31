@@ -4,7 +4,7 @@
  *
  * 重构2：MCP Server = 防腐层，调用 mock_apis (demo backend)
  */
-import { backendPost, mcpLog, startMcpHttpServer, z, McpServer, performance } from "../shared/server.js";
+import { backendPost, mcpLog, z, McpServer, performance } from "../shared/server.js";
 
 export function registerBusinessTools(server: McpServer): void {
   server.tool("cancel_service", "退订用户已订阅的增值业务（如流量包、短信包等）", {
@@ -73,11 +73,3 @@ export function registerBusinessTools(server: McpServer): void {
   });
 
 }
-
-function createServer(): McpServer {
-  const server = new McpServer({ name: "business-service", version: "2.0.0" });
-  registerBusinessTools(server);
-  return server;
-}
-
-if (import.meta.main) startMcpHttpServer("business-service", Number(process.env.PORT ?? 18004), createServer);

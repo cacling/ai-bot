@@ -49,13 +49,23 @@ mock.module(SHARED_SERVER_PATH, () => ({
   BACKEND_URL: 'http://mock',
 }));
 
+/** Path mapping: old service paths → new tools paths */
+const PATH_MAP: Record<string, string> = {
+  'src/services/user_info_service.ts': 'src/services/internal_service.ts',
+  'src/services/business_service.ts': 'src/services/internal_service.ts',
+  'src/services/diagnosis_service.ts': 'src/services/internal_service.ts',
+  'src/services/outbound_service.ts': 'src/services/internal_service.ts',
+  'src/services/account_service.ts': 'src/services/internal_service.ts',
+};
+
 /** Import a service module and return its captured createServer function */
 export async function loadService(servicePath: string): Promise<() => McpServer> {
-  // Resolve relative to mcp_servers/ root
-  const resolved = require('path').resolve(__dirname, '../../', servicePath);
+  // Map old service paths to internal_service (all tools consolidated)
+  const actualPath = PATH_MAP[servicePath] ?? servicePath;
+  const resolved = require('path').resolve(__dirname, '../../', actualPath);
   await import(resolved);
-  // Service name is derived from the file name (e.g. user_info_service → user-info-service)
-  const name = servicePath.replace(/.*\//, '').replace(/\.(ts|js)$/, '').replace(/_/g, '-');
+  // internal_service registers as "internal-service"
+  const name = actualPath.replace(/.*\//, '').replace(/\.(ts|js)$/, '').replace(/_/g, '-');
   const fn = captured.get(name);
   if (!fn) throw new Error(`Service ${name} did not register via startMcpHttpServer. Captured: ${[...captured.keys()].join(', ')}`);
   return fn;

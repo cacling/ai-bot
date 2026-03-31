@@ -4,7 +4,7 @@
  *
  * 重构2：MCP Server = 防腐层，调用 mock_apis (demo backend)
  */
-import { backendGet, backendPost, mcpLog, startMcpHttpServer, z, McpServer } from "../shared/server.js";
+import { backendGet, backendPost, mcpLog, z, McpServer } from "../shared/server.js";
 
 export function registerAccountTools(server: McpServer): void {
   server.tool("verify_identity", "验证用户身份（通过短信验证码）。高风险操作前必须先验证。", {
@@ -94,11 +94,3 @@ export function registerAccountTools(server: McpServer): void {
   });
 
 }
-
-function createServer(): McpServer {
-  const server = new McpServer({ name: "account-service", version: "2.0.0" });
-  registerAccountTools(server);
-  return server;
-}
-
-if (import.meta.main) startMcpHttpServer("account-service", Number(process.env.PORT ?? 18007), createServer);
