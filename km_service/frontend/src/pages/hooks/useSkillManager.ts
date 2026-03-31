@@ -24,22 +24,31 @@ export interface SkillFileNode {
   children?: SkillFileNode[];
 }
 
+export interface VisionResult {
+  summary: string;
+  description: string;
+  mermaid: string;
+}
+
 export interface ChatMessage {
   id: number;
   role: 'user' | 'assistant' | 'system';
   text: string;
   thinking?: string | null;
   image?: string; // base64 图片预览（仅用户消息）
+  visionResult?: VisionResult;
 }
 
 export interface VisionTaskState {
   status: 'processing' | 'completed' | 'failed';
   step: string;
   stageLabel: string;
+  detailLabel: string;
   current: number;
   total: number;
   percent: number;
   elapsedMs: number;
+  etaMs: number;
   startedAt: number;
   collapsed: boolean;
 }
@@ -515,8 +524,10 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
           status: 'processing',
           step: 'uploading',
           stageLabel: '正在提交图片',
+          detailLabel: '正在上传原图并创建解析任务',
           current: 0, total: 1, percent: 0,
           elapsedMs: 0,
+          etaMs: 0,
           startedAt: Date.now(),
           collapsed: false,
         });
@@ -640,10 +651,12 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
                     status: 'processing',
                     step: data.step ?? 'trim',
                     stageLabel: data.stage_label ?? data.step ?? '',
+                    detailLabel: data.detail_label ?? data.stage_label ?? '',
                     current: data.current ?? 0,
                     total: data.total ?? 1,
                     percent: data.overall_percent ?? 0,
                     elapsedMs: data.elapsed_ms ?? 0,
+                    etaMs: data.eta_ms ?? 0,
                     startedAt: prev?.startedAt ?? Date.now(),
                     collapsed: prev?.collapsed ?? false,
                   }));
@@ -653,7 +666,12 @@ export function useSkillManager(lang: 'zh' | 'en' = 'zh') {
                   // 图片解析结果：插入一条系统消息，在 AI 回复之前展示
                   setMessages((prev) => {
                     const aiMsgIndex = prev.findIndex(m => m.id === msgId);
-                    const visionMsg: ChatMessage = { id: Date.now() - 1, role: 'system', text: data.text };
+                    const visionMsg: ChatMessage = {
+                      id: Date.now() - 1,
+                      role: 'system',
+                      text: data.text,
+                      visionResult: data.summary ? { summary: data.summary, description: data.description, mermaid: data.mermaid } : undefined,
+                    };
                     if (aiMsgIndex >= 0) {
                       const updated = [...prev];
                       updated.splice(aiMsgIndex, 0, visionMsg);

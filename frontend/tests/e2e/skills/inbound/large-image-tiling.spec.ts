@@ -37,7 +37,7 @@ async function postMultipartSSE(
     formData.append('image', new Blob([file.buffer], { type: file.type }), file.name);
   }
 
-  const res = await fetch(url, { method: 'POST', body: formData });
+  const res = await fetch(url, { method: 'POST', body: formData, signal: AbortSignal.timeout(900_000) });
   if (!res.body) return { status: res.status, events: [] };
 
   const events: Array<Record<string, unknown>> = [];
@@ -62,7 +62,7 @@ async function postMultipartSSE(
 }
 
 test.describe('large-image-tiling: 超大流程图处理', () => {
-  test.setTimeout(600_000);
+  test.setTimeout(900_000); // 大图处理需要 7-15 分钟
 
   test('TILE-01: multipart 上传大图 → 后端返回 SSE 进度 + 最终结果', async () => {
     const imageBuffer = readFileSync(IMAGE_PATH);

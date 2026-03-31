@@ -44,6 +44,7 @@ export const VisionTaskCard = memo(function VisionTaskCard({ task, onCollapse, o
         <span className="text-foreground font-medium">流程图解析 {task.percent}%</span>
         <span className="text-muted-foreground">· {task.stageLabel}</span>
         <span className="text-muted-foreground">· {formatDuration(elapsed)}</span>
+        {task.etaMs > 0 && <span className="text-muted-foreground">· 约剩 {formatDuration(task.etaMs)}</span>}
         <Button variant="ghost" size="icon-sm" className="ml-auto h-5 w-5" onClick={onCollapse}>
           <ChevronDown className="w-3 h-3" />
         </Button>
@@ -99,7 +100,7 @@ export const VisionTaskCard = memo(function VisionTaskCard({ task, onCollapse, o
           <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
           <span className="text-xs font-medium text-foreground">流程图解析中</span>
           <span className="text-[10px] text-muted-foreground ml-auto">
-            已耗时 {formatDuration(elapsed)}
+            已耗时 {formatDuration(elapsed)}{task.etaMs > 0 ? ` · 预计还需 ${formatDuration(task.etaMs)}` : ''}
           </span>
         </div>
 
@@ -127,15 +128,20 @@ export const VisionTaskCard = memo(function VisionTaskCard({ task, onCollapse, o
               label = task.stageLabel; // "分片识别 3/6"
             }
             return (
-              <div key={step.key} className={`flex items-center gap-1.5 text-[10px] ${isPending ? 'text-muted-foreground/50' : isCurrent ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
-                {isDone ? (
-                  <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-                ) : isCurrent ? (
-                  <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />
-                ) : (
-                  <Circle className="w-3 h-3 shrink-0" />
+              <div key={step.key}>
+                <div className={`flex items-center gap-1.5 text-[10px] ${isPending ? 'text-muted-foreground/50' : isCurrent ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                  {isDone ? (
+                    <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+                  ) : isCurrent ? (
+                    <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />
+                  ) : (
+                    <Circle className="w-3 h-3 shrink-0" />
+                  )}
+                  {label}
+                </div>
+                {isCurrent && task.detailLabel && task.detailLabel !== task.stageLabel && (
+                  <div className="ml-[18px] text-[10px] text-muted-foreground">{task.detailLabel}</div>
                 )}
-                {label}
               </div>
             );
           })}

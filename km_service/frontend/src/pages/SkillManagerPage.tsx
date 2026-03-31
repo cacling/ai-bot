@@ -20,8 +20,8 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import {
   Send, Bot, User, FileText, Folder, FileCode,
   ChevronRight, ChevronDown, ChevronUp, Sparkles, CheckCircle2, Plus,
-  ArrowLeft, AlertCircle, GitBranch, Search, Wrench,
-  Mic, MicOff, Loader2, FlaskConical, ImagePlus, X, ScanEye,
+  ArrowLeft, AlertCircle, Search, Wrench,
+  Mic, MicOff, Loader2, FlaskConical, ImagePlus, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,8 +37,12 @@ import { ToolCallPlanPanel } from './components/ToolCallPlanPanel';
 import { VisionTaskCard } from './components/VisionTaskCard';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { SkillDiagramWorkbench } from './components/SkillDiagramWorkbench';
+import { SkillDiagramPanel } from './components/SkillDiagramPanel';
+import { VisionResultCard } from './components/VisionResultCard';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
-import { findCustomerGuidanceDiagramSection, replaceCustomerGuidanceMermaid } from '../shared/skillMarkdown';
+import { replaceCustomerGuidanceMermaid } from '../shared/skillMarkdown';
+import { useDiagramContext } from './hooks/useDiagramContext';
+import { useWorkbenchPreview } from './hooks/useWorkbenchPreview';
 import {
   useSkillManager,
   isMdFile,
@@ -521,21 +525,7 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
   const [testMode, setTestMode] = useState<'mock' | 'real'>('mock');
   const [testDiagram, setTestDiagram] = useState<{ skill_name: string; mermaid: string; progressState?: string; nodeTypeMap?: Record<string, string> } | null>(null);
   const [diagramCollapsed, setDiagramCollapsed] = useState(false);
-  // Backend-sourced diagram data (mermaid + nodeTypeMap from compiled WorkflowSpec)
-  const [backendDiagram, setBackendDiagram] = useState<{ mermaid: string; nodeTypeMap: Record<string, string> | null } | null>(null);
-  const [backendDiagramLoading, setBackendDiagramLoading] = useState(false);
-
-  // Fetch diagram data from backend when skill changes
-  useEffect(() => {
-    if (!activeSkill?.id || activeSkill.id.startsWith('new-')) { setBackendDiagram(null); setBackendDiagramLoading(false); return; }
-    setBackendDiagram(null);
-    setBackendDiagramLoading(true);
-    fetch(`/api/skill-versions/${encodeURIComponent(activeSkill.id)}/diagram-data`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data?.mermaid) setBackendDiagram(data); else setBackendDiagram(null); })
-      .catch(() => setBackendDiagram(null))
-      .finally(() => setBackendDiagramLoading(false));
-  }, [activeSkill?.id]);
+  const [expandedDiagramOpen, setExpandedDiagramOpen] = useState(false);
   const [testPersonaId, setTestPersonaId] = useState('');
   const [testPersonaList, setTestPersonaList] = useState<Array<{ id: string; label: string; context: Record<string, unknown> }>>([]);
 
@@ -732,6 +722,33 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
       setFileDirtyMap(prev => new Map(prev).set(selectedFile.path!, true));
     }
   }, [selectedFile, updateEditorContent]);
+
+  // ── Diagram hooks ─────────────────────────────────────────────────────────
+  const isWorkbenchMode = selectedIsSkillMd && skillEditorSurface === 'diagram';
+  const workbenchPreview = useWorkbenchPreview({
+    skillMd: editorContent,
+    skillId: activeSkill?.id ?? null,
+    versionNo: viewingVersion,
+    references: referenceFiles,
+    assets: assetFiles,
+    enabled: isWorkbenchMode,
+  });
+  const diagramCtx = useDiagramContext({
+    skillId: activeSkill?.id ?? null,
+    editorContent,
+    testDiagram,
+    testingVersion,
+    selectedIsSkillMd,
+    workbenchPreview: isWorkbenchMode ? workbenchPreview.preview : undefined,
+  });
+
+  // Escape key closes fullscreen overlay
+  useEffect(() => {
+    if (!expandedDiagramOpen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpandedDiagramOpen(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [expandedDiagramOpen]);
 
   if (view === 'list') {
     return (
@@ -1098,7 +1115,7 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
 
       {/* ── 中间：主工作区（多模式）── */}
       <ResizablePanel id="center" defaultSize="60%" minSize="30%">
-      <div className="h-full flex flex-col bg-background overflow-hidden">
+      <div className="h-full flex flex-col bg-background overflow-hidden relative">
 
         {/* 中间区工具栏 */}
         <div className="h-9 border-b border-border flex items-center justify-between px-3 shrink-0">
@@ -1152,112 +1169,139 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
           </div>
         )}
 
-        {/* ── 编辑区 + 流程图（可拖动分隔） ── */}
+        {/* ── 编辑区 + 流程图 ── */}
         {centerMode === 'edit' && (() => {
-          if (selectedIsSkillMd && skillEditorSurface === 'diagram') {
+          // ── SKILL.md: 左右双栏（左编辑 + 右图表） ──
+          if (selectedIsSkillMd) {
+            const showDiagram = !!diagramCtx.mermaid || diagramCtx.isTestMode;
             return (
-              <SkillDiagramWorkbench
-                skillMd={editorContent}
-                skillId={activeSkill?.id ?? null}
-                versionNo={viewingVersion}
-                readOnly={isPublishedVersion}
-                references={referenceFiles}
-                assets={assetFiles}
-                onChangeMermaid={handleDiagramMermaidChange}
-              />
-            );
-          }
-
-          // Diagram data computed from backend API (same source as agent workstation)
-          const fallbackMermaid = backendDiagramLoading
-            ? null
-            : (findCustomerGuidanceDiagramSection(editorContent).mermaid?.replace(/\s*%%[^\n]*/gm, '').trim() ?? null);
-          const activeMermaid = testDiagram?.mermaid ?? backendDiagram?.mermaid ?? fallbackMermaid;
-          const activeNodeTypeMap = (testDiagram as any)?.nodeTypeMap ?? backendDiagram?.nodeTypeMap ?? undefined;
-          const diagramLabel = testDiagram ? testDiagram.skill_name : (selectedIsSkillMd ? activeSkill?.id : null);
-          const isTestMode = testingVersion !== null;
-          const showDiagram = !!activeMermaid || isTestMode;
-
-          return (
-            <ResizablePanelGroup orientation="vertical" className="flex-1">
-              <ResizablePanel defaultSize={showDiagram ? 60 : 100} minSize={20}>
-                <div className="h-full overflow-hidden">
-                  {fileLoading && (
-                    <div className="flex items-center justify-center h-full text-muted-foreground gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span className="text-sm">加载中…</span>
-                    </div>
-                  )}
-                  {!fileLoading && selectedFile && selectedIsMd && viewMode === 'edit' && (
-                    <Textarea
-                      className={`w-full h-full min-h-0 resize-none font-mono text-sm leading-relaxed p-4 border-none shadow-none focus-visible:ring-0 rounded-none ${isPublishedVersion ? 'bg-muted text-muted-foreground' : 'bg-background text-foreground'}`}
+              <ResizablePanelGroup orientation="horizontal" id="center-skill-dual" className="flex-1">
+                <ResizablePanel defaultSize={showDiagram ? 55 : 100} minSize={30}>
+                  {skillEditorSurface === 'diagram' ? (
+                    <SkillDiagramWorkbench
+                      skillMd={editorContent}
                       readOnly={isPublishedVersion}
-                      value={editorContent}
-                      onChange={(e) => !isPublishedVersion && handleEditorChangeTracked(e.target.value)}
-                      spellCheck={false}
+                      onChangeMermaid={handleDiagramMermaidChange}
                     />
-                  )}
-                  {!fileLoading && selectedFile && selectedIsMd && viewMode === 'preview' && (
-                    <div className="h-full overflow-y-auto px-6 py-4 prose prose-sm max-w-none">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-                    </div>
-                  )}
-                  {!fileLoading && selectedFile && !selectedIsMd && isTextFile(selectedFile.name) && (
-                    <div className="h-full overflow-auto">
-                      <CodeMirror
-                        value={editorContent}
-                        height="100%"
-                        theme={oneDark}
-                        extensions={getCodeMirrorLang(selectedFile.name) ? [getCodeMirrorLang(selectedFile.name)!] : []}
-                        onChange={isPublishedVersion ? undefined : handleEditorChangeTracked}
-                        readOnly={isPublishedVersion}
-                        basicSetup={{ lineNumbers: true, foldGutter: true }}
-                        style={{ fontSize: '13px', height: '100%' }}
-                      />
-                    </div>
-                  )}
-                  {!fileLoading && selectedFile && !selectedIsMd && !isTextFile(selectedFile.name) && (
-                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
-                      <AlertCircle size={16} />
-                      不支持预览此文件类型
-                    </div>
-                  )}
-                  {!fileLoading && !selectedFile && (
-                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                      选择左侧文件开始编辑
-                    </div>
-                  )}
-                </div>
-              </ResizablePanel>
-
-              {showDiagram && (
-                <>
-                  <ResizableHandle />
-                  <ResizablePanel defaultSize={40} minSize={15}>
-                    <div className="h-full flex flex-col overflow-hidden">
-                      <Button variant="ghost" size="sm" onClick={() => setDiagramCollapsed(prev => !prev)} className="w-full justify-start rounded-none text-xs shrink-0 border-b border-border">
-                        {diagramCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
-                        <GitBranch size={12} /> 流程图{diagramLabel ? ` — ${diagramLabel}` : ''}
-                        {testDiagram && <Badge variant="outline" className="ml-2 text-[9px] px-1 py-0">测试中</Badge>}
-                      </Button>
-                      {!diagramCollapsed && (
-                        <div className="flex-1 px-3 pb-2 overflow-auto">
-                          {activeMermaid ? (
-                            <MermaidRenderer mermaid={activeMermaid} nodeTypeMap={activeNodeTypeMap} progressState={testDiagram?.progressState} height="100%" zoom={true} autoFocus={!!testDiagram} emptyText="暂无流程图" />
-                          ) : (
-                            <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-                              {isTestMode ? '发送测试消息后展示流程图' : '当前文件无 mermaid 状态图'}
-                            </div>
-                          )}
+                  ) : (
+                    <div className="h-full overflow-hidden">
+                      {fileLoading && (
+                        <div className="flex items-center justify-center h-full text-muted-foreground gap-2">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span className="text-sm">加载中…</span>
+                        </div>
+                      )}
+                      {!fileLoading && viewMode === 'edit' && (
+                        <Textarea
+                          className={`w-full h-full min-h-0 resize-none font-mono text-sm leading-relaxed p-4 border-none shadow-none focus-visible:ring-0 rounded-none ${isPublishedVersion ? 'bg-muted text-muted-foreground' : 'bg-background text-foreground'}`}
+                          readOnly={isPublishedVersion}
+                          value={editorContent}
+                          onChange={(e) => !isPublishedVersion && handleEditorChangeTracked(e.target.value)}
+                          spellCheck={false}
+                        />
+                      )}
+                      {!fileLoading && viewMode === 'preview' && (
+                        <div className="h-full overflow-y-auto px-6 py-4 prose prose-sm max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
                         </div>
                       )}
                     </div>
-                  </ResizablePanel>
-                </>
+                  )}
+                </ResizablePanel>
+                {showDiagram && (
+                  <>
+                    <ResizableHandle />
+                    <ResizablePanel defaultSize={45} minSize={20}>
+                      <SkillDiagramPanel
+                        diagram={diagramCtx}
+                        showDiagnostics={skillEditorSurface === 'diagram'}
+                        diagnostics={workbenchPreview.preview}
+                        diagnosticsError={workbenchPreview.error}
+                        onExpandFullscreen={() => setExpandedDiagramOpen(true)}
+                        collapsed={diagramCollapsed}
+                        onToggleCollapse={() => setDiagramCollapsed(prev => !prev)}
+                      />
+                    </ResizablePanel>
+                  </>
+                )}
+              </ResizablePanelGroup>
+            );
+          }
+
+          // ── 非 SKILL.md: 单栏编辑器 ──
+          return (
+            <div className="flex-1 overflow-hidden">
+              {fileLoading && (
+                <div className="flex items-center justify-center h-full text-muted-foreground gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">加载中…</span>
+                </div>
               )}
-            </ResizablePanelGroup>
+              {!fileLoading && selectedFile && selectedIsMd && viewMode === 'edit' && (
+                <Textarea
+                  className={`w-full h-full min-h-0 resize-none font-mono text-sm leading-relaxed p-4 border-none shadow-none focus-visible:ring-0 rounded-none ${isPublishedVersion ? 'bg-muted text-muted-foreground' : 'bg-background text-foreground'}`}
+                  readOnly={isPublishedVersion}
+                  value={editorContent}
+                  onChange={(e) => !isPublishedVersion && handleEditorChangeTracked(e.target.value)}
+                  spellCheck={false}
+                />
+              )}
+              {!fileLoading && selectedFile && selectedIsMd && viewMode === 'preview' && (
+                <div className="h-full overflow-y-auto px-6 py-4 prose prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                </div>
+              )}
+              {!fileLoading && selectedFile && !selectedIsMd && isTextFile(selectedFile.name) && (
+                <div className="h-full overflow-auto">
+                  <CodeMirror
+                    value={editorContent}
+                    height="100%"
+                    theme={oneDark}
+                    extensions={getCodeMirrorLang(selectedFile.name) ? [getCodeMirrorLang(selectedFile.name)!] : []}
+                    onChange={isPublishedVersion ? undefined : handleEditorChangeTracked}
+                    readOnly={isPublishedVersion}
+                    basicSetup={{ lineNumbers: true, foldGutter: true }}
+                    style={{ fontSize: '13px', height: '100%' }}
+                  />
+                </div>
+              )}
+              {!fileLoading && selectedFile && !selectedIsMd && !isTextFile(selectedFile.name) && (
+                <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
+                  <AlertCircle size={16} />
+                  不支持预览此文件类型
+                </div>
+              )}
+              {!fileLoading && !selectedFile && (
+                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                  选择左侧文件开始编辑
+                </div>
+              )}
+            </div>
           );
         })()}
+
+        {/* ── 全屏流程图覆盖层 ── */}
+        {expandedDiagramOpen && (
+          <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col">
+            <div className="h-10 border-b border-border flex items-center justify-between px-4 shrink-0">
+              <span className="text-sm font-medium">流程图{diagramCtx.sourceLabel ? ` — ${diagramCtx.sourceLabel}` : ''}</span>
+              <Button variant="ghost" size="icon-xs" onClick={() => setExpandedDiagramOpen(false)}>
+                <X size={16} />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <MermaidRenderer
+                mermaid={diagramCtx.mermaid}
+                nodeTypeMap={diagramCtx.nodeTypeMap}
+                progressState={diagramCtx.progressState}
+                height="100%"
+                zoom={true}
+                autoFocus={false}
+                emptyText="暂无流程图"
+              />
+            </div>
+          </div>
+        )}
 
       </div>
       </ResizablePanel>
@@ -1313,15 +1357,7 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
             <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
               {messages.map((msg) => (
                 msg.role === 'system' ? (
-                  <div key={msg.id} className="flex gap-2">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
-                      <ScanEye className="w-3.5 h-3.5" />
-                    </div>
-                    <div className="max-w-[90%] rounded-2xl rounded-tl-none px-3 py-2 text-xs leading-relaxed shadow-sm bg-amber-50 border border-amber-200 text-foreground dark:bg-amber-950/20 dark:border-amber-800">
-                      <div className="text-[10px] font-medium text-amber-600 dark:text-amber-400 mb-1">流程图解析结果</div>
-                      <InlineMarkdown text={msg.text} />
-                    </div>
-                  </div>
+                  <VisionResultCard key={msg.id} text={msg.text} visionResult={msg.visionResult} />
                 ) : (
                   <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                     <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>

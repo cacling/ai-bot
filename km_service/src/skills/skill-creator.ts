@@ -640,7 +640,9 @@ export interface VisionProgressEvent {
   current: number;
   total: number;
   elapsed_ms: number;
+  eta_ms: number;
   stage_label: string;
+  detail_label: string;
   overall_percent: number;
 }
 
@@ -654,6 +656,7 @@ function buildProgressEvent(
   startTs: number,
   sliceCurrent?: number,
   sliceTotal?: number,
+  detailLabel?: string,
 ): VisionProgressEvent {
   const elapsed_ms = Date.now() - startTs;
 
@@ -680,33 +683,79 @@ function buildProgressEvent(
     percent += STAGE_WEIGHTS[step] * Math.min(current / total, 1);
   }
 
+  const overall_percent = Math.round(Math.min(percent, 100));
+
+  // ETA 估算：进度 > 5% 时才有意义
+  const eta_ms = overall_percent > 5
+    ? Math.round(elapsed_ms / (overall_percent / 100) - elapsed_ms)
+    : 0;
+
   return {
     step,
     current,
     total,
     elapsed_ms,
+    eta_ms,
     stage_label: labels[step] ?? step,
-    overall_percent: Math.round(Math.min(percent, 100)),
+    detail_label: detailLabel ?? labels[step] ?? step,
+    overall_percent,
   };
+}
+
+// ── vision 结果解析 ──────────────────────────────────────────────────────
+
+export interface ParsedVisionResult {
+  summary: string;
+  description: string;
+  mermaid: string;
+}
+
+function parseVisionResult(text: string): ParsedVisionResult {
+  // 提取 mermaid 代码块
+  const mermaidMatch = text.match(/```mermaid\s*\n([\s\S]*?)```/);
+  const mermaid = mermaidMatch ? mermaidMatch[1].trim() : '';
+
+  // 提取流程描述段落（## 流程描述 到下一个 ## 或 ``` 之间）
+  const descMatch = text.match(/##\s*流程描述\s*\n([\s\S]*?)(?=\n##\s|\n```mermaid|$)/);
+  const description = descMatch ? descMatch[1].trim() : text.replace(/```mermaid[\s\S]*?```/g, '').trim();
+
+  // 摘要：取描述第一段（到第一个空行或前 200 字）
+  const firstPara = description.split(/\n\s*\n/)[0] ?? '';
+  const summary = firstPara.length > 200 ? firstPara.slice(0, 200) + '…' : firstPara;
+
+  return { summary, description, mermaid };
 }
 
 // ── 单图 vision 调用 ──────────────────────────────────────────────────────
 
-async function callVisionModel(imageDataUrl: string, prompt: string): Promise<string> {
-  const { text } = await generateText({
-    model: skillCreatorVisionModel,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'image', image: imageDataUrl },
-          { type: 'text', text: prompt },
-        ],
-      },
-    ],
-    temperature: 0.2,
-  });
-  return text;
+async function callVisionModel(imageDataUrl: string, prompt: string, label?: string): Promise<string> {
+  const callTs = Date.now();
+  const imageSize = Math.round(imageDataUrl.length / 1024);
+  const tag = label ?? 'vision';
+  logger.info('skill-creator', 'llm_vision_call_start', { tag, prompt_length: prompt.length, image_base64_kb: imageSize });
+  try {
+    const { text, usage } = await generateText({
+      model: skillCreatorVisionModel,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', image: imageDataUrl },
+            { type: 'text', text: prompt },
+          ],
+        },
+      ],
+      temperature: 0.2,
+    });
+    logger.info('skill-creator', 'llm_vision_call_done', {
+      tag, duration_ms: Date.now() - callTs, result_length: text.length,
+      input_tokens: usage?.promptTokens, output_tokens: usage?.completionTokens,
+    });
+    return text;
+  } catch (err) {
+    logger.error('skill-creator', 'llm_vision_call_error', { tag, duration_ms: Date.now() - callTs, error: String(err) });
+    throw err;
+  }
 }
 
 // ── parseFlowchartImage — 支持大图分片 ──────────────────────────────────────
@@ -731,7 +780,7 @@ async function parseFlowchartImage(
   // ── direct: 小图直接处理 ──
   if (analysis.strategy === 'direct') {
     const dataUrl = toDataUrl(buffer);
-    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang));
+    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang), 'direct');
     logger.info('skill-creator', 'image_parsed', { strategy: 'direct', result_length: text.length });
     return text;
   }
@@ -740,7 +789,7 @@ async function parseFlowchartImage(
   if (analysis.strategy === 'resize') {
     const resized = await resizeImage(buffer, 2048);
     const dataUrl = toDataUrl(resized);
-    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang));
+    const text = await callVisionModel(dataUrl, buildVisionPromptSingle(lang), 'resize');
     logger.info('skill-creator', 'image_parsed', { strategy: 'resize', result_length: text.length });
     return text;
   }
@@ -755,99 +804,130 @@ async function parseFlowchartImage(
   logger.info('skill-creator', 'vision_cache_dir', { path: cacheDir });
 
   // Step 1: 裁白边
-  onProgress?.(buildProgressEvent('trim', 0, totalSteps, visionStartTs));
+  onProgress?.(buildProgressEvent('trim', 0, totalSteps, visionStartTs, undefined, undefined, '裁剪空白区域并检查尺寸'));
   let trimmed: Buffer;
+  const trimStartTs = Date.now();
   try {
     trimmed = await trimWhitespace(buffer);
     logger.info('skill-creator', 'image_trimmed', {
       original: `${analysis.width}x${analysis.height}`,
+      original_size_kb: Math.round(buffer.length / 1024),
+      trimmed_size_kb: Math.round(trimmed.length / 1024),
+      duration_ms: Date.now() - trimStartTs,
     });
-  } catch {
+  } catch (err) {
+    logger.warn('skill-creator', 'trim_failed_fallback_to_original', { error: String(err), duration_ms: Date.now() - trimStartTs });
     trimmed = buffer;
   }
 
   // Step 2: 总览
-  onProgress?.(buildProgressEvent('overview', 1, totalSteps, visionStartTs));
+  onProgress?.(buildProgressEvent('overview', 1, totalSteps, visionStartTs, undefined, undefined, '生成缩略图，识别整体结构'));
+  const overviewResizeTs = Date.now();
   const overviewBuf = await generateOverview(trimmed, 1024);
   writeFileSync(join(cacheDir, 'overview.jpg'), overviewBuf);
+  logger.info('skill-creator', 'overview_thumbnail', { size_kb: Math.round(overviewBuf.length / 1024), resize_ms: Date.now() - overviewResizeTs });
   const overviewDataUrl = toDataUrl(overviewBuf);
-  const overviewText = await callVisionModel(overviewDataUrl, buildVisionPromptOverview(lang));
+  const overviewLlmTs = Date.now();
+  const overviewText = await callVisionModel(overviewDataUrl, buildVisionPromptOverview(lang), 'overview');
   writeFileSync(join(cacheDir, 'overview.md'), overviewText);
-  logger.info('skill-creator', 'overview_parsed', { result_length: overviewText.length });
+  logger.info('skill-creator', 'overview_parsed', { result_length: overviewText.length, llm_ms: Date.now() - overviewLlmTs, total_overview_ms: Date.now() - overviewResizeTs });
 
   // Step 3: 切片
+  const tileGenTs = Date.now();
   const tiles = await generateTiles(trimmed, analysis.rows, analysis.cols, {
     maxTileSide: 2048,
     overlap: 0.15,
   });
-  logger.info('skill-creator', 'tiles_generated', { count: tiles.length });
+  logger.info('skill-creator', 'tiles_generated', {
+    count: tiles.length, rows: analysis.rows, cols: analysis.cols,
+    tile_sizes_kb: tiles.map(t => Math.round(t.length / 1024)),
+    duration_ms: Date.now() - tileGenTs,
+  });
 
   // 保存切片图片
   for (let i = 0; i < tiles.length; i++) {
     writeFileSync(join(cacheDir, `tile-${i + 1}.jpg`), tiles[i]);
   }
 
-  // 并行处理切片（concurrency=3）
-  const tileTexts: string[] = new Array(tiles.length);
-  const concurrency = 3;
-  let completed = 0;
+  // 全并行处理切片（所有 tile 同时发起 LLM 调用）
+  const slicePhaseTs = Date.now();
+  let sliceCompleted = 0;
+  logger.info('skill-creator', 'slice_phase_start', { total_tiles: tiles.length, strategy: 'all_parallel' });
 
-  for (let i = 0; i < tiles.length; i += concurrency) {
-    const batch = tiles.slice(i, i + concurrency);
-    const results = await Promise.all(
-      batch.map((tile, j) => {
-        const idx = i + j;
-        const dataUrl = toDataUrl(tile);
-        return callVisionModel(dataUrl, buildTilePrompt(idx, tiles.length, lang));
-      }),
-    );
-    for (let j = 0; j < results.length; j++) {
-      const idx = i + j;
-      tileTexts[idx] = results[j];
-      completed++;
-      writeFileSync(join(cacheDir, `tile-${idx + 1}.md`), results[j]);
-      onProgress?.(buildProgressEvent('slice', 1 + completed, totalSteps, visionStartTs, completed, tiles.length));
-      logger.info('skill-creator', 'tile_parsed', { tile: idx + 1, total: tiles.length, result_length: results[j].length });
-    }
-  }
+  const tileTexts: string[] = await Promise.all(
+    tiles.map((tile, idx) => {
+      const dataUrl = toDataUrl(tile);
+      return callVisionModel(dataUrl, buildTilePrompt(idx, tiles.length, lang), `tile-${idx + 1}/${tiles.length}`)
+        .then(text => {
+          writeFileSync(join(cacheDir, `tile-${idx + 1}.md`), text);
+          sliceCompleted++;
+          onProgress?.(buildProgressEvent('slice', 1 + sliceCompleted, totalSteps, visionStartTs, sliceCompleted, tiles.length, `正在解析切片 ${sliceCompleted}/${tiles.length}`));
+          logger.info('skill-creator', 'tile_parsed', { tile: idx + 1, total: tiles.length, result_length: text.length, completed: sliceCompleted, elapsed_since_start_ms: Date.now() - slicePhaseTs });
+          return text;
+        });
+    }),
+  );
+  logger.info('skill-creator', 'slice_phase_done', { total_tiles: tiles.length, total_slice_ms: Date.now() - slicePhaseTs });
 
   // Step 4: 两步合并 — 先相邻切片 pairwise merge，再全局 final merge
-  onProgress?.(buildProgressEvent('merge', totalSteps - 1, totalSteps, visionStartTs));
+  const mergePhaseTs = Date.now();
+  onProgress?.(buildProgressEvent('merge', totalSteps - 1, totalSteps, visionStartTs, undefined, undefined, `正在合并 ${tiles.length} 个区域的识别结果`));
 
-  // Step 4a: Pairwise merge — 将相邻 2-3 个切片合并为局部流程
+  // Step 4a: Pairwise merge — 将相邻 2-3 个切片并行合并为局部流程
   const pairSize = tiles.length <= 4 ? 2 : 3;
-  const partialMerges: string[] = [];
+  const totalPairs = Math.ceil(tileTexts.length / pairSize);
+  logger.info('skill-creator', 'pair_merge_start', { pair_size: pairSize, total_pairs: totalPairs, strategy: 'all_parallel', input_tile_lengths: tileTexts.map(t => t.length) });
 
+  // 构建 pair 分组
+  const pairGroups: { idx: number; tiles: string[]; startOffset: number }[] = [];
   for (let i = 0; i < tileTexts.length; i += pairSize) {
-    const pairTiles = tileTexts.slice(i, i + pairSize);
-    if (pairTiles.length === 1) {
-      // 只有一个切片，直接用
-      partialMerges.push(pairTiles[0]);
-    } else {
-      const pairPrompt = buildPairMergePrompt(pairTiles, i, lang);
-      const { text: pairResult } = await generateText({
+    pairGroups.push({ idx: Math.floor(i / pairSize) + 1, tiles: tileTexts.slice(i, i + pairSize), startOffset: i });
+  }
+
+  // 全并行执行 pair merge
+  const partialMerges: string[] = await Promise.all(
+    pairGroups.map(async ({ idx: pairIdx, tiles: pairTiles, startOffset }) => {
+      if (pairTiles.length === 1) {
+        logger.info('skill-creator', 'pair_skipped_single', { pair: pairIdx });
+        return pairTiles[0];
+      }
+      const pairPrompt = buildPairMergePrompt(pairTiles, startOffset, lang);
+      const pairTs = Date.now();
+      logger.info('skill-creator', 'pair_merge_llm_start', { pair: pairIdx, input_tiles: pairTiles.length, prompt_length: pairPrompt.length, input_lengths: pairTiles.map(t => t.length) });
+      const { text: pairResult, usage: pairUsage } = await generateText({
         model: skillCreatorModel,
         messages: [{ role: 'user', content: pairPrompt }],
         temperature: 0.2,
         maxTokens: 8192,
       });
-      partialMerges.push(pairResult);
-      writeFileSync(join(cacheDir, `pair-${Math.floor(i / pairSize) + 1}.md`), pairResult);
-      logger.info('skill-creator', 'pair_merged', { pair: Math.floor(i / pairSize) + 1, input_tiles: pairTiles.length, result_length: pairResult.length });
-    }
-  }
+      writeFileSync(join(cacheDir, `pair-${pairIdx}.md`), pairResult);
+      logger.info('skill-creator', 'pair_merged', {
+        pair: pairIdx, input_tiles: pairTiles.length, result_length: pairResult.length, llm_ms: Date.now() - pairTs,
+        input_tokens: pairUsage?.promptTokens, output_tokens: pairUsage?.completionTokens,
+      });
+      return pairResult;
+    }),
+  );
+  logger.info('skill-creator', 'pair_merge_phase_done', { total_pairs: partialMerges.length, pair_merge_ms: Date.now() - mergePhaseTs });
 
   // Step 4b: Final merge — 总览 + 各局部合并 → 完整流程图
   const finalPrompt = buildFinalMergePrompt(overviewText, partialMerges, lang);
-  const { text: mergedText } = await generateText({
+  const finalMergeTs = Date.now();
+  logger.info('skill-creator', 'final_merge_llm_start', { prompt_length: finalPrompt.length, partial_merge_lengths: partialMerges.map(p => p.length), overview_length: overviewText.length });
+  const { text: mergedText, usage: finalUsage } = await generateText({
     model: skillCreatorModel,
     messages: [{ role: 'user', content: finalPrompt }],
     temperature: 0.2,
     maxTokens: 16384,
   });
   writeFileSync(join(cacheDir, 'merged.md'), mergedText);
-  onProgress?.(buildProgressEvent('render', totalSteps, totalSteps, visionStartTs));
+  logger.info('skill-creator', 'final_merge_done', {
+    result_length: mergedText.length, llm_ms: Date.now() - finalMergeTs,
+    input_tokens: finalUsage?.promptTokens, output_tokens: finalUsage?.completionTokens,
+  });
+  onProgress?.(buildProgressEvent('render', totalSteps, totalSteps, visionStartTs, undefined, undefined, '正在生成 Mermaid 流程图与中文说明'));
 
+  const totalDurationMs = Date.now() - visionStartTs;
   logger.info('skill-creator', 'image_parsed', {
     strategy: 'tile',
     tiles: tiles.length,
@@ -855,6 +935,8 @@ async function parseFlowchartImage(
     overview_length: overviewText.length,
     merge_length: mergedText.length,
     cache_dir: cacheDir,
+    total_duration_ms: totalDurationMs,
+    total_duration_min: (totalDurationMs / 60000).toFixed(1),
   });
 
   return mergedText;
@@ -1129,9 +1211,10 @@ skillCreator.post('/chat', async (c) => {
                 return;
               }
             }
-            // 推送图片解析结果
+            // 推送图片解析结果（结构化：摘要 + 描述 + Mermaid）
             if (imageDescription) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'vision_result', text: imageDescription })}\n\n`));
+              const parsed = parseVisionResult(imageDescription);
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'vision_result', text: imageDescription, ...parsed })}\n\n`));
             }
 
             let firstChunkTs = 0;
@@ -1362,7 +1445,8 @@ skillCreator.post('/chat', async (c) => {
       total_duration_ms: Date.now() - reqStartTs,
     });
 
-    return c.json({ session_id: session.id, reply: finalParsed.reply, phase: session.phase, draft: session.draft, thinking: null, vision_result: imageDescription ?? null, validation: validation ?? undefined });
+    const visionResult = imageDescription ? { text: imageDescription, ...parseVisionResult(imageDescription) } : null;
+    return c.json({ session_id: session.id, reply: finalParsed.reply, phase: session.phase, draft: session.draft, thinking: null, vision_result: visionResult, validation: validation ?? undefined });
   } catch (err) {
     logger.error('skill-creator', 'chat_error', {
       error: String(err),
