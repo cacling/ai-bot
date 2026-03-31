@@ -9,7 +9,7 @@
  * - 发布任意版本会自动取消旧发布
  */
 
-import { resolve } from 'node:path';
+import { resolve, basename } from 'node:path';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { db } from '../db';
@@ -206,7 +206,7 @@ export async function publishVersion(
   await cp(snapshotAbsPath, skillDir, {
     recursive: true,
     force: true,
-    filter: (src) => !src.endsWith('.draft'),
+    filter: (src) => !src.endsWith('.draft') && basename(src) !== 'tests',
   });
 
   // Mark as published

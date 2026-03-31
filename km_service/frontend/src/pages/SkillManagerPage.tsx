@@ -38,6 +38,7 @@ import { VisionTaskCard } from './components/VisionTaskCard';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { SkillDiagramWorkbench } from './components/SkillDiagramWorkbench';
 import { SkillDiagramPanel } from './components/SkillDiagramPanel';
+import { TestCasePanel } from './components/TestCasePanel';
 import { VisionResultCard } from './components/VisionResultCard';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
 import { replaceCustomerGuidanceMermaid } from '../shared/skillMarkdown';
@@ -521,6 +522,8 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
   // ── 右侧 Tab 切换 + 测试对话 ─────────────────────────────────────────────────
   type RightTab = 'chat' | 'test';
   const [rightTab, setRightTab] = useState<RightTab>('chat');
+  type TestSubTab = 'cases' | 'chat';
+  const [testSubTab, setTestSubTab] = useState<TestSubTab>('cases');
   const [testingVersion, setTestingVersion] = useState<number | null>(null);
   const [testMessages, setTestMessages] = useState<Array<{ id: number; role: 'user' | 'assistant'; text: string }>>([]);
   const [testInput, setTestInput] = useState('');
@@ -1475,74 +1478,115 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
         {/* ── 测试 Tab ── */}
         {rightTab === 'test' && (
           <>
-            {/* 测试对话区 */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
-              {testingVersion === null ? (
-                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                  点击顶部「运行测试」开始
-                </div>
-              ) : testMessages.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                  输入消息开始测试 v{testingVersion}
-                </div>
-              ) : (
-                <>
-                  {testMessages.map((msg) => (
-                    <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
-                        {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-                      </div>
-                      <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-muted border border-border text-foreground rounded-tl-none'}`}>
-                        <InlineMarkdown text={msg.text} />
-                      </div>
-                    </div>
-                  ))}
-                  {testRunning && (
-                    <div className="flex gap-2">
-                      <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
-                      <div className="bg-muted border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
-                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
-                        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              <div ref={testEndRef} />
+            {/* 测试 Sub-tab 切换 */}
+            <div className="shrink-0 flex border-b border-border bg-muted/20 px-2">
+              <button
+                onClick={() => setTestSubTab('cases')}
+                className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                  testSubTab === 'cases' ? 'border-primary text-primary font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                用例
+              </button>
+              <button
+                onClick={() => setTestSubTab('chat')}
+                className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
+                  testSubTab === 'chat' ? 'border-primary text-primary font-medium' : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                对话
+              </button>
             </div>
 
-            {/* 测试输入区 */}
-            {testingVersion !== null && (
-              <div className="p-3 bg-background border-t border-border space-y-2 shrink-0">
-                <Select value={testPersonaId} onValueChange={(v) => { if (v) setTestPersonaId(v); }}>
-                  <SelectTrigger className="w-full text-[11px] h-7">
-                    <SelectValue placeholder="选择测试用户">
-                      {testPersonaList.find(p => p.id === testPersonaId)?.label ?? testPersonaId}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {testPersonaList.map(p => {
-                      const ctx = p.context as Record<string, string>;
-                      return <SelectItem key={p.id} value={p.id}>{ctx.name ?? p.id} · {ctx.phone ?? ''}</SelectItem>;
-                    })}
-                  </SelectContent>
-                </Select>
-                <div className="flex gap-2">
-                  <Textarea
-                    value={testInput}
-                    onChange={(e) => setTestInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendTest(); } }}
-                    placeholder="输入测试消息…（Enter 发送）"
-                    rows={2}
-                    className="flex-1 min-h-0 resize-none text-xs rounded-lg"
-                    spellCheck={false}
-                  />
-                  <Button size="sm" onClick={handleSendTest} disabled={!testInput.trim() || testRunning} className="self-end">
-                    <Send className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
+            {/* 用例 Sub-tab */}
+            {testSubTab === 'cases' && activeSkill && effectiveVersionNo !== null && (
+              <TestCasePanel
+                skillId={activeSkill.id}
+                versionNo={effectiveVersionNo}
+                personaList={testPersonaList}
+                selectedPersonaId={testPersonaId}
+                onPersonaChange={(v) => { if (v) setTestPersonaId(v); }}
+              />
+            )}
+            {testSubTab === 'cases' && (!activeSkill || effectiveVersionNo === null) && (
+              <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+                请先选择技能和版本
               </div>
+            )}
+
+            {/* 对话 Sub-tab（保留原有聊天式测试） */}
+            {testSubTab === 'chat' && (
+              <>
+                {/* 测试对话区 */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-4 bg-background">
+                  {testingVersion === null ? (
+                    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                      点击顶部「运行测试」开始
+                    </div>
+                  ) : testMessages.length === 0 ? (
+                    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                      输入消息开始测试 v{testingVersion}
+                    </div>
+                  ) : (
+                    <>
+                      {testMessages.map((msg) => (
+                        <div key={msg.id} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.role === 'user' ? 'bg-accent text-primary' : 'bg-accent text-accent-foreground'}`}>
+                            {msg.role === 'user' ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                          </div>
+                          <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-muted border border-border text-foreground rounded-tl-none'}`}>
+                            <InlineMarkdown text={msg.text} />
+                          </div>
+                        </div>
+                      ))}
+                      {testRunning && (
+                        <div className="flex gap-2">
+                          <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
+                          <div className="bg-muted border border-border rounded-2xl rounded-tl-none px-3 py-2 flex items-center gap-1 shadow-sm">
+                            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" />
+                            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.2s' }} />
+                            <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0.4s' }} />
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <div ref={testEndRef} />
+                </div>
+
+                {/* 测试输入区 */}
+                {testingVersion !== null && (
+                  <div className="p-3 bg-background border-t border-border space-y-2 shrink-0">
+                    <Select value={testPersonaId} onValueChange={(v) => { if (v) setTestPersonaId(v); }}>
+                      <SelectTrigger className="w-full text-[11px] h-7">
+                        <SelectValue placeholder="选择测试用户">
+                          {testPersonaList.find(p => p.id === testPersonaId)?.label ?? testPersonaId}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {testPersonaList.map(p => {
+                          const ctx = p.context as Record<string, string>;
+                          return <SelectItem key={p.id} value={p.id}>{ctx.name ?? p.id} · {ctx.phone ?? ''}</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex gap-2">
+                      <Textarea
+                        value={testInput}
+                        onChange={(e) => setTestInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendTest(); } }}
+                        placeholder="输入测试消息…（Enter 发送）"
+                        rows={2}
+                        className="flex-1 min-h-0 resize-none text-xs rounded-lg"
+                        spellCheck={false}
+                      />
+                      <Button size="sm" onClick={handleSendTest} disabled={!testInput.trim() || testRunning} className="self-end">
+                        <Send className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

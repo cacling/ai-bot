@@ -239,118 +239,220 @@ app.post('/create-from', async (c) => {
   }
 });
 
+// ── runTestMessage — 版本快照测试的核心逻辑 ──────────────────────────────────
+
+export interface TestMessageParams {
+  skill: string;
+  version_no: number;
+  message: string;
+  history?: Array<{ role: string; content: string }>;
+  phone?: string;
+  lang?: 'zh' | 'en';
+  useMock?: boolean;
+  persona?: Record<string, unknown>;
+  session_id?: string;
+  /** 多轮测试时复用 tempDir（由 caller 负责创建和清理） */
+  tempDir?: string;
+}
+
+export interface TestMessageResult {
+  text: string;
+  card: { type: string; data?: unknown } | null;
+  skill_diagram: { skill_name?: string; mermaid?: string; active_node?: string } | null;
+  tool_records: Array<{ tool: string; args?: Record<string, unknown>; result?: unknown }>;
+  transfer_data: unknown;
+  mock: boolean;
+  session_id: string;
+}
+
+/**
+ * 用版本快照执行单条测试消息。
+ * 若提供 tempDir，复用该目录（不创建不清理）；否则自行创建并清理。
+ */
+export async function runTestMessage(params: TestMessageParams): Promise<TestMessageResult> {
+  const version = getVersionDetail(params.skill, params.version_no);
+  if (!version?.snapshot_path) throw new Error(`版本 v${params.version_no} 不存在`);
+
+  const snapshotAbsPath = resolve(SKILLS_ROOT, version.snapshot_path);
+  const { runAgent, SOP_ENFORCEMENT_SUFFIX } = await import('../engine-stubs');
+  const { mkdtempSync, cpSync, rmSync, readFileSync: fsReadFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+
+  const ownTempDir = !params.tempDir;
+  const tempParent = params.tempDir ?? mkdtempSync(join(tmpdir(), 'skill-test-'));
+  const skillSubDir = join(tempParent, params.skill);
+
+  try {
+    // 仅当 skill 子目录不存在时复制（多轮首次调用时复制，后续轮次跳过）
+    const { existsSync } = await import('node:fs');
+    if (!existsSync(skillSubDir)) {
+      cpSync(snapshotAbsPath, skillSubDir, { recursive: true });
+    }
+
+    const history = (params.history ?? []).map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }));
+
+    // Read SKILL.md and inject into prompt
+    const skillMdPath = join(snapshotAbsPath, 'SKILL.md');
+    let skillContent: string | undefined;
+    try {
+      const raw = fsReadFileSync(skillMdPath, 'utf-8');
+      skillContent = raw + SOP_ENFORCEMENT_SUFFIX;
+    } catch { /* SKILL.md not found, proceed without injection */ }
+
+    // Build persona context
+    const persona = params.persona ?? {};
+    const phone = (persona.phone as string) ?? params.phone ?? '13800000001';
+    const sessionId = params.session_id?.trim() || `skilltest_${params.skill}_v${params.version_no}_${phone}`;
+    const subscriberName = (persona.name as string) ?? undefined;
+    const planName = (persona.plan as string) ?? undefined;
+
+    // For outbound personas, inject task context
+    let personaContext = '';
+    if (persona.task_type) {
+      personaContext = `\n\n---\n### 测试任务上下文\n\n任务类型：${persona.task_type === 'collection' ? '催收' : '营销'}\n` +
+        `客户姓名：${persona.name ?? '用户'}\n` +
+        `客户手机号：${phone}\n` +
+        (persona.product_name ? `产品名称：${persona.product_name}\n` : '') +
+        (persona.arrears_amount ? `欠款金额：¥${persona.arrears_amount}\n` : '') +
+        (persona.overdue_days ? `逾期天数：${persona.overdue_days}天\n` : '') +
+        (persona.campaign_name ? `活动名称：${persona.campaign_name}\n` : '') +
+        '\n请根据以上任务信息，按照技能操作指南执行。';
+      if (skillContent) skillContent += personaContext;
+      else skillContent = personaContext;
+    }
+
+    // Compile workflow plan for SOPGuard V2
+    let workflowPlan: import('../engine-stubs').WorkflowSpec | undefined;
+    try {
+      const { compileWorkflow } = await import('../engine-stubs');
+      const raw = fsReadFileSync(skillMdPath, 'utf-8');
+      const compileResult = compileWorkflow(raw, params.skill, params.version_no);
+      if (compileResult.spec) workflowPlan = compileResult.spec;
+    } catch { /* compilation optional */ }
+
+    const result = await runAgent(
+      params.message,
+      history,
+      phone,
+      params.lang ?? 'zh',
+      undefined,        // onDiagramUpdate
+      undefined,        // onTextDelta
+      subscriberName,   // subscriberName
+      planName,         // planName
+      undefined,        // subscriberGender
+      tempParent,       // overrideSkillsDir
+      { useMock: params.useMock !== false, skillContent, skillName: params.skill, workflowPlan, sessionId },
+    );
+
+    return {
+      text: result.text,
+      card: result.card ?? null,
+      skill_diagram: result.skill_diagram ?? null,
+      tool_records: result.toolRecords ?? [],
+      transfer_data: result.transferData ?? null,
+      mock: params.useMock !== false,
+      session_id: sessionId,
+    };
+  } finally {
+    if (ownTempDir) {
+      rmSync(tempParent, { recursive: true, force: true });
+    }
+  }
+}
+
 // POST /api/skill-versions/test — 直接用版本快照测试（不创建沙箱）
 app.post('/test', async (c) => {
-  const body = await c.req.json<{
-    skill: string;
-    version_no: number;
-    message: string;
-    history?: Array<{ role: string; content: string }>;
-    phone?: string;
-    lang?: 'zh' | 'en';
-    useMock?: boolean;
-    persona?: Record<string, unknown>;
-    session_id?: string;
-  }>();
+  const body = await c.req.json<TestMessageParams>();
   if (!body.skill || !body.version_no || !body.message) {
     return c.json({ error: 'skill, version_no, message 必填' }, 400);
   }
 
-  const version = getVersionDetail(body.skill, body.version_no);
-  if (!version?.snapshot_path) return c.json({ error: `版本 v${body.version_no} 不存在` }, 404);
-
-  const skillsDir = resolve(SKILLS_ROOT, version.snapshot_path, '..');
-  // snapshot_path = ".versions/bill-inquiry/v2" → parent = ".versions/bill-inquiry"
-  // But runAgent expects a dir containing skill folders, so we need to restructure:
-  // The snapshot IS the skill dir, so we create a virtual parent with the skill as a subdirectory
-  const snapshotAbsPath = resolve(SKILLS_ROOT, version.snapshot_path);
-
-  // runAgent expects skillsDir to contain skill subdirs (e.g. skillsDir/bill-inquiry/SKILL.md)
-  // But our snapshot is already the skill dir. Use a symlink-like approach:
-  // Actually, just pass the snapshot's parent as skillsDir and skill name matches the dir name? No.
-  // The simplest: pass snapshot dir directly and let runAgent find SKILL.md in it.
-  // runAgent uses overrideSkillsDir which scans for subdirs. We need the snapshot to be inside a parent.
-  // Solution: use a temp dir with a symlink, or restructure.
-
-  // Simplest approach: use runAgent's existing useMock + the snapshot path
-  const { runAgent, SOP_ENFORCEMENT_SUFFIX } = await import('../engine-stubs');
-
   try {
-    // Create a virtual skills dir structure: tempParent/{skillId}/ -> snapshot (copy)
-    const { mkdtempSync, cpSync, rmSync } = await import('node:fs');
-    const { tmpdir } = await import('node:os');
-    const tempParent = mkdtempSync(join(tmpdir(), 'skill-test-'));
-    try {
-      cpSync(snapshotAbsPath, join(tempParent, body.skill), { recursive: true });
-      const history = (body.history ?? []).map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
-      // Read SKILL.md and inject into prompt (so LLM sees SOP without needing to call get_skill_instructions)
-      const { readFileSync } = await import('node:fs');
-      const skillMdPath = join(snapshotAbsPath, 'SKILL.md');
-      let skillContent: string | undefined;
-      try {
-        const raw = readFileSync(skillMdPath, 'utf-8');
-        skillContent = raw + SOP_ENFORCEMENT_SUFFIX;
-      } catch { /* SKILL.md not found, proceed without injection */ }
-
-      // Build persona context to inject into prompt
-      const persona = body.persona ?? {};
-      const phone = (persona.phone as string) ?? body.phone ?? '13800000001';
-      const sessionId = body.session_id?.trim() || `skilltest_${body.skill}_v${body.version_no}_${phone}`;
-      const subscriberName = (persona.name as string) ?? undefined;
-      const planName = (persona.plan as string) ?? undefined;
-
-      // For outbound personas, inject task context
-      let personaContext = '';
-      if (persona.task_type) {
-        personaContext = `\n\n---\n### 测试任务上下文\n\n任务类型：${persona.task_type === 'collection' ? '催收' : '营销'}\n` +
-          `客户姓名：${persona.name ?? '用户'}\n` +
-          `客户手机号：${phone}\n` +
-          (persona.product_name ? `产品名称：${persona.product_name}\n` : '') +
-          (persona.arrears_amount ? `欠款金额：¥${persona.arrears_amount}\n` : '') +
-          (persona.overdue_days ? `逾期天数：${persona.overdue_days}天\n` : '') +
-          (persona.campaign_name ? `活动名称：${persona.campaign_name}\n` : '') +
-          '\n请根据以上任务信息，按照技能操作指南执行。';
-        if (skillContent) skillContent += personaContext;
-        else skillContent = personaContext;
-      }
-
-      // Compile workflow plan for SOPGuard V2
-      let workflowPlan: import('../engine-stubs').WorkflowSpec | undefined;
-      try {
-        const { compileWorkflow } = await import('../engine-stubs');
-        const raw = readFileSync(skillMdPath, 'utf-8');
-        const compileResult = compileWorkflow(raw, body.skill, body.version_no);
-        if (compileResult.spec) workflowPlan = compileResult.spec;
-      } catch { /* compilation optional */ }
-
-      const result = await runAgent(
-        body.message,
-        history,
-        phone,
-        body.lang ?? 'zh',
-        undefined,        // onDiagramUpdate
-        undefined,        // onTextDelta
-        subscriberName,   // subscriberName
-        planName,         // planName
-        undefined,        // subscriberGender
-        tempParent,       // overrideSkillsDir
-        { useMock: body.useMock !== false, skillContent, skillName: body.skill, workflowPlan, sessionId },
-      );
-      return c.json({
-        text: result.text,
-        card: result.card ?? null,
-        skill_diagram: result.skill_diagram ?? null,
-        mock: body.useMock !== false,
-        session_id: sessionId,
-      });
-    } finally {
-      rmSync(tempParent, { recursive: true, force: true });
-    }
+    const result = await runTestMessage(body);
+    return c.json(result);
   } catch (err) {
     return c.json({ error: `测试失败: ${String(err)}` }, 500);
+  }
+});
+
+// ── 版本绑定测试用例 API ─────────────────────────────────────────────────────
+
+// POST /api/skill-versions/:skillId/:vno/generate-testcases — 生成测试用例
+app.post('/:skillId/:vno/generate-testcases', async (c) => {
+  const skillId = c.req.param('skillId');
+  const vno = parseInt(c.req.param('vno'), 10);
+  if (!skillId || isNaN(vno)) return c.json({ error: 'skillId 和 vno 必填' }, 400);
+
+  try {
+    const { generateTestCases } = await import('./testcase-generator');
+    const manifest = await generateTestCases(skillId, vno);
+    return c.json({ ok: true, manifest });
+  } catch (err) {
+    logger.error('skill-versions', 'generate_testcases_error', { skillId, vno, error: String(err) });
+    return c.json({ error: `生成测试用例失败: ${String(err)}` }, 500);
+  }
+});
+
+// GET /api/skill-versions/:skillId/:vno/testcases — 读取测试用例 manifest
+app.get('/:skillId/:vno/testcases', async (c) => {
+  const skillId = c.req.param('skillId');
+  const vno = parseInt(c.req.param('vno'), 10);
+  if (!skillId || isNaN(vno)) return c.json({ error: 'skillId 和 vno 必填' }, 400);
+
+  try {
+    const { readTestManifest } = await import('./testcase-generator');
+    const manifest = await readTestManifest(skillId, vno);
+    if (!manifest) return c.json({ cases: [], requirements: [], meta: null });
+    return c.json(manifest);
+  } catch (err) {
+    return c.json({ error: `读取测试用例失败: ${String(err)}` }, 500);
+  }
+});
+
+// POST /api/skill-versions/:skillId/:vno/run-testcase — 运行单条测试用例
+app.post('/:skillId/:vno/run-testcase', async (c) => {
+  const skillId = c.req.param('skillId');
+  const vno = parseInt(c.req.param('vno'), 10);
+  const body = await c.req.json<{ case_id: string; persona?: Record<string, unknown> }>();
+  if (!skillId || isNaN(vno) || !body.case_id) {
+    return c.json({ error: 'skillId, vno, case_id 必填' }, 400);
+  }
+
+  try {
+    const { readTestManifest } = await import('./testcase-generator');
+    const { runSingleTestCase } = await import('./testcase-runner');
+
+    const manifest = await readTestManifest(skillId, vno);
+    if (!manifest) return c.json({ error: '该版本尚未生成测试用例' }, 404);
+
+    const caseEntry = manifest.cases.find(tc => tc.id === body.case_id);
+    if (!caseEntry) return c.json({ error: `用例 ${body.case_id} 不存在` }, 404);
+
+    const result = await runSingleTestCase(skillId, vno, caseEntry, body.persona);
+    return c.json(result);
+  } catch (err) {
+    logger.error('skill-versions', 'run_testcase_error', { skillId, vno, caseId: body.case_id, error: String(err) });
+    return c.json({ error: `执行测试用例失败: ${String(err)}` }, 500);
+  }
+});
+
+// POST /api/skill-versions/:skillId/:vno/run-all-testcases — 运行全部测试用例
+app.post('/:skillId/:vno/run-all-testcases', async (c) => {
+  const skillId = c.req.param('skillId');
+  const vno = parseInt(c.req.param('vno'), 10);
+  const body = await c.req.json<{ persona?: Record<string, unknown> }>().catch(() => ({}));
+  if (!skillId || isNaN(vno)) return c.json({ error: 'skillId 和 vno 必填' }, 400);
+
+  try {
+    const { runAllTestCases } = await import('./testcase-runner');
+    const result = await runAllTestCases(skillId, vno, (body as { persona?: Record<string, unknown> }).persona);
+    return c.json(result);
+  } catch (err) {
+    logger.error('skill-versions', 'run_all_testcases_error', { skillId, vno, error: String(err) });
+    return c.json({ error: `批量执行测试用例失败: ${String(err)}` }, 500);
   }
 });
 
