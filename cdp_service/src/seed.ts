@@ -14,6 +14,11 @@ import {
   cdpServiceSubscriptions,
   cdpPartySubscriptionRelations,
   cdpSourceRecordLinks,
+  cdpCommunicationPreferences,
+  cdpConsentRecords,
+  cdpServiceSummaries,
+  eq,
+  and,
 } from './db';
 import { normalizeIdentityValue } from './routes/identity';
 
@@ -199,5 +204,147 @@ for (const row of rows) {
   }
 }
 
+// ── Phase 2: 导入 customer_preferences → communication_preference + consent_record + service_summary ──
+
+interface PreferenceRow {
+  phone: string;
+  marketing_opt_in: number;
+  sms_opt_in: number;
+  dnd: number;
+  preferred_channel: string;
+  contact_window_start: string;
+  contact_window_end: string;
+}
+
+const prefRows = businessDb.prepare(`
+  SELECT phone, marketing_opt_in, sms_opt_in, dnd, preferred_channel,
+         contact_window_start, contact_window_end
+  FROM customer_preferences
+`).all() as PreferenceRow[];
+
+console.log(`[cdp-seed] Found ${prefRows.length} customer_preferences in business.db`);
+
+let prefCreated = 0;
+
+for (const pref of prefRows) {
+  // 找到对应的 party_id（通过 phone identity resolve）
+  const phoneNorm = normalizeIdentityValue('phone', pref.phone);
+  const identityRows = await db
+    .select({ party_id: cdpPartyIdentities.party_id })
+    .from(cdpPartyIdentities)
+    .where(
+      and(
+        eq(cdpPartyIdentities.tenant_id, TENANT_ID),
+        eq(cdpPartyIdentities.identity_type, 'phone'),
+        eq(cdpPartyIdentities.identity_value_norm, phoneNorm),
+      ),
+    )
+    .limit(1);
+
+  if (identityRows.length === 0) continue;
+  const partyId = identityRows[0].party_id;
+
+  try {
+    // channel preference
+    await db.insert(cdpCommunicationPreferences).values({
+      communication_preference_id: crypto.randomUUID(),
+      tenant_id: TENANT_ID,
+      party_id: partyId,
+      preference_type: 'channel_preference',
+      channel_type: pref.preferred_channel,
+      preference_value: pref.preferred_channel,
+      priority_order: 1,
+      source_system: SOURCE_SYSTEM,
+    }).onConflictDoNothing();
+
+    // contact_time preference
+    await db.insert(cdpCommunicationPreferences).values({
+      communication_preference_id: crypto.randomUUID(),
+      tenant_id: TENANT_ID,
+      party_id: partyId,
+      preference_type: 'contact_time',
+      preference_value: `${pref.contact_window_start}-${pref.contact_window_end}`,
+      source_system: SOURCE_SYSTEM,
+    }).onConflictDoNothing();
+
+    // DND preference
+    if (pref.dnd) {
+      await db.insert(cdpCommunicationPreferences).values({
+        communication_preference_id: crypto.randomUUID(),
+        tenant_id: TENANT_ID,
+        party_id: partyId,
+        preference_type: 'contact_frequency',
+        preference_value: 'dnd',
+        source_system: SOURCE_SYSTEM,
+      }).onConflictDoNothing();
+    }
+
+    // consent: marketing (sms)
+    await db.insert(cdpConsentRecords).values({
+      consent_record_id: crypto.randomUUID(),
+      tenant_id: TENANT_ID,
+      party_id: partyId,
+      channel_type: 'sms',
+      purpose_type: 'marketing',
+      consent_status: pref.marketing_opt_in && pref.sms_opt_in ? 'granted' : 'revoked',
+      source_system: SOURCE_SYSTEM,
+    }).onConflictDoNothing();
+
+    // consent: service (phone)
+    await db.insert(cdpConsentRecords).values({
+      consent_record_id: crypto.randomUUID(),
+      tenant_id: TENANT_ID,
+      party_id: partyId,
+      channel_type: 'phone',
+      purpose_type: 'service',
+      consent_status: pref.dnd ? 'revoked' : 'granted',
+      source_system: SOURCE_SYSTEM,
+    }).onConflictDoNothing();
+
+    // service_summary — 从已导入的 subscription 数据汇总
+    const subRows = await db
+      .select()
+      .from(cdpServiceSubscriptions)
+      .innerJoin(
+        cdpPartySubscriptionRelations,
+        eq(cdpServiceSubscriptions.service_subscription_id, cdpPartySubscriptionRelations.service_subscription_id),
+      )
+      .where(
+        and(
+          eq(cdpPartySubscriptionRelations.party_id, partyId),
+          eq(cdpPartySubscriptionRelations.status, 'active'),
+        ),
+      );
+
+    const activeSubs = subRows.filter(r => r.cdp_service_subscriptions.service_status === 'active');
+    const primarySub = subRows[0]?.cdp_service_subscriptions;
+    const accountRows = primarySub
+      ? await db.select().from(cdpCustomerAccounts).where(eq(cdpCustomerAccounts.customer_account_id, primarySub.customer_account_id)).limit(1)
+      : [];
+    const account = accountRows[0];
+
+    await db.insert(cdpServiceSummaries).values({
+      service_summary_id: crypto.randomUUID(),
+      tenant_id: TENANT_ID,
+      party_id: partyId,
+      primary_account_id: account?.customer_account_id ?? null,
+      active_subscription_count: activeSubs.length,
+      primary_subscription_id: primarySub?.service_subscription_id ?? null,
+      service_status: activeSubs.length === subRows.length ? 'normal'
+        : activeSubs.length > 0 ? 'partially_suspended' : 'suspended',
+      billing_status: account?.billing_status ?? 'normal',
+      delinquent_flag: account?.billing_status === 'overdue',
+    }).onConflictDoNothing();
+
+    prefCreated++;
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('UNIQUE constraint')) {
+      // already exists
+    } else {
+      console.error(`[cdp-seed] Error for preference ${pref.phone}:`, err);
+    }
+  }
+}
+
 businessDb.close();
-console.log(`[cdp-seed] Done: ${created} created, ${skipped} skipped (already exist)`);
+console.log(`[cdp-seed] Done: ${created} subscribers, ${prefCreated} preferences/summaries imported`);
