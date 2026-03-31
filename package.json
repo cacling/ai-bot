@@ -16,12 +16,14 @@
   "scripts": {
     "dev:backend": "npm --workspace backend run dev",
     "dev:frontend": "npm --workspace frontend run dev",
-    "dev:mcp": "npm --workspace @ai-bot/mcp-servers run dev:all",
+    "dev:mcp": "npm --workspace @ai-bot/mcp-servers run dev",
     "test:mcp": "npm --workspace @ai-bot/mcp-servers run test",
     "dev:km": "npm --workspace @ai-bot/km-service run dev",
     "dev:km-frontend": "npm --workspace @ai-bot/km-frontend run dev",
     "check:shared-db": "npm --workspace @ai-bot/shared-db run check",
     "check:mcp": "npm --workspace @ai-bot/mcp-servers run check",
-    "check:km": "npm --workspace @ai-bot/km-service run check"
+    "check:km": "npm --workspace @ai-bot/km-service run check",
+    "dev:cdp": "npm --workspace @ai-bot/cdp-service run dev",
+    "check:cdp": "npm --workspace @ai-bot/cdp-service run check"
   }
 }

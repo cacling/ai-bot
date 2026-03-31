@@ -27,10 +27,6 @@ platformSqlite.exec('PRAGMA busy_timeout = 5000');
 export const platformDb = drizzle(platformSqlite, { schema });
 export { platformSqlite };
 
-// ── business.db（只读，查询用户信息用于个性化问候等）──
-const businessDbPath =
-  process.env.BUSINESS_DB_PATH ??
-  fileURLToPath(new URL('../../../data/business.db', import.meta.url));
-
-const businessSqlite = new Database(businessDbPath, { readonly: true });
-export const businessDb = drizzle(businessSqlite, { schema });
+// ── business.db 已迁移至 CDP Service ──
+// 运行时客户数据查询通过 cdp-client.ts → CDP Service API
+// business.db 仅由 mock_apis 和 seed.ts 使用
