@@ -634,7 +634,11 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
             }),
           });
           const data = await res.json();
-          lastResponseText = data.text ?? data.error ?? '无返回';
+          if (!res.ok) {
+            lastResponseText = `[${res.status}] ${data.error ?? '请求失败'}`;
+          } else {
+            lastResponseText = data.text ?? data.error ?? '无返回';
+          }
 
           // 添加助手消息
           setTestMessages(prev => [...prev, { id: ++testMsgIdRef.current, role: 'assistant', text: lastResponseText }]);
@@ -664,6 +668,7 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
 
       // 3. 评估断言
       const toolsCalled = allToolRecords.map(r => r.tool);
+      console.log(`[testcase-eval] ${tc.id}: response="${lastResponseText.slice(0,80)}..." tools=${JSON.stringify(toolsCalled)} skills=${JSON.stringify(allSkillsLoaded)}`);
       try {
         const evalRes = await fetch('/api/skill-versions/evaluate-assertions', {
           method: 'POST',

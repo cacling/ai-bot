@@ -468,6 +468,14 @@ app.post('/evaluate-assertions', async (c) => {
     return c.json({ error: 'assertions 必填' }, 400);
   }
 
+  logger.info('skill-versions', 'evaluate_assertions', {
+    assertionCount: body.assertions.length,
+    responseLen: (body.response_text ?? '').length,
+    toolsCalled: body.tools_called ?? [],
+    skillsLoaded: body.skills_loaded ?? [],
+    responsePreview: (body.response_text ?? '').slice(0, 80),
+  });
+
   try {
     const { runAssertions, runAssertionsAsync } = await import('./assertion-evaluator');
     const hasLlmRubric = body.assertions.some((a: { type: string }) => a.type === 'llm_rubric');

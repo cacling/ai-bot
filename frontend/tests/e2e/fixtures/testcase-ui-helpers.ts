@@ -155,21 +155,41 @@ export async function runCaseInChat(
   await expect(page.locator('.animate-bounce').first()).not.toBeVisible({ timeout: 90_000 });
   await page.waitForTimeout(1000);
 
-  // 切回用例 tab 查看结果
+  // 切回用例 tab，等待断言评估完成
   await switchToTestCasesSubTab(page);
   await page.waitForTimeout(500);
 
-  // 点选同一用例查看状态图标（可能需要滚动）
+  // 找到用例行，等待 spinning 消失 + 状态图标出现（evaluate-assertions 可能需要几秒）
   const caseRowAgain = page.getByText(new RegExp(`${caseId}\\s*·`)).first();
   await caseRowAgain.scrollIntoViewIfNeeded();
-  await caseRowAgain.click();
-  await page.waitForTimeout(300);
 
-  // 读取状态：绿色=passed, 红色=failed, 黄色=infra_error
+  // 等待该行出现绿/红/黄状态图标（最多 30 秒，覆盖 llm_rubric 等异步断言）
+  const rowParent = caseRowAgain.locator('..');
+  try {
+    await expect(rowParent.locator('.text-green-500, .text-red-500, .text-amber-500').first())
+      .toBeVisible({ timeout: 30_000 });
+  } catch { /* timeout = unknown */ }
+
+  await caseRowAgain.click();
+  await page.waitForTimeout(200);
+
+  // 检测状态图标：在整个用例列表区域查找，不限于 .ring-1 行
+  const listArea = page.locator('.overflow-y-auto').first();
+  const greenCount = await listArea.locator('.text-green-500').count().catch(() => 0);
+  const redCount = await listArea.locator('.text-red-500').count().catch(() => 0);
+  const amberCount = await listArea.locator('.text-amber-500').count().catch(() => 0);
+
+  // 查找当前用例行的状态：行内包含 caseId 的最近祖先
   const row = page.locator('.ring-1').first();
   if (await row.locator('.text-green-500').first().isVisible().catch(() => false)) return 'passed';
   if (await row.locator('.text-red-500').first().isVisible().catch(() => false)) return 'failed';
   if (await row.locator('.text-amber-500').first().isVisible().catch(() => false)) return 'infra_error';
+
+  // fallback: 如果 .ring-1 内没找到，但页面上有状态图标，用全局计数
+  if (greenCount > 0 || redCount > 0 || amberCount > 0) {
+    // 有图标但不在 .ring-1 内，说明选择器对不上，用 debug 信息
+    console.log(`[runCaseInChat] ${caseId}: icon in list (g=${greenCount} r=${redCount} a=${amberCount}) but not in .ring-1`);
+  }
   return 'unknown';
 }
 
@@ -177,25 +197,34 @@ export async function runCaseInChat(
  * 逐条在对话 tab 中运行全部用例，每条都通过 Play 按钮触发实时对话。
  * 返回 { passed, failed, total, results }
  */
+/**
+ * 点击「运行全部」按钮执行全部用例（后端批量模式），等待完成后读取统计。
+ * 注意：单条 runCaseInChat 会切到对话 tab（TestCasePanel 卸载导致状态丢失），
+ * 因此全量执行用后端批量模式更可靠。
+ */
 export async function runAllCasesInChat(page: Page): Promise<{
   passed: number;
   failed: number;
   total: number;
   results: Array<{ caseId: string; status: string }>;
 }> {
-  const caseIds = await getVisibleCaseIds(page);
-  const results: Array<{ caseId: string; status: string }> = [];
-  let passed = 0;
-  let failed = 0;
+  await switchToTestCasesSubTab(page);
+  await page.waitForTimeout(300);
 
-  for (let i = 0; i < caseIds.length; i++) {
-    // 每条用例间隔 5 秒，避免触发 LLM API rate limit
-    if (i > 0) await page.waitForTimeout(5000);
-    const status = await runCaseInChat(page, caseIds[i]);
-    results.push({ caseId: caseIds[i], status });
-    if (status === 'passed') passed++;
-    else failed++;
-  }
+  const runAllBtn = page.getByRole('button', { name: /运行全部/ });
+  await expect(runAllBtn).toBeVisible({ timeout: 5_000 });
+  await runAllBtn.click();
 
-  return { passed, failed, total: caseIds.length, results };
+  // 等待「执行中」出现再消失（每个用例 ~10-30s）
+  await expect(page.getByText(/执行中/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/执行中/)).not.toBeVisible({ timeout: 600_000 });
+
+  // 读取统计文本
+  const statsText = await page.getByText(/\d+ pass/).first().textContent({ timeout: 10_000 }).catch(() => '');
+  const passMatch = statsText.match(/(\d+)\s*pass/);
+  const failMatch = statsText.match(/(\d+)\s*fail/);
+  const passed = passMatch ? parseInt(passMatch[1]) : 0;
+  const failed = failMatch ? parseInt(failMatch[1]) : 0;
+
+  return { passed, failed, total: passed + failed, results: [] };
 }
