@@ -182,14 +182,24 @@ frontend → /api/mcp/* → backend（Control Plane）→ platform schema
 
 | Workspace | 包名 | 职责 | DB |
 |-----------|------|------|-----|
-| `backend/` | telecom-support-backend | Agent runtime + 管理 API 代理 | `platform.db`（独占）+ `km.db`（只读） |
-| `km_service/` | — | 技能管理 + MCP 管理 + 知识管理 | `km.db`（独占写入） |
+| `backend/` | telecom-support-backend | Agent runtime（LLM 编排、对话、语音）+ 管理 API 代理 | `platform.db`（独占） |
+| `km_service/` | @ai-bot/km-service | 知识与技能运营平台（见下方管辖范围） | `km.db`（独占） |
 | `mock_apis/` | — | 电信业务模拟后端 | `business.db`（独占） |
 | `work_order_service/` | — | 工单/工作流管理 | `workorder.db`（独占） |
 | `frontend/` | — | 客服 React UI | — |
 | `cdp_service/` | @ai-bot/cdp-service | 客户数据平台（16 张表，party-centric 语义层） | `cdp.db`（独占） |
 | `mcp_servers/` | @ai-bot/mcp-servers | MCP 内部服务（已合并为 internal_service，端口 :18003） | — |
 | `packages/shared-db/` | @ai-bot/shared-db | 共享 Drizzle schema（5 域） | — |
+
+#### km_service 管辖范围
+
+| 域 | 内容 | 对应资源 |
+|----|------|---------|
+| **知识管理** | 公司政策、QA 知识库、知识审批工作流 | kmAssets, kmDocuments, kmCandidates 等 km_* 表 |
+| **技能管理** | 业务 SOP 的沉淀、版本控制、发布审批、灰度、沙盒测试 | `km_service/skills/` 目录 + skillRegistry, skillVersions, skillWorkflowSpecs 表 |
+| **工具管理** | 技能/知识驱动时所需 MCP 工具的注册、绑定、发现、Mock 规则 | mcpServers, mcpTools, toolImplementations, connectors 表 |
+
+Backend 通过 `km-client.ts`（HTTP + TTL 缓存）访问以上数据，不直接读写 km.db。
 
 ### 2.4 已知边界违反（待清理）
 
