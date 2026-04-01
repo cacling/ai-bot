@@ -209,7 +209,8 @@ export async function runAllCasesInChat(page: Page): Promise<{
   results: Array<{ caseId: string; status: string }>;
 }> {
   await switchToTestCasesSubTab(page);
-  await page.waitForTimeout(300);
+  // cooldown：等前一个技能的 LLM 请求处理完毕，避免资源竞争
+  await page.waitForTimeout(3000);
 
   const runAllBtn = page.getByRole('button', { name: /运行全部/ });
   await expect(runAllBtn).toBeVisible({ timeout: 5_000 });
