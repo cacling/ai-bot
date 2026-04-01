@@ -186,7 +186,7 @@ mcp_servers/src/services/
 ### Skills 知识层（skills/）
 
 ```
-backend/skills/
+km_service/skills/
 ├── biz-skills/                          # 业务技能（状态图驱动，v3 规范）
 │   ├── _shared/types.ts                 # 跨技能共享类型（BaseCheckStep 等）
 │   ├── bill-inquiry/
@@ -624,9 +624,9 @@ tests/unittest/frontend/
 
 | 步骤 | 文件 | 说明 |
 |------|------|------|
-| 1 | `backend/skills/biz-skills/broadband-repair/SKILL.md` | 新建技能目录 + 主文件（含状态图） |
-| 2 | `backend/skills/biz-skills/broadband-repair/references/*.md` | 参考文档（政策/规则） |
-| 3 | （可选）`backend/skills/biz-skills/broadband-repair/scripts/*.ts` | 诊断/执行脚本 |
+| 1 | `km_service/skills/biz-skills/broadband-repair/SKILL.md` | 新建技能目录 + 主文件（含状态图） |
+| 2 | `km_service/skills/biz-skills/broadband-repair/references/*.md` | 参考文档（政策/规则） |
+| 3 | （可选）`km_service/skills/biz-skills/broadband-repair/scripts/*.ts` | 诊断/执行脚本 |
 | 4 | 无需修改 | skills.ts 自动发现新目录，refreshSkillsCache() 热加载 |
 | 5 | `tests/` | 新增回归测试用例（POST /api/test-cases） |
 
@@ -694,8 +694,8 @@ CDP 已独立为 `cdp_service/`（端口 18020），Schema 在 `packages/shared-
 | **数据库 Schema** | `backend/src/db/schema/business.ts`（业务）、`platform.ts`（平台）、`packages/shared-db/src/schema/cdp.ts`（CDP） |
 | **种子数据** | `backend/src/db/seed.ts` |
 | **系统提示词** | `backend/src/engine/*-system-prompt.md`（5 个文件） |
-| **业务技能** | `backend/skills/biz-skills/<skill-name>/SKILL.md` |
-| **技术技能** | `backend/skills/tech-skills/<skill-name>/SKILL.md` |
+| **业务技能** | `km_service/skills/biz-skills/<skill-name>/SKILL.md` |
+| **技术技能** | `km_service/skills/tech-skills/<skill-name>/SKILL.md` |
 | **MCP Server** | `mcp_servers/src/services/<service>.ts`（5 个文件） |
 | **启动/停止脚本** | 根目录 `start.sh` / `stop.sh` |
 | **LLM 语义评测** | `frontend/tests/e2e/evals/`（promptfoo） |
@@ -712,9 +712,9 @@ CDP 已独立为 `cdp_service/`（端口 18020），Schema 在 `packages/shared-
 | **路由注册** | `backend/src/index.ts`（全部路由挂载） |
 | **前端路由** | `frontend/src/App.tsx` |
 | **日志文件** | `logs/backend.log`、`logs/mcp-*.log`、`logs/frontend.log` |
-| **版本快照** | `backend/skills/.versions/<skill>/<vN>/` |
-| **沙箱副本** | `backend/skills/.sandbox/<id>/` |
-| **灰度目录** | `backend/skills/.canary/` |
+| **版本快照** | `km_service/skills/.versions/<skill>/<vN>/` |
+| **沙箱副本** | `km_service/skills/.sandbox/<id>/` |
+| **灰度目录** | `km_service/skills/.canary/` |
 
 ---
 
@@ -806,7 +806,7 @@ registerCard({
 ### 新增业务 Skill
 
 ```
-backend/skills/biz-skills/my-skill/
+km_service/skills/biz-skills/my-skill/
 ├── SKILL.md                  # 必须：frontmatter + 状态图 + 流程逻辑
 └── references/
     └── my-guide.md           # 可选：参考文档

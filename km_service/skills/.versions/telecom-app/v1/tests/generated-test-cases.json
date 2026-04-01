@@ -1,0 +1,407 @@
+{
+  "meta": {
+    "skill_id": "telecom-app",
+    "version_no": 1,
+    "generated_at": "2026-03-31T16:25:09.670Z",
+    "source_checksum": "c964f45cfdac085c",
+    "generator_version": "1.1"
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "source": "frontmatter",
+      "description": "技能应仅处理 App 登录、闪退、安装更新、设备安全与页面技术异常，不处理账单解读、套餐咨询、业务退订等业务问题"
+    },
+    {
+      "id": "REQ-002",
+      "source": "trigger",
+      "description": "当用户反映 App 无法打开、闪退、卡顿时，应进入 app_crash 问题处理流程"
+    },
+    {
+      "id": "REQ-003",
+      "source": "trigger",
+      "description": "当用户无法登录（密码错误、OTP 未收到、账号被锁）时，应进入 login_issue 问题处理流程"
+    },
+    {
+      "id": "REQ-004",
+      "source": "trigger",
+      "description": "当用户报告 App 内功能异常（查话费、缴费、办理业务等页面报错或无响应）时，应进入 feature_error 问题处理流程"
+    },
+    {
+      "id": "REQ-005",
+      "source": "trigger",
+      "description": "当用户无法安装 App 或无法升级至新版本时，应进入 install_update 问题处理流程"
+    },
+    {
+      "id": "REQ-006",
+      "source": "trigger",
+      "description": "当 App 提示设备环境异常、安全检测不通过，或账号显示可疑活动、被风控限制时，应进入 security_check 问题处理流程"
+    },
+    {
+      "id": "REQ-007",
+      "source": "trigger",
+      "description": "当用户询问附近营业厅地址、线下网点位置或如何前往营业厅时，应进入 store_locator 问题处理流程"
+    },
+    {
+      "id": "REQ-008",
+      "source": "workflow",
+      "description": "对于高冲突场景（如'App 里查不了话费'），应先澄清是 App 技术问题还是业务需求，仅在确认为 App 技术问题时继续本技能"
+    },
+    {
+      "id": "REQ-009",
+      "source": "tool",
+      "description": "系统应根据客户描述准确分类 issue_type，并调用相应工具进行诊断或查询"
+    },
+    {
+      "id": "REQ-010",
+      "source": "tool",
+      "description": "对于安全类问题和登录中涉及安全的场景，应使用 diagnose_app 工具执行安全诊断，不得凭空猜测设备状态"
+    },
+    {
+      "id": "REQ-011",
+      "source": "tool",
+      "description": "对于功能异常中涉及账号状态的问题，应先调用 query_subscriber 工具核实账号状态，再给出处理建议"
+    },
+    {
+      "id": "REQ-012",
+      "source": "tool",
+      "description": "对于营业厅查询请求，应先获取用户位置，再调用 maps_around_search 工具搜索附近营业厅"
+    },
+    {
+      "id": "REQ-013",
+      "source": "workflow",
+      "description": "TC1_闪退流程中，应先检查 App 版本，版本过旧则引导更新，版本正常则引导清缓存、重启、清存储"
+    },
+    {
+      "id": "REQ-014",
+      "source": "workflow",
+      "description": "TC2_登录流程中，应根据不同登录问题类型（账号被锁、密码错误、OTP 未收到、生物识别失败）提供针对性处理方案"
+    },
+    {
+      "id": "REQ-015",
+      "source": "workflow",
+      "description": "TC3_功能异常流程中，应先确认具体异常类型（页面/按钮/支付/账号），再进行针对性排查"
+    },
+    {
+      "id": "REQ-016",
+      "source": "workflow",
+      "description": "TC4_安装更新流程中，应先进行基础排查（系统版本、存储空间、网络），仍失败则提供官方下载渠道"
+    },
+    {
+      "id": "REQ-017",
+      "source": "workflow",
+      "description": "TC5_安全流程中，应先调用 diagnose_app 进行安全诊断，根据诊断结果区分高风险、硬性限制和可修复情况"
+    },
+    {
+      "id": "REQ-018",
+      "source": "workflow",
+      "description": "对于硬性限制（如 Root 或模拟器），应告知用户须使用正常设备，若用户声明未 Root 则升级 frontline 人工核查"
+    },
+    {
+      "id": "REQ-019",
+      "source": "workflow",
+      "description": "所有问题处理流程中，若自助解决方案无效，应升级至相应路径（frontline 或 security_team）"
+    },
+    {
+      "id": "REQ-020",
+      "source": "workflow",
+      "description": "所有问题解决路径最后应确认问题是否已解决，用户确认解决则结束对话，否则升级 frontline"
+    },
+    {
+      "id": "REQ-021",
+      "source": "workflow",
+      "description": "用户可随时要求转人工，系统应立即转接人工客服"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-001",
+      "title": "App 闪退 - 正常流程（版本过旧）",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-002",
+        "REQ-009",
+        "REQ-013",
+        "REQ-020"
+      ],
+      "turns": [
+        "App 一打开就闪退，根本进不去"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called_any_of",
+          "value": "diagnose_app, query_subscriber"
+        },
+        {
+          "type": "contains",
+          "value": "版本"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "更新, 升级, 应用商店"
+        },
+        {
+          "type": "response_has_next_step",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "id": "TC-002",
+      "title": "登录失败 - OTP 未收到",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-003",
+        "REQ-009",
+        "REQ-014",
+        "REQ-020"
+      ],
+      "turns": [
+        "登录时收不到验证码，试了好几次都没收到"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "验证码"
+        },
+        {
+          "type": "response_mentions_all",
+          "value": "手机号, 等待, 重发"
+        },
+        {
+          "type": "not_contains",
+          "value": "密码"
+        },
+        {
+          "type": "response_has_next_step",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "id": "TC-003",
+      "title": "功能异常 - 查话费页面报错（账号状态正常）",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-004",
+        "REQ-009",
+        "REQ-011",
+        "REQ-015",
+        "REQ-020"
+      ],
+      "turns": [
+        "App 里查话费一直报错，页面打不开"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "query_subscriber"
+        },
+        {
+          "type": "contains",
+          "value": "网络"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "缓存, 重启, 版本"
+        },
+        {
+          "type": "response_has_next_step",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "id": "TC-004",
+      "title": "安装失败 - 存储空间不足",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-005",
+        "REQ-009",
+        "REQ-016",
+        "REQ-020"
+      ],
+      "turns": [
+        "App 装不上，提示存储空间不够"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "空间"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "清理, 删除, 应用商店"
+        },
+        {
+          "type": "response_has_next_step",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "id": "TC-005",
+      "title": "安全检测不通过 - 设备 Root",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-006",
+        "REQ-009",
+        "REQ-010",
+        "REQ-017",
+        "REQ-020"
+      ],
+      "turns": [
+        "App 提示设备不安全，说我用了 Root"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "diagnose_app"
+        },
+        {
+          "type": "contains",
+          "value": "Root"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "正常设备, 非Root"
+        },
+        {
+          "type": "response_has_next_step",
+          "value": ""
+        }
+      ]
+    },
+    {
+      "id": "TC-006",
+      "title": "高冲突场景 - App 里查不了话费（实为账单咨询）",
+      "category": "edge",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-001",
+        "REQ-008"
+      ],
+      "turns": [
+        "App 里查不了话费，我想知道这个月花了多少钱"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "是 App 本身出了故障"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "query_subscriber"
+        },
+        {
+          "type": "not_contains",
+          "value": "账单金额"
+        }
+      ]
+    },
+    {
+      "id": "TC-007",
+      "title": "超出范围请求 - 套餐变更咨询",
+      "category": "error",
+      "priority": 3,
+      "requirement_refs": [
+        "REQ-001"
+      ],
+      "turns": [
+        "我想把套餐改成 59 元的，App 里找不到入口"
+      ],
+      "assertions": [
+        {
+          "type": "tool_not_called_any_of",
+          "value": "diagnose_app, query_subscriber, maps_around_search"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "套餐变更, plan-inquiry"
+        }
+      ]
+    },
+    {
+      "id": "TC-008",
+      "title": "营业厅查询 - 获取位置后搜索",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-007",
+        "REQ-009",
+        "REQ-012"
+      ],
+      "turns": [
+        "最近的电信营业厅在哪？",
+        "我在北京市朝阳区国贸"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "maps_around_search"
+        },
+        {
+          "type": "contains",
+          "value": "营业厅"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "地址, 距离, 导航"
+        }
+      ]
+    },
+    {
+      "id": "TC-009",
+      "title": "硬性限制 - 用户声明未 Root",
+      "category": "state",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-018",
+        "REQ-019"
+      ],
+      "turns": [
+        "App 说我设备 Root 了，但我没 Root 过",
+        "我不接受这个说法"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "人工核查"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "frontline, 客服, 工单"
+        }
+      ]
+    },
+    {
+      "id": "TC-010",
+      "title": "用户中途要求转人工",
+      "category": "state",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-019",
+        "REQ-021"
+      ],
+      "turns": [
+        "App 登录不了",
+        "算了，直接转人工吧"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "正在为您转接人工客服"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "diagnose_app"
+        }
+      ]
+    }
+  ]
+}

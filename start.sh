@@ -46,12 +46,13 @@ KM_SERVICE_PORT="${KM_SERVICE_PORT:-18010}"
 MOCK_APIS_PORT="${MOCK_APIS_PORT:-18008}"
 WORK_ORDER_PORT="${WORK_ORDER_PORT:-18009}"
 CDP_SERVICE_PORT="${CDP_SERVICE_PORT:-18020}"
+OUTBOUND_SERVICE_PORT="${OUTBOUND_SERVICE_PORT:-18021}"
 MCP_INTERNAL_PORT="${MCP_INTERNAL_PORT:-18003}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 MCP_PORTS=("$MCP_INTERNAL_PORT")
 MCP_SERVICES=("internal_service")
 MCP_LABELS=("内部服务")
-ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$CDP_SERVICE_PORT" "$FRONTEND_PORT")
+ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$CDP_SERVICE_PORT" "$OUTBOUND_SERVICE_PORT" "$FRONTEND_PORT")
 
 # ── PID 记录 ────────────────────────────────────────────────────────────────
 WRAPPER_PIDS=()
@@ -138,6 +139,10 @@ log "cdp_service: bun install"
 cd "$BASE_DIR/cdp_service" && "$BUN" install 2>&1 | tail -3
 ok "cdp_service 依赖就绪"
 
+log "outbound_service: bun install"
+cd "$BASE_DIR/outbound_service" && "$BUN" install 2>&1 | tail -3
+ok "outbound_service 依赖就绪"
+
 log "frontend: bun install"
 cd "$BASE_DIR/frontend" && "$BUN" install 2>&1 | tail -3
 ok "frontend 依赖就绪"
@@ -153,8 +158,9 @@ export PLATFORM_DB_PATH="$BASE_DIR/data/platform.db"
 export BUSINESS_DB_PATH="$BASE_DIR/data/business.db"
 export WORKORDER_DB_PATH="$BASE_DIR/data/workorder.db"
 export CDP_DB_PATH="$BASE_DIR/data/cdp.db"
+export OUTBOUND_DB_PATH="$BASE_DIR/data/outbound.db"
 
-# Schema 同步（5 DB：telecom/platform/business/workorder/cdp）
+# Schema 同步（6 DB：telecom/platform/business/workorder/cdp/outbound）
 log "同步数据库 Schema..."
 
 # 1) backend schema → km.db (platform + km 表)
@@ -191,7 +197,11 @@ WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" drizzle-kit push --config drizzle-
 cd "$BASE_DIR/cdp_service"
 CDP_DB_PATH="$CDP_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
 
-ok "数据库 Schema 就绪（km.db + business.db + workorder.db + cdp.db）"
+# 6) outbound_service schema → outbound.db
+cd "$BASE_DIR/outbound_service"
+OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+
+ok "数据库 Schema 就绪（km.db + business.db + workorder.db + cdp.db + outbound.db）"
 
 # 数据初始化
 if [[ "$RESET_MODE" == true ]]; then
@@ -208,7 +218,7 @@ if [[ "$RESET_MODE" == true ]]; then
   # 清理非默认技能（biz-skills 和 .versions 中只保留默认 7 个）
   DEFAULT_SKILLS=("bill-inquiry" "fault-diagnosis" "outbound-collection" "outbound-marketing" "plan-inquiry" "service-cancel" "telecom-app")
 
-  BIZ_DIR="$BASE_DIR/backend/skills/biz-skills"
+  BIZ_DIR="$BASE_DIR/km_service/skills/biz-skills"
   for dir in "$BIZ_DIR"/*/; do
     [[ ! -d "$dir" ]] && continue
     name=$(basename "$dir")
@@ -218,7 +228,7 @@ if [[ "$RESET_MODE" == true ]]; then
     fi
   done
 
-  VERSIONS_DIR="$BASE_DIR/backend/skills/.versions"
+  VERSIONS_DIR="$BASE_DIR/km_service/skills/.versions"
   for dir in "$VERSIONS_DIR"/*/; do
     [[ ! -d "$dir" ]] && continue
     name=$(basename "$dir")
@@ -247,7 +257,7 @@ if [[ "$RESET_MODE" == true ]]; then
   fi
 
   # 删除所有 .draft 文件
-  find "$BASE_DIR/backend/skills" -name "*.draft" -delete 2>/dev/null
+  find "$BASE_DIR/km_service/skills" -name "*.draft" -delete 2>/dev/null
   ok "草稿文件已清理"
 
   # 重新 push schema + seed（多 DB）
@@ -257,9 +267,12 @@ if [[ "$RESET_MODE" == true ]]; then
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" drizzle-kit push --config drizzle-business.config.ts 2>&1 | tail -1
   cd "$BASE_DIR/backend" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+  cd "$BASE_DIR/outbound_service" && OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" run db:seed 2>&1 | tail -5
   cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
+  # outbound seed 依赖 CDP（phone → party_id 解析），需要先启动 CDP 服务
+  # 这里先跳过，在 CDP 服务启动后再 seed（见下方 start_service 后的 seed 步骤）
   ok "数据已重置为初始状态"
 else
   # 正常模式：upsert，保留用户数据
@@ -334,6 +347,21 @@ start_service "km-service" "$BASE_DIR/km_service" \
 start_service "cdp-service" "$BASE_DIR/cdp_service" \
   "CDP_SERVICE_PORT=$CDP_SERVICE_PORT CDP_DB_PATH=$CDP_DB_PATH $BUN src/server.ts"
 
+# Outbound Service (外呼任务与营销活动管理)
+start_service "outbound-service" "$BASE_DIR/outbound_service" \
+  "OUTBOUND_SERVICE_PORT=$OUTBOUND_SERVICE_PORT OUTBOUND_DB_PATH=$OUTBOUND_DB_PATH CDP_SERVICE_PORT=$CDP_SERVICE_PORT $BUN src/server.ts"
+
+# Outbound seed（依赖 CDP 服务已启动，等待 CDP 就绪后执行）
+if [[ "$RESET_MODE" == true ]]; then
+  log "等待 CDP 就绪后执行 outbound seed..."
+  for i in $(seq 1 15); do
+    if curl -sf --noproxy '*' http://127.0.0.1:${CDP_SERVICE_PORT}/health >/dev/null 2>&1; then break; fi
+    sleep 1
+  done
+  cd "$BASE_DIR/outbound_service" && OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" CDP_SERVICE_PORT="$CDP_SERVICE_PORT" "$BUN" src/seed.ts 2>&1 | tail -5
+  ok "outbound 数据已初始化"
+fi
+
 # Backend
 start_service "backend" "$BASE_DIR/backend" "PORT=$BACKEND_PORT $BUN src/index.ts"
 
@@ -361,6 +389,7 @@ if [[ "$READY" == true ]]; then
   ok "Backend      → http://127.0.0.1:${BACKEND_PORT}"
   ok "KM Service   → http://127.0.0.1:${KM_SERVICE_PORT}"
   ok "CDP Service  → http://127.0.0.1:${CDP_SERVICE_PORT}"
+  ok "Outbound Svc → http://127.0.0.1:${OUTBOUND_SERVICE_PORT}"
   ok "Frontend     → http://localhost:${FRONTEND_PORT}"
 
   # 检查每个 MCP 服务

@@ -1,6 +1,6 @@
 ---
 paths:
-  - "backend/skills/**"
+  - "km_service/skills/**"
 ---
 <!-- auto-generated on 2026-04-01 from standards.md -->
 

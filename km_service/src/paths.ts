@@ -15,7 +15,7 @@ export const REPO_ROOT = (() => {
     process.cwd(),
   ];
   for (const c of candidates) {
-    if (existsSync(resolve(c, 'backend/skills')) && existsSync(resolve(c, 'frontend'))) return c;
+    if ((existsSync(resolve(c, 'km_service/skills')) || existsSync(resolve(c, 'backend/skills'))) && existsSync(resolve(c, 'frontend'))) return c;
   }
   return candidates[0];
 })();
@@ -26,7 +26,7 @@ export const BACKEND_ROOT = resolve(REPO_ROOT, 'backend');
 /** skills 根目录 */
 export const SKILLS_ROOT = process.env.SKILLS_DIR
   ? resolve(process.cwd(), process.env.SKILLS_DIR)
-  : resolve(BACKEND_ROOT, 'skills');
+  : resolve(REPO_ROOT, 'km_service/skills');
 
 /** biz-skills 目录 */
 export const BIZ_SKILLS_DIR = resolve(SKILLS_ROOT, 'biz-skills');

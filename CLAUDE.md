@@ -67,9 +67,9 @@ cd backend && bunx drizzle-kit studio  # 数据库可视化管理
 
 | 步骤 | 文件 | 说明 |
 |------|------|------|
-| 1 | `backend/skills/biz-skills/broadband-repair/SKILL.md` | 新建技能目录 + 主文件（含状态图） |
-| 2 | `backend/skills/biz-skills/broadband-repair/references/*.md` | 参考文档（政策/规则） |
-| 3 | （可选）`backend/skills/biz-skills/broadband-repair/scripts/*.ts` | 诊断/执行脚本 |
+| 1 | `km_service/skills/biz-skills/broadband-repair/SKILL.md` | 新建技能目录 + 主文件（含状态图） |
+| 2 | `km_service/skills/biz-skills/broadband-repair/references/*.md` | 参考文档（政策/规则） |
+| 3 | （可选）`km_service/skills/biz-skills/broadband-repair/scripts/*.ts` | 诊断/执行脚本 |
 | 4 | 无需修改 | skills.ts 自动发现新目录，refreshSkillsCache() 热加载 |
 | 5 | `tests/` | 新增回归测试用例（POST /api/test-cases） |
 
@@ -219,7 +219,7 @@ registerCard({
 ### 新增业务 Skill
 
 ```
-backend/skills/biz-skills/my-skill/
+km_service/skills/biz-skills/my-skill/
 ├── SKILL.md                  # 必须：frontmatter + 状态图 + 流程逻辑
 └── references/
     └── my-guide.md           # 可选：参考文档
@@ -267,4 +267,4 @@ metadata:
 | `rules/backend.md` | `backend/src/**` | 后端命名、导出、日志、错误处理 |
 | `rules/frontend.md` | `frontend/src/**` | 前端命名、导出、组件结构 |
 | `rules/mcp.md` | `mcp_servers/**` | MCP 工具定义、Zod 校验、返回格式 |
-| `rules/skills.md` | `backend/skills/**` | Skill 目录结构、SKILL.md 编写、状态图标记 |
+| `rules/skills.md` | `km_service/skills/**` | Skill 目录结构、SKILL.md 编写、状态图标记 |

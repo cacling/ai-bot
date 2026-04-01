@@ -125,7 +125,7 @@ extract_scope "$STANDARDS" "mcp" >> "$RULES_DIR/mcp.md"
 cat > "$RULES_DIR/skills.md" << EOF
 ---
 paths:
-  - "backend/skills/**"
+  - "km_service/skills/**"
 ---
 $HEADER_NOTE
 
@@ -264,7 +264,7 @@ cat >> "$OUTPUT" << 'EOF'
 | `rules/backend.md` | `backend/src/**` | 后端命名、导出、日志、错误处理 |
 | `rules/frontend.md` | `frontend/src/**` | 前端命名、导出、组件结构 |
 | `rules/mcp.md` | `mcp_servers/**` | MCP 工具定义、Zod 校验、返回格式 |
-| `rules/skills.md` | `backend/skills/**` | Skill 目录结构、SKILL.md 编写、状态图标记 |
+| `rules/skills.md` | `km_service/skills/**` | Skill 目录结构、SKILL.md 编写、状态图标记 |
 EOF
 
 # ══════════════════════════════════════════════════════════════════════════════

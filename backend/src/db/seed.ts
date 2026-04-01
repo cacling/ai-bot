@@ -1606,7 +1606,7 @@ async function seed() {
   // ── 10. 技能注册 + v1 版本快照（upsert：已存在则跳过）─────────────────────
   console.log('[seed] 初始化技能注册表和版本快照...');
 
-  const { initializeSkillVersion } = await import('../agent/km/skills/version-manager');
+  const { initializeSkillVersion } = await import('../../../km_service/src/skills/version-manager');
 
   const bizSkills = [
     { id: 'bill-inquiry',         desc: '电信账单查询技能' },

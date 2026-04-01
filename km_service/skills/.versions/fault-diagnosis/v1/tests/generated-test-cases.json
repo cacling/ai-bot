@@ -1,0 +1,361 @@
+{
+  "meta": {
+    "skill_id": "fault-diagnosis",
+    "version_no": 1,
+    "generated_at": "2026-03-31T16:12:04.896Z",
+    "source_checksum": "633cb7bdfa23ee9f",
+    "generator_version": "1.1"
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "source": "frontmatter",
+      "description": "技能应在用户表达网络故障意图（如无信号、网速骤降、通话中断、无法上网）时被加载"
+    },
+    {
+      "id": "REQ-002",
+      "source": "frontmatter",
+      "description": "技能不应处理长期流量不足或套餐限速问题，此类请求应转至套餐查询技能"
+    },
+    {
+      "id": "REQ-003",
+      "source": "trigger",
+      "description": "用户反映最近突然网速变慢、无信号、通话中断或无法上网时应触发本技能"
+    },
+    {
+      "id": "REQ-004",
+      "source": "trigger",
+      "description": "当用户提到“网速慢”或“被限速”时，应先澄清是突发故障还是月底流量用尽，以决定是否继续本技能"
+    },
+    {
+      "id": "REQ-005",
+      "source": "tool",
+      "description": "系统应在【接收并诊断】状态立即调用 diagnose_network 工具进行预检，不得先反复追问故障细节"
+    },
+    {
+      "id": "REQ-006",
+      "source": "workflow",
+      "description": "根据 diagnose_network 返回的异常项（如账号停机、流量耗尽、APN异常、基站异常、网络拥塞等），应进入对应的处理状态"
+    },
+    {
+      "id": "REQ-007",
+      "source": "workflow",
+      "description": "若 diagnose_network 返回所有项正常，应进入【用户自查】状态，逐步引导用户执行自查步骤（每轮仅一个动作）"
+    },
+    {
+      "id": "REQ-008",
+      "source": "workflow",
+      "description": "在【确认恢复】状态，必须询问用户问题是否已解决，并根据回答决定进入【已解决】或【升级处理】"
+    },
+    {
+      "id": "REQ-009",
+      "source": "workflow",
+      "description": "涉及基站异常、SIM卡损坏、连续重启无效等场景时，应引导用户转人工或前往营业厅，不得承诺已提交工单"
+    },
+    {
+      "id": "REQ-010",
+      "source": "workflow",
+      "description": "若 diagnose_network 调用失败，应进入【诊断失败兜底】状态并建议转人工处理"
+    },
+    {
+      "id": "REQ-011",
+      "source": "workflow",
+      "description": "任何状态下用户主动要求转人工，应立即进入【转接人工】状态并提供人工客服路径"
+    },
+    {
+      "id": "REQ-012",
+      "source": "workflow",
+      "description": "每轮对话只能执行当前状态定义的操作，禁止合并多个步骤或提前透露后续流程"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-001",
+      "title": "突发无信号-正常诊断流程",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-001",
+        "REQ-003",
+        "REQ-005"
+      ],
+      "turns": [
+        "我手机突然没信号了，完全打不了电话"
+      ],
+      "assertions": [
+        {
+          "type": "skill_loaded",
+          "value": "fault-diagnosis"
+        },
+        {
+          "type": "tool_called",
+          "value": "diagnose_network"
+        },
+        {
+          "type": "contains",
+          "value": "抱歉"
+        },
+        {
+          "type": "contains",
+          "value": "正在为您诊断"
+        }
+      ],
+      "notes": "核心主路径：突发无信号触发技能并立即调用诊断工具"
+    },
+    {
+      "id": "TC-002",
+      "title": "网速骤降-诊断返回基站异常",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-001",
+        "REQ-003",
+        "REQ-005",
+        "REQ-006",
+        "REQ-009"
+      ],
+      "turns": [
+        "最近两天网特别卡，刷视频都转圈，以前都好好的"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "diagnose_network"
+        },
+        {
+          "type": "contains",
+          "value": "基站"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "转人工, 人工客服, 营业厅"
+        }
+      ],
+      "notes": "诊断返回基站异常，应引导转人工而非承诺解决"
+    },
+    {
+      "id": "TC-003",
+      "title": "通话中断-诊断返回SIM卡问题",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-001",
+        "REQ-003",
+        "REQ-005",
+        "REQ-006",
+        "REQ-009",
+        "REQ-012"
+      ],
+      "turns": [
+        "打电话老是断线，听不清对方说话"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "diagnose_network"
+        },
+        {
+          "type": "contains",
+          "value": "SIM卡"
+        },
+        {
+          "type": "contains",
+          "value": "营业厅"
+        },
+        {
+          "type": "not_contains",
+          "value": "已提交工单"
+        }
+      ],
+      "notes": "涉及SIM卡损坏需引导营业厅，且不得提及工单提交"
+    },
+    {
+      "id": "TC-004",
+      "title": "所有诊断项正常-进入用户自查流程",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-005",
+        "REQ-007",
+        "REQ-012"
+      ],
+      "turns": [
+        "手机有信号但上不了网"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "diagnose_network"
+        },
+        {
+          "type": "contains",
+          "value": "飞行模式"
+        },
+        {
+          "type": "not_contains",
+          "value": "重启"
+        },
+        {
+          "type": "not_contains",
+          "value": "插拔SIM卡"
+        }
+      ],
+      "notes": "首轮自查仅引导确认飞行模式，不合并后续步骤"
+    },
+    {
+      "id": "TC-005",
+      "title": "确认恢复状态-用户反馈未解决",
+      "category": "state",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-008",
+        "REQ-012"
+      ],
+      "turns": [
+        "网速突然变慢了",
+        "好的，我知道了"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "请问问题现在解决了吗"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "diagnose_network"
+        }
+      ],
+      "notes": "在【确认恢复】状态仅询问是否解决，不执行其他操作"
+    },
+    {
+      "id": "TC-006",
+      "title": "模糊网速慢-需澄清是否月底限速",
+      "category": "edge",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-004"
+      ],
+      "turns": [
+        "我网速好慢，是不是被限速了？"
+      ],
+      "assertions": [
+        {
+          "type": "response_mentions_all",
+          "value": "最近, 月底"
+        },
+        {
+          "type": "contains",
+          "value": "突然变慢"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "diagnose_network"
+        }
+      ],
+      "notes": "需先澄清是突发故障还是套餐限速，再决定是否诊断"
+    },
+    {
+      "id": "TC-007",
+      "title": "长期流量不足-应转套餐查询",
+      "category": "error",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-002"
+      ],
+      "turns": [
+        "每个月底都特别卡，流量不够用"
+      ],
+      "assertions": [
+        {
+          "type": "tool_not_called",
+          "value": "diagnose_network"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "套餐, 流量包, plan-inquiry"
+        }
+      ],
+      "notes": "明确属于套餐问题，不应触发故障诊断"
+    },
+    {
+      "id": "TC-008",
+      "title": "基站异常后升级处理-合规引导",
+      "category": "state",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-009",
+        "REQ-012"
+      ],
+      "turns": [
+        "附近都没信号，是不是基站坏了？",
+        "是的，换了地方也没用"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "人工客服"
+        },
+        {
+          "type": "not_contains",
+          "value": "已提交"
+        },
+        {
+          "type": "not_contains",
+          "value": "工单号"
+        }
+      ],
+      "notes": "基站问题必须引导转人工，且不得虚构工单信息"
+    },
+    {
+      "id": "TC-009",
+      "title": "诊断工具调用失败-兜底转人工",
+      "category": "error",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-010"
+      ],
+      "turns": [
+        "突然上不了网了"
+      ],
+      "assertions": [
+        {
+          "type": "tool_not_called",
+          "value": "diagnose_network"
+        },
+        {
+          "type": "contains",
+          "value": "无法获取诊断数据"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "转人工, 人工客服"
+        }
+      ],
+      "notes": "模拟诊断失败场景，应进入兜底状态"
+    },
+    {
+      "id": "TC-010",
+      "title": "任意状态用户要求转人工",
+      "category": "state",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-011"
+      ],
+      "turns": [
+        "网速慢",
+        "直接转人工吧"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "10086"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "转接, 人工客服"
+        }
+      ],
+      "notes": "用户中途要求转人工，应立即终止流程并提供路径"
+    }
+  ]
+}

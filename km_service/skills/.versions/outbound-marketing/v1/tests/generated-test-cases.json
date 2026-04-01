@@ -1,0 +1,409 @@
+{
+  "meta": {
+    "skill_id": "outbound-marketing",
+    "version_no": 1,
+    "generated_at": "2026-04-01T01:27:16.955Z",
+    "source_checksum": "29554731e3c66b38",
+    "generator_version": "1.1"
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "source": "frontmatter",
+      "description": "技能应在营销任务平台下发时被触发，用于主动外呼推介套餐升级方案"
+    },
+    {
+      "id": "REQ-002",
+      "source": "trigger",
+      "description": "通话开始前应已注入客户姓名、性别、当前套餐、目标套餐、话术模板等上下文数据"
+    },
+    {
+      "id": "REQ-003",
+      "source": "workflow",
+      "description": "拨号前必须检查 allowed_hours、max_retry 和 DND 名单，任一不合规则延后或终止任务"
+    },
+    {
+      "id": "REQ-004",
+      "source": "workflow",
+      "description": "客户接听后，应先自我介绍、告知录音、用已知姓名确认身份，再征得客户同意继续介绍"
+    },
+    {
+      "id": "REQ-005",
+      "source": "workflow",
+      "description": "客户明确拒绝后不得继续推销，应立即记录结果并礼貌结束"
+    },
+    {
+      "id": "REQ-006",
+      "source": "workflow",
+      "description": "客户表达异议（如价格贵、够用等）时，应进行针对性回应，并根据客户二次表态进入对应分支"
+    },
+    {
+      "id": "REQ-007",
+      "source": "workflow",
+      "description": "客户同意办理后，需再次确认意愿，确认后并行发送套餐短信并记录成交结果"
+    },
+    {
+      "id": "REQ-008",
+      "source": "workflow",
+      "description": "客户犹豫或需考虑时，应询问回访时间，并并行发送短信和记录待回访状态"
+    },
+    {
+      "id": "REQ-009",
+      "source": "workflow",
+      "description": "客户要求不再来电或删除营销名单时，应优先处理 DND 请求并从名单移除"
+    },
+    {
+      "id": "REQ-010",
+      "source": "workflow",
+      "description": "客户要求转人工或出现情绪激烈、投诉意向时，应立即调用 transfer_to_human 转接"
+    },
+    {
+      "id": "REQ-011",
+      "source": "tool",
+      "description": "所有通话结果（包括成交、回访、拒绝、未接等）必须通过 record_marketing_result 工具记录"
+    },
+    {
+      "id": "REQ-012",
+      "source": "tool",
+      "description": "成交或待回访场景下，应调用 send_followup_sms 发送套餐详情短信"
+    },
+    {
+      "id": "REQ-013",
+      "source": "compliance",
+      "description": "不得使用'已为您办理'等误导性表述，因系统无直接开通能力，只能引导自助办理"
+    },
+    {
+      "id": "REQ-014",
+      "source": "workflow",
+      "description": "客户对其他套餐感兴趣时，应切换 target_plan 并重新介绍新套餐"
+    },
+    {
+      "id": "REQ-015",
+      "source": "workflow",
+      "description": "非本人接听时，应记录为 wrong_number 并结束通话"
+    }
+  ],
+  "cases": [
+    {
+      "id": "TC-001",
+      "title": "外呼营销完整主流程（客户同意）",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-001",
+        "REQ-002",
+        "REQ-004",
+        "REQ-007",
+        "REQ-011",
+        "REQ-012",
+        "REQ-013"
+      ],
+      "turns": [
+        "您好，请问是张伟先生吗？我是电信智能服务机器人小通，本次通话可能会被录音。我们注意到您当前使用的是畅享套餐，今天来电是想为您介绍一个更划算的5G升级方案，方便占用您30秒了解一下吗？",
+        "可以啊，你说说看。",
+        "太好了！新套餐每月仅需59元，包含20GB流量和300分钟通话，比您现在的套餐多10GB流量……",
+        "听起来不错，我办一个吧。",
+        "感谢您的信任！为确认办理意愿，请问您确定要升级到这个59元5G套餐吗？"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "张伟先生"
+        },
+        {
+          "type": "contains",
+          "value": "可能会被录音"
+        },
+        {
+          "type": "tool_called",
+          "value": "record_marketing_result"
+        },
+        {
+          "type": "tool_called",
+          "value": "send_followup_sms"
+        },
+        {
+          "type": "not_contains",
+          "value": "已为您办理"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "查看短信, 自助办理, APP"
+        }
+      ],
+      "notes": "覆盖主路径：身份确认 → 同意 → 确认 → 成交记录+短信"
+    },
+    {
+      "id": "TC-002",
+      "title": "客户明确拒绝后立即结束",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-004",
+        "REQ-005",
+        "REQ-011"
+      ],
+      "turns": [
+        "您好，请问是李芳女士吗？我是电信智能服务机器人小通，本次通话可能会被录音。我们注意到您当前使用的是青春卡，今天来电是想为您介绍一个流量更多的升级方案，方便占用您30秒了解一下吗？",
+        "不用了，我不需要。"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "record_marketing_result"
+        },
+        {
+          "type": "not_contains",
+          "value": "但是"
+        },
+        {
+          "type": "not_contains",
+          "value": "再考虑一下"
+        },
+        {
+          "type": "contains",
+          "value": "感谢"
+        }
+      ],
+      "notes": "验证一次拒绝即收口，不进行异议处理"
+    },
+    {
+      "id": "TC-003",
+      "title": "客户提出价格异议并最终仍拒绝",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-004",
+        "REQ-006",
+        "REQ-011"
+      ],
+      "turns": [
+        "您好，请问是王强先生吗？……方便占用您30秒了解一下吗？",
+        "可以。",
+        "新套餐每月69元，包含30GB流量……",
+        "69块太贵了，我现在的套餐才39块。",
+        "理解您的顾虑！其实新套餐每GB流量成本更低，而且包含5G网络……",
+        "还是算了，我觉得没必要。"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "理解您的顾虑"
+        },
+        {
+          "type": "tool_called",
+          "value": "record_marketing_result"
+        },
+        {
+          "type": "contains",
+          "value": "感谢"
+        }
+      ],
+      "notes": "覆盖异议处理分支：价格异议 → 回应 → 仍拒绝"
+    },
+    {
+      "id": "TC-004",
+      "title": "客户同意办理后的确认与引导",
+      "category": "state",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-007",
+        "REQ-011",
+        "REQ-012",
+        "REQ-013"
+      ],
+      "turns": [
+        "……请问您确定要升级到这个59元5G套餐吗？",
+        "确定。"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "record_marketing_result"
+        },
+        {
+          "type": "tool_called",
+          "value": "send_followup_sms"
+        },
+        {
+          "type": "not_contains",
+          "value": "已开通"
+        },
+        {
+          "type": "response_mentions_all",
+          "value": "短信, 查看, 自助办理"
+        }
+      ],
+      "notes": "聚焦确认后的行为：并行记录+发短信，且不误导"
+    },
+    {
+      "id": "TC-005",
+      "title": "客户犹豫并约定回访时间",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-004",
+        "REQ-008",
+        "REQ-011",
+        "REQ-012"
+      ],
+      "turns": [
+        "……方便占用您30秒了解一下吗？",
+        "现在有点忙，晚点再说吧。",
+        "好的！请问您希望我们什么时候再联系您比较方便呢？比如明天下午3点？"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "record_marketing_result"
+        },
+        {
+          "type": "tool_called",
+          "value": "send_followup_sms"
+        },
+        {
+          "type": "contains",
+          "value": "回访"
+        }
+      ],
+      "notes": "覆盖待回访路径：询问时间 + 发短信 + 记录callback"
+    },
+    {
+      "id": "TC-006",
+      "title": "客户要求不再来电（DND请求）",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-004",
+        "REQ-009",
+        "REQ-011"
+      ],
+      "turns": [
+        "……方便占用您30秒了解一下吗？",
+        "以后不要再打来了，把我从你们营销名单里删掉！"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "record_marketing_result"
+        },
+        {
+          "type": "contains",
+          "value": "已记录您的要求"
+        },
+        {
+          "type": "contains",
+          "value": "不再打扰"
+        }
+      ],
+      "notes": "DND请求优先级最高，立即处理并结束"
+    },
+    {
+      "id": "TC-007",
+      "title": "客户要求转人工",
+      "category": "error",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-004",
+        "REQ-010",
+        "REQ-011"
+      ],
+      "turns": [
+        "……方便占用您30秒了解一下吗？",
+        "我不想跟机器人聊，转人工！"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "transfer_to_human"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "record_marketing_result"
+        }
+      ],
+      "notes": "转人工场景下不记录营销结果，由人工后续处理"
+    },
+    {
+      "id": "TC-008",
+      "title": "拨号前合规检查失败（时段不允许）",
+      "category": "error",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-003",
+        "REQ-011"
+      ],
+      "persona_id": "normal_user",
+      "turns": [
+        "系统检测到当前时间为凌晨2点，不在允许拨打时段[8,21]内"
+      ],
+      "assertions": [
+        {
+          "type": "tool_not_called",
+          "value": "record_marketing_result"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "send_followup_sms"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "transfer_to_human"
+        }
+      ],
+      "notes": "模拟拨前门控失败，任务延后，不产生任何工具调用"
+    },
+    {
+      "id": "TC-009",
+      "title": "客户对其他套餐感兴趣并切换推介",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-014",
+        "REQ-004",
+        "REQ-011"
+      ],
+      "turns": [
+        "……我们为您推荐59元5G套餐……",
+        "这个我不感兴趣，你们有没有带国际漫游的套餐？"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "国际漫游"
+        },
+        {
+          "type": "tool_called_any_of",
+          "value": "record_marketing_result, send_followup_sms"
+        }
+      ],
+      "notes": "验证 target_plan 切换后重新介绍"
+    },
+    {
+      "id": "TC-010",
+      "title": "非本人接听",
+      "category": "edge",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-004",
+        "REQ-015",
+        "REQ-011"
+      ],
+      "turns": [
+        "您好，请问是赵敏女士吗？",
+        "不是，你打错了。"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "record_marketing_result"
+        },
+        {
+          "type": "contains",
+          "value": "打扰了"
+        }
+      ],
+      "notes": "验证 wrong_number 记录"
+    }
+  ]
+}
