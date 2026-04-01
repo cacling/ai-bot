@@ -79,6 +79,12 @@ export interface TestCasePanelProps {
   versionNo: number;
   /** 在对话 tab 中运行用例：父组件负责逐轮发送消息并收集结果 */
   onRunInChat?: (tc: TestCaseEntry, onResult: (result: CaseResult) => void) => void;
+  /** 受控 caseResults（提升到父组件，防止 tab 切换时 state 丢失） */
+  caseResults?: Record<string, CaseResult>;
+  onCaseResultsChange?: (results: Record<string, CaseResult>) => void;
+  /** 受控 runningCaseId（父组件管理） */
+  runningCaseId?: string | null;
+  onRunningCaseIdChange?: (id: string | null) => void;
 }
 
 // ── 常量 ─────────────────────────────────────────────────────────────────────
@@ -106,12 +112,33 @@ const PRIORITY_COLORS: Record<number, string> = {
 
 // ── 组件 ─────────────────────────────────────────────────────────────────────
 
-export function TestCasePanel({ skillId, versionNo, onRunInChat }: TestCasePanelProps) {
+export function TestCasePanel({
+  skillId, versionNo, onRunInChat,
+  caseResults: controlledResults, onCaseResultsChange,
+  runningCaseId: controlledRunningId, onRunningCaseIdChange,
+}: TestCasePanelProps) {
   const [manifest, setManifest] = useState<TestManifest | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [caseResults, setCaseResults] = useState<Record<string, CaseResult>>({});
-  const [runningCaseId, setRunningCaseId] = useState<string | null>(null);
+
+  // 支持受控/非受控模式
+  const [internalResults, setInternalResults] = useState<Record<string, CaseResult>>({});
+  const caseResults = controlledResults ?? internalResults;
+  const setCaseResults = useCallback((updater: Record<string, CaseResult> | ((prev: Record<string, CaseResult>) => Record<string, CaseResult>)) => {
+    if (onCaseResultsChange) {
+      const next = typeof updater === 'function' ? updater(controlledResults ?? {}) : updater;
+      onCaseResultsChange(next);
+    } else {
+      setInternalResults(updater as any);
+    }
+  }, [controlledResults, onCaseResultsChange]);
+
+  const [internalRunningId, setInternalRunningId] = useState<string | null>(null);
+  const runningCaseId = controlledRunningId ?? internalRunningId;
+  const setRunningCaseId = useCallback((id: string | null) => {
+    if (onRunningCaseIdChange) onRunningCaseIdChange(id);
+    else setInternalRunningId(id);
+  }, [onRunningCaseIdChange]);
   const [runAllRunning, setRunAllRunning] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);

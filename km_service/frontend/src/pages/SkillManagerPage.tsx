@@ -441,6 +441,8 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
     setTestMessages([]);
     setTestInput('');
     setTestDiagram(null);
+    setTestCaseResults({});
+    setTestRunningCaseId(null);
     setRightTab('chat');
   }, [activeSkill, reloadVersions]);
 
@@ -530,6 +532,9 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
   const [testRunning, setTestRunning] = useState(false);
   const [testMode, setTestMode] = useState<'mock' | 'real'>('mock');
   const [testDiagram, setTestDiagram] = useState<{ skill_name: string; mermaid: string; progressState?: string; nodeTypeMap?: Record<string, string> } | null>(null);
+  // 提升到父组件，防止 tab 切换时 TestCasePanel 卸载导致 state 丢失
+  const [testCaseResults, setTestCaseResults] = useState<Record<string, CaseResult>>({});
+  const [testRunningCaseId, setTestRunningCaseId] = useState<string | null>(null);
   const [diagramCollapsed, setDiagramCollapsed] = useState(false);
   const [expandedDiagramOpen, setExpandedDiagramOpen] = useState(false);
   const [testPersonaId, setTestPersonaId] = useState('');
@@ -1633,6 +1638,10 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
                 skillId={activeSkill.id}
                 versionNo={effectiveVersionNo}
                 onRunInChat={handleRunCaseInChat}
+                caseResults={testCaseResults}
+                onCaseResultsChange={setTestCaseResults}
+                runningCaseId={testRunningCaseId}
+                onRunningCaseIdChange={setTestRunningCaseId}
               />
             )}
             {testSubTab === 'cases' && (!activeSkill || effectiveVersionNo === null) && (
