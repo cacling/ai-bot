@@ -52,6 +52,14 @@ function makeMockFetch(overrides?: {
       ));
     }
 
+    // Internal API endpoints (skill registry, MCP servers, etc.)
+    if (urlStr.includes('/api/internal/skills/registry')) {
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    }
+    if (urlStr.includes('/api/internal/mcp/')) {
+      return Promise.resolve(new Response(JSON.stringify({ items: [], implementations: [], connectors: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    }
+
     // Other endpoints
     return Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }));
   });
