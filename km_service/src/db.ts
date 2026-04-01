@@ -53,7 +53,6 @@ export const {
   skillVersions,
   changeRequests,
   testCases,
-  testPersonas,
   skillToolBindings,
   skillWorkflowSpecs,
   skillInstances,

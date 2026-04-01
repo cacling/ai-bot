@@ -18,9 +18,7 @@ import { sessionBus } from '../services/session-bus';
 import { setCustomerLang } from '../services/lang-session';
 import { t, OUTBOUND_TOOL_LABELS } from '../services/i18n';
 import { type CollectionCase, type MarketingTask, type CallbackTask, CALLBACK_TASKS } from './outbound-mock';
-import { eq } from 'drizzle-orm';
-import { platformDb as db } from '../db';
-import { outboundTasks } from '../db/schema';
+const OUTBOUND_BASE = `http://localhost:${process.env.OUTBOUND_SERVICE_PORT ?? 18021}/api/outbound`;
 import { sendSkillDiagram, runProgressTracking, triggerHandoff } from '../services/voice-common';
 import { GlmRealtimeController, type WsSend } from '../services/glm-realtime-controller';
 import { OutboundTextSession } from '../services/outbound-text-session';
@@ -196,15 +194,18 @@ outbound.get(
     const taskId     = c.req.query('id') ?? defaultId;
     const sessionId  = crypto.randomUUID();
 
-    // 从 DB 加载任务信息（根据语言选择 zh/en 变体）
-    function loadTaskFromDB(id: string): CollectionCase | MarketingTask | undefined {
-      const rows = db.select().from(outboundTasks).where(eq(outboundTasks.id, id)).all();
-      if (rows.length === 0) return undefined;
-      const parsed = JSON.parse(rows[0].data);
-      return parsed[lang] ?? parsed['zh'];
+    // 从 outbound_service 加载任务信息
+    async function loadTask(id: string): Promise<CollectionCase | MarketingTask | undefined> {
+      try {
+        const res = await fetch(`${OUTBOUND_BASE}/tasks/${id}`);
+        if (!res.ok) return undefined;
+        const row = await res.json();
+        const parsed = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+        return parsed[lang] ?? parsed['zh'];
+      } catch { return undefined; }
     }
 
-    const taskInfo = loadTaskFromDB(taskId);
+    const taskInfo = await loadTask(taskId);
     if (!taskInfo) {
       logger.warn('outbound', 'unknown_task_id', { taskParam, taskId });
     }

@@ -28,7 +28,9 @@ import { requireRole } from '../auth';
 import { getRegisteredToolNames } from '../mock-engine';
 import { getToolsOverview } from '../mcp/tools-overview';
 import { db } from '../db';
-import { testCases, testPersonas } from '../db';
+import { testCases } from '../db';
+
+const OUTBOUND_BASE = `http://localhost:${process.env.OUTBOUND_SERVICE_PORT ?? 18021}/api/outbound`;
 
 import { REPO_ROOT } from '../paths';
 const PROJECT_ROOT = REPO_ROOT;
@@ -275,11 +277,14 @@ sandbox.post('/:id/regression', async (c) => {
 
     let phone = '13800000001';
     if (tc.persona_id) {
-      const persona = db.select().from(testPersonas).where(eq(testPersonas.id, tc.persona_id)).get();
-      if (persona) {
-        const ctx = JSON.parse(persona.context) as Record<string, unknown>;
-        phone = (ctx.phone as string) ?? phone;
-      }
+      try {
+        const res = await fetch(`${OUTBOUND_BASE}/test-personas?category=inbound`);
+        if (res.ok) {
+          const personas = await res.json() as Array<{ id: string; context: Record<string, unknown> }>;
+          const persona = personas.find(p => p.id === tc.persona_id);
+          if (persona) phone = (persona.context.phone as string) ?? phone;
+        }
+      } catch { /* fallback to default phone */ }
     }
 
     const agentResult = await runAgent(

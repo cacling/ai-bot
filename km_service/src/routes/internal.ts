@@ -14,7 +14,6 @@ import {
   mcpTools,
   toolImplementations,
   connectors,
-  testPersonas,
 } from '../db';
 import { logger } from '../logger';
 
@@ -129,9 +128,16 @@ app.get('/mcp/tool-bindings', (c) => {
 // Test Personas（供 backend mock-data 使用）
 // ══════════════════════════════════════════════════════════════════════════
 
-app.get('/test-personas', (c) => {
-  const rows = db.select().from(testPersonas).all();
-  return c.json({ items: rows });
+app.get('/test-personas', async (c) => {
+  // 代理到 outbound_service（testPersonas 数据已迁移）
+  try {
+    const res = await fetch(`http://localhost:${process.env.OUTBOUND_SERVICE_PORT ?? 18021}/api/outbound/test-personas`);
+    if (res.ok) {
+      const items = await res.json();
+      return c.json({ items });
+    }
+  } catch { /* fallback below */ }
+  return c.json({ items: [] });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
