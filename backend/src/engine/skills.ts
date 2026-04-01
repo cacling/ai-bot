@@ -3,9 +3,13 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { resolve, join } from 'path';
 import { z } from 'zod';
 import { logger } from '../services/logger';
-import { eq, and } from 'drizzle-orm';
-import { db } from '../db';
-import { skillRegistry, skillWorkflowSpecs } from '../db/schema';
+import {
+  getSkillRegistrySync,
+  getWorkflowSpecSync,
+  syncSkillMetadata as kmSyncMetadata,
+  insertWorkflowSpec as kmInsertSpec,
+  type SkillRegistryRow,
+} from '../services/km-client';
 
 import { BIZ_SKILLS_DIR as SKILLS_DIR } from '../services/paths';
 import { extractPrimaryMermaidBlock } from '../services/mermaid';
@@ -55,7 +59,7 @@ function parseChannels(content: string): string[] {
 /** Get published skill IDs from registry. Empty set = no registry (load all). */
 function getPublishedSkillIds(): Set<string> | null {
   try {
-    const rows = db.select().from(skillRegistry).all();
+    const rows = getSkillRegistrySync();
     if (rows.length === 0) return null;
     return new Set(rows.filter(r => r.published_version != null).map(r => r.id));
   } catch { return null; }
@@ -85,7 +89,7 @@ function buildCache(): SkillCache {
   const skillReferenceFiles = new Map<string, string[]>();
 
   try {
-    const rows = db.select().from(skillRegistry).all()
+    const rows = getSkillRegistrySync()
       .filter(r => r.published_version != null);
 
     for (const row of rows) {
@@ -197,8 +201,7 @@ export function syncSkillMetadata(skillName: string, content: string): void {
     }
   } catch { /* ignore */ }
 
-  const now = new Date().toISOString();
-  db.update(skillRegistry).set({
+  kmSyncMetadata(skillName, {
     description: meta.description,
     channels: JSON.stringify(meta.channels),
     mode: meta.mode,
@@ -207,8 +210,7 @@ export function syncSkillMetadata(skillName: string, content: string): void {
     mermaid: meta.mermaid,
     tags: meta.tags.length > 0 ? JSON.stringify(meta.tags) : null,
     reference_files: refFiles.length > 0 ? JSON.stringify(refFiles) : null,
-    updated_at: now,
-  }).where(eq(skillRegistry.id, skillName)).run();
+  });
 
   logger.info('skills', 'metadata_synced', { skill: skillName, tools: meta.toolNames.length, refs: refFiles.length });
 }
@@ -216,7 +218,7 @@ export function syncSkillMetadata(skillName: string, content: string): void {
 /** 批量同步所有已发布技能的元数据（seed / startup 时使用） */
 export function syncAllSkillMetadata(): void {
   try {
-    const rows = db.select().from(skillRegistry).all()
+    const rows = getSkillRegistrySync()
       .filter(r => r.published_version != null);
     for (const row of rows) {
       const mdPath = join(SKILLS_DIR, row.id, 'SKILL.md');
@@ -230,15 +232,12 @@ export function syncAllSkillMetadata(): void {
   }
 
   // Compile workflow specs for published skills that don't have one yet
-  // Use synchronous require to avoid async race condition (seed process may exit before .then runs)
   try {
     const { compileWorkflow } = require('./skill-workflow-compiler');
-    const allSkills = db.select().from(skillRegistry).all();
+    const allSkills = getSkillRegistrySync();
     for (const row of allSkills) {
       if (!row.published_version) continue;
-      const existing = db.select().from(skillWorkflowSpecs)
-        .where(and(eq(skillWorkflowSpecs.skill_id, row.id), eq(skillWorkflowSpecs.status, 'published')))
-        .get();
+      const existing = getWorkflowSpecSync(row.id);
       if (existing) continue;
 
       const mdPath = join(SKILLS_DIR, row.id, 'SKILL.md');
@@ -246,12 +245,11 @@ export function syncAllSkillMetadata(): void {
       const content = readFileSync(mdPath, 'utf-8');
       const result = compileWorkflow(content, row.id, row.published_version);
       if (result.spec && result.errors.length === 0) {
-        db.insert(skillWorkflowSpecs).values({
+        kmInsertSpec({
           skill_id: row.id,
           version_no: row.published_version,
-          status: 'published',
           spec_json: JSON.stringify(result.spec),
-        }).run();
+        });
         logger.info('skills', 'workflow_spec_compiled', { skill: row.id });
       }
     }

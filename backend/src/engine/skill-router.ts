@@ -1,8 +1,6 @@
 import { findActiveInstance } from './skill-instance-store';
 import type { WorkflowSpec } from './skill-workflow-types';
-import { db } from '../db';
-import { skillWorkflowSpecs } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { getWorkflowSpecSync } from '../services/km-client';
 
 export interface RouteResult {
   mode: 'runtime' | 'legacy';
@@ -42,9 +40,7 @@ export function useV2Engine(): boolean {
 
 function loadSpec(skillId: string): WorkflowSpec | undefined {
   try {
-    const row = db.select().from(skillWorkflowSpecs)
-      .where(and(eq(skillWorkflowSpecs.skill_id, skillId), eq(skillWorkflowSpecs.status, 'published')))
-      .get();
+    const row = getWorkflowSpecSync(skillId);
     if (!row) return undefined;
     return JSON.parse(row.spec_json);
   } catch { return undefined; }

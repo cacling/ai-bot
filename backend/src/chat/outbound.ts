@@ -19,7 +19,7 @@ import { setCustomerLang } from '../services/lang-session';
 import { t, OUTBOUND_TOOL_LABELS } from '../services/i18n';
 import { type CollectionCase, type MarketingTask, type CallbackTask, CALLBACK_TASKS } from './outbound-mock';
 import { eq } from 'drizzle-orm';
-import { db } from '../db';
+import { platformDb as db } from '../db';
 import { outboundTasks } from '../db/schema';
 import { sendSkillDiagram, runProgressTracking, triggerHandoff } from '../services/voice-common';
 import { GlmRealtimeController, type WsSend } from '../services/glm-realtime-controller';

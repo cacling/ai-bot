@@ -17,6 +17,7 @@ import changeRequestRoutes from "./skills/change-requests";
 import testCaseRoutes from "./skills/test-cases";
 import skillCreatorRoutes from "./skills/skill-creator";
 import toolBindingsRoutes from "./skills/tool-bindings";
+import internalRoutes from "./routes/internal";
 
 export function createApp() {
   const app = new Hono();
@@ -66,6 +67,9 @@ export function createApp() {
   app.route('/api/change-requests', changeRequestRoutes);
   app.route('/api/test-cases', testCaseRoutes);
   app.route('/api/skill-creator', skillCreatorRoutes);
+
+  // 内部 API（供 backend km-client 调用，不经过前端代理）
+  app.route('/api/internal', internalRoutes);
 
   return app;
 }

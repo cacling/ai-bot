@@ -6,7 +6,6 @@ import { Hono } from 'hono';
 import { createBunWebSocket } from 'hono/bun';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { db } from '../db';
 import { getSubscriberInfo } from '../services/cdp-client';
 import { textToSpeech } from '../services/tts';
 import { translateText } from '../services/translate-lang';
@@ -269,11 +268,8 @@ voice.get(
                 activeSkillName = skillName.replace(/_/g, '-');
                 sopGuard.recordToolCall('get_skill_instructions', { success: true, hasData: true });
                 try {
-                  const { skillWorkflowSpecs } = await import('../db/schema');
-                  const { eq: eqFn, and } = await import('drizzle-orm');
-                  const planRow = db.select().from(skillWorkflowSpecs)
-                    .where(and(eqFn(skillWorkflowSpecs.skill_id, activeSkillName), eqFn(skillWorkflowSpecs.status, 'published')))
-                    .get();
+                  const { getWorkflowSpecSync } = await import('../services/km-client');
+                  const planRow = getWorkflowSpecSync(activeSkillName);
                   if (planRow) {
                     sopGuard.activatePlan(activeSkillName, JSON.parse(planRow.spec_json));
                     logger.info('voice', 'plan_activated', { session: sessionId, skill: activeSkillName });

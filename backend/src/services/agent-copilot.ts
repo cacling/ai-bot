@@ -10,11 +10,15 @@
  */
 
 import { generateText } from 'ai';
-import { db } from '../db';
-import { kmAssets, kmAssetVersions } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
 import { chatModel } from '../engine/llm';
-import { buildReplyHints, type ReplyHints } from './reply-copilot';
+import {
+  buildReplyHints as kmBuildReplyHints,
+  buildCopilotContext as kmBuildCopilotContext,
+  askKnowledgeBase as kmAskKnowledgeBase,
+  type ReplyHints,
+  type CopilotData,
+  type KbAnswer,
+} from './km-client';
 import { logger } from './logger';
 
 // ── Types ────────────────────────────────────────────────────────────────────

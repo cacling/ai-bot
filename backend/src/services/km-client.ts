@@ -89,6 +89,26 @@ export async function buildCopilotContext(params: {
   });
 }
 
+// ── Knowledge Base Q&A ─────────────────────────────────────────────────────
+
+export interface KbAnswer {
+  answer: string;
+  sources: string[];
+  confidence: number;
+}
+
+export async function askKnowledgeBase(params: {
+  question: string;
+  phone?: string;
+  conversation_summary?: string;
+}): Promise<KbAnswer | null> {
+  const result = await kmFetch<{ answer: KbAnswer }>('/api/km/agent-copilot/ask', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return result?.answer ?? null;
+}
+
 // ── Tools Overview ──────────────────────────────────────────────────────────
 
 export interface ToolOverviewItem {
@@ -192,4 +212,285 @@ export async function warmToolsCache(): Promise<void> {
     _toolsCache = data.items;
     _toolsCacheTs = Date.now();
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Skill Registry（TTL 30s 缓存）
+// ══════════════════════════════════════════════════════════════════════════
+
+export interface SkillRegistryRow {
+  id: string;
+  published_version: number | null;
+  latest_version: number;
+  description: string;
+  channels: string | null;
+  mode: string | null;
+  trigger_keywords: string | null;
+  tool_names: string | null;
+  mermaid: string | null;
+  tags: string | null;
+  reference_files: string | null;
+  updated_at: string | null;
+}
+
+let _skillRegistryCache: SkillRegistryRow[] | null = null;
+let _skillRegistryCacheTs = 0;
+const SKILL_CACHE_TTL = 30_000;
+
+export async function getSkillRegistry(): Promise<SkillRegistryRow[]> {
+  if (_skillRegistryCache && Date.now() - _skillRegistryCacheTs < SKILL_CACHE_TTL) {
+    return _skillRegistryCache;
+  }
+
+  const data = await kmFetch<{ items: SkillRegistryRow[] }>('/api/internal/skills/registry');
+  if (data?.items) {
+    _skillRegistryCache = data.items;
+    _skillRegistryCacheTs = Date.now();
+    return data.items;
+  }
+
+  return _skillRegistryCache ?? [];
+}
+
+export function getSkillRegistrySync(): SkillRegistryRow[] {
+  if (!_skillRegistryCache || Date.now() - _skillRegistryCacheTs >= SKILL_CACHE_TTL) {
+    kmFetch<{ items: SkillRegistryRow[] }>('/api/internal/skills/registry').then(data => {
+      if (data?.items) {
+        _skillRegistryCache = data.items;
+        _skillRegistryCacheTs = Date.now();
+      }
+    });
+  }
+  return _skillRegistryCache ?? [];
+}
+
+// ── Workflow Specs（per-skill 缓存）──────────────────────────────────────
+
+export interface WorkflowSpecRow {
+  skill_id: string;
+  version_no: number;
+  status: string;
+  spec_json: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+const _specCache = new Map<string, { row: WorkflowSpecRow | null; ts: number }>();
+
+export async function getWorkflowSpec(skillId: string): Promise<WorkflowSpecRow | null> {
+  const cached = _specCache.get(skillId);
+  if (cached && Date.now() - cached.ts < SKILL_CACHE_TTL) return cached.row;
+
+  const data = await kmFetch<WorkflowSpecRow>(`/api/internal/skills/workflow-specs/${encodeURIComponent(skillId)}`);
+  const row = data ?? null;
+  _specCache.set(skillId, { row, ts: Date.now() });
+  return row;
+}
+
+export function getWorkflowSpecSync(skillId: string): WorkflowSpecRow | null {
+  const cached = _specCache.get(skillId);
+  if (!cached || Date.now() - cached.ts >= SKILL_CACHE_TTL) {
+    kmFetch<WorkflowSpecRow>(`/api/internal/skills/workflow-specs/${encodeURIComponent(skillId)}`).then(data => {
+      _specCache.set(skillId, { row: data ?? null, ts: Date.now() });
+    });
+  }
+  return cached?.row ?? null;
+}
+
+// ── Sync Metadata（写入）──────────────────────────────────────────────────
+
+export async function syncSkillMetadata(skillId: string, metadata: Record<string, unknown>): Promise<boolean> {
+  const result = await kmFetch<{ ok: boolean }>(`/api/internal/skills/registry/${encodeURIComponent(skillId)}/sync-metadata`, {
+    method: 'POST',
+    body: JSON.stringify(metadata),
+  });
+  if (result?.ok) {
+    // 刷新缓存
+    _skillRegistryCache = null;
+    _skillRegistryCacheTs = 0;
+  }
+  return result?.ok ?? false;
+}
+
+export async function insertWorkflowSpec(spec: { skill_id: string; version_no: number; spec_json: string; status?: string }): Promise<boolean> {
+  const result = await kmFetch<{ ok: boolean }>('/api/internal/skills/workflow-specs', {
+    method: 'POST',
+    body: JSON.stringify(spec),
+  });
+  if (result?.ok) {
+    _specCache.delete(spec.skill_id);
+  }
+  return result?.ok ?? false;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MCP Servers & Tool Bindings（TTL 60s 缓存）
+// ══════════════════════════════════════════════════════════════════════════
+
+export interface McpServerRow {
+  id: string;
+  name: string;
+  description: string;
+  transport: string;
+  enabled: boolean;
+  kind: string;
+  url: string | null;
+  status: string | null;
+  disabled_tools: string | null;
+  mock_rules: string | null;
+  tools_json: string | null;
+  [key: string]: unknown;
+}
+
+let _mcpServersCache: McpServerRow[] | null = null;
+let _mcpServersCacheTs = 0;
+const MCP_CACHE_TTL = 60_000;
+
+export async function getMcpServers(): Promise<McpServerRow[]> {
+  if (_mcpServersCache && Date.now() - _mcpServersCacheTs < MCP_CACHE_TTL) {
+    return _mcpServersCache;
+  }
+
+  const data = await kmFetch<{ items: McpServerRow[] }>('/api/internal/mcp/servers-full');
+  if (data?.items) {
+    _mcpServersCache = data.items;
+    _mcpServersCacheTs = Date.now();
+    return data.items;
+  }
+
+  return _mcpServersCache ?? [];
+}
+
+export function getMcpServersSync(): McpServerRow[] {
+  if (!_mcpServersCache || Date.now() - _mcpServersCacheTs >= MCP_CACHE_TTL) {
+    kmFetch<{ items: McpServerRow[] }>('/api/internal/mcp/servers-full').then(data => {
+      if (data?.items) {
+        _mcpServersCache = data.items;
+        _mcpServersCacheTs = Date.now();
+      }
+    });
+  }
+  return _mcpServersCache ?? [];
+}
+
+// ── MCP Tools（全量）──
+
+export interface McpToolRow {
+  id: string;
+  name: string;
+  description: string;
+  input_schema: string | null;
+  output_schema: string | null;
+  mocked: boolean;
+  disabled: boolean;
+  mock_rules: string | null;
+  server_id: string | null;
+  annotations: string | null;
+  [key: string]: unknown;
+}
+
+let _mcpToolsCache: McpToolRow[] | null = null;
+let _mcpToolsCacheTs = 0;
+
+export async function getMcpTools(): Promise<McpToolRow[]> {
+  if (_mcpToolsCache && Date.now() - _mcpToolsCacheTs < MCP_CACHE_TTL) {
+    return _mcpToolsCache;
+  }
+
+  const data = await kmFetch<{ items: McpToolRow[] }>('/api/internal/mcp/tools-full');
+  if (data?.items) {
+    _mcpToolsCache = data.items;
+    _mcpToolsCacheTs = Date.now();
+    return data.items;
+  }
+
+  return _mcpToolsCache ?? [];
+}
+
+export function getMcpToolsSync(): McpToolRow[] {
+  if (!_mcpToolsCache || Date.now() - _mcpToolsCacheTs >= MCP_CACHE_TTL) {
+    kmFetch<{ items: McpToolRow[] }>('/api/internal/mcp/tools-full').then(data => {
+      if (data?.items) {
+        _mcpToolsCache = data.items;
+        _mcpToolsCacheTs = Date.now();
+      }
+    });
+  }
+  return _mcpToolsCache ?? [];
+}
+
+// ── Tool Bindings ──
+
+export interface ToolBindingsData {
+  implementations: Array<{
+    id: string;
+    tool_id: string;
+    adapter_type: string;
+    connector_id: string | null;
+    handler_key: string | null;
+    config: string | null;
+    status: string;
+    [key: string]: unknown;
+  }>;
+  connectors: Array<{
+    id: string;
+    name: string;
+    type: string;
+    config: string | null;
+    status: string;
+    [key: string]: unknown;
+  }>;
+}
+
+let _bindingsCache: ToolBindingsData | null = null;
+let _bindingsCacheTs = 0;
+
+export async function getMcpToolBindings(): Promise<ToolBindingsData> {
+  if (_bindingsCache && Date.now() - _bindingsCacheTs < MCP_CACHE_TTL) {
+    return _bindingsCache;
+  }
+
+  const data = await kmFetch<ToolBindingsData>('/api/internal/mcp/tool-bindings');
+  if (data) {
+    _bindingsCache = data;
+    _bindingsCacheTs = Date.now();
+    return data;
+  }
+
+  return _bindingsCache ?? { implementations: [], connectors: [] };
+}
+
+export function getMcpToolBindingsSync(): ToolBindingsData {
+  if (!_bindingsCache || Date.now() - _bindingsCacheTs >= MCP_CACHE_TTL) {
+    getMcpToolBindings(); // trigger background refresh
+  }
+  return _bindingsCache ?? { implementations: [], connectors: [] };
+}
+
+// ── Cache Control ──
+
+export function invalidateSkillCache(): void {
+  _skillRegistryCache = null;
+  _skillRegistryCacheTs = 0;
+  _specCache.clear();
+}
+
+export function invalidateMcpCache(): void {
+  _mcpServersCache = null;
+  _mcpServersCacheTs = 0;
+  _mcpToolsCache = null;
+  _mcpToolsCacheTs = 0;
+  _bindingsCache = null;
+  _bindingsCacheTs = 0;
+}
+
+/** 预热全部缓存（启动时调用） */
+export async function warmAllCaches(): Promise<void> {
+  await Promise.all([
+    warmToolsCache(),
+    getSkillRegistry(),
+    getMcpServers(),
+    getMcpTools(),
+    getMcpToolBindings(),
+  ]);
 }

@@ -4,8 +4,7 @@
  * 优先从 mcp_tools 表读取 mock 数据，回退读 mcp_servers（过渡期）。
  */
 
-import { db } from '../db';
-import { mcpTools, mcpServers } from '../db/schema';
+import { getMcpToolsSync, getMcpServersSync } from './km-client';
 import { logger } from './logger';
 
 export interface MockRule {
@@ -20,7 +19,7 @@ function loadAllMockRules(): MockRule[] {
 
   // 优先从 mcp_tools 读
   try {
-    const tools = db.select().from(mcpTools).all();
+    const tools = getMcpToolsSync();
     for (const tool of tools) {
       if (!tool.mock_rules) continue;
       try {
@@ -32,7 +31,7 @@ function loadAllMockRules(): MockRule[] {
 
   // 如果 mcp_tools 没数据，回退到 mcp_servers
   if (allRules.length === 0) {
-    const servers = db.select().from(mcpServers).all();
+    const servers = getMcpServersSync();
     for (const server of servers) {
       if (!server.mock_rules) continue;
       try {
@@ -103,7 +102,7 @@ export function getMockedToolNames(): Set<string> {
 
   // 优先从 mcp_tools 读
   try {
-    const tools = db.select().from(mcpTools).all();
+    const tools = getMcpToolsSync();
     for (const tool of tools) {
       if (tool.mocked) names.add(tool.name);
     }
@@ -111,7 +110,7 @@ export function getMockedToolNames(): Set<string> {
 
   // 回退 mcp_servers
   if (names.size === 0) {
-    const servers = db.select().from(mcpServers).all();
+    const servers = getMcpServersSync();
     for (const server of servers) {
       if (server.mocked_tools) {
         try {
@@ -135,7 +134,7 @@ export function getMockedToolDefinitions(): Array<{ name: string; description: s
 
   // 优先从 mcp_tools 读
   try {
-    const tools = db.select().from(mcpTools).all();
+    const tools = getMcpToolsSync();
     for (const tool of tools) {
       if (!tool.mocked) continue;
       const schema = tool.input_schema ? JSON.parse(tool.input_schema) : undefined;
@@ -145,7 +144,7 @@ export function getMockedToolDefinitions(): Array<{ name: string; description: s
 
   // 回退 mcp_servers
   if (result.length === 0) {
-    const servers = db.select().from(mcpServers).all();
+    const servers = getMcpServersSync();
     for (const server of servers) {
       const mockedNames: string[] = server.mocked_tools ? JSON.parse(server.mocked_tools) : [];
       if (mockedNames.length === 0) continue;
@@ -171,14 +170,14 @@ export function getRegisteredToolNames(): Set<string> {
 
   // 从 mcp_tools 读
   try {
-    for (const t of db.select().from(mcpTools).all()) {
+    for (const t of getMcpToolsSync()) {
       names.add(t.name);
     }
   } catch { /* ignore */ }
 
   // 回退 mcp_servers
   if (names.size === 0) {
-    for (const server of db.select().from(mcpServers).all()) {
+    for (const server of getMcpServersSync()) {
       if (server.tools_json) {
         try {
           for (const t of JSON.parse(server.tools_json) as Array<{ name: string }>) {

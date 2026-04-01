@@ -12,8 +12,7 @@ import { translateText } from '../services/translate-lang';
 import { isNoDataResult, isErrorResult } from '../services/tool-result';
 import { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers, extractStateNames, highlightMermaidProgress, buildNodeTypeMap } from '../services/mermaid';
 import { analyzeProgress } from '../agent/card/progress-tracker';
-import { skillWorkflowSpecs } from '../db/schema';
-import { eq as dbEq, and as dbAnd, desc as dbDesc } from 'drizzle-orm';
+import { getWorkflowSpec, getWorkflowSpecSync, getMcpServersSync } from '../services/km-client';
 import { SOPGuard } from './sop-guard';
 import { randomUUID } from 'crypto';
 import { type NormalizedQuery } from '../services/query-normalizer';
@@ -25,8 +24,7 @@ import { parseDisposition, executeDisposition } from './disposition-executor';
 // Re-export for test file
 export { extractMermaidFromContent, highlightMermaidTool, highlightMermaidBranch, determineBranch, stripMermaidMarkers };
 
-import { db } from '../db';
-import { mcpServers } from '../db/schema';
+// km.db 访问已迁移至 km-client.ts
 
 const TELECOM_MCP_URL = process.env.TELECOM_MCP_URL ?? `http://127.0.0.1:${process.env.MCP_INTERNAL_PORT ?? 18003}/mcp`;
 
@@ -48,10 +46,7 @@ function getSkillToolMap(): Record<string, string> {
 /** Find the latest published workflow spec for a skill */
 function findPublishedSpec(skillId: string) {
   try {
-    return db.select().from(skillWorkflowSpecs)
-      .where(dbAnd(dbEq(skillWorkflowSpecs.skill_id, skillId), dbEq(skillWorkflowSpecs.status, 'published')))
-      .orderBy(dbDesc(skillWorkflowSpecs.version_no))
-      .get();
+    return getWorkflowSpecSync(skillId) ?? undefined;
   } catch { return undefined; }
 }
 
@@ -96,7 +91,7 @@ let persistentMCPTools: Record<string, any> | null = null;
 function getAllDisabledTools(): Set<string> {
   const disabled = new Set<string>();
   try {
-    for (const server of db.select().from(mcpServers).all()) {
+    for (const server of getMcpServersSync()) {
       if (server.disabled_tools) {
         for (const name of JSON.parse(server.disabled_tools) as string[]) disabled.add(name);
       }
@@ -109,7 +104,7 @@ function getAllDisabledTools(): Set<string> {
 async function getMCPTools() {
   // Connect to all enabled active servers (once per server)
   if (!allMCPTools) {
-    const servers = db.select().from(mcpServers).all()
+    const servers = getMcpServersSync()
       .filter(s => s.enabled && s.status === 'active' && s.url);
 
     if (servers.length === 0) {

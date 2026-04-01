@@ -1,6 +1,9 @@
-import { db } from '../db';
-import { mcpTools, mcpServers, toolImplementations, connectors } from '../db/schema';
 import { logger } from '../services/logger';
+import {
+  getMcpServersSync,
+  getMcpToolsSync,
+  getMcpToolBindingsSync,
+} from '../services/km-client';
 import type { ToolContract, ToolBinding, ConnectorConfig, ResolvedTool, AdapterType } from './types';
 
 export class ToolRegistry {
@@ -61,12 +64,12 @@ export class ToolRegistry {
   getActiveServers(): Array<{ id: string; name: string; url: string }> {
     const result: Array<{ id: string; name: string; url: string }> = [];
     try {
-      for (const s of db.select().from(mcpServers).all()) {
+      for (const s of getMcpServersSync()) {
         if (s.enabled && s.status === 'active' && s.url) {
           result.push({ id: s.id, name: s.name, url: s.url });
         }
       }
-    } catch { /* DB not ready */ }
+    } catch { /* not ready */ }
     return result;
   }
 
@@ -74,10 +77,10 @@ export class ToolRegistry {
 
   private loadServers(): void {
     try {
-      for (const s of db.select().from(mcpServers).all()) {
+      for (const s of getMcpServersSync()) {
         if (s.url) this.serverUrls.set(s.id, s.url);
       }
-    } catch { /* DB not ready */ }
+    } catch { /* not ready */ }
   }
 
   private safeJsonParse(text: string | null | undefined): Record<string, unknown> | undefined {
@@ -87,7 +90,7 @@ export class ToolRegistry {
 
   private loadContracts(): void {
     try {
-      for (const row of db.select().from(mcpTools).all()) {
+      for (const row of getMcpToolsSync()) {
         const contract: ToolContract = {
           id: row.id,
           name: row.name,
@@ -105,12 +108,12 @@ export class ToolRegistry {
         this.contracts.set(row.name, contract);
         this.contractIdToName.set(row.id, row.name);
       }
-    } catch { /* table may not exist yet */ }
+    } catch { /* not ready */ }
 
     // Fallback: load from mcp_servers.tools_json if mcp_tools is empty
     if (this.contracts.size === 0) {
       try {
-        for (const s of db.select().from(mcpServers).all()) {
+        for (const s of getMcpServersSync()) {
           if (!s.tools_json) continue;
           const tools = JSON.parse(s.tools_json) as Array<{ name: string; description?: string; inputSchema?: unknown }>;
           for (const t of tools) {
@@ -132,7 +135,8 @@ export class ToolRegistry {
 
   private loadBindings(): void {
     try {
-      for (const row of db.select().from(toolImplementations).all()) {
+      const bindingsData = getMcpToolBindingsSync();
+      for (const row of bindingsData.implementations) {
         const toolName = this.contractIdToName.get(row.tool_id);
         if (!toolName) continue;
 
@@ -159,7 +163,8 @@ export class ToolRegistry {
 
   private loadConnectors(): void {
     try {
-      for (const row of db.select().from(connectors).all()) {
+      const bindingsData = getMcpToolBindingsSync();
+      for (const row of bindingsData.connectors) {
         this.connectorMap.set(row.id, {
           id: row.id,
           name: row.name,
@@ -168,6 +173,6 @@ export class ToolRegistry {
           status: row.status,
         });
       }
-    } catch { /* table may not exist */ }
+    } catch { /* not ready */ }
   }
 }
