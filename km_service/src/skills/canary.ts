@@ -17,7 +17,7 @@ import { logger } from '../logger';
 
 import { REPO_ROOT } from '../paths';
 const PROJECT_ROOT = REPO_ROOT;
-const CANARY_ROOT = resolve(PROJECT_ROOT, 'backend/skills', '.canary');
+const CANARY_ROOT = resolve(PROJECT_ROOT, 'km_service/skills', '.canary');
 
 interface CanaryConfig {
   skill_path: string;

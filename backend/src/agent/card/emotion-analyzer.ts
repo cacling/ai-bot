@@ -3,7 +3,7 @@
  *
  * 在每轮用户语音转写完成后由 voice.ts 异步调用，不阻塞语音回复流程。
  *
- * Skill 定义（情绪分类体系 + 判断原则）从 backend/skills/emotion-detection/ 加载，
+ * Skill 定义（情绪分类体系 + 判断原则）从 km_service/skills/emotion-detection/ 加载，
  * 遵循项目 Skill 规范，支持渐进式暴露：
  *   - SKILL.md               → system 指令（始终加载）
  *   - references/emotion-guide.md → 详细示例（按需懒加载，当前保留供扩展）

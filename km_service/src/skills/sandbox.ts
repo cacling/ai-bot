@@ -32,7 +32,7 @@ import { testCases, testPersonas } from '../db';
 
 import { REPO_ROOT } from '../paths';
 const PROJECT_ROOT = REPO_ROOT;
-const SANDBOX_ROOT = resolve(PROJECT_ROOT, 'backend/skills', '.sandbox');
+const SANDBOX_ROOT = resolve(PROJECT_ROOT, 'km_service/skills', '.sandbox');
 
 // In-memory sandbox registry
 interface SandboxInfo {

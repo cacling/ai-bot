@@ -11,7 +11,7 @@ import { REPO_ROOT } from '../paths';
 
 // Allowed roots for file scanning — only these directories are visible to the file API
 const ALLOWED_ROOTS = [
-  resolve(REPO_ROOT, 'backend/skills'),
+  resolve(REPO_ROOT, 'km_service/skills'),
   resolve(REPO_ROOT, 'mcp_servers'),
 ];
 
@@ -86,7 +86,7 @@ files.get('/tree', async (c) => {
   // Scan each allowed root and present as top-level entries
   const allNodes: FileNode[] = [];
   for (const root of ALLOWED_ROOTS) {
-    const label = relative(REPO_ROOT, root); // e.g., "backend/skills" or "mcp_servers"
+    const label = relative(REPO_ROOT, root); // e.g., "km_service/skills" or "mcp_servers"
     if (!existsSync(root)) continue;
     const children = await scanDir(root, label);
     allNodes.push({ name: basename(root), path: label, type: 'dir', children });

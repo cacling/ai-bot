@@ -93,8 +93,8 @@ app.post('/diagram-preview', async (c) => {
     const [{ compileWorkflow }, { stripMermaidMarkers, buildNodeTypeMap }, { runValidation }, { parseStateDiagram }] = await Promise.all([
       import('../engine-stubs'),
       import('../mermaid'),
-      import('../../../backend/skills/tech-skills/skill-creator-spec/scripts/run_validation'),
-      import('../../../backend/skills/tech-skills/skill-creator-spec/scripts/validate_statediagram'),
+      import('../../skills/tech-skills/skill-creator-spec/scripts/run_validation'),
+      import('../../skills/tech-skills/skill-creator-spec/scripts/validate_statediagram'),
     ]);
 
     const skillId = body.skill?.trim() || 'skill-preview';
@@ -454,6 +454,29 @@ app.post('/:skillId/:vno/run-all-testcases', async (c) => {
     logger.error('skill-versions', 'run_all_testcases_error', { skillId, vno, error: String(err) });
     return c.json({ error: `批量执行测试用例失败: ${String(err)}` }, 500);
   }
+});
+
+// POST /api/skill-versions/evaluate-assertions — 轻量断言评估（前端跑完对话后调用）
+app.post('/evaluate-assertions', async (c) => {
+  const body = await c.req.json<{
+    assertions: Array<{ type: string; value: string }>;
+    response_text: string;
+    tools_called: string[];
+    skills_loaded: string[];
+  }>();
+  if (!body.assertions || !Array.isArray(body.assertions)) {
+    return c.json({ error: 'assertions 必填' }, 400);
+  }
+
+  const { runAssertions } = await import('./assertion-evaluator');
+  const results = runAssertions(
+    body.assertions as Array<{ type: any; value: string }>,
+    body.response_text ?? '',
+    body.tools_called ?? [],
+    body.skills_loaded ?? [],
+  );
+  const passed = results.every(r => r.passed);
+  return c.json({ status: passed ? 'passed' : 'failed', assertions: results });
 });
 
 export default app;

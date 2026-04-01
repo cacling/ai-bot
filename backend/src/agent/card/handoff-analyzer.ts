@@ -5,7 +5,7 @@
  *   - 结构化 JSON（工单字段）
  *   - 自然语言摘要（80~150 字）
  *
- * Skill 定义从 backend/skills/handoff-analysis/SKILL.md 加载。
+ * Skill 定义从 km_service/skills/handoff-analysis/SKILL.md 加载。
  */
 
 import { generateText } from 'ai';

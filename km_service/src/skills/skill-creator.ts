@@ -29,8 +29,8 @@ import { BIZ_SKILLS_DIR as SKILLS_DIR, TECH_SKILLS_DIR, SKILLS_ROOT } from '../p
 import { db } from '../db';
 import { testCases } from '../db';
 import { getToolsOverview, getToolDetail } from '../mcp/tools-overview';
-import { runValidation } from '../../../backend/skills/tech-skills/skill-creator-spec/scripts/run_validation';
-import type { ValidationCheck, ValidationResult } from '../../../backend/skills/tech-skills/skill-creator-spec/scripts/types';
+import { runValidation } from '../../skills/tech-skills/skill-creator-spec/scripts/run_validation';
+import type { ValidationCheck, ValidationResult } from '../../skills/tech-skills/skill-creator-spec/scripts/types';
 
 // ── 类型定义 ──────────────────────────────────────────────────────────────────
 
