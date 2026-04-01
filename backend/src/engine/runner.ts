@@ -468,6 +468,7 @@ export async function runAgent(
   try {
     const result = await generateText({
       model: chatModel,
+      maxRetries: 5, // 指数退避：1s → 2s → 4s → 8s → 16s，应对 429 Too Many Requests
       system: systemPrompt,
       messages: [...history, { role: 'user', content: userMessage }],
       tools: {

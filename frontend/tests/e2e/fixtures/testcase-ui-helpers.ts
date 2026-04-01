@@ -189,8 +189,8 @@ export async function runAllCasesInChat(page: Page): Promise<{
   let failed = 0;
 
   for (let i = 0; i < caseIds.length; i++) {
-    // 每条用例间隔 3 秒，避免触发 LLM API rate limit
-    if (i > 0) await page.waitForTimeout(3000);
+    // 每条用例间隔 5 秒，避免触发 LLM API rate limit
+    if (i > 0) await page.waitForTimeout(5000);
     const status = await runCaseInChat(page, caseIds[i]);
     results.push({ caseId: caseIds[i], status });
     if (status === 'passed') passed++;
