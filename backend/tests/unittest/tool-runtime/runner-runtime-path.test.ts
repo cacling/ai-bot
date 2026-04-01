@@ -2,7 +2,6 @@
  * Tests for runner.ts runtime path
  * Verifies that the runtime produces correct tool surface.
  */
-import './_mock-km-client';
 import { describe, test, expect } from 'bun:test';
 import { ToolRuntime } from '../../../src/tool-runtime';
 

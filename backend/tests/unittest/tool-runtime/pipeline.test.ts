@@ -1,4 +1,3 @@
-import './_mock-km-client';
 import { describe, test, expect, mock } from 'bun:test';
 import { Pipeline } from '../../../src/tool-runtime/pipeline';
 import { ToolRegistry } from '../../../src/tool-runtime/registry';

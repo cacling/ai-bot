@@ -1,4 +1,3 @@
-import '../tool-runtime/_mock-km-client';
 import { describe, test, expect } from 'bun:test';
 import { executeTool, executeToolViaRuntime, buildToolArgs } from '../../../src/engine/skill-tool-executor';
 import { ToolRuntime } from '../../../src/tool-runtime';
