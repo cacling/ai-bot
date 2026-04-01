@@ -163,25 +163,11 @@ export OUTBOUND_DB_PATH="$BASE_DIR/data/outbound.db"
 # Schema 同步（6 DB：telecom/platform/business/workorder/cdp/outbound）
 log "同步数据库 Schema..."
 
-# 1) backend schema → km.db (platform + km 表)
+# 1) platform.db (backend 独占运行时表)
 cd "$BASE_DIR/backend"
-PUSH_OUTPUT=$("$BUN" drizzle-kit push 2>&1 || true)
-if echo "$PUSH_OUTPUT" | grep -q "rename column\|created or renamed"; then
-  warn "检测到 backend Schema 破坏性变更，重建表..."
-  "$BUN" -e "
-    import Database from 'bun:sqlite';
-    const db = new Database(process.env.SQLITE_PATH || '../data/km.db');
-    const tables = db.prepare(\"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'\").all();
-    for (const t of tables) { db.exec('DROP TABLE IF EXISTS ' + t.name); }
-    console.log('Dropped', tables.length, 'tables');
-  " 2>/dev/null
-  "$BUN" drizzle-kit push 2>&1 | tail -3
-fi
-
-# 1b) platform.db (backend 独占运行时表)
 PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" drizzle-kit push --config drizzle-platform.config.ts 2>&1 | tail -1
 
-# 2) km_service schema → km.db (km 表，与 backend 共享同一 DB)
+# 2) km_service schema → km.db (platform + km 表，km_service 独占)
 cd "$BASE_DIR/km_service"
 "$BUN" drizzle-kit push 2>&1 | tail -1
 
@@ -261,7 +247,6 @@ if [[ "$RESET_MODE" == true ]]; then
   ok "草稿文件已清理"
 
   # 重新 push schema + seed（多 DB）
-  cd "$BASE_DIR/backend" && "$BUN" drizzle-kit push 2>&1 | tail -3
   cd "$BASE_DIR/backend" && PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" drizzle-kit push --config drizzle-platform.config.ts 2>&1 | tail -1
   cd "$BASE_DIR/km_service" && "$BUN" drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" drizzle-kit push --config drizzle-business.config.ts 2>&1 | tail -1
