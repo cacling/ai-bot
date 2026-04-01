@@ -20,8 +20,12 @@ export default function globalSetup() {
   }
 
   const backendDir = path.resolve(__dirname, '../../../backend');
-  console.log('[global-setup] Re-seeding database...');
+  const kmServiceDir = path.resolve(__dirname, '../../../km_service');
+  console.log('[global-setup] Pushing schemas and re-seeding database...');
   try {
+    // km_service schema must exist before seed (skill_versions table is in km.db)
+    execSync('bun drizzle-kit push', { cwd: kmServiceDir, stdio: 'pipe' });
+    execSync('bun drizzle-kit push --config drizzle-platform.config.ts', { cwd: backendDir, stdio: 'pipe' });
     execSync('bun run db:seed', { cwd: backendDir, stdio: 'pipe' });
     console.log('[global-setup] Database seeded successfully');
   } catch (err) {
