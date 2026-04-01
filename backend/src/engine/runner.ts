@@ -365,8 +365,12 @@ export async function runAgent(
     // Create request-scoped SOP policy
     const sopPolicy = new SopPolicy(sopGuard);
 
+    // Ensure registry has contracts (async warmup on first request)
+    await runtime.ensureContractsLoaded();
+
     // Build tool surface from registry
     const surface = runtime.getToolSurface();
+    logger.info('agent', 'tool_surface', { count: surface.length, tools: surface.map(c => c.name) });
     sopWrappedTools = {};
     for (const contract of surface) {
       const schema = contract.inputSchema ?? { type: 'object', properties: {} };

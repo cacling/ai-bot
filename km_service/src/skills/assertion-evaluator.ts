@@ -8,7 +8,8 @@
 
 export interface Assertion {
   type: 'contains' | 'not_contains' | 'tool_called' | 'tool_not_called' | 'skill_loaded' | 'regex'
-    | 'tool_called_any_of' | 'tool_called_before' | 'response_mentions_all' | 'response_mentions_any' | 'response_has_next_step';
+    | 'tool_called_any_of' | 'tool_called_before' | 'response_mentions_all' | 'response_mentions_any'
+    | 'response_has_next_step' | 'llm_rubric';
   value: string;
 }
 
@@ -129,10 +130,104 @@ export function runAssertions(
         const ok = matched.length > 0;
         return { ...a, passed: ok, detail: ok ? `回复包含下一步引导: "${matched[0]}"` : `回复缺少下一步引导（未匹配常见引导句式）` };
       }
+      case 'llm_rubric':
+        // llm_rubric 是异步的，同步 runAssertions 中标记为 pending，由 runAssertionsAsync 处理
+        return { ...a, passed: false, detail: 'llm_rubric:pending' };
       default:
         return { ...a, passed: false, detail: `未知断言类型: ${a.type}` };
     }
   });
+}
+
+// ── LLM-as-Judge 语义评估 ──────────────────────────────────────────────────
+
+const LLM_JUDGE_URL = process.env.LLM_JUDGE_URL ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+const LLM_JUDGE_KEY = process.env.SKILL_CREATOR_API_KEY ?? '';
+const LLM_JUDGE_MODEL = process.env.LLM_JUDGE_MODEL ?? 'qwen-max';
+
+/**
+ * 使用 LLM 裁判评估回复是否符合语义要求。
+ * rubric: 自然语言描述的评估标准（如"回复应展示账单信息，包含金额"）
+ * responseText: 机器人的实际回复
+ * 返回 { passed, score, detail }
+ */
+async function evaluateLlmRubric(rubric: string, responseText: string): Promise<{ passed: boolean; score: number; detail: string }> {
+  if (!LLM_JUDGE_KEY) {
+    return { passed: false, score: 0, detail: 'LLM_JUDGE: SKILL_CREATOR_API_KEY 未配置' };
+  }
+
+  const systemPrompt = `你是一个 AI 回复质量评审员。请根据评审标准判断 AI 助手的回复是否合格。
+输出 JSON 格式：{"pass": true/false, "score": 0.0-1.0, "reason": "简短理由"}
+- score >= 0.6 为通过
+- 只输出 JSON，不要其他内容`;
+
+  const userPrompt = `## 评审标准
+${rubric}
+
+## AI 助手回复
+${responseText}
+
+请评审。`;
+
+  try {
+    const res = await fetch(LLM_JUDGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${LLM_JUDGE_KEY}` },
+      body: JSON.stringify({
+        model: LLM_JUDGE_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.1,
+      }),
+    });
+
+    if (!res.ok) {
+      return { passed: false, score: 0, detail: `LLM_JUDGE: API 调用失败 (${res.status})` };
+    }
+
+    const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content ?? '';
+
+    // 解析 JSON 响应
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return { passed: false, score: 0, detail: `LLM_JUDGE: 无法解析响应 — ${content.slice(0, 100)}` };
+    }
+
+    const result = JSON.parse(jsonMatch[0]) as { pass?: boolean; score?: number; reason?: string };
+    const score = result.score ?? (result.pass ? 1 : 0);
+    const passed = score >= 0.6;
+    return { passed, score, detail: `LLM_JUDGE: ${result.reason ?? (passed ? '通过' : '不通过')} (score=${score.toFixed(2)})` };
+  } catch (err) {
+    return { passed: false, score: 0, detail: `LLM_JUDGE: ${String(err)}` };
+  }
+}
+
+/**
+ * 异步版本的 runAssertions，支持 llm_rubric 断言类型。
+ * 先执行同步断言，再异步执行 llm_rubric 断言。
+ */
+export async function runAssertionsAsync(
+  assertions: Assertion[],
+  responseText: string,
+  toolsCalled: string[],
+  skillsLoaded: string[],
+): Promise<AssertionResult[]> {
+  // 先跑同步断言
+  const syncResults = runAssertions(assertions, responseText, toolsCalled, skillsLoaded);
+
+  // 异步处理 llm_rubric
+  const results = await Promise.all(syncResults.map(async (r, i) => {
+    if (r.detail === 'llm_rubric:pending' && assertions[i].type === 'llm_rubric') {
+      const evalResult = await evaluateLlmRubric(assertions[i].value, responseText);
+      return { ...r, passed: evalResult.passed, detail: evalResult.detail };
+    }
+    return r;
+  }));
+
+  return results;
 }
 
 // ── 工具/技能提取 ────────────────────────────────────────────────────────────

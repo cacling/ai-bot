@@ -21,6 +21,15 @@ const businessSqlite = new Database(businessDbPath, { create: true });
 businessSqlite.exec('PRAGMA journal_mode = WAL');
 businessSqlite.exec('PRAGMA busy_timeout = 5000');
 const businessDb = drizzle(businessSqlite);
+
+// ── KM DB（km_service 独占：MCP tools/servers, skill registry/versions 等）──
+const kmDbPath =
+  process.env.SQLITE_PATH ??
+  fileURLToPath(new URL('../../../data/km.db', import.meta.url));
+const kmSqlite = new Database(kmDbPath, { create: true });
+kmSqlite.exec('PRAGMA journal_mode = WAL');
+kmSqlite.exec('PRAGMA busy_timeout = 5000');
+const kmDb = drizzle(kmSqlite);
 // E2E test cases (originally from tests/apitest/usecase/, inlined after directory removal)
 const seededE2ECases = [
   // bill-inquiry
@@ -1629,7 +1638,30 @@ async function seed() {
   refreshSkillsCache();
   console.log('[seed] 技能元数据同步完成');
 
+  // ── MCP/工具数据同步到 km.db ─────────────────────────────────────────────
+  // km_service 从 km.db 读取 mcp_servers/mcp_tools/connectors/tool_implementations，
+  // 但 seed 写入了 platform.db。这里同步一份到 km.db。
+  console.log('[seed] 同步 MCP 数据到 km.db...');
+  const mcpTables = ['mcp_servers', 'mcp_tools', 'connectors', 'tool_implementations', 'skill_tool_bindings'];
+  for (const table of mcpTables) {
+    try {
+      kmSqlite.exec(`DELETE FROM ${table}`);
+      const rows = platformSqlite.prepare(`SELECT * FROM ${table}`).all();
+      if (rows.length === 0) continue;
+      const cols = Object.keys(rows[0] as Record<string, unknown>);
+      const placeholders = cols.map(() => '?').join(', ');
+      const stmt = kmSqlite.prepare(`INSERT OR IGNORE INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})`);
+      for (const row of rows) {
+        stmt.run(...cols.map(c => (row as Record<string, unknown>)[c]));
+      }
+      console.log(`[seed]   ${table}: ${rows.length} 行已同步`);
+    } catch (e) {
+      console.warn(`[seed]   ${table}: 同步跳过 (${e instanceof Error ? e.message : e})`);
+    }
+  }
+
   console.log('[seed] 初始化完成！');
+  kmSqlite.close();
   process.exit(0);
 }
 

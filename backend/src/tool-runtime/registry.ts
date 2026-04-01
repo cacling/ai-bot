@@ -2,6 +2,7 @@ import { logger } from '../services/logger';
 import {
   getMcpServersSync,
   getMcpToolsSync,
+  getMcpTools,
   getMcpToolBindingsSync,
 } from '../services/km-client';
 import type { ToolContract, ToolBinding, ConnectorConfig, ResolvedTool, AdapterType } from './types';
@@ -55,6 +56,13 @@ export class ToolRegistry {
 
   getToolSurface(): ToolContract[] {
     return this.listContracts().filter(c => !c.disabled);
+  }
+
+  /** 异步刷新：确保 km-client cache 已预热后再加载 contracts */
+  async refreshAsync(): Promise<void> {
+    // 预热 km-client cache（await 确保数据到位）
+    await getMcpTools();
+    this.refresh();
   }
 
   getServerUrl(serverId: string): string | undefined {

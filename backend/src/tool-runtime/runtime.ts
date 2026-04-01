@@ -43,6 +43,13 @@ export class ToolRuntime {
     this.registry.refresh();
   }
 
+  /** 确保 registry contracts 已加载（首次请求时异步预热 km-client cache） */
+  async ensureContractsLoaded(): Promise<void> {
+    if (this.registry.getToolSurface().length === 0) {
+      await this.registry.refreshAsync();
+    }
+  }
+
   setPolicies(policies: GovernPolicy[]): void {
     this.policies = policies;
     this.pipeline = new Pipeline(this.registry, this.adapters, this.policies);

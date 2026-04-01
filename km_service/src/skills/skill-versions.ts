@@ -468,15 +468,28 @@ app.post('/evaluate-assertions', async (c) => {
     return c.json({ error: 'assertions 必填' }, 400);
   }
 
-  const { runAssertions } = await import('./assertion-evaluator');
-  const results = runAssertions(
-    body.assertions as Array<{ type: any; value: string }>,
-    body.response_text ?? '',
-    body.tools_called ?? [],
-    body.skills_loaded ?? [],
-  );
-  const passed = results.every(r => r.passed);
-  return c.json({ status: passed ? 'passed' : 'failed', assertions: results });
+  try {
+    const { runAssertions, runAssertionsAsync } = await import('./assertion-evaluator');
+    const hasLlmRubric = body.assertions.some((a: { type: string }) => a.type === 'llm_rubric');
+    const results = hasLlmRubric
+      ? await runAssertionsAsync(
+          body.assertions as Array<{ type: any; value: string }>,
+          body.response_text ?? '',
+          body.tools_called ?? [],
+          body.skills_loaded ?? [],
+        )
+      : runAssertions(
+          body.assertions as Array<{ type: any; value: string }>,
+          body.response_text ?? '',
+          body.tools_called ?? [],
+          body.skills_loaded ?? [],
+        );
+    const passed = results.every(r => r.passed);
+    return c.json({ status: passed ? 'passed' : 'failed', assertions: results });
+  } catch (err) {
+    logger.error('skill-versions', 'evaluate_assertions_error', { error: String(err) });
+    return c.json({ error: `断言评估失败: ${String(err)}` }, 500);
+  }
 });
 
 export default app;

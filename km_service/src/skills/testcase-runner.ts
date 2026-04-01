@@ -13,7 +13,7 @@ import { runTestMessage, type TestMessageResult } from './skill-versions';
 import { readTestManifest, type TestCaseEntry, type TestManifest } from './testcase-generator';
 import {
   type Assertion, type AssertionResult, type TestStatus,
-  runAssertions, extractToolsAndSkills, isInfraError, sleep,
+  runAssertions, runAssertionsAsync, extractToolsAndSkills, isInfraError, sleep,
   type AgentResultForAssertion,
 } from './assertion-evaluator';
 import { logger } from '../logger';
@@ -100,7 +100,10 @@ export async function runSingleTestCase(
 
     // 运行断言
     const assertions = caseEntry.assertions as Assertion[];
-    const assertionResults = runAssertions(assertions, lastResult?.text ?? '', toolsCalled, skillsLoaded);
+    const hasLlmRubric = assertions.some(a => a.type === 'llm_rubric');
+    const assertionResults = hasLlmRubric
+      ? await runAssertionsAsync(assertions, lastResult?.text ?? '', toolsCalled, skillsLoaded)
+      : runAssertions(assertions, lastResult?.text ?? '', toolsCalled, skillsLoaded);
     const allPassed = assertionResults.every(r => r.passed);
 
     return {

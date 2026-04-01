@@ -49,14 +49,15 @@ export async function switchToTestTab(page: Page) {
 }
 
 export async function switchToTestCasesSubTab(page: Page) {
-  const casesBtn = page.getByText('用例', { exact: true });
+  // sub-tab 按钮在 bg-muted 容器中，带 text-xs class
+  const casesBtn = page.locator('button.text-xs').filter({ hasText: '用例' }).first();
   await expect(casesBtn).toBeVisible({ timeout: 3_000 });
   await casesBtn.click();
   await page.waitForTimeout(300);
 }
 
 export async function switchToChatSubTab(page: Page) {
-  const chatBtn = page.getByText('对话', { exact: true });
+  const chatBtn = page.locator('button.text-xs').filter({ hasText: '对话' }).first();
   await expect(chatBtn).toBeVisible({ timeout: 3_000 });
   await chatBtn.click();
   await page.waitForTimeout(300);
@@ -107,8 +108,9 @@ export async function regenerateTestCases(page: Page): Promise<number> {
  * 获取用例列表中所有不重复的 TC-xxx ID
  */
 export async function getVisibleCaseIds(page: Page): Promise<string[]> {
-  // 只在用例列表区域内查找（排除详情区的 TC-xxx）
-  const elements = page.locator('.overflow-y-auto >> text=/TC-\\d{3}/');
+  // 用例列表行格式: "TC-XXX · title"（带中点），详情区格式: "TC-XXX: title"（带冒号）
+  // 只匹配列表行，避免详情区的 TC-xxx 被误收集
+  const elements = page.getByText(/TC-\d{3}\s*·/);
   const count = await elements.count();
   const ids = new Set<string>();
   for (let i = 0; i < count; i++) {
@@ -131,8 +133,9 @@ export async function runCaseInChat(
   await switchToTestCasesSubTab(page);
   await page.waitForTimeout(300);
 
-  // 点选用例行
+  // 点选用例行（可能需要滚动）
   const caseRow = page.getByText(new RegExp(`${caseId}\\s*·`)).first();
+  await caseRow.scrollIntoViewIfNeeded();
   await expect(caseRow).toBeVisible({ timeout: 5_000 });
   await caseRow.click();
   await page.waitForTimeout(300);
@@ -156,8 +159,9 @@ export async function runCaseInChat(
   await switchToTestCasesSubTab(page);
   await page.waitForTimeout(500);
 
-  // 点选同一用例查看状态图标
+  // 点选同一用例查看状态图标（可能需要滚动）
   const caseRowAgain = page.getByText(new RegExp(`${caseId}\\s*·`)).first();
+  await caseRowAgain.scrollIntoViewIfNeeded();
   await caseRowAgain.click();
   await page.waitForTimeout(300);
 
@@ -184,9 +188,11 @@ export async function runAllCasesInChat(page: Page): Promise<{
   let passed = 0;
   let failed = 0;
 
-  for (const caseId of caseIds) {
-    const status = await runCaseInChat(page, caseId);
-    results.push({ caseId, status });
+  for (let i = 0; i < caseIds.length; i++) {
+    // 每条用例间隔 3 秒，避免触发 LLM API rate limit
+    if (i > 0) await page.waitForTimeout(3000);
+    const status = await runCaseInChat(page, caseIds[i]);
+    results.push({ caseId: caseIds[i], status });
     if (status === 'passed') passed++;
     else failed++;
   }
