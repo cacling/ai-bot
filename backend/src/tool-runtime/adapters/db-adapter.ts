@@ -1,7 +1,8 @@
 import type { Adapter, AdapterCallContext, AdapterType } from '../types';
-import { db } from '../../db';
 import { isErrorResult, isNoDataResult } from '../../services/tool-result';
 import { logger } from '../../services/logger';
+
+const KM_BASE = process.env.KM_SERVICE_URL ?? `http://localhost:${process.env.KM_SERVICE_PORT ?? 18010}`;
 
 interface DbQueryConfig {
   table: string;
@@ -10,14 +11,6 @@ interface DbQueryConfig {
   columns?: string[];
   set?: Record<string, string>;
   values?: Record<string, string>;
-}
-
-const SAFE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-
-function assertSafeIdentifier(name: string, label: string): void {
-  if (!SAFE_IDENTIFIER.test(name)) {
-    throw new Error(`Unsafe ${label}: "${name}" — only alphanumeric and underscore allowed`);
-  }
 }
 
 export class DbAdapter implements Adapter {
@@ -47,9 +40,8 @@ export class DbAdapter implements Adapter {
   }
 
   private async executeQuery(config: DbQueryConfig, args: Record<string, unknown>): Promise<unknown> {
-    assertSafeIdentifier(config.table, 'table name');
-    if (config.columns) {
-      for (const col of config.columns) assertSafeIdentifier(col, 'column name');
+    if (config.operation !== 'select') {
+      throw new Error(`DB operation "${config.operation}" not yet implemented`);
     }
 
     const resolveValue = (template: string): unknown => {
@@ -58,25 +50,30 @@ export class DbAdapter implements Adapter {
       return template;
     };
 
-    if (config.operation === 'select') {
-      const cols = config.columns?.join(', ') ?? '*';
-
-      const conditions: string[] = [];
-      const params: unknown[] = [];
-      if (config.where) {
-        for (const [col, tmpl] of Object.entries(config.where)) {
-          assertSafeIdentifier(col, 'where column');
-          conditions.push(`${col} = ?`);
-          params.push(resolveValue(tmpl));
-        }
+    const where: Record<string, unknown> = {};
+    if (config.where) {
+      for (const [col, tmpl] of Object.entries(config.where)) {
+        where[col] = resolveValue(tmpl);
       }
-      const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
-      const query = `SELECT ${cols} FROM ${config.table}${whereClause}`;
-
-      const stmt = db.$client.prepare(query);
-      return stmt.all(...params);
     }
 
-    throw new Error(`DB operation "${config.operation}" not yet implemented`);
+    // Call km_service internal DB query proxy
+    const res = await fetch(`${KM_BASE}/api/internal/db/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        table: config.table,
+        columns: config.columns,
+        where,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(`km_service query failed: ${JSON.stringify(err)}`);
+    }
+
+    const data = await res.json() as { rows: unknown[] };
+    return data.rows;
   }
 }

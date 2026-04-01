@@ -8,25 +8,36 @@
  */
 import { Hono } from 'hono';
 import { eq, asc } from 'drizzle-orm';
-import { db, platformDb } from '../db';
-import { testPersonas, outboundTasks } from '../db/schema';
+import { platformDb } from '../db';
+import { outboundTasks } from '../db/schema';
+import { logger } from '../services/logger';
+
+const KM_BASE = process.env.KM_SERVICE_URL ?? `http://localhost:${process.env.KM_SERVICE_PORT ?? 18010}`;
 
 const mockDataRoutes = new Hono();
 
 mockDataRoutes.get('/test-personas', async (c) => {
   const category = c.req.query('category');
   const lang = (c.req.query('lang') ?? 'zh') as 'zh' | 'en';
-  const rows = category
-    ? db.select().from(testPersonas).where(eq(testPersonas.category, category)).orderBy(asc(testPersonas.sort_order)).all()
-    : db.select().from(testPersonas).orderBy(asc(testPersonas.sort_order)).all();
-  return c.json(rows.map(r => ({
-    id: r.id,
-    label: lang === 'en' ? r.label_en : r.label_zh,
-    category: r.category,
-    tag: lang === 'en' ? r.tag_en : r.tag_zh,
-    tagColor: r.tag_color,
-    context: JSON.parse(r.context) as Record<string, unknown>,
-  })));
+  try {
+    const res = await fetch(`${KM_BASE}/api/internal/test-personas`);
+    if (!res.ok) return c.json([]);
+    const data = await res.json() as { items: Array<Record<string, unknown>> };
+    let rows = data.items ?? [];
+    if (category) rows = rows.filter((r: any) => r.category === category);
+    rows.sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    return c.json(rows.map((r: any) => ({
+      id: r.id,
+      label: lang === 'en' ? r.label_en : r.label_zh,
+      category: r.category,
+      tag: lang === 'en' ? r.tag_en : r.tag_zh,
+      tagColor: r.tag_color,
+      context: JSON.parse(r.context) as Record<string, unknown>,
+    })));
+  } catch (e) {
+    logger.warn('mock-data', 'test_personas_fetch_error', { error: String(e) });
+    return c.json([]);
+  }
 });
 
 mockDataRoutes.get('/outbound-tasks', async (c) => {

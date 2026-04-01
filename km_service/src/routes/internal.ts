@@ -14,6 +14,7 @@ import {
   mcpTools,
   toolImplementations,
   connectors,
+  testPersonas,
 } from '../db';
 import { logger } from '../logger';
 
@@ -122,6 +123,55 @@ app.get('/mcp/tool-bindings', (c) => {
   const impls = db.select().from(toolImplementations).all();
   const conns = db.select().from(connectors).all();
   return c.json({ implementations: impls, connectors: conns });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Test Personas（供 backend mock-data 使用）
+// ══════════════════════════════════════════════════════════════════════════
+
+app.get('/test-personas', (c) => {
+  const rows = db.select().from(testPersonas).all();
+  return c.json({ items: rows });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// DB Query Proxy（供 tool-runtime/db-adapter 使用）
+// ══════════════════════════════════════════════════════════════════════════
+
+const SAFE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/** POST /db/query — 受限的 SELECT 查询代理 */
+app.post('/db/query', async (c) => {
+  const body = await c.req.json();
+  const { table, columns, where } = body;
+
+  if (!table || !SAFE_IDENTIFIER.test(table)) {
+    return c.json({ error: 'invalid table name' }, 400);
+  }
+
+  const cols = (columns as string[] | undefined)?.filter(c => SAFE_IDENTIFIER.test(c)).join(', ') ?? '*';
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (where && typeof where === 'object') {
+    for (const [col, val] of Object.entries(where)) {
+      if (!SAFE_IDENTIFIER.test(col)) continue;
+      conditions.push(`${col} = ?`);
+      params.push(val);
+    }
+  }
+
+  const whereClause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+  const sql = `SELECT ${cols} FROM ${table}${whereClause}`;
+
+  try {
+    const { sqlite } = await import('../db');
+    const stmt = sqlite.prepare(sql);
+    const rows = stmt.all(...params);
+    return c.json({ rows });
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
+  }
 });
 
 export default app;
