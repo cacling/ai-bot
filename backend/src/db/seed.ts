@@ -1623,10 +1623,10 @@ async function seed() {
   }
   console.log(`[seed] 技能注册完成：${bizSkills.length} 个技能已发布 (v1)`);
 
-  // 同步技能元数据到 skill_registry 表
+  // 同步技能元数据到 skill_registry 表（直接调用 km_service 模块，seed 阶段 km_service 未启动）
   console.log('[seed] 同步技能元数据...');
-  const { syncAllSkillMetadata } = await import('../engine/skills');
-  syncAllSkillMetadata();
+  const { refreshSkillsCache } = await import('../../../km_service/src/engine-stubs');
+  refreshSkillsCache();
   console.log('[seed] 技能元数据同步完成');
 
   console.log('[seed] 初始化完成！');
