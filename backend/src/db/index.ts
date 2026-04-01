@@ -3,18 +3,6 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { fileURLToPath } from 'url';
 import * as schema from './schema';
 
-// ── km.db（平台+知识管理表，与 km_service 共享，Phase 2.4 后由 km_service 独占）──
-const dbPath =
-  process.env.SQLITE_PATH ??
-  fileURLToPath(new URL('../../../data/km.db', import.meta.url));
-
-const sqlite = new Database(dbPath, { create: true });
-sqlite.exec('PRAGMA journal_mode = WAL');
-sqlite.exec('PRAGMA busy_timeout = 5000');
-
-export const db = drizzle(sqlite, { schema });
-export { sqlite };
-
 // ── platform.db（backend 独占的运行时表：sessions, messages, staff, skill_instances 等）──
 const platformDbPath =
   process.env.PLATFORM_DB_PATH ??
@@ -27,6 +15,7 @@ platformSqlite.exec('PRAGMA busy_timeout = 5000');
 export const platformDb = drizzle(platformSqlite, { schema });
 export { platformSqlite };
 
-// ── business.db 已迁移至 CDP Service ──
-// 运行时客户数据查询通过 cdp-client.ts → CDP Service API
-// business.db 仅由 mock_apis 和 seed.ts 使用
+// ── 其他数据库已按 Constitution XII 迁移 ──
+// km.db → km_service（通过 km-client.ts HTTP API 访问）
+// business.db → mock_apis（通过 MCP tools 访问）
+// cdp.db → cdp_service（通过 cdp-client.ts HTTP API 访问）

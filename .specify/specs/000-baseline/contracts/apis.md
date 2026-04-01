@@ -1119,6 +1119,105 @@ LLM 可使用 3 个工具：
 
 ---
 
-## 18. 环境变量配置
+## 18. CDP Service REST API（:18020）
+
+客户数据平台 — 客户语义层与客户事实底座。
+
+### 18.1 Identity Resolve
+
+**`POST /api/cdp/identity/resolve`**
+
+根据外部标识（手机号/邮箱等）解析到统一客户主体。
+
+**请求体：**
+```json
+{ "tenant_id": "default", "identity_type": "phone", "identity_value": "13800000001" }
+```
+
+**成功响应（200）：**
+```json
+{ "resolved": true, "party_id": "uuid", "display_name": "张三", "party_type": "customer" }
+```
+
+**未匹配（200）：**
+```json
+{ "resolved": false, "identity_type": "phone", "identity_value_norm": "13800000001" }
+```
+
+### 18.2 Customer Context
+
+**`GET /api/cdp/party/:partyId/context`**
+
+返回完整客户上下文（party + identities + contacts + subscriptions + profile）。
+
+**成功响应（200）：**
+```json
+{
+  "party": { "party_id": "uuid", "display_name": "张三", "party_type": "customer", "status": "active" },
+  "identities": [{ "identity_type": "phone", "identity_value": "13800000001", "primary_flag": true }],
+  "contact_points": [{ "contact_type": "phone", "contact_value": "13800000001", "preferred_flag": true }],
+  "subscriptions": [{ "plan_code": "plan_50g", "service_status": "active", "relation_type": "owner" }],
+  "profile": { "basic_profile_json": "{\"gender\":\"male\",\"customer_tier\":\"standard\"}" }
+}
+```
+
+### 18.3 Party CRUD
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST /api/cdp/party` | 创建 party（可含 identities + contact_points） |
+| `GET /api/cdp/party/:partyId` | 获取 party 基本信息 |
+| `GET /api/cdp/party/:partyId/subscriptions` | 获取订阅列表 |
+| `POST /api/cdp/party/:partyId/identity` | 添加 identity |
+
+### 18.4 Consent & Contactability
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST /api/cdp/consents` | 创建 consent record |
+| `GET /api/cdp/consents?party_id=` | 查询 party 的全部 consent |
+| `GET /api/cdp/consents/check?party_id=&channel_type=&purpose_type=` | 检查联系能力 |
+| `PATCH /api/cdp/consents/:id` | 更新 consent 状态（revoke/expire） |
+
+### 18.5 Customer Events
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST /api/cdp/events` | 记录客户事件（append-only） |
+| `GET /api/cdp/events?party_id=&limit=` | 查询事件时间线 |
+
+### 18.6 Consumption Views
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET /api/cdp/views/profile?party_id=` | 获取客户画像 |
+| `PUT /api/cdp/views/profile` | 创建/更新画像（upsert） |
+| `GET /api/cdp/views/service-summary?party_id=` | 获取服务摘要 |
+| `PUT /api/cdp/views/service-summary` | 创建/更新服务摘要 |
+| `GET /api/cdp/views/interaction-summary?party_id=` | 获取交互摘要 |
+| `PUT /api/cdp/views/interaction-summary` | 创建/更新交互摘要 |
+
+### 18.7 Identity Graph Governance
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST /api/cdp/identity-links` | 创建 identity link |
+| `GET /api/cdp/identity-links?party_identity_id=` | 查询 identity 的关联 |
+| `PATCH /api/cdp/identity-links/:id` | 审批（confirm/reject） |
+| `POST /api/cdp/resolution-cases` | 创建 merge/split 审核工单 |
+| `GET /api/cdp/resolution-cases?status=` | 查询工单列表 |
+| `PATCH /api/cdp/resolution-cases/:id` | 审批工单 |
+
+### 18.8 Source Record Lineage
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST /api/cdp/source-records` | 创建源系统映射 |
+| `GET /api/cdp/source-records/by-target?target_entity_type=&target_entity_id=` | 按 CDP 实体查映射 |
+| `GET /api/cdp/source-records/by-source?source_system=&source_entity_type=&source_entity_id=` | 按源系统查映射 |
+
+---
+
+## 19. 环境变量配置
 
 完整变量说明及 `.env` 示例见 **[06-deployment.md § 2](06-deployment.md)**。
