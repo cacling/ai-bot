@@ -3,7 +3,7 @@
  */
 import { describe, test, expect } from 'bun:test';
 import { Hono } from 'hono';
-import mockDataRoutes from '../../../src/chat/mock-data';
+import mockDataRoutes from '../../src/chat/mock-data';
 
 const app = new Hono();
 app.route('/api', mockDataRoutes);

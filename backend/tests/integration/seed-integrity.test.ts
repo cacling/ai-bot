@@ -17,17 +17,18 @@ import { $ } from 'bun';
 const TMP_DB = `/tmp/seed-integrity-test-${Date.now()}.db`;
 const PROJECT_ROOT = join(import.meta.dir, '../../..');  // workspace/ai-bot/
 const BACKEND_DIR = join(PROJECT_ROOT, 'backend');
+const KM_SERVICE_DIR = join(PROJECT_ROOT, 'km_service');
 
 let sqliteDb: Database;
 
 beforeAll(async () => {
-  // 1. push schema
+  // 1. push km_service schema (includes platform + km tables in one DB)
   const push = await $`SQLITE_PATH=${TMP_DB} bunx drizzle-kit push --force`
-    .cwd(BACKEND_DIR).quiet().nothrow();
+    .cwd(KM_SERVICE_DIR).quiet().nothrow();
   if (push.exitCode !== 0) throw new Error(`drizzle-kit push failed: ${push.stderr}`);
 
-  // 2. run seed
-  const seed = await $`SQLITE_PATH=${TMP_DB} bun run src/db/seed.ts`
+  // 2. run seed (SQLITE_PATH for km.db tables, PLATFORM_DB_PATH for platform tables)
+  const seed = await $`SQLITE_PATH=${TMP_DB} PLATFORM_DB_PATH=${TMP_DB} bun run src/db/seed.ts`
     .cwd(BACKEND_DIR).quiet().nothrow();
   if (seed.exitCode !== 0) throw new Error(`seed failed: ${seed.stderr}`);
 
