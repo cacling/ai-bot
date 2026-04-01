@@ -16,7 +16,7 @@ const RE_ANNOTATION_STEP = /%%\s*step:([\w-]+)/g;
 const RE_ANNOTATION_KIND = /%%\s*kind:(\w+)/g;
 const RE_ANNOTATION_GUARD = /%%\s*guard:([\w.]+)/g;
 const RE_ANNOTATION_OUTPUT = /%%\s*output:(\w+)/g;
-import { extractPrimaryMermaidBlock as _extractPrimaryMermaidBlock } from '../../../../src/services/mermaid';
+import { extractPrimaryMermaidBlock as _extractPrimaryMermaidBlock } from '../../../../src/mermaid';
 
 /** 清理状态名：去除引号和前后空格 */
 function cleanStateName(raw: string): string {
