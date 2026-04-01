@@ -119,11 +119,20 @@
 - 必须记录"为什么需要"和"被否决的更简单方案"
 - 在 spec/plan 的 Complexity Tracking 表中留痕
 
+### XII. 数据库所有权隔离（Database Ownership Isolation）
+
+- 每个服务只读写自己的数据库，禁止直接读写其他服务的 SQLite 文件
+- 跨服务数据访问必须通过 HTTP API（如 km-client.ts → km_service、cdp-client.ts → CDP Service）
+- 本地 TTL 缓存 + 后台刷新用于减少 HTTP 调用频率，不阻塞请求路径
+- DB 所有权表：km.db → km_service、platform.db → backend、business.db → mock_apis、cdp.db → cdp_service、workorder.db → work_order_service
+- 违反示例：backend 直接 `import { db } from '../db'` 读取 km.db 的 skillRegistry 表
+- 正确方式：backend 通过 `getSkillRegistry()` 调用 km_service 的 `/api/internal/skills/registry`
+
 ## Governance
 
 - Constitution 优先于所有其他开发实践
 - 修订 Constitution 必须更新版本号并记录修订日期
 - 原则 I-VI 为架构性原则，修改需架构评审
-- 原则 VII-XI 为工程治理原则，修改需技术负责人批准
+- 原则 VII-XII 为工程治理原则，修改需技术负责人批准
 
-**Version**: 3.0.0 | **Ratified**: 2026-03-19 | **Last Amended**: 2026-03-21
+**Version**: 4.0.0 | **Ratified**: 2026-03-19 | **Last Amended**: 2026-04-01
