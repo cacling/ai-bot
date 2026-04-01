@@ -10,6 +10,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { waitForChatWs, sendMessage, waitForBotReply, getLastBotReply } from '../../fixtures/chat-helpers';
+import { navigateToTestCases, regenerateTestCases, runAllCasesInChat } from '../../fixtures/testcase-ui-helpers';
 
 // ── SOP 流程验证 ─────────────────────────────────────────────────────────────
 
@@ -171,5 +172,25 @@ test.describe.serial('Workflow Engine: 全局转人工', () => {
     await waitForBotReply(page);
     const reply = await getLastBotReply(page);
     expect(reply.length, '转人工回复不应为空').toBeGreaterThan(5);
+  });
+});
+
+// ── 自动生成测试用例：重新生成 + 全量运行 ─────────────────────────────────────
+
+test.describe.serial('service-cancel 自动生成测试用例', () => {
+  test.setTimeout(600_000);
+
+  test('AUTO-SC-01: 重新生成测试用例', async ({ page }) => {
+    await navigateToTestCases(page, 'service-cancel');
+    const count = await regenerateTestCases(page);
+    expect(count, '应至少生成 3 条测试用例').toBeGreaterThanOrEqual(3);
+  });
+
+  test('AUTO-SC-02: 运行全部用例并验证通过', async ({ page }) => {
+    await navigateToTestCases(page, 'service-cancel');
+    const stats = await runAllCasesInChat(page);
+    expect(stats.total, '应有用例被执行').toBeGreaterThan(0);
+    expect(stats.passed, '通过数应大于 0').toBeGreaterThan(0);
+    expect(stats.passed / stats.total, `通过率 ${stats.passed}/${stats.total} 应 >= 50%`).toBeGreaterThanOrEqual(0.5);
   });
 });

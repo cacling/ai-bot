@@ -180,20 +180,25 @@ test.describe.serial('测试用例面板', () => {
     await page.waitForTimeout(300);
 
     // 找到该行的运行按钮（Play 图标 SVG）
-    // 运行按钮在选中行上才显示（opacity 控制）
-    // 使用 locator 链找到选中行内的 Play 按钮
     const selectedRow = page.locator('.ring-1').first();
     const playBtn = selectedRow.locator('button').last();
     await playBtn.click();
 
-    // 等待执行完成（Agent 调用可能需要 30-60s）
-    // 执行完成后详情区应出现「断言结果」和「对话记录」
-    await expect(page.getByText('断言结果')).toBeVisible({ timeout: 90_000 });
-    await expect(page.getByText('对话记录')).toBeVisible();
+    // 点击运行后会自动切换到对话 sub-tab，实时显示消息
+    // 等待对话中出现助手回复（Agent 调用可能需要 30-60s）
+    await expect(page.locator('.rounded-2xl.rounded-tl-none').first()).toBeVisible({ timeout: 90_000 });
 
-    // 应显示通过/失败的断言结果
-    const passOrFail = page.locator('text=/passed|failed|pass|fail/i').first();
-    await expect(passOrFail).toBeVisible({ timeout: 5_000 });
+    // 切回用例 sub-tab 查看断言结果
+    await switchToTestCasesSubTab(page);
+    await page.waitForTimeout(500);
+
+    // 选中同一用例，查看详情
+    await page.getByText(/TC-\d{3}/).first().click();
+    await page.waitForTimeout(300);
+
+    // 执行完成后详情区应出现断言结果（状态图标：✅ 或 ❌）
+    const statusIcon = page.locator('.shrink-0.border-t svg').first();
+    await expect(statusIcon).toBeVisible({ timeout: 10_000 });
   });
 
   test('TC-PANEL-07: 运行全部用例并显示统计', async ({ page }) => {

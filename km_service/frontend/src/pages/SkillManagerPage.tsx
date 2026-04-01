@@ -38,7 +38,7 @@ import { VisionTaskCard } from './components/VisionTaskCard';
 import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { SkillDiagramWorkbench } from './components/SkillDiagramWorkbench';
 import { SkillDiagramPanel } from './components/SkillDiagramPanel';
-import { TestCasePanel } from './components/TestCasePanel';
+import { TestCasePanel, type TestCaseEntry, type CaseResult } from './components/TestCasePanel';
 import { VisionResultCard } from './components/VisionResultCard';
 import { InlineMarkdown, SkillCard, SaveIndicator, ViewToggle, UnsavedDialog } from './components/SkillEditorWidgets';
 import { replaceCustomerGuidanceMermaid } from '../shared/skillMarkdown';
@@ -590,6 +590,114 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
   }, [activeSkill, testingVersion, testInput, testMode]);
 
   useEffect(() => { testEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [testMessages, testRunning]);
+
+  // ── 在对话 tab 中运行测试用例 ─────────────────────────────────────────────
+  const handleRunCaseInChat = useCallback((tc: TestCaseEntry, onResult: (result: CaseResult) => void) => {
+    if (!activeSkill) return;
+    const vno = effectiveVersionNo;
+    if (vno === null) return;
+
+    // 1. 清空对话、切到对话 sub-tab
+    testMsgIdRef.current = 0;
+    setTestMessages([]);
+    setTestInput('');
+    setTestDiagram(null);
+    setTestingVersion(vno);
+    setTestSubTab('chat');
+
+    const persona = testPersonaList.find(p => p.id === testPersonaId)?.context;
+    const startTime = Date.now();
+
+    // 2. 异步逐轮执行
+    (async () => {
+      const history: Array<{ role: string; content: string }> = [];
+      const allToolRecords: Array<{ tool: string }> = [];
+      const allSkillsLoaded: string[] = [];
+      let lastResponseText = '';
+
+      for (const turn of tc.turns) {
+        // 添加用户消息
+        const userMsg = { id: ++testMsgIdRef.current, role: 'user' as const, text: turn };
+        setTestMessages(prev => [...prev, userMsg]);
+        setTestRunning(true);
+
+        try {
+          const res = await fetch('/api/skill-versions/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              skill: activeSkill.id,
+              version_no: vno,
+              message: turn,
+              history,
+              persona,
+            }),
+          });
+          const data = await res.json();
+          lastResponseText = data.text ?? data.error ?? '无返回';
+
+          // 添加助手消息
+          setTestMessages(prev => [...prev, { id: ++testMsgIdRef.current, role: 'assistant', text: lastResponseText }]);
+
+          // 收集工具和技能
+          if (data.tool_records) {
+            allToolRecords.push(...data.tool_records);
+          }
+          if (data.skill_diagram?.skill_name) {
+            if (!allSkillsLoaded.includes(data.skill_diagram.skill_name)) {
+              allSkillsLoaded.push(data.skill_diagram.skill_name);
+            }
+          }
+          if (data.skill_diagram) {
+            setTestDiagram(data.skill_diagram);
+          }
+
+          // 累积 history
+          history.push({ role: 'user', content: turn });
+          history.push({ role: 'assistant', content: lastResponseText });
+        } catch (err) {
+          lastResponseText = `测试失败: ${err}`;
+          setTestMessages(prev => [...prev, { id: ++testMsgIdRef.current, role: 'assistant', text: lastResponseText }]);
+        }
+        setTestRunning(false);
+      }
+
+      // 3. 评估断言
+      const toolsCalled = allToolRecords.map(r => r.tool);
+      try {
+        const evalRes = await fetch('/api/skill-versions/evaluate-assertions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assertions: tc.assertions,
+            response_text: lastResponseText,
+            tools_called: toolsCalled,
+            skills_loaded: allSkillsLoaded,
+          }),
+        });
+        const evalData = await evalRes.json();
+
+        const result: CaseResult = {
+          case_id: tc.id,
+          title: tc.title,
+          category: tc.category,
+          status: evalData.status ?? 'failed',
+          assertions: evalData.assertions ?? [],
+          transcript: history.map((h, i) => ({ role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant', text: h.content })),
+          tools_called: toolsCalled,
+          skills_loaded: allSkillsLoaded,
+          duration_ms: Date.now() - startTime,
+        };
+        onResult(result);
+      } catch {
+        onResult({
+          case_id: tc.id, title: tc.title, category: tc.category, status: 'infra_error',
+          assertions: [], transcript: [], tools_called: [], skills_loaded: [],
+          duration_ms: Date.now() - startTime,
+        });
+      }
+    })();
+  }, [activeSkill, effectiveVersionNo, testPersonaList, testPersonaId]);
 
   // ── 文件/文件夹创建 ───────────────────────────────────────────────────────
   const handleCreateFile = useCallback(async (parentPath: string, name: string) => {
@@ -1478,8 +1586,8 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
         {/* ── 测试 Tab ── */}
         {rightTab === 'test' && (
           <>
-            {/* 测试 Sub-tab 切换 */}
-            <div className="shrink-0 flex border-b border-border bg-muted/20 px-2">
+            {/* 测试 Sub-tab 切换 + 共享 Persona 选择器 */}
+            <div className="shrink-0 flex items-center border-b border-border bg-muted/20 px-2">
               <button
                 onClick={() => setTestSubTab('cases')}
                 className={`px-3 py-1.5 text-xs border-b-2 transition-colors ${
@@ -1496,6 +1604,22 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
               >
                 对话
               </button>
+              <div className="ml-auto pr-1">
+                <Select value={testPersonaId} onValueChange={(v) => { if (v) setTestPersonaId(v); }}>
+                  <SelectTrigger className="h-6 text-[10px] border-none bg-transparent shadow-none gap-1 px-1.5">
+                    <User className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <SelectValue placeholder="测试用户">
+                      {(() => { const p = testPersonaList.find(x => x.id === testPersonaId); const ctx = p?.context as Record<string, string> | undefined; return ctx?.name ?? p?.id ?? testPersonaId; })()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {testPersonaList.map(p => {
+                      const ctx = p.context as Record<string, string>;
+                      return <SelectItem key={p.id} value={p.id} className="text-xs">{ctx.name ?? p.id} · {ctx.phone ?? ''}</SelectItem>;
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* 用例 Sub-tab */}
@@ -1503,9 +1627,7 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
               <TestCasePanel
                 skillId={activeSkill.id}
                 versionNo={effectiveVersionNo}
-                personaList={testPersonaList}
-                selectedPersonaId={testPersonaId}
-                onPersonaChange={(v) => { if (v) setTestPersonaId(v); }}
+                onRunInChat={handleRunCaseInChat}
               />
             )}
             {testSubTab === 'cases' && (!activeSkill || effectiveVersionNo === null) && (
@@ -1556,20 +1678,7 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
 
                 {/* 测试输入区 */}
                 {testingVersion !== null && (
-                  <div className="p-3 bg-background border-t border-border space-y-2 shrink-0">
-                    <Select value={testPersonaId} onValueChange={(v) => { if (v) setTestPersonaId(v); }}>
-                      <SelectTrigger className="w-full text-[11px] h-7">
-                        <SelectValue placeholder="选择测试用户">
-                          {testPersonaList.find(p => p.id === testPersonaId)?.label ?? testPersonaId}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {testPersonaList.map(p => {
-                          const ctx = p.context as Record<string, string>;
-                          return <SelectItem key={p.id} value={p.id}>{ctx.name ?? p.id} · {ctx.phone ?? ''}</SelectItem>;
-                        })}
-                      </SelectContent>
-                    </Select>
+                  <div className="p-3 bg-background border-t border-border shrink-0">
                     <div className="flex gap-2">
                       <Textarea
                         value={testInput}

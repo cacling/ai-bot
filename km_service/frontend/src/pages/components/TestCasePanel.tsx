@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 
 // ── 类型 ─────────────────────────────────────────────────────────────────────
 
@@ -21,7 +21,7 @@ interface Requirement {
   description: string;
 }
 
-interface TestCaseEntry {
+export interface TestCaseEntry {
   id: string;
   title: string;
   category: 'functional' | 'edge' | 'error' | 'state';
@@ -52,7 +52,7 @@ interface AssertionResult {
   detail: string;
 }
 
-interface CaseResult {
+export interface CaseResult {
   case_id: string;
   title: string;
   category: string;
@@ -77,9 +77,8 @@ interface BatchResult {
 export interface TestCasePanelProps {
   skillId: string;
   versionNo: number;
-  personaList: Array<{ id: string; label: string; context: Record<string, unknown> }>;
-  selectedPersonaId: string;
-  onPersonaChange: (id: string) => void;
+  /** 在对话 tab 中运行用例：父组件负责逐轮发送消息并收集结果 */
+  onRunInChat?: (tc: TestCaseEntry, onResult: (result: CaseResult) => void) => void;
 }
 
 // ── 常量 ─────────────────────────────────────────────────────────────────────
@@ -107,7 +106,7 @@ const PRIORITY_COLORS: Record<number, string> = {
 
 // ── 组件 ─────────────────────────────────────────────────────────────────────
 
-export function TestCasePanel({ skillId, versionNo, personaList, selectedPersonaId, onPersonaChange }: TestCasePanelProps) {
+export function TestCasePanel({ skillId, versionNo, onRunInChat }: TestCasePanelProps) {
   const [manifest, setManifest] = useState<TestManifest | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -169,15 +168,28 @@ export function TestCasePanel({ skillId, versionNo, personaList, selectedPersona
 
   // ── 运行单条 ───────────────────────────────────────────────────────────────
 
-  const handleRunCase = useCallback(async (caseId: string) => {
+  const handleRunCase = useCallback(async (caseId: string, inChat = false) => {
+    const tc = manifest?.cases.find(c => c.id === caseId);
+    if (!tc) return;
+
     setRunningCaseId(caseId);
     setSelectedCaseId(caseId);
+
+    // 在对话 tab 中运行：逐轮发送，实时显示
+    if (inChat && onRunInChat) {
+      onRunInChat(tc, (result) => {
+        setCaseResults(prev => ({ ...prev, [caseId]: result }));
+        setRunningCaseId(null);
+      });
+      return;
+    }
+
+    // 默认：后端批量执行
     try {
-      const persona = personaList.find(p => p.id === selectedPersonaId)?.context;
       const res = await fetch(`/api/skill-versions/${encodeURIComponent(skillId)}/${versionNo}/run-testcase`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ case_id: caseId, persona }),
+        body: JSON.stringify({ case_id: caseId }),
       });
       const result: CaseResult = await res.json();
       setCaseResults(prev => ({ ...prev, [caseId]: result }));
@@ -192,7 +204,7 @@ export function TestCasePanel({ skillId, versionNo, personaList, selectedPersona
       }));
     }
     setRunningCaseId(null);
-  }, [skillId, versionNo, personaList, selectedPersonaId]);
+  }, [skillId, versionNo, manifest, onRunInChat]);
 
   // ── 运行全部 ───────────────────────────────────────────────────────────────
 
@@ -200,11 +212,10 @@ export function TestCasePanel({ skillId, versionNo, personaList, selectedPersona
     setRunAllRunning(true);
     setCaseResults({});
     try {
-      const persona = personaList.find(p => p.id === selectedPersonaId)?.context;
       const res = await fetch(`/api/skill-versions/${encodeURIComponent(skillId)}/${versionNo}/run-all-testcases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona }),
+        body: JSON.stringify({}),
       });
       const batch: BatchResult = await res.json();
       const map: Record<string, CaseResult> = {};
@@ -214,7 +225,7 @@ export function TestCasePanel({ skillId, versionNo, personaList, selectedPersona
       alert(`批量执行失败: ${err}`);
     }
     setRunAllRunning(false);
-  }, [skillId, versionNo, personaList, selectedPersonaId]);
+  }, [skillId, versionNo]);
 
   // ── 过滤 ───────────────────────────────────────────────────────────────────
 
@@ -290,20 +301,8 @@ export function TestCasePanel({ skillId, versionNo, personaList, selectedPersona
           )}
         </div>
 
-        {/* 第二行：persona + 分类筛选 */}
+        {/* 第二行：分类筛选 */}
         <div className="flex items-center gap-2">
-          <Select value={selectedPersonaId} onValueChange={(v) => { if (v) onPersonaChange(v); }}>
-            <SelectTrigger className="w-36 text-[10px] h-6">
-              <SelectValue placeholder="测试用户" />
-            </SelectTrigger>
-            <SelectContent>
-              {personaList.map(p => {
-                const ctx = p.context as Record<string, string>;
-                return <SelectItem key={p.id} value={p.id} className="text-xs">{ctx.name ?? p.id}</SelectItem>;
-              })}
-            </SelectContent>
-          </Select>
-
           <div className="flex gap-1">
             {CATEGORIES.map(cat => (
               <button
@@ -389,12 +388,13 @@ export function TestCasePanel({ skillId, versionNo, personaList, selectedPersona
                           P{tc.priority}
                         </Badge>
 
-                        {/* 运行按钮 */}
+                        {/* 运行按钮：优先在对话中运行 */}
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleRunCase(tc.id); }}
+                          onClick={(e) => { e.stopPropagation(); handleRunCase(tc.id, !!onRunInChat); }}
                           disabled={isRunning || runAllRunning}
                           className="opacity-0 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-primary/10 transition-opacity shrink-0"
                           style={{ opacity: isSelected ? 1 : undefined }}
+                          title={onRunInChat ? '在对话中运行' : '运行'}
                         >
                           <Play className="w-3 h-3 text-primary" />
                         </button>

@@ -12,6 +12,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { waitForChatWs, sendMessage, waitForBotReply, getLastBotReply } from '../../fixtures/chat-helpers';
+import { navigateToTestCases, regenerateTestCases, runAllCasesInChat } from '../../fixtures/testcase-ui-helpers';
 
 // ── 场景：未知扣费查询→解释→退订 ──────────────────────────────────────────
 
@@ -72,5 +73,25 @@ test.describe.serial('bill-inquiry SOP: 账单查询多步流程', () => {
     await waitForBotReply(page);
     const reply3 = await getLastBotReply(page);
     expect(reply3.length, '第 3 步回复不应为空').toBeGreaterThan(10);
+  });
+});
+
+// ── 自动生成测试用例：重新生成 + 全量运行 ─────────────────────────────────────
+
+test.describe.serial('bill-inquiry 自动生成测试用例', () => {
+  test.setTimeout(600_000);
+
+  test('AUTO-BI-01: 重新生成测试用例', async ({ page }) => {
+    await navigateToTestCases(page, 'bill-inquiry');
+    const count = await regenerateTestCases(page);
+    expect(count, '应至少生成 3 条测试用例').toBeGreaterThanOrEqual(3);
+  });
+
+  test('AUTO-BI-02: 运行全部用例并验证通过', async ({ page }) => {
+    await navigateToTestCases(page, 'bill-inquiry');
+    const stats = await runAllCasesInChat(page);
+    expect(stats.total, '应有用例被执行').toBeGreaterThan(0);
+    expect(stats.passed, '通过数应大于 0').toBeGreaterThan(0);
+    expect(stats.passed / stats.total, `通过率 ${stats.passed}/${stats.total} 应 >= 50%`).toBeGreaterThanOrEqual(0.5);
   });
 });

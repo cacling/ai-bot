@@ -9,6 +9,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { connectOutbound, type OutboundWsClient } from '../../fixtures/outbound-helpers';
+import { navigateToTestCases, regenerateTestCases, runAllCasesInChat } from '../../fixtures/testcase-ui-helpers';
 
 test.describe.serial('outbound-collection SOP: 标准催收流程', () => {
   test.setTimeout(300_000);
@@ -173,4 +174,24 @@ test.describe.serial('outbound-collection SOP: 合规阻止', () => {
   // 合规拦截发生在呼叫建立前，text mode WS 连接即代表通话已接通，无法覆盖拨前门控逻辑
   test.skip('SOP-COL-08: 非法时段呼叫→合规拦截→任务延后（拨前门控，需语音模式或单元测试）', async () => {});
   test.skip('SOP-COL-09: 超最大重试次数→合规拦截→标记放弃（拨前门控，需语音模式或单元测试）', async () => {});
+});
+
+// ── 自动生成测试用例：重新生成 + 全量运行 ─────────────────────────────────────
+
+test.describe.serial('outbound-collection 自动生成测试用例', () => {
+  test.setTimeout(600_000);
+
+  test('AUTO-COL-01: 重新生成测试用例', async ({ page }) => {
+    await navigateToTestCases(page, 'outbound-collection');
+    const count = await regenerateTestCases(page);
+    expect(count, '应至少生成 3 条测试用例').toBeGreaterThanOrEqual(3);
+  });
+
+  test('AUTO-COL-02: 运行全部用例并验证通过', async ({ page }) => {
+    await navigateToTestCases(page, 'outbound-collection');
+    const stats = await runAllCasesInChat(page);
+    expect(stats.total, '应有用例被执行').toBeGreaterThan(0);
+    expect(stats.passed, '通过数应大于 0').toBeGreaterThan(0);
+    expect(stats.passed / stats.total, `通过率 ${stats.passed}/${stats.total} 应 >= 50%`).toBeGreaterThanOrEqual(0.5);
+  });
 });
