@@ -215,12 +215,18 @@ export async function runAllCasesInChat(page: Page): Promise<{
   await expect(runAllBtn).toBeVisible({ timeout: 5_000 });
   await runAllBtn.click();
 
-  // 等待「执行中」出现再消失（每个用例 ~10-30s）
-  await expect(page.getByText(/执行中/)).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText(/执行中/)).not.toBeVisible({ timeout: 600_000 });
+  // 等待执行完成：先等「执行中」出现，再等它消失
+  // 如果「执行中」没出现（用例秒完或出错），直接继续
+  const executing = page.getByText(/执行中/);
+  const appeared = await executing.isVisible().catch(() => false)
+    || await executing.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true).catch(() => false);
+  if (appeared) {
+    await expect(executing).not.toBeVisible({ timeout: 600_000 });
+  }
+  await page.waitForTimeout(2000);
 
-  // 读取统计文本
-  const statsText = await page.getByText(/\d+ pass/).first().textContent({ timeout: 10_000 }).catch(() => '');
+  // 读取统计文本（pass / fail）
+  const statsText = await page.getByText(/\d+ pass/).first().textContent({ timeout: 15_000 }).catch(() => '');
   const passMatch = statsText.match(/(\d+)\s*pass/);
   const failMatch = statsText.match(/(\d+)\s*fail/);
   const passed = passMatch ? parseInt(passMatch[1]) : 0;
