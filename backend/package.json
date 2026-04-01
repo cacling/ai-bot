@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "test": "bun test --preload tests/unittest/preload.ts tests/unittest/ && bun test tests/unittest-isolated/",
-    "test:all": "bun test --preload tests/unittest/preload.ts tests/unittest/ && bun test tests/unittest-isolated/ && bun test tests/integration/",
+    "test": "bun test --preload ./tests/unittest/preload.ts tests/unittest/ && bun test --preload ./tests/unittest/preload.ts tests/unittest-isolated/workflow/ tests/unittest-isolated/engine/ tests/unittest-isolated/services/mcp-client.test.ts && bun test tests/unittest-isolated/services/km-client.test.ts",
+    "test:all": "bun test --preload ./tests/unittest/preload.ts tests/unittest/ && bun test --preload ./tests/unittest/preload.ts tests/unittest-isolated/workflow/ tests/unittest-isolated/engine/ tests/unittest-isolated/services/mcp-client.test.ts && bun test tests/unittest-isolated/services/km-client.test.ts && bun test tests/integration/",
     "test:coverage": "bun test --preload tests/unittest/preload.ts tests/unittest/ tests/unittest-isolated/ tests/integration/ --coverage",
     "test:diagnosis": "bun test skills/fault-diagnosis/scripts/run_diagnosis.test.ts",
     "test:diagram": "bun test src/agent/runner.diagram.test.ts",
