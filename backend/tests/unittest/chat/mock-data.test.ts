@@ -20,17 +20,17 @@ describe('mock-data — GET /api/test-personas', () => {
     expect(Array.isArray(data)).toBe(true);
   });
 
-  test('personas have expected shape', async () => {
+  test('personas have expected shape (requires km_service)', async () => {
     const { data } = await req('/api/test-personas');
     const personas = data as Array<Record<string, unknown>>;
-    if (personas.length > 0) {
-      const p = personas[0];
-      expect(p.id).toBeDefined();
-      expect(p.label).toBeDefined();
-      expect(p.category).toBeDefined();
-      expect(p.tag).toBeDefined();
-      expect(p.context).toBeDefined();
-    }
+    // When km_service is not running, returns empty array (graceful fallback)
+    if (personas.length === 0) return;
+    const p = personas[0];
+    expect(p.id).toBeDefined();
+    expect(p.label).toBeDefined();
+    expect(p.category).toBeDefined();
+    expect(p.tag).toBeDefined();
+    expect(p.context).toBeDefined();
   });
 
   test('filter by category=inbound', async () => {

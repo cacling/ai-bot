@@ -2,6 +2,7 @@
  * Tests for tool-executor.ts runtime branch (Phase 3 integration)
  * Verifies that tool-executor prefers ToolRuntime when _toolRuntime is injected.
  */
+import '../tool-runtime/_mock-km-client';
 import { describe, test, expect } from 'bun:test';
 import { toolExecutor } from '../../../src/workflow/executors/tool-executor';
 import { ToolRuntime } from '../../../src/tool-runtime';

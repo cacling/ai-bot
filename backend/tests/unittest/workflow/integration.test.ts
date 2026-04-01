@@ -12,7 +12,7 @@ beforeAll(() => {
 
 describe('V2 Engine Integration', () => {
   test('real service-cancel spec adapts to WorkflowDefinition', () => {
-    const mdPath = resolve(__dirname, '../../../skills/biz-skills/service-cancel/SKILL.md');
+    const mdPath = resolve(__dirname, '../../../../km_service/skills/biz-skills/service-cancel/SKILL.md');
     const md = readFileSync(mdPath, 'utf-8');
     const compiled = compileWorkflow(md, 'service-cancel', 1);
     expect(compiled.errors).toEqual([]);

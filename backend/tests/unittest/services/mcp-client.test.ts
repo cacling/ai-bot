@@ -1,6 +1,7 @@
 /**
  * mcp-client.test.ts — Tests for MCP client module
  */
+import '../tool-runtime/_mock-km-client';
 import { describe, test, expect } from 'bun:test';
 import { callMcpTool } from '../../../src/services/mcp-client';
 

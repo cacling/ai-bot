@@ -4,7 +4,7 @@ import { compileWorkflow } from '../../../src/engine/skill-workflow-compiler';
 import { SOPGuard } from '../../../src/engine/sop-guard';
 
 describe('SOPGuard V2 + compiler integration (service-cancel)', () => {
-  const skillMd = readFileSync(new URL('../../../skills/biz-skills/service-cancel/SKILL.md', import.meta.url).pathname, 'utf-8');
+  const skillMd = readFileSync(new URL('../../../../km_service/skills/biz-skills/service-cancel/SKILL.md', import.meta.url).pathname, 'utf-8');
   const compileResult = compileWorkflow(skillMd, 'service-cancel', 1);
   const spec = compileResult.spec!;
 
@@ -126,7 +126,7 @@ describe('SOPGuard V2 + compiler integration (service-cancel)', () => {
 });
 
 describe('SOPGuard V2 + compiler integration (outbound-collection)', () => {
-  const skillMd = readFileSync(new URL('../../../skills/biz-skills/outbound-collection/SKILL.md', import.meta.url).pathname, 'utf-8');
+  const skillMd = readFileSync(new URL('../../../../km_service/skills/biz-skills/outbound-collection/SKILL.md', import.meta.url).pathname, 'utf-8');
   const compileResult = compileWorkflow(skillMd, 'outbound-collection', 1);
   const spec = compileResult.spec!;
 
@@ -173,7 +173,7 @@ describe('SOPGuard V2 + compiler integration (outbound-collection)', () => {
 });
 
 describe('SOPGuard V2 + compiler integration (outbound-marketing)', () => {
-  const skillMd = readFileSync(new URL('../../../skills/biz-skills/outbound-marketing/SKILL.md', import.meta.url).pathname, 'utf-8');
+  const skillMd = readFileSync(new URL('../../../../km_service/skills/biz-skills/outbound-marketing/SKILL.md', import.meta.url).pathname, 'utf-8');
   const compileResult = compileWorkflow(skillMd, 'outbound-marketing', 1);
   const spec = compileResult.spec!;
 
