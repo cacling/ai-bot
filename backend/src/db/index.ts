@@ -15,6 +15,10 @@ platformSqlite.exec('PRAGMA busy_timeout = 5000');
 export const platformDb = drizzle(platformSqlite, { schema });
 export { platformSqlite };
 
+// seed.ts 兼容别名（原 db 指向 platform.db，迁移过渡期保留）
+export const db = platformDb;
+export const sqlite = platformSqlite;
+
 // ── 其他数据库已按 Constitution XII 迁移 ──
 // km.db → km_service（通过 km-client.ts HTTP API 访问）
 // business.db → mock_apis（通过 MCP tools 访问）

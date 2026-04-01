@@ -11,6 +11,7 @@
     "./schema/workorder": "./src/schema/workorder.ts",
     "./schema/km": "./src/schema/km.ts",
     "./schema/cdp": "./src/schema/cdp.ts",
+    "./schema/outbound": "./src/schema/outbound.ts",
     "./env": "./src/env.ts"
   },
   "scripts": {

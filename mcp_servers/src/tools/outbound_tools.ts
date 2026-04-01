@@ -4,7 +4,7 @@
  *
  * 领域规则内置：PTP 日期校验、静默时段、结果分类标签、转化标签、DND 标记、SMS 类型校验
  */
-import { backendPost, mcpLog, z, McpServer } from "../shared/server.js";
+import { outboundPost, mcpLog, z, McpServer } from "../shared/server.js";
 
 // ── 领域规则 ─────────────────────────────────────────────────────────────────
 const MAX_PTP_DAYS = 7;
@@ -60,7 +60,7 @@ export function registerOutboundTools(server: McpServer): void {
 
     mcpLog("outbound", "record_call_result", { result, remark, callback_time, ptp_date });
     try {
-      const res = await backendPost<{ success: boolean; result_id?: string; next_action?: string }>('/api/outreach/calls/result', {
+      const res = await outboundPost<{ ok: boolean; result_id?: string }>('/results/call-results', {
         phone: "outbound_current",
         result,
         remark,
@@ -104,10 +104,11 @@ export function registerOutboundTools(server: McpServer): void {
 
     mcpLog("outbound", "send_followup_sms", { phone, sms_type, context });
     try {
-      const res = await backendPost<{ success: boolean; event_id?: string; status?: string; reason?: string }>('/api/outreach/sms/send', {
+      const res = await outboundPost<{ ok: boolean; event_id?: string; status?: string; reason?: string }>('/results/sms-events', {
         phone,
         sms_type,
         context: context ?? null,
+        status: 'sent',
       });
       return { content: [{ type: "text" as const, text: JSON.stringify({
         phone,
@@ -132,12 +133,12 @@ export function registerOutboundTools(server: McpServer): void {
   }, async ({ original_task_id, callback_phone, preferred_time, customer_name, product_name }) => {
     mcpLog("outbound", "create_callback_task", { original_task_id, callback_phone, preferred_time });
     try {
-      const res = await backendPost<{ success: boolean; callback_task_id?: string; [key: string]: any }>(
-        '/api/callback/create',
+      const res = await outboundPost<{ ok: boolean; task_id?: string }>(
+        '/tasks/callbacks',
         { original_task_id, callback_phone, preferred_time, customer_name, product_name }
       );
       return { content: [{ type: "text" as const, text: JSON.stringify({
-        callback_task_id: res.callback_task_id ?? `CB-${Date.now().toString(36)}`,
+        callback_task_id: res.task_id ?? `CB-${Date.now().toString(36)}`,
         original_task_id, callback_phone, preferred_time,
         customer_name: customer_name ?? null, product_name: product_name ?? null, status: "pending",
       }) }] };
@@ -156,11 +157,12 @@ export function registerOutboundTools(server: McpServer): void {
     mcpLog("outbound", "record_marketing_result", { campaign_id, phone, result, callback_time });
     const isDND = result === "dnd";
     try {
-      const res = await backendPost<{ success: boolean; record_id?: string; is_dnd?: boolean; followup?: string }>('/api/outreach/marketing/result', {
+      const res = await outboundPost<{ ok: boolean; record_id?: string; is_dnd?: boolean }>('/results/marketing-results', {
         campaign_id,
         phone,
         result,
         callback_time,
+        is_dnd: isDND,
       });
       return { content: [{ type: "text" as const, text: JSON.stringify({
         campaign_id,

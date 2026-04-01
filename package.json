@@ -11,6 +11,7 @@
     "km_service",
     "km_service/frontend",
     "cdp_service",
+    "outbound_service",
     "packages/*"
   ],
   "scripts": {

@@ -16,6 +16,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 // demo 阶段指向 mock_apis，生产阶段替换为真实系统 URL
 
 export const BACKEND_URL = process.env.MOCK_API_URL ?? `http://127.0.0.1:${process.env.MOCK_APIS_PORT ?? 18008}`;
+export const OUTBOUND_URL = `http://127.0.0.1:${process.env.OUTBOUND_SERVICE_PORT ?? 18021}/api/outbound`;
 
 export async function backendGet<T = unknown>(path: string): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${path}`);
@@ -35,6 +36,19 @@ export async function backendPost<T = unknown>(path: string, body: unknown): Pro
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Backend POST ${path} failed: ${res.status} ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function outboundPost<T = unknown>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${OUTBOUND_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Outbound POST ${path} failed: ${res.status} ${text}`);
   }
   return res.json() as Promise<T>;
 }

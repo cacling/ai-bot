@@ -124,15 +124,24 @@
 - 每个服务只读写自己的数据库，禁止直接读写其他服务的 SQLite 文件
 - 跨服务数据访问必须通过 HTTP API（如 km-client.ts → km_service、cdp-client.ts → CDP Service）
 - 本地 TTL 缓存 + 后台刷新用于减少 HTTP 调用频率，不阻塞请求路径
-- DB 所有权表：km.db → km_service、platform.db → backend、business.db → mock_apis、cdp.db → cdp_service、workorder.db → work_order_service
+- DB 所有权表：km.db → km_service、platform.db → backend、business.db → mock_apis、cdp.db → cdp_service、workorder.db → work_order_service、outbound.db → outbound_service
 - 违反示例：backend 直接 `import { db } from '../db'` 读取 km.db 的 skillRegistry 表
 - 正确方式：backend 通过 `getSkillRegistry()` 调用 km_service 的 `/api/internal/skills/registry`
+
+### XIII. CDP 客户档案唯一事实来源（CDP as Single Source of Customer Truth）
+
+- CDP Service 是所有客户档案信息的唯一事实来源，其他服务不得自建客户主数据
+- CDP 管辖范围：客户身份关联标识、客户渠道偏好、客户接触记录、客户属性、客户历史轨迹、客户画像、客户所属分群、客户免打扰（DND）
+- 其他服务需要客户信息时，必须通过 CDP API（`/api/cdp/parties/:id/context`）获取，不得在本地表中冗余存储客户属性
+- 允许存储的引用：`party_id`（关联 CDP 主体）、`phone`（业务键，用于事务关联）
+- 违反示例：outbound_service 在 ob_tasks 表中存储 `customer_name`、`plan_name` 等客户属性
+- 正确方式：outbound_service 只存 `party_id`，运行时从 CDP 拉取客户姓名、套餐等信息
 
 ## Governance
 
 - Constitution 优先于所有其他开发实践
 - 修订 Constitution 必须更新版本号并记录修订日期
 - 原则 I-VI 为架构性原则，修改需架构评审
-- 原则 VII-XII 为工程治理原则，修改需技术负责人批准
+- 原则 VII-XIII 为工程治理原则，修改需技术负责人批准
 
-**Version**: 4.0.0 | **Ratified**: 2026-03-19 | **Last Amended**: 2026-04-01
+**Version**: 5.0.0 | **Ratified**: 2026-03-19 | **Last Amended**: 2026-04-01

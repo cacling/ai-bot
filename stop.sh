@@ -12,7 +12,7 @@ fail() { echo -e "  ${RED}✗${NC} $*"; }
 if [[ -f "$BASE_DIR/.env" ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ "$line" =~ ^(BACKEND_PORT|KM_SERVICE_PORT|MOCK_APIS_PORT|WORK_ORDER_PORT|MCP_INTERNAL_PORT|FRONTEND_PORT)= ]] && export "$line"
+    [[ "$line" =~ ^(BACKEND_PORT|KM_SERVICE_PORT|MOCK_APIS_PORT|WORK_ORDER_PORT|MCP_INTERNAL_PORT|CDP_SERVICE_PORT|OUTBOUND_SERVICE_PORT|FRONTEND_PORT)= ]] && export "$line"
   done < "$BASE_DIR/.env"
 fi
 
@@ -21,6 +21,8 @@ KM_SERVICE_PORT="${KM_SERVICE_PORT:-18010}"
 MOCK_APIS_PORT="${MOCK_APIS_PORT:-18008}"
 WORK_ORDER_PORT="${WORK_ORDER_PORT:-18009}"
 MCP_INTERNAL_PORT="${MCP_INTERNAL_PORT:-18003}"
+CDP_SERVICE_PORT="${CDP_SERVICE_PORT:-18020}"
+OUTBOUND_SERVICE_PORT="${OUTBOUND_SERVICE_PORT:-18021}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 
 kill_port() {
@@ -50,6 +52,8 @@ kill_port "$MCP_INTERNAL_PORT"  # 内部服务 MCP (统一)
 kill_port "$MOCK_APIS_PORT"     # mock_apis
 kill_port "$WORK_ORDER_PORT"    # work_order_service
 kill_port "$KM_SERVICE_PORT"    # km_service
+kill_port "$CDP_SERVICE_PORT"   # cdp_service
+kill_port "$OUTBOUND_SERVICE_PORT" # outbound_service
 kill_port "$FRONTEND_PORT"      # frontend
 
 # 杀掉可能漂移的 Vite 端口
