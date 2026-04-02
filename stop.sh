@@ -12,7 +12,7 @@ fail() { echo -e "  ${RED}✗${NC} $*"; }
 if [[ -f "$BASE_DIR/.env" ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ "$line" =~ ^(BACKEND_PORT|KM_SERVICE_PORT|MOCK_APIS_PORT|WORK_ORDER_PORT|MCP_INTERNAL_PORT|CDP_SERVICE_PORT|OUTBOUND_SERVICE_PORT|FRONTEND_PORT)= ]] && export "$line"
+    [[ "$line" =~ ^(BACKEND_PORT|KM_SERVICE_PORT|MOCK_APIS_PORT|WORK_ORDER_PORT|MCP_INTERNAL_PORT|CDP_SERVICE_PORT|OUTBOUND_SERVICE_PORT|CHANNEL_HOST_PORT|BAILEYS_GATEWAY_PORT|FEISHU_GATEWAY_PORT|FRONTEND_PORT)= ]] && export "$line"
   done < "$BASE_DIR/.env"
 fi
 
@@ -23,6 +23,9 @@ WORK_ORDER_PORT="${WORK_ORDER_PORT:-18009}"
 MCP_INTERNAL_PORT="${MCP_INTERNAL_PORT:-18003}"
 CDP_SERVICE_PORT="${CDP_SERVICE_PORT:-18020}"
 OUTBOUND_SERVICE_PORT="${OUTBOUND_SERVICE_PORT:-18021}"
+CHANNEL_HOST_PORT="${CHANNEL_HOST_PORT:-18030}"
+BAILEYS_GATEWAY_PORT="${BAILEYS_GATEWAY_PORT:-18031}"
+FEISHU_GATEWAY_PORT="${FEISHU_GATEWAY_PORT:-18032}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 
 kill_port() {
@@ -54,6 +57,9 @@ kill_port "$WORK_ORDER_PORT"    # work_order_service
 kill_port "$KM_SERVICE_PORT"    # km_service
 kill_port "$CDP_SERVICE_PORT"   # cdp_service
 kill_port "$OUTBOUND_SERVICE_PORT" # outbound_service
+kill_port "$CHANNEL_HOST_PORT"  # channel_host
+kill_port "$BAILEYS_GATEWAY_PORT"  # baileys_gateway
+kill_port "$FEISHU_GATEWAY_PORT"   # feishu_gateway
 kill_port "$FRONTEND_PORT"      # frontend
 
 # 杀掉可能漂移的 Vite 端口

@@ -47,12 +47,16 @@ MOCK_APIS_PORT="${MOCK_APIS_PORT:-18008}"
 WORK_ORDER_PORT="${WORK_ORDER_PORT:-18009}"
 CDP_SERVICE_PORT="${CDP_SERVICE_PORT:-18020}"
 OUTBOUND_SERVICE_PORT="${OUTBOUND_SERVICE_PORT:-18021}"
+INTERACTION_PLATFORM_PORT="${INTERACTION_PLATFORM_PORT:-18022}"
+CHANNEL_HOST_PORT="${CHANNEL_HOST_PORT:-18030}"
+BAILEYS_GATEWAY_PORT="${BAILEYS_GATEWAY_PORT:-18031}"
+FEISHU_GATEWAY_PORT="${FEISHU_GATEWAY_PORT:-18032}"
 MCP_INTERNAL_PORT="${MCP_INTERNAL_PORT:-18003}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 MCP_PORTS=("$MCP_INTERNAL_PORT")
 MCP_SERVICES=("internal_service")
 MCP_LABELS=("内部服务")
-ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$CDP_SERVICE_PORT" "$OUTBOUND_SERVICE_PORT" "$FRONTEND_PORT")
+ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$CDP_SERVICE_PORT" "$OUTBOUND_SERVICE_PORT" "$CHANNEL_HOST_PORT" "$BAILEYS_GATEWAY_PORT" "$FEISHU_GATEWAY_PORT" "$FRONTEND_PORT")
 
 # ── PID 记录 ────────────────────────────────────────────────────────────────
 WRAPPER_PIDS=()
@@ -143,9 +147,35 @@ log "outbound_service: bun install"
 cd "$BASE_DIR/outbound_service" && "$BUN" install 2>&1 | tail -3
 ok "outbound_service 依赖就绪"
 
+log "channel_host: bun install"
+cd "$BASE_DIR/channel_host" && "$BUN" install 2>&1 | tail -3
+ok "channel_host 依赖就绪"
+
 log "frontend: bun install"
 cd "$BASE_DIR/frontend" && "$BUN" install 2>&1 | tail -3
 ok "frontend 依赖就绪"
+
+VENDOR_DIR="$BASE_DIR/channel_host/vendor"
+
+# Baileys SDK (npm install in vendor/, Node.js runtime)
+if [[ ! -d "$VENDOR_DIR/baileys-sdk/node_modules/@whiskeysockets/baileys" ]]; then
+  log "baileys-sdk: npm install"
+  mkdir -p "$VENDOR_DIR/baileys-sdk"
+  cd "$VENDOR_DIR/baileys-sdk" && "$NPM" install @whiskeysockets/baileys qrcode-terminal https-proxy-agent 2>&1 | tail -3
+  ok "Baileys SDK 依赖就绪"
+else
+  ok "Baileys SDK 已安装"
+fi
+
+# Feishu SDK (npm install in vendor/, Node.js runtime)
+if [[ ! -d "$VENDOR_DIR/feishu-sdk/node_modules/@larksuiteoapi/node-sdk" ]]; then
+  log "feishu-sdk: npm install"
+  mkdir -p "$VENDOR_DIR/feishu-sdk"
+  cd "$VENDOR_DIR/feishu-sdk" && "$NPM" install @larksuiteoapi/node-sdk https-proxy-agent 2>&1 | tail -3
+  ok "Feishu SDK 依赖就绪"
+else
+  ok "Feishu SDK 已安装"
+fi
 
 # ════════════════════════════════════════════════════════════════════════════
 # 2. 数据库准备
@@ -159,6 +189,7 @@ export BUSINESS_DB_PATH="$BASE_DIR/data/business.db"
 export WORKORDER_DB_PATH="$BASE_DIR/data/workorder.db"
 export CDP_DB_PATH="$BASE_DIR/data/cdp.db"
 export OUTBOUND_DB_PATH="$BASE_DIR/data/outbound.db"
+export INTERACTION_DB_PATH="$BASE_DIR/data/interaction.db"
 
 # Schema 同步（6 DB：telecom/platform/business/workorder/cdp/outbound）
 log "同步数据库 Schema..."
@@ -187,7 +218,11 @@ CDP_DB_PATH="$CDP_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
 cd "$BASE_DIR/outbound_service"
 OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
 
-ok "数据库 Schema 就绪（km.db + business.db + workorder.db + cdp.db + outbound.db）"
+# 7) interaction_platform schema → interaction.db
+cd "$BASE_DIR/interaction_platform"
+INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+
+ok "数据库 Schema 就绪（km.db + business.db + workorder.db + cdp.db + outbound.db + interaction.db）"
 
 # 数据初始化
 if [[ "$RESET_MODE" == true ]]; then
@@ -253,9 +288,11 @@ if [[ "$RESET_MODE" == true ]]; then
   cd "$BASE_DIR/backend" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/outbound_service" && OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+  cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" run db:seed 2>&1 | tail -5
   cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
+  cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   # outbound seed 依赖 CDP（phone → party_id 解析），需要先启动 CDP 服务
   # 这里先跳过，在 CDP 服务启动后再 seed（见下方 start_service 后的 seed 步骤）
   ok "数据已重置为初始状态"
@@ -265,6 +302,7 @@ else
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" run db:seed 2>&1 | tail -5
   cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
+  cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   ok "初始数据就绪"
 fi
 
@@ -336,6 +374,35 @@ start_service "cdp-service" "$BASE_DIR/cdp_service" \
 start_service "outbound-service" "$BASE_DIR/outbound_service" \
   "OUTBOUND_SERVICE_PORT=$OUTBOUND_SERVICE_PORT OUTBOUND_DB_PATH=$OUTBOUND_DB_PATH CDP_SERVICE_PORT=$CDP_SERVICE_PORT $BUN src/server.ts"
 
+# Interaction Platform (实时互动中枢)
+start_service "interaction-platform" "$BASE_DIR/interaction_platform" \
+  "INTERACTION_PLATFORM_PORT=$INTERACTION_PLATFORM_PORT INTERACTION_DB_PATH=$INTERACTION_DB_PATH $BUN src/server.ts"
+
+# Channel Host (渠道适配层)
+start_service "channel-host" "$BASE_DIR/channel_host" \
+  "CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT CDP_URL=http://127.0.0.1:$CDP_SERVICE_PORT INTERACTION_PLATFORM_URL=http://127.0.0.1:$INTERACTION_PLATFORM_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT BAILEYS_GATEWAY_URL=http://127.0.0.1:$BAILEYS_GATEWAY_PORT FEISHU_GATEWAY_URL=http://127.0.0.1:$FEISHU_GATEWAY_PORT $BUN src/index.ts"
+
+# Baileys Gateway (WhatsApp Node.js sidecar)
+if [[ -d "$VENDOR_DIR/baileys-sdk/node_modules/@whiskeysockets/baileys" ]]; then
+  start_service "baileys-gateway" "$BASE_DIR/channel_host" \
+    "BAILEYS_GATEWAY_PORT=$BAILEYS_GATEWAY_PORT CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT $NODE src/runtime-plane/baileys-node-gateway.cjs"
+else
+  warn "Baileys SDK 未安装，跳过 WhatsApp gateway"
+fi
+
+# Feishu Gateway (飞书 Node.js sidecar, 需要代理访问飞书 API)
+if [[ -d "$VENDOR_DIR/feishu-sdk/node_modules/@larksuiteoapi/node-sdk" ]]; then
+  # 飞书凭证已从主 .env 加载
+  if [[ -n "${FEISHU_APP_ID:-}" && -n "${FEISHU_APP_SECRET:-}" ]]; then
+    start_service "feishu-gateway" "$BASE_DIR/channel_host" \
+      "FEISHU_GATEWAY_PORT=$FEISHU_GATEWAY_PORT CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT FEISHU_APP_ID=$FEISHU_APP_ID FEISHU_APP_SECRET=$FEISHU_APP_SECRET FEISHU_VERIFICATION_TOKEN=${FEISHU_VERIFICATION_TOKEN:-} $NODE src/runtime-plane/feishu-node-gateway.cjs"
+  else
+    warn "飞书凭证未配置（channel_host/.env），跳过飞书 gateway"
+  fi
+else
+  warn "飞书 SDK 未安装，跳过飞书 gateway"
+fi
+
 # Outbound seed（依赖 CDP 服务已启动，等待 CDP 就绪后执行）
 if [[ "$RESET_MODE" == true ]]; then
   log "等待 CDP 就绪后执行 outbound seed..."
@@ -375,6 +442,13 @@ if [[ "$READY" == true ]]; then
   ok "KM Service   → http://127.0.0.1:${KM_SERVICE_PORT}"
   ok "CDP Service  → http://127.0.0.1:${CDP_SERVICE_PORT}"
   ok "Outbound Svc → http://127.0.0.1:${OUTBOUND_SERVICE_PORT}"
+  ok "Channel Host → http://127.0.0.1:${CHANNEL_HOST_PORT}"
+  if lsof -ti :"$BAILEYS_GATEWAY_PORT" >/dev/null 2>&1; then
+    ok "Baileys GW   → http://127.0.0.1:${BAILEYS_GATEWAY_PORT}"
+  fi
+  if lsof -ti :"$FEISHU_GATEWAY_PORT" >/dev/null 2>&1; then
+    ok "Feishu GW    → http://127.0.0.1:${FEISHU_GATEWAY_PORT}"
+  fi
   ok "Frontend     → http://localhost:${FRONTEND_PORT}"
 
   # 检查每个 MCP 服务

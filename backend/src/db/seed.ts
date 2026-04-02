@@ -611,6 +611,7 @@ async function seed() {
     { phone: '13900000004', name: '陈伟', gender: 'male', customer_tier: 'premium', preferred_language: 'zh-CN', id_type: '居民身份证', id_last4: '9924', plan_id: 'plan_4g_99', household_id: null, status: 'active', balance: 68.0, data_used_gb: 96.0, voice_used_min: 210, sms_used: 10, activated_at: '2024-03-01', contract_end_date: '2026-05-31', overdue_days: 0, email: 'chenwei@example.com', region: '广州' },
     { phone: '13900000005', name: '刘丽', gender: 'female', customer_tier: 'premium', preferred_language: 'zh-CN', id_type: '居民身份证', id_last4: '1185', plan_id: 'plan_personal_79', household_id: null, status: 'active', balance: 102.0, data_used_gb: 38.0, voice_used_min: 260, sms_used: 30, activated_at: '2024-07-12', contract_end_date: null, overdue_days: 0, email: 'liuli@example.com', region: '杭州' },
     { phone: '13900000006', name: '赵强', gender: 'male', customer_tier: 'premium', preferred_language: 'zh-CN', id_type: '居民身份证', id_last4: '6636', plan_id: 'plan_business_159', household_id: 'HH-003', status: 'active', balance: 260.0, data_used_gb: 72.0, voice_used_min: 480, sms_used: 8, activated_at: '2023-09-01', contract_end_date: '2026-09-01', overdue_days: 0, email: 'zhaoqiang@corp.example.com', region: '深圳' },
+    { phone: '13609796392', name: '陈军', gender: 'male', customer_tier: 'standard', preferred_language: 'zh-CN', id_type: '居民身份证', id_last4: '8877', plan_id: 'plan_100g', household_id: null, status: 'active', balance: 66.5, data_used_gb: 58.3, voice_used_min: 150, sms_used: 20, activated_at: '2024-05-01', contract_end_date: '2026-05-01', overdue_days: 0, email: 'chenjun@example.com', region: '贵阳' },
   ]).run();
 
   const [m0, m1, m2] = recentMonths(3); // m0=本月, m1=上月, m2=上上月
@@ -640,6 +641,7 @@ async function seed() {
     { phone: '13900000004', marketing_opt_in: true, sms_opt_in: true, dnd: false, preferred_channel: 'voice', contact_window_start: '10:00', contact_window_end: '21:00', notes: '高流量 4G 客户，适合 5G 升级。' },
     { phone: '13900000005', marketing_opt_in: true, sms_opt_in: true, dnd: false, preferred_channel: 'voice', contact_window_start: '09:00', contact_window_end: '20:30', notes: '家庭融合潜客，接受语音沟通。' },
     { phone: '13900000006', marketing_opt_in: true, sms_opt_in: true, dnd: false, preferred_channel: 'sms', contact_window_start: '09:00', contact_window_end: '21:00', notes: '商务客户，可接受国际漫游和发票服务提醒。' },
+    { phone: '13609796392', marketing_opt_in: true, sms_opt_in: true, dnd: false, preferred_channel: 'feishu', contact_window_start: '09:00', contact_window_end: '22:00', notes: '多渠道测试用户（WhatsApp + 飞书），偏好在线客服。飞书 open_id: ou_210e97fbdab389fc711e4784262bc6b2' },
   ]).run();
 
   // ── 4b. 合约（依赖用户）──────────────────────────────────────────────────────
@@ -699,6 +701,9 @@ async function seed() {
     mkBill('13900000006', m0, 257.0, 159.0, 50.0, 20.0, 0.0, 20.0, 8.0, 'paid'),
     mkBill('13900000006', m1, 239.0, 159.0, 40.0, 0.0, 0.0, 30.0, 10.0, 'paid'),
     mkBill('13900000006', m2, 159.0, 159.0, 0.0, 0.0, 0.0, 0.0, 0.0, 'paid'),
+    mkBill('13609796392', m0, 108.0, 88.0, 8.0, 0.0, 0.0, 8.0, 4.0, 'paid'),
+    mkBill('13609796392', m1, 96.0, 88.0, 0.0, 0.0, 0.0, 5.0, 3.0, 'paid'),
+    mkBill('13609796392', m2, 88.0, 88.0, 0.0, 0.0, 0.0, 0.0, 0.0, 'paid'),
   ]).run();
 
   const billRows = businessDb.select().from(bills).all();
@@ -743,6 +748,10 @@ async function seed() {
     { line_id: `BLI-${m0}-032`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'voice_fee', item_name: '国际漫游语音费', amount: 20, service_id: null, occurred_at: `${m0}-14T11:30:00+08:00`, source_system: 'roaming_core', disputable: true },
     { line_id: `BLI-${m0}-033`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'value_added_fee', item_name: '国际漫游安心包', amount: 20, service_id: 'roaming_pkg', occurred_at: `${m0}-02T09:45:00+08:00`, source_system: 'vas_center', disputable: false },
     { line_id: `BLI-${m0}-034`, phone: '13900000006', month: m0, bill_id: findBillId('13900000006', m0), item_type: 'tax', item_name: '税费', amount: 8, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-035`, phone: '13609796392', month: m0, bill_id: findBillId('13609796392', m0), item_type: 'plan_fee', item_name: '超值 100G 套餐月费', amount: 88, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'billing_core', disputable: false },
+    { line_id: `BLI-${m0}-036`, phone: '13609796392', month: m0, bill_id: findBillId('13609796392', m0), item_type: 'data_fee', item_name: '流量超额费', amount: 8, service_id: null, occurred_at: `${m0}-22T16:00:00+08:00`, source_system: 'billing_core', disputable: true },
+    { line_id: `BLI-${m0}-037`, phone: '13609796392', month: m0, bill_id: findBillId('13609796392', m0), item_type: 'value_added_fee', item_name: '来电显示增值服务', amount: 8, service_id: null, occurred_at: `${m0}-01T00:00:00+08:00`, source_system: 'vas_center', disputable: true },
+    { line_id: `BLI-${m0}-038`, phone: '13609796392', month: m0, bill_id: findBillId('13609796392', m0), item_type: 'tax', item_name: '税费', amount: 4, service_id: null, occurred_at: `${m0}-28T23:00:00+08:00`, source_system: 'billing_core', disputable: false },
   ]).run();
   businessDb.insert(billingDisputeCases).values([
     { case_id: 'DSP-001', phone: '13800000001', month: m0, bill_id: findBillId('13800000001', m0), issue_category: 'value_added_charge', description: '客户质疑视频会员未主动续订仍继续扣费。', claimed_amount: 20, status: 'open', resolution_summary: null, created_at: `${m0}-22T09:30:00+08:00`, resolved_at: null },
