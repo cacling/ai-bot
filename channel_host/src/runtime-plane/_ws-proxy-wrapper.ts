@@ -4,12 +4,16 @@ const path = require("path");
 const VENDOR_DIR = path.resolve(__dirname, "../../vendor");
 const RealWebSocket = require(path.join(VENDOR_DIR, "baileys-sdk/node_modules/ws/lib/websocket.js"));
 const { HttpsProxyAgent } = require("https-proxy-agent");
-const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "http://127.0.0.1:58309";
-const proxyAgent = new HttpsProxyAgent(proxyUrl);
+// §10 standard: PROXY_URL + WHATSAPP_NEEDS_PROXY
+const needsProxy = process.env.WHATSAPP_NEEDS_PROXY === 'true';
+const proxyUrl = needsProxy ? (process.env.PROXY_URL || '') : '';
+const proxyAgent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : null;
 
 class ProxiedWebSocket extends RealWebSocket {
   constructor(address, protocols, options) {
-    const opts = Object.assign({}, options || {}, { agent: proxyAgent });
+    const opts = proxyAgent
+      ? Object.assign({}, options || {}, { agent: proxyAgent })
+      : (options || {});
     super(address, protocols, opts);
   }
 }

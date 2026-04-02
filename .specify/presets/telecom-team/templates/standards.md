@@ -441,6 +441,98 @@ Skill 属于 **Skill 编排层**（平台自有），不属于 MCP 协议：
 - MCP Server = 业务域稳定边界（防腐层），内部通过 HTTP 调用 mock_apis (demo backend)
 - Runner 中的 API 工具路由由 `TOOL_ROUTING_MODE` 环境变量控制（`hybrid` → `mcp_only`）
 
+---
+
+## 10. External URL & Proxy Standards
+
+### 原则
+
+所有对外部 URL 的调用（LLM、IM 平台、第三方 API）**必须**满足以下要求：
+
+1. **URL 可配置**：外部 URL 必须通过 `.env` 环境变量配置，不得硬编码
+2. **代理可控**：每个外部 URL 必须声明是否需要代理（`NEEDS_PROXY`），运行时据此决定是否注入代理
+3. **国内/海外分类**：国内服务（飞书、SiliconFlow、智谱、DashScope、高德）不走代理；海外服务（WhatsApp/Baileys、OpenAI）需要代理
+
+### .env 配置格式
+
+每个外部服务遵循统一命名模式：
+
+```bash
+# 格式: <SERVICE>_BASE_URL / <SERVICE>_API_KEY / <SERVICE>_NEEDS_PROXY
+# NEEDS_PROXY=true 表示该服务需要通过 PROXY_URL 访问
+
+# ── 代理配置 ──
+PROXY_URL=http://127.0.0.1:58309        # 统一代理地址（HTTP/HTTPS/SOCKS5）
+
+# ── LLM 服务 ──
+SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
+SILICONFLOW_NEEDS_PROXY=false            # 国内
+
+GLM_REALTIME_URL=wss://open.bigmodel.cn/api/paas/v4/realtime
+GLM_REALTIME_NEEDS_PROXY=false           # 国内
+
+SKILL_CREATOR_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+SKILL_CREATOR_NEEDS_PROXY=false          # 国内
+
+SKILL_CREATOR_OPENAI_BASE_URL=https://api.openai.com/v1
+SKILL_CREATOR_OPENAI_NEEDS_PROXY=true    # 海外
+
+# ── IM 渠道 ──
+FEISHU_API_BASE=https://open.feishu.cn/open-apis
+FEISHU_NEEDS_PROXY=false                 # 国内
+
+WHATSAPP_NEEDS_PROXY=true                # 海外（Baileys WSS）
+
+# ── 第三方 API ──
+AMAP_MCP_URL=https://mcp.amap.com/sse
+AMAP_NEEDS_PROXY=false                   # 国内
+```
+
+### 运行时代理注入
+
+```typescript
+// 统一工具函数: src/utils/proxy.ts
+import { HttpsProxyAgent } from 'https-proxy-agent';
+
+const PROXY_URL = process.env.PROXY_URL ?? '';
+
+export function getProxyAgent(needsProxy: boolean): HttpsProxyAgent | undefined {
+  if (!needsProxy || !PROXY_URL) return undefined;
+  return new HttpsProxyAgent(PROXY_URL);
+}
+
+export function needsProxy(envKey: string): boolean {
+  return process.env[`${envKey}_NEEDS_PROXY`] === 'true';
+}
+```
+
+### start.sh 行为
+
+- `start.sh` 清除全局 `HTTP_PROXY`/`HTTPS_PROXY`（防止干扰内部服务通信）
+- 需要代理的服务通过 `PROXY_URL` 环境变量获取代理地址，自行注入
+- **不再**依赖全局代理环境变量
+
+### 已知外部服务清单
+
+| 服务 | 域名 | 区域 | NEEDS_PROXY | 调用方式 |
+|------|------|------|-------------|---------|
+| SiliconFlow | api.siliconflow.cn | 国内 | false | Vercel AI SDK |
+| 智谱 GLM | open.bigmodel.cn | 国内 | false | WebSocket |
+| DashScope/Qwen | dashscope.aliyuncs.com | 国内 | false | Vercel AI SDK |
+| OpenAI | api.openai.com | 海外 | true | Vercel AI SDK |
+| 飞书 | open.feishu.cn | 国内 | false | @larksuiteoapi/node-sdk |
+| WhatsApp | web.whatsapp.com | 海外 | true | Baileys WSS |
+| 高德地图 | mcp.amap.com | 国内 | false | Remote MCP SSE |
+
+### 禁止事项
+
+- **不要**在代码中硬编码外部 URL（必须通过 env var）
+- **不要**依赖全局 `HTTP_PROXY`/`HTTPS_PROXY` 环境变量控制代理（使用 `PROXY_URL` + `*_NEEDS_PROXY`）
+- **不要**对国内服务设置 `NEEDS_PROXY=true`（增加延迟，且代理可能不稳定）
+- **不要**在 `start.sh` 中为个别服务临时设置/取消代理（统一由服务自身根据 `PROXY_URL` 决定）
+
+---
+
 <!-- scope: mcp -->
 - **不要**在 MCP 工具 handler 中抛出异常，始终返回结构化结果
 - **不要**在 Tool 契约层（mcp_tools 表）存放实现配置，实现配置放 tool_implementations 表

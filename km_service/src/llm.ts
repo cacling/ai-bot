@@ -7,6 +7,7 @@
  */
 import { createOpenAI } from '@ai-sdk/openai';
 import { wrapLanguageModel, extractReasoningMiddleware, type LanguageModelV1 } from 'ai';
+import { getServiceProxyUrl } from '@ai-bot/shared-db/proxy';
 
 export const siliconflow = createOpenAI({
   baseURL: process.env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1',
@@ -145,9 +146,16 @@ const qwenThinkingModel: LanguageModelV1 = wrapLanguageModel({
 // Skill Creator — OpenAI（GPT-5.4）
 // ══════════════════════════════════════════════════════════════════════════════
 
+const openaiProxyUrl = getServiceProxyUrl('SKILL_CREATOR_OPENAI');
 const openaiProvider = createOpenAI({
   baseURL: process.env.SKILL_CREATOR_OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
   apiKey: process.env.SKILL_CREATOR_OPENAI_API_KEY ?? '',
+  // Bun native proxy support for overseas LLM
+  ...(openaiProxyUrl ? {
+    fetch: ((url: RequestInfo | URL, init?: RequestInit) =>
+      fetch(url, { ...init, proxy: openaiProxyUrl } as RequestInit)
+    ) as typeof fetch,
+  } : {}),
 });
 
 const openaiModel: LanguageModelV1 = openaiProvider(

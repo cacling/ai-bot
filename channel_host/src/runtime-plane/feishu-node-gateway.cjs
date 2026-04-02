@@ -37,8 +37,9 @@ const baseConfig = {
   appSecret: FEISHU_APP_SECRET,
 };
 
-// Proxy support: SDK uses axios for HTTP + ws for WebSocket — both need proxy agent
-const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
+// Proxy support: reads PROXY_URL + FEISHU_NEEDS_PROXY from .env (§10 standard)
+const needsProxy = process.env.FEISHU_NEEDS_PROXY === 'true';
+const proxyUrl = needsProxy ? (process.env.PROXY_URL || '') : '';
 let proxyAgent = undefined;
 if (proxyUrl) {
   try {

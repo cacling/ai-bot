@@ -13,7 +13,10 @@
 import { resolve } from 'path';
 import { existsSync } from 'fs';
 
-const PROXY_URL = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+// §10 standard: PROXY_URL + WHATSAPP_NEEDS_PROXY
+const PROXY_URL = process.env.WHATSAPP_NEEDS_PROXY === 'true'
+  ? (process.env.PROXY_URL || '')
+  : '';
 
 if (PROXY_URL) {
   // Find https-proxy-agent
@@ -64,7 +67,7 @@ if (PROXY_URL) {
       if (code.includes(original)) {
         const patchedCode = code.replace(
           original,
-          `// __PROXY_PATCHED__\n    if (!config.agent && process.env.HTTPS_PROXY) { try { config.agent = new (require("https-proxy-agent").HttpsProxyAgent)(process.env.HTTPS_PROXY); } catch {} }\n    ${original}`,
+          `// __PROXY_PATCHED__\n    if (!config.agent && process.env.WHATSAPP_NEEDS_PROXY === 'true' && process.env.PROXY_URL) { try { config.agent = new (require("https-proxy-agent").HttpsProxyAgent)(process.env.PROXY_URL); } catch {} }\n    ${original}`,
         );
         fs.writeFileSync(socketPath, patchedCode);
         console.log(`[channel-host] Baileys proxy patch applied to ${socketPath}`);

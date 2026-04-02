@@ -35,9 +35,10 @@ async function startConnection(channelId, accountId, authDir) {
   const baileys = require(BAILEYS_PATH);
   const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = baileys;
 
-  // Proxy
+  // Proxy: reads PROXY_URL + WHATSAPP_NEEDS_PROXY from .env (§10 standard)
   let agent;
-  const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+  const needsProxy = process.env.WHATSAPP_NEEDS_PROXY === 'true';
+  const proxyUrl = needsProxy ? (process.env.PROXY_URL || '') : '';
   if (proxyUrl) {
     try {
       const { HttpsProxyAgent } = require(path.join(VENDOR_DIR, 'baileys-sdk/node_modules/https-proxy-agent/dist/index.js'));

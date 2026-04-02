@@ -96,12 +96,12 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-# ── 清除代理 ────────────────────────────────────────────────────────────────
+# ── 清除系统代理（各服务通过 PROXY_URL + *_NEEDS_PROXY 自行决定是否走代理）──
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
 NO_PROXY="localhost,127.0.0.1"
 no_proxy="localhost,127.0.0.1"
 export NO_PROXY no_proxy
-log "已清除代理环境变量"
+log "已清除系统代理环境变量（各服务读取 PROXY_URL + *_NEEDS_PROXY 按需使用）"
 
 # ── 清空日志 ────────────────────────────────────────────────────────────────
 log "清空日志文件..."
@@ -384,24 +384,23 @@ start_service "interaction-platform" "$BASE_DIR/interaction_platform" \
 
 # Channel Host (渠道适配层)
 start_service "channel-host" "$BASE_DIR/channel_host" \
-  "CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT CDP_URL=http://127.0.0.1:$CDP_SERVICE_PORT INTERACTION_PLATFORM_URL=http://127.0.0.1:$INTERACTION_PLATFORM_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT BAILEYS_GATEWAY_URL=http://127.0.0.1:$BAILEYS_GATEWAY_PORT FEISHU_GATEWAY_URL=http://127.0.0.1:$FEISHU_GATEWAY_PORT $BUN src/index.ts"
+  "CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT CDP_URL=http://127.0.0.1:$CDP_SERVICE_PORT INTERACTION_PLATFORM_URL=http://127.0.0.1:$INTERACTION_PLATFORM_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT BAILEYS_GATEWAY_URL=http://127.0.0.1:$BAILEYS_GATEWAY_PORT FEISHU_GATEWAY_URL=http://127.0.0.1:$FEISHU_GATEWAY_PORT PROXY_URL=${PROXY_URL:-} WHATSAPP_NEEDS_PROXY=${WHATSAPP_NEEDS_PROXY:-false} $BUN src/index.ts"
 
 # Baileys Gateway (WhatsApp Node.js sidecar)
 if [[ -d "$VENDOR_DIR/baileys-sdk/node_modules/@whiskeysockets/baileys" ]]; then
   start_service "baileys-gateway" "$BASE_DIR/channel_host" \
-    "BAILEYS_GATEWAY_PORT=$BAILEYS_GATEWAY_PORT CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT $NODE src/runtime-plane/baileys-node-gateway.cjs"
+    "BAILEYS_GATEWAY_PORT=$BAILEYS_GATEWAY_PORT CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT PROXY_URL=${PROXY_URL:-} WHATSAPP_NEEDS_PROXY=${WHATSAPP_NEEDS_PROXY:-false} $NODE src/runtime-plane/baileys-node-gateway.cjs"
 else
   warn "Baileys SDK 未安装，跳过 WhatsApp gateway"
 fi
 
-# Feishu Gateway (飞书 Node.js sidecar, 需要代理访问飞书 API)
+# Feishu Gateway (飞书 Node.js sidecar)
 if [[ -d "$VENDOR_DIR/feishu-sdk/node_modules/@larksuiteoapi/node-sdk" ]]; then
-  # 飞书凭证已从主 .env 加载
   if [[ -n "${FEISHU_APP_ID:-}" && -n "${FEISHU_APP_SECRET:-}" ]]; then
     start_service "feishu-gateway" "$BASE_DIR/channel_host" \
-      "FEISHU_GATEWAY_PORT=$FEISHU_GATEWAY_PORT CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT FEISHU_APP_ID=$FEISHU_APP_ID FEISHU_APP_SECRET=$FEISHU_APP_SECRET FEISHU_VERIFICATION_TOKEN=${FEISHU_VERIFICATION_TOKEN:-} $NODE src/runtime-plane/feishu-node-gateway.cjs"
+      "FEISHU_GATEWAY_PORT=$FEISHU_GATEWAY_PORT CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT PROXY_URL=${PROXY_URL:-} FEISHU_NEEDS_PROXY=${FEISHU_NEEDS_PROXY:-false} FEISHU_APP_ID=$FEISHU_APP_ID FEISHU_APP_SECRET=$FEISHU_APP_SECRET FEISHU_VERIFICATION_TOKEN=${FEISHU_VERIFICATION_TOKEN:-} $NODE src/runtime-plane/feishu-node-gateway.cjs"
   else
-    warn "飞书凭证未配置（channel_host/.env），跳过飞书 gateway"
+    warn "飞书凭证未配置，跳过飞书 gateway"
   fi
 else
   warn "飞书 SDK 未安装，跳过飞书 gateway"
