@@ -12,6 +12,7 @@
     "./schema/km": "./src/schema/km.ts",
     "./schema/cdp": "./src/schema/cdp.ts",
     "./schema/outbound": "./src/schema/outbound.ts",
+    "./schema/interaction": "./src/schema/interaction.ts",
     "./env": "./src/env.ts"
   },
   "scripts": {

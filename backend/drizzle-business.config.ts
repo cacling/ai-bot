@@ -5,6 +5,6 @@ export default defineConfig({
   out: '../mock_apis/drizzle',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.BUSINESS_DB_PATH ?? '../data/business.db',
+    url: process.env.BUSINESS_DB_PATH ?? '../mock_apis/data/business.db',
   },
 });

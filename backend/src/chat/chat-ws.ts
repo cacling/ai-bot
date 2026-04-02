@@ -28,7 +28,7 @@ import { buildNodeTypeMap, stripMermaidMarkers } from '../services/mermaid';
 import { routeSkill, shouldUseRuntime } from '../engine/skill-router';
 import { runSkillTurn } from '../engine/skill-runtime';
 import { createInstance, findActiveInstance } from '../engine/skill-instance-store';
-import { getSkillMermaid } from '../engine/skills';
+import { getSkillMermaid, refreshSkillsCache } from '../engine/skills';
 import { upgradeWebSocket } from './voice';
 import { sessionBus } from '../services/session-bus';
 import { logger } from '../services/logger';
@@ -39,8 +39,32 @@ import { checkCompliance, maskPII, sanitizeText } from '../services/keyword-filt
 import { detectHallucination } from '../services/hallucination-detector';
 import { runProgressTracking } from '../services/voice-common';
 import { normalizeQuery } from '../services/query-normalizer';
-import { buildReplyHints, buildCopilotContext } from '../services/km-client';
+import { buildReplyHints, buildCopilotContext, getSkillRegistry } from '../services/km-client';
 import { getWelcomeSuggestions } from '../services/conversation-guidance';
+import { mapPhoneToIdentity } from '../services/identity-mapper';
+
+const INTERACTION_PLATFORM_URL = process.env.INTERACTION_PLATFORM_URL ?? 'http://localhost:18022';
+
+/** Fire-and-forget: materialize an interaction when handoff happens. */
+async function materializeOnHandoff(phone: string, sessionId: string) {
+  try {
+    const identity = await mapPhoneToIdentity(phone);
+    if (!identity.partyId) return;
+    await fetch(`${INTERACTION_PLATFORM_URL}/api/interactions/materialize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer_party_id: identity.partyId,
+        channel: 'webchat',
+        work_model: 'live_chat',
+        queue_code: 'default_chat',
+        handoff_summary: `Chat session ${sessionId} transferred to human`,
+      }),
+    });
+  } catch (err) {
+    logger.warn('chat-ws', 'materialize_error', { phone, session: sessionId, error: String(err) });
+  }
+}
 
 const chatWs = new Hono();
 
@@ -136,7 +160,10 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
         logger.info('chat-ws', 'greeting_sent', { phone, session: sessionId });
 
         // 动态推荐（替代前端静态 FAQ）
+        // 确保 skill registry 缓存已加载（避免冷启动时 getSkillRegistrySync 返回空）
         try {
+          await getSkillRegistry();
+          refreshSkillsCache();
           const suggestions = getWelcomeSuggestions({ lang: langParam, channel: 'online', phone });
           ws.send(JSON.stringify({ source: 'user', ...suggestions, msg_id: crypto.randomUUID() }));
         } catch (err) {
@@ -300,6 +327,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
             try { ws.send(JSON.stringify({ type: 'transfer_to_human', msg_id })); } catch { /* ws closed */ }
             sessionBus.publish(phone, { source: 'user', type: 'transfer_data', msg_id });
             logger.info('chat-ws', 'bot_disabled', { phone, session: sessionId });
+            materializeOnHandoff(phone, sessionId);
           }
 
           // Track metrics
@@ -524,6 +552,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
         botEnabled = false;
         logger.info('chat-ws', 'bot_disabled', { phone, session: sessionId });
         try { ws.send(JSON.stringify({ type: 'transfer_to_human' })); } catch { /* ws closed */ }
+        materializeOnHandoff(phone, sessionId);
       }
 
       logger.info('chat-ws', 'response_sent', { session: sessionId });

@@ -8,6 +8,13 @@ import preferenceRoutes from './preference';
 import consentRoutes from './consent';
 import profileRoutes from './profile';
 import eventRoutes from './event';
+import customerRoutes from './customer';
+import auditLogRoutes from './audit-log';
+import tagRoutes from './tag';
+import blacklistRoutes from './blacklist';
+import segmentRoutes from './segment';
+import lifecycleRoutes from './lifecycle';
+import importExportRoutes from './import-export';
 
 const router = new Hono();
 
@@ -25,5 +32,13 @@ router.route('/consents', consentRoutes);
 router.route('/views', profileRoutes);
 // Phase 5: 事实事件 + household
 router.route('/', eventRoutes);
+// Phase 6: 客户管理
+router.route('/customers', customerRoutes);
+router.route('/audit-logs', auditLogRoutes);
+router.route('/tags', tagRoutes);
+router.route('/blacklist', blacklistRoutes);
+router.route('/segments', segmentRoutes);
+router.route('/lifecycle', lifecycleRoutes);
+router.route('/tasks', importExportRoutes);
 
 export default router;

@@ -93,8 +93,9 @@ agentWs.get('/ws/agent', upgradeWebSocket((c) => {
     logger.warn('agent-ws', 'no_session_dev_mode', {});
   }
 
-  const phone     = c.req.query('phone') ?? '13800000001';
-  const langParam = (c.req.query('lang') === 'en' ? 'en' : 'zh') as 'zh' | 'en';
+  const phone          = c.req.query('phone') ?? '13800000001';
+  const langParam      = (c.req.query('lang') === 'en' ? 'en' : 'zh') as 'zh' | 'en';
+  const interactionId  = c.req.query('interaction_id') ?? null; // Phase 2: optional interaction context
 
   let unsubscribe: (() => void) | null = null;
 
@@ -102,7 +103,7 @@ agentWs.get('/ws/agent', upgradeWebSocket((c) => {
     onOpen: (_, ws) => {
       // Register agent language
       setAgentLang(phone, langParam);
-      logger.info('agent-ws', 'open', { phone, initLang: langParam, langs: getLangs(phone) });
+      logger.info('agent-ws', 'open', { phone, initLang: langParam, interactionId, langs: getLangs(phone) });
 
       // Subscribe to customer-side events → translate if needed → forward to agent WS
       unsubscribe = sessionBus.subscribeWithHistory(phone, async (event) => {

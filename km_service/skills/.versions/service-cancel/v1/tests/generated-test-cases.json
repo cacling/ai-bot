@@ -2,7 +2,7 @@
   "meta": {
     "skill_id": "service-cancel",
     "version_no": 1,
-    "generated_at": "2026-03-31T16:20:32.455Z",
+    "generated_at": "2026-04-02T06:44:57.143Z",
     "source_checksum": "b60c1fff355e2632",
     "generator_version": "1.1"
   },
@@ -10,92 +10,82 @@
     {
       "id": "REQ-001",
       "source": "frontmatter",
-      "description": "技能应在用户表达退订增值业务、处理未知扣费或误订退款意图时被加载"
+      "description": "技能应仅处理视频会员、短信包、流量包等增值业务的退订与误订退款，不处理主套餐变更或销户"
     },
     {
       "id": "REQ-002",
-      "source": "frontmatter",
-      "description": "技能不处理主套餐变更、销户、费用明细解读（无退订诉求）或App技术故障，应正确转向其他技能或渠道"
+      "source": "trigger",
+      "description": "用户表达取消增值服务、发现不明扣费或声称误订时应触发本技能"
     },
     {
       "id": "REQ-003",
       "source": "trigger",
-      "description": "用户请求取消视频会员、短信包、流量包等增值业务时应触发标准退订流程"
+      "description": "用户询问退订生效时间或本月费用处理方式时应进入退订流程"
     },
     {
       "id": "REQ-004",
-      "source": "trigger",
-      "description": "用户发现账单中有不认识的扣费项并希望退订时应触发未知扣费流程"
+      "source": "workflow",
+      "description": "系统应根据用户请求类型（标准退订、未知扣费、误订退款）进入对应处理分支"
     },
     {
       "id": "REQ-005",
-      "source": "trigger",
-      "description": "用户声称误订某项业务并要求退款时应触发误订退款流程"
+      "source": "tool",
+      "description": "退订流程开始时应优先使用 get_cancel_context 工具一次性获取用户完整上下文"
     },
     {
       "id": "REQ-006",
-      "source": "tool",
-      "description": "退订流程开始时应优先使用 get_cancel_context 工具一次性获取用户信息、套餐和账单上下文"
+      "source": "workflow",
+      "description": "标准退订流程中，若用户未明确指定业务，应列出已订增值业务供用户选择"
     },
     {
       "id": "REQ-007",
-      "source": "tool",
-      "description": "系统必须先查询用户已订业务或账单明细，再执行退订操作，不得擅自退订"
+      "source": "workflow",
+      "description": "执行退订前必须向用户说明退订影响（本月仍收费、次月1日生效、不可撤回）并获得确认"
     },
     {
       "id": "REQ-008",
-      "source": "tool",
-      "description": "执行 cancel_service 前必须获得用户明确确认，且每次仅调用一次该工具"
+      "source": "workflow",
+      "description": "未知扣费场景下，应先解释费用来源再询问是否退订，不得直接引导取消"
     },
     {
       "id": "REQ-009",
       "source": "workflow",
-      "description": "标准退订流程中，若用户未明确指定业务，应列出所有已订增值业务供用户选择"
+      "description": "误订退款场景需确认订购时间，24小时内可申请全额退款，超过24小时则按次月生效处理"
     },
     {
       "id": "REQ-010",
       "source": "workflow",
-      "description": "退订前必须告知用户：本月费用仍正常收取，退订将于次月1日生效，且操作不可撤回"
+      "description": "主套餐退订请求应引导用户前往营业厅或转至套餐查询技能，不得通过本技能处理"
     },
     {
       "id": "REQ-011",
       "source": "workflow",
-      "description": "未知扣费流程中，必须先解释每笔费用的来源和用途，再询问用户是否仍需退订"
+      "description": "多业务退订时应逐个处理，每次只调用一次 cancel_service，等待结果后再处理下一个"
     },
     {
       "id": "REQ-012",
       "source": "workflow",
-      "description": "误订退款流程中，需根据订购时间判断是否符合24小时内全额退款条件"
+      "description": "用户否认订购某项业务时应升级核查，不得直接执行退订"
     },
     {
       "id": "REQ-013",
       "source": "workflow",
-      "description": "当用户否认订购某项业务（如'我没订过这个'）时，应升级至人工核查"
+      "description": "工具调用失败时应提示用户稍后重试或拨打10086"
     },
     {
       "id": "REQ-014",
       "source": "workflow",
-      "description": "多业务退订时，每完成一个退订就反馈结果，并询问是否继续退订下一个"
+      "description": "用户要求转人工时应引导拨打10086"
     },
     {
       "id": "REQ-015",
-      "source": "workflow",
-      "description": "当用户请求退订主套餐时，应引导其前往营业厅办理或转至套餐查询技能"
+      "source": "compliance",
+      "description": "禁止未经用户明确确认擅自执行退订操作"
     },
     {
       "id": "REQ-016",
-      "source": "workflow",
-      "description": "工具调用失败（如 query_subscriber 或 cancel_service 异常）时，应提示稍后重试或拨打10086"
-    },
-    {
-      "id": "REQ-017",
-      "source": "workflow",
-      "description": "用户取消退订操作或表示不再需要时，应礼貌结束对话"
-    },
-    {
-      "id": "REQ-018",
-      "source": "workflow",
-      "description": "退订成功后应按规范模板告知业务名称、生效时间及剩余可退订业务（如有）"
+      "source": "compliance",
+      "description": "退款表述必须符合政策规范，不得承诺具体退款金额或时效，需说明需人工审核"
     }
   ],
   "cases": [
@@ -106,12 +96,9 @@
       "priority": 1,
       "requirement_refs": [
         "REQ-001",
-        "REQ-003",
-        "REQ-006",
-        "REQ-007",
-        "REQ-008",
-        "REQ-010",
-        "REQ-018"
+        "REQ-002",
+        "REQ-004",
+        "REQ-005"
       ],
       "turns": [
         "帮我退订腾讯视频会员"
@@ -122,125 +109,223 @@
           "value": "get_cancel_context"
         },
         {
-          "type": "tool_called",
-          "value": "cancel_service"
-        },
-        {
-          "type": "tool_called_before",
-          "value": "get_cancel_context, cancel_service"
-        },
-        {
           "type": "contains",
-          "value": "次月1日生效"
+          "value": "腾讯视频"
         },
         {
-          "type": "contains",
-          "value": "腾讯视频会员"
+          "type": "response_mentions_any",
+          "value": "本月, 次月, 生效"
         }
       ]
     },
     {
       "id": "TC-002",
-      "title": "未知扣费流程-解释费用后退订",
+      "title": "未知扣费场景-先解释费用来源再询问退订",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
-        "REQ-001",
+        "REQ-002",
         "REQ-004",
-        "REQ-006",
-        "REQ-007",
-        "REQ-008",
-        "REQ-011"
+        "REQ-005",
+        "REQ-008"
       ],
       "turns": [
-        "我账单里有个不认识的视频会员扣费，帮我看看是什么并退掉"
+        "账单里有个不认识的视频会员扣费，帮我看看是什么"
       ],
       "assertions": [
         {
-          "type": "tool_called_any_of",
-          "value": "get_cancel_context, query_bill"
+          "type": "tool_called",
+          "value": "query_bill"
         },
         {
           "type": "contains",
-          "value": "视频会员"
+          "value": "费用来源"
         },
         {
-          "type": "response_mentions_any",
-          "value": "来源, 用途, 订阅"
+          "type": "not_contains",
+          "value": "直接退订"
         }
       ]
     },
     {
       "id": "TC-003",
-      "title": "误订退款流程-24小时内申请",
+      "title": "误订退款-24小时内申请全额退款",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
-        "REQ-001",
+        "REQ-002",
+        "REQ-004",
         "REQ-005",
-        "REQ-006",
-        "REQ-007",
-        "REQ-008",
-        "REQ-012"
+        "REQ-009",
+        "REQ-016"
       ],
       "turns": [
-        "我不小心订了个流量包，刚订的，能退吗？"
+        "我刚不小心订了个流量包，现在就想退，能退款吗？"
       ],
       "assertions": [
         {
           "type": "tool_called",
-          "value": "get_cancel_context"
+          "value": "query_subscriber"
         },
         {
-          "type": "tool_called",
-          "value": "cancel_service"
+          "type": "contains",
+          "value": "人工审核"
         },
         {
-          "type": "response_mentions_any",
-          "value": "退款, 原路退回, 1-3个工作日"
+          "type": "not_contains",
+          "value": "已退款"
         }
       ]
     },
     {
       "id": "TC-004",
-      "title": "标准退订-未指定业务时列出选项",
+      "title": "询问退订生效时间-进入退订流程",
       "category": "functional",
       "priority": 2,
       "requirement_refs": [
-        "REQ-009",
-        "REQ-010"
+        "REQ-003"
       ],
       "turns": [
-        "我想退订一些增值服务"
+        "退订视频会员后什么时候生效？这个月的钱还能退吗？"
       ],
       "assertions": [
         {
-          "type": "tool_called",
-          "value": "get_cancel_context"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "以下, 列表, 可选"
+          "type": "contains",
+          "value": "次月1日生效"
         },
         {
           "type": "contains",
-          "value": "次月1日生效"
+          "value": "本月仍收费"
         }
       ]
     },
     {
       "id": "TC-005",
-      "title": "多业务退订-逐个确认并反馈",
+      "title": "标准退订-未明确业务时列出已订列表",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-006"
+      ],
+      "turns": [
+        "我想退订一个增值服务"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "query_subscriber"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "腾讯视频, 爱奇艺, 流量包, 短信包"
+        }
+      ]
+    },
+    {
+      "id": "TC-006",
+      "title": "退订前确认影响-用户确认后执行",
       "category": "state",
       "priority": 1,
       "requirement_refs": [
-        "REQ-010",
-        "REQ-014",
-        "REQ-018"
+        "REQ-007",
+        "REQ-015"
       ],
       "turns": [
-        "帮我退订腾讯视频和爱奇艺会员",
-        "先退腾讯视频吧",
+        "退订爱奇艺会员",
+        "好的，我知道了，确认退订"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "cancel_service"
+        },
+        {
+          "type": "contains",
+          "value": "不可撤回"
+        }
+      ]
+    },
+    {
+      "id": "TC-007",
+      "title": "退订前确认影响-用户拒绝后终止",
+      "category": "state",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-007",
+        "REQ-015"
+      ],
+      "turns": [
+        "退订游戏加速包",
+        "算了，我不退了"
+      ],
+      "assertions": [
+        {
+          "type": "tool_not_called",
+          "value": "cancel_service"
+        },
+        {
+          "type": "contains",
+          "value": "尊重您的选择"
+        }
+      ]
+    },
+    {
+      "id": "TC-008",
+      "title": "未知扣费-用户要求直接退订但系统先解释",
+      "category": "edge",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-008",
+        "REQ-015"
+      ],
+      "turns": [
+        "那个不认识的扣费直接给我退掉！"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "先为您说明这笔费用的来源"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "cancel_service"
+        }
+      ]
+    },
+    {
+      "id": "TC-009",
+      "title": "误订超24小时-无法退款但可次月生效",
+      "category": "edge",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-009",
+        "REQ-016"
+      ],
+      "turns": [
+        "三天前误订的视频会员能退款吗？"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "本月费用不退"
+        },
+        {
+          "type": "contains",
+          "value": "需人工审核"
+        }
+      ]
+    },
+    {
+      "id": "TC-010",
+      "title": "多业务退订-逐个处理并等待确认",
+      "category": "state",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-011"
+      ],
+      "turns": [
+        "我要退订腾讯视频和爱奇艺会员",
+        "先退腾讯视频",
         "好的，再退爱奇艺"
       ],
       "assertions": [
@@ -250,132 +335,65 @@
         },
         {
           "type": "response_mentions_all",
-          "value": "腾讯视频, 爱奇艺, 次月1日生效"
-        }
-      ]
-    },
-    {
-      "id": "TC-006",
-      "title": "用户中途取消退订",
-      "category": "state",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-017"
-      ],
-      "turns": [
-        "我想退订视频会员",
-        "算了，不用退了"
-      ],
-      "assertions": [
-        {
-          "type": "tool_not_called",
-          "value": "cancel_service"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "好的, 再见, 随时"
-        }
-      ]
-    },
-    {
-      "id": "TC-007",
-      "title": "请求退订主套餐-引导至营业厅",
-      "category": "error",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-002",
-        "REQ-015"
-      ],
-      "turns": [
-        "我要退订我的主套餐"
-      ],
-      "assertions": [
-        {
-          "type": "tool_not_called",
-          "value": "cancel_service"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "营业厅, 身份证, 线下办理"
-        }
-      ]
-    },
-    {
-      "id": "TC-008",
-      "title": "超出范围请求-App故障转技能",
-      "category": "error",
-      "priority": 3,
-      "requirement_refs": [
-        "REQ-002"
-      ],
-      "turns": [
-        "你们App打不开，一直闪退"
-      ],
-      "assertions": [
-        {
-          "type": "tool_not_called",
-          "value": "get_cancel_context"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "App, 技术, 故障"
-        }
-      ]
-    },
-    {
-      "id": "TC-009",
-      "title": "误订超24小时-无法退款但可退订",
-      "category": "edge",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-012"
-      ],
-      "turns": [
-        "三天前不小心订了个短信包，现在能退钱吗？"
-      ],
-      "assertions": [
-        {
-          "type": "contains",
-          "value": "本月费用不退"
-        },
-        {
-          "type": "contains",
-          "value": "次月生效"
-        }
-      ]
-    },
-    {
-      "id": "TC-010",
-      "title": "否认订购-升级人工核查",
-      "category": "error",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-013"
-      ],
-      "turns": [
-        "我没订过这个视频会员，为什么扣我钱？"
-      ],
-      "assertions": [
-        {
-          "type": "tool_not_called",
-          "value": "cancel_service"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "人工, 核查, 10086"
+          "value": "腾讯视频, 爱奇艺"
         }
       ]
     },
     {
       "id": "TC-011",
-      "title": "工具调用失败-提示重试或拨打10086",
+      "title": "用户否认订购-升级核查不直接退订",
       "category": "error",
       "priority": 2,
       "requirement_refs": [
-        "REQ-016"
+        "REQ-012"
       ],
       "turns": [
-        "帮我退订流量包"
+        "我没订过这个视频会员，为什么在扣费？"
+      ],
+      "assertions": [
+        {
+          "type": "tool_not_called",
+          "value": "cancel_service"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "升级核查, 安全团队"
+        }
+      ]
+    },
+    {
+      "id": "TC-012",
+      "title": "主套餐退订请求-引导至营业厅或套餐查询",
+      "category": "error",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-001",
+        "REQ-010"
+      ],
+      "turns": [
+        "我想退订我的主套餐"
+      ],
+      "assertions": [
+        {
+          "type": "tool_not_called",
+          "value": "cancel_service"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "营业厅, 套餐查询"
+        }
+      ]
+    },
+    {
+      "id": "TC-013",
+      "title": "工具调用失败-提示重试或拨打10086",
+      "category": "error",
+      "priority": 3,
+      "requirement_refs": [
+        "REQ-013"
+      ],
+      "turns": [
+        "退订流量包"
       ],
       "assertions": [
         {
@@ -387,7 +405,25 @@
           "value": "10086"
         }
       ],
-      "notes": "模拟 get_cancel_context 或 cancel_service 工具异常"
+      "notes": "模拟工具调用失败场景"
+    },
+    {
+      "id": "TC-014",
+      "title": "用户要求转人工-引导拨打10086",
+      "category": "state",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-014"
+      ],
+      "turns": [
+        "我要转人工客服"
+      ],
+      "assertions": [
+        {
+          "type": "response_mentions_any",
+          "value": "10086, 人工客服"
+        }
+      ]
     }
   ]
 }

@@ -259,6 +259,8 @@ const CARD_EXTRACTORS: Record<string, CardExtractor> = {
     return a?.current_month ? { type: 'anomaly_card', data: a as unknown as AnomalyCardData } : null;
   },
   plan_card: (p) => {
+    const plan = p.plan as PlanCardData | undefined;
+    if (plan) return { type: 'plan_card', data: plan };
     const plans = p.plans as unknown[] | undefined;
     return plans?.length === 1 ? { type: 'plan_card', data: plans[0] as PlanCardData } : null;
   },

@@ -12,6 +12,8 @@
     "km_service/frontend",
     "cdp_service",
     "outbound_service",
+    "interaction_platform",
+    "channel_host",
     "packages/*"
   ],
   "scripts": {

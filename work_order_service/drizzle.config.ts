@@ -5,6 +5,6 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.WORKORDER_DB_PATH ?? '../data/workorder.db',
+    url: process.env.WORKORDER_DB_PATH ?? 'data/workorder.db',
   },
 });

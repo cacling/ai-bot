@@ -182,14 +182,17 @@ fi
 # ════════════════════════════════════════════════════════════════════════════
 echo -e "\n${BLU}══════ 数据库准备 ══════${NC}"
 
-mkdir -p "$BASE_DIR/data"
-export SQLITE_PATH="$BASE_DIR/data/km.db"
-export PLATFORM_DB_PATH="$BASE_DIR/data/platform.db"
-export BUSINESS_DB_PATH="$BASE_DIR/data/business.db"
-export WORKORDER_DB_PATH="$BASE_DIR/data/workorder.db"
-export CDP_DB_PATH="$BASE_DIR/data/cdp.db"
-export OUTBOUND_DB_PATH="$BASE_DIR/data/outbound.db"
-export INTERACTION_DB_PATH="$BASE_DIR/data/interaction.db"
+# 各模块 data/ 目录（DB 文件归属各自模块）
+for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data; do
+  mkdir -p "$BASE_DIR/$svc_data"
+done
+export SQLITE_PATH="$BASE_DIR/km_service/data/km.db"
+export PLATFORM_DB_PATH="$BASE_DIR/backend/data/platform.db"
+export BUSINESS_DB_PATH="$BASE_DIR/mock_apis/data/business.db"
+export WORKORDER_DB_PATH="$BASE_DIR/work_order_service/data/workorder.db"
+export CDP_DB_PATH="$BASE_DIR/cdp_service/data/cdp.db"
+export OUTBOUND_DB_PATH="$BASE_DIR/outbound_service/data/outbound.db"
+export INTERACTION_DB_PATH="$BASE_DIR/interaction_platform/data/interaction.db"
 
 # Schema 同步（6 DB：telecom/platform/business/workorder/cdp/outbound）
 log "同步数据库 Schema..."
@@ -229,11 +232,12 @@ if [[ "$RESET_MODE" == true ]]; then
   warn "重置模式：清空数据库 + 清理版本快照..."
   cd "$BASE_DIR/backend"
 
-  # 删除所有 DB + WAL/SHM
-  for dbfile in km platform business workorder cdp; do
-    rm -f "$BASE_DIR/data/${dbfile}.db" "$BASE_DIR/data/${dbfile}.db-wal" "$BASE_DIR/data/${dbfile}.db-shm"
+  # 删除所有 DB + WAL/SHM（各模块 data/ 目录）
+  for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data; do
+    rm -f "$BASE_DIR/$svc_data"/*.db "$BASE_DIR/$svc_data"/*.db-wal "$BASE_DIR/$svc_data"/*.db-shm
   done
-  rm -f "$BASE_DIR/backend/data/km.db" "$BASE_DIR/backend/data/km.db-wal" "$BASE_DIR/backend/data/km.db-shm"
+  # 兼容清理：旧 data/ 根目录残留
+  rm -f "$BASE_DIR/data"/*.db "$BASE_DIR/data"/*.db-wal "$BASE_DIR/data"/*.db-shm
   ok "数据库已删除"
 
   # 清理非默认技能（biz-skills 和 .versions 中只保留默认 7 个）

@@ -2,7 +2,7 @@
   "meta": {
     "skill_id": "plan-inquiry",
     "version_no": 1,
-    "generated_at": "2026-03-31T16:16:46.945Z",
+    "generated_at": "2026-04-02T06:41:45.155Z",
     "source_checksum": "9da390dc720e8ba1",
     "generator_version": "1.1"
   },
@@ -15,7 +15,7 @@
     {
       "id": "REQ-002",
       "source": "frontmatter",
-      "description": "技能不应处理近期突发网络故障、增值业务退订、账单解读或App技术问题，应引导至对应技能"
+      "description": "技能不应处理近期突发网络故障，应引导至故障诊断技能"
     },
     {
       "id": "REQ-003",
@@ -35,12 +35,12 @@
     {
       "id": "REQ-006",
       "source": "trigger",
-      "description": "用户反映流量用完、上网慢或被限速时应先进入网速问题分流判断"
+      "description": "用户反映流量经常不够用、被限速时应进入流量不足处理流程"
     },
     {
       "id": "REQ-007",
       "source": "workflow",
-      "description": "当用户提到'上网慢'或'被限速'时，必须先澄清是突发故障还是长期流量不足，突发故障应引导至故障诊断技能"
+      "description": "当用户提到上网慢或被限速时，必须先澄清是突发故障还是长期流量不足，再决定是否继续本技能"
     },
     {
       "id": "REQ-008",
@@ -50,146 +50,138 @@
     {
       "id": "REQ-009",
       "source": "workflow",
-      "description": "套餐浏览流程中，成功获取套餐列表后应询问用户预算偏好和关注点，并基于需求推荐最优套餐"
+      "description": "套餐浏览流程中，获取套餐列表后应询问用户预算偏好和关注点，再进行个性化推荐"
     },
     {
       "id": "REQ-010",
       "source": "workflow",
-      "description": "套餐变更流程中，必须先查询用户当前套餐和用量数据，再分析是否建议升级、降级或维持"
+      "description": "套餐变更流程中，必须先查询用户当前套餐和用量数据，再分析是否适合升降档"
     },
     {
       "id": "REQ-011",
       "source": "workflow",
-      "description": "套餐变更前必须检查用户是否处于合约期内，合约期内变更应告知违约金并引导至营业厅办理"
+      "description": "套餐变更前必须检查用户是否处于合约期内，合约期内变更需告知违约金并引导至营业厅"
     },
     {
       "id": "REQ-012",
       "source": "workflow",
-      "description": "流量不够用流程中，若剩余流量接近零应优先推荐加油包解决燃眉之急，再讨论长期套餐升级方案"
+      "description": "根据用户用量数据（如流量使用率>80%）应给出明确的升降档建议，并说明推荐理由"
     },
     {
       "id": "REQ-013",
       "source": "workflow",
-      "description": "所有涉及套餐变更的场景，必须明确告知用户生效时间（升级立即/降级次月）和办理方式（APP自助或营业厅）"
+      "description": "套餐对比流程中，应按月费、流量、通话、权益四个维度进行结构化对比，并突出差异项"
     },
     {
       "id": "REQ-014",
       "source": "workflow",
-      "description": "套餐对比时必须按月费、流量、通话、权益四个维度进行清晰对比，并突出差异项和每GB单价"
+      "description": "流量不足场景下，若剩余流量接近零应优先推荐加油包解决燃眉之急，再讨论长期套餐升级方案"
     },
     {
       "id": "REQ-015",
       "source": "workflow",
-      "description": "任何工具调用失败时，应提示用户稍后重试或拨打10086"
+      "description": "所有套餐变更操作只能引导用户通过APP自助办理或前往营业厅，不得声称已直接办理成功"
     },
     {
       "id": "REQ-016",
       "source": "workflow",
-      "description": "用户要求转人工时，应引导拨打10086"
+      "description": "用户表示仅了解信息无办理意愿时，应礼貌结束对话"
     },
     {
       "id": "REQ-017",
       "source": "workflow",
-      "description": "推荐套餐时必须引用用户实际用量数据作为依据，禁止反问用户已有数据中可获取的信息"
+      "description": "用户要求转人工时，应引导拨打10086"
     },
     {
       "id": "REQ-018",
       "source": "workflow",
-      "description": "推荐套餐时必须给出明确结论（如'建议您升级到XX套餐'）并说明推荐理由（用量、性价比、生效时间等）"
+      "description": "工具调用失败时应提示稍后重试或拨打10086"
     }
   ],
   "cases": [
     {
       "id": "TC-001",
-      "title": "套餐浏览-正常流程并推荐",
+      "title": "套餐浏览-正常流程",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-001",
         "REQ-003",
-        "REQ-008",
-        "REQ-009",
-        "REQ-017",
-        "REQ-018"
+        "REQ-009"
       ],
       "turns": [
-        "有哪些套餐可以选？"
+        "有什么套餐可以选？"
       ],
       "assertions": [
         {
           "type": "tool_called",
-          "value": "get_plan_context"
-        },
-        {
-          "type": "contains",
-          "value": "预算"
-        },
-        {
-          "type": "contains",
-          "value": "建议您"
+          "value": "query_plans"
         },
         {
           "type": "response_mentions_all",
           "value": "月费,流量,通话,权益"
+        },
+        {
+          "type": "response_has_next_step",
+          "value": ""
         }
-      ],
-      "notes": "核心主路径：使用 get_plan_context 获取上下文，询问偏好后给出明确推荐"
+      ]
     },
     {
       "id": "TC-002",
-      "title": "套餐变更-升级推荐并说明生效规则",
+      "title": "套餐变更-升级推荐（用量>80%）",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-001",
         "REQ-004",
-        "REQ-008",
         "REQ-010",
-        "REQ-013",
-        "REQ-017",
-        "REQ-018"
+        "REQ-012",
+        "REQ-015"
       ],
       "turns": [
         "我想换个大流量的套餐"
       ],
       "assertions": [
         {
+          "type": "tool_called_any_of",
+          "value": "get_plan_context,query_subscriber"
+        },
+        {
           "type": "tool_called",
-          "value": "get_plan_context"
+          "value": "query_plans"
         },
         {
           "type": "contains",
           "value": "建议您升级到"
         },
         {
-          "type": "contains",
-          "value": "立即生效"
+          "type": "not_contains",
+          "value": "已为您办理"
         },
         {
-          "type": "regex",
-          "value": "用量.*\\d+%"
+          "type": "response_mentions_any",
+          "value": "APP,营业厅"
         }
-      ],
-      "notes": "验证基于用量数据推荐升级，并说明生效时间"
+      ]
     },
     {
       "id": "TC-003",
-      "title": "套餐对比-四维度清晰对比",
+      "title": "套餐对比-结构化四维对比",
       "category": "functional",
       "priority": 2,
       "requirement_refs": [
         "REQ-001",
         "REQ-005",
-        "REQ-008",
-        "REQ-014"
+        "REQ-013"
       ],
       "turns": [
-        "A套餐和B套餐哪个划算？"
+        "A套餐和B套餐哪个更划算？"
       ],
       "assertions": [
         {
           "type": "tool_called",
-          "value": "get_plan_context"
+          "value": "query_plans"
         },
         {
           "type": "response_mentions_all",
@@ -197,57 +189,109 @@
         },
         {
           "type": "contains",
-          "value": "每GB单价"
+          "value": "对比"
         }
-      ],
-      "notes": "验证按四个维度对比并突出差异"
+      ]
     },
     {
       "id": "TC-004",
-      "title": "流量不够用-优先推荐加油包再讨论升级",
+      "title": "流量不足-优先推荐加油包",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-001",
         "REQ-006",
-        "REQ-008",
-        "REQ-012",
-        "REQ-017",
-        "REQ-018"
+        "REQ-014",
+        "REQ-015"
       ],
       "turns": [
         "流量用完了，现在上不了网"
       ],
       "assertions": [
         {
-          "type": "tool_called",
-          "value": "get_plan_context"
+          "type": "tool_called_any_of",
+          "value": "get_plan_context,query_subscriber"
         },
         {
           "type": "contains",
           "value": "加油包"
         },
         {
-          "type": "contains",
-          "value": "建议您"
+          "type": "response_mentions_any",
+          "value": "APP,自助购买"
         },
         {
-          "type": "regex",
-          "value": "剩余流量.*接近零"
+          "type": "not_contains",
+          "value": "已开通"
         }
-      ],
-      "notes": "验证先解决燃眉之急（加油包），再提长期方案"
+      ]
     },
     {
       "id": "TC-005",
-      "title": "合约期内变更-引导营业厅办理",
+      "title": "突发网络故障-引导至故障诊断",
+      "category": "error",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-002"
+      ],
+      "turns": [
+        "刚才突然上不了网了"
+      ],
+      "assertions": [
+        {
+          "type": "tool_not_called",
+          "value": "query_plans"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "故障,诊断,排查"
+        }
+      ]
+    },
+    {
+      "id": "TC-006",
+      "title": "网速问题澄清-区分故障与流量不足",
+      "category": "state",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-007"
+      ],
+      "turns": [
+        "上网好慢啊"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "是最近突然变慢，还是经常月底流量不够用"
+        }
+      ]
+    },
+    {
+      "id": "TC-007",
+      "title": "工具调用优化-使用get_plan_context",
       "category": "edge",
       "priority": 2,
       "requirement_refs": [
-        "REQ-004",
-        "REQ-010",
-        "REQ-011",
-        "REQ-013"
+        "REQ-008"
+      ],
+      "turns": [
+        "帮我看看适合我的套餐"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "get_plan_context"
+        }
+      ],
+      "notes": "验证优先使用合并工具"
+    },
+    {
+      "id": "TC-008",
+      "title": "合约期内变更-引导营业厅",
+      "category": "edge",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-011"
       ],
       "persona_id": "contract_user",
       "turns": [
@@ -259,152 +303,37 @@
           "value": "合约期内"
         },
         {
-          "type": "contains",
-          "value": "违约金"
-        },
-        {
-          "type": "contains",
-          "value": "营业厅"
-        },
-        {
-          "type": "tool_not_called",
-          "value": "query_plans"
-        }
-      ],
-      "notes": "模拟合约用户，验证不直接推荐降级而是引导线下办理"
-    },
-    {
-      "id": "TC-006",
-      "title": "模糊表达-口语化套餐查询",
-      "category": "edge",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-001",
-        "REQ-003"
-      ],
-      "turns": [
-        "有啥套餐啊"
-      ],
-      "assertions": [
-        {
-          "type": "tool_called_any_of",
-          "value": "get_plan_context, query_plans"
-        },
-        {
-          "type": "contains",
-          "value": "套餐"
-        }
-      ],
-      "notes": "极简口语输入，验证意图识别鲁棒性"
-    },
-    {
-      "id": "TC-007",
-      "title": "上网慢-澄清后分流至故障诊断",
-      "category": "state",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-006",
-        "REQ-007"
-      ],
-      "turns": [
-        "最近上网特别慢",
-        "就是这两天突然变慢的"
-      ],
-      "assertions": [
-        {
-          "type": "contains",
-          "value": "最近突然变慢"
-        },
-        {
           "type": "response_mentions_any",
-          "value": "故障诊断, 网络问题, 排查"
-        },
-        {
-          "type": "tool_not_called",
-          "value": "get_plan_context"
+          "value": "营业厅,违约金"
         }
-      ],
-      "notes": "多轮对话：第一轮澄清，第二轮确认为突发故障后转出"
-    },
-    {
-      "id": "TC-008",
-      "title": "增值业务退订请求-引导至对应技能",
-      "category": "error",
-      "priority": 3,
-      "requirement_refs": [
-        "REQ-002"
-      ],
-      "turns": [
-        "帮我退订视频会员"
-      ],
-      "assertions": [
-        {
-          "type": "tool_not_called",
-          "value": "get_plan_context"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "退订, 增值业务, service-cancel"
-        }
-      ],
-      "notes": "验证超出范围请求不会触发套餐工具"
+      ]
     },
     {
       "id": "TC-009",
-      "title": "账单解读请求-引导至账单技能",
-      "category": "error",
+      "title": "仅了解信息-礼貌结束",
+      "category": "state",
       "priority": 3,
       "requirement_refs": [
-        "REQ-002"
+        "REQ-016"
       ],
       "turns": [
-        "我上个月话费怎么这么多？"
+        "有哪些套餐？",
+        "我就随便问问，不用办理"
       ],
       "assertions": [
         {
-          "type": "tool_not_called",
-          "value": "get_plan_context"
-        },
-        {
           "type": "response_mentions_any",
-          "value": "账单, bill-inquiry, 费用明细"
+          "value": "还有,其他,帮到,再见"
         }
       ]
     },
     {
       "id": "TC-010",
-      "title": "工具调用失败-提示重试或拨打10086",
+      "title": "用户要求转人工",
       "category": "error",
       "priority": 2,
       "requirement_refs": [
-        "REQ-015"
-      ],
-      "turns": [
-        "有什么套餐？"
-      ],
-      "assertions": [
-        {
-          "type": "contains",
-          "value": "稍后重试"
-        },
-        {
-          "type": "contains",
-          "value": "10086"
-        },
-        {
-          "type": "tool_not_called",
-          "value": "query_subscriber"
-        }
-      ],
-      "notes": "模拟工具异常场景，验证错误提示"
-    },
-    {
-      "id": "TC-011",
-      "title": "用户要求转人工-引导拨打10086",
-      "category": "state",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-016"
+        "REQ-017"
       ],
       "turns": [
         "转人工客服"
@@ -413,12 +342,31 @@
         {
           "type": "contains",
           "value": "10086"
-        },
-        {
-          "type": "tool_not_called",
-          "value": "get_plan_context"
         }
       ]
+    },
+    {
+      "id": "TC-011",
+      "title": "工具调用失败-提示重试或拨打10086",
+      "category": "error",
+      "priority": 3,
+      "requirement_refs": [
+        "REQ-018"
+      ],
+      "turns": [
+        "查一下我的套餐"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "稍后重试"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "10086,客服"
+        }
+      ],
+      "notes": "模拟工具异常场景"
     }
   ]
 }

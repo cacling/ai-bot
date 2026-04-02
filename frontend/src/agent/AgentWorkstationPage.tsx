@@ -19,6 +19,7 @@ import { buildInitialCardStates, findCardByEvent, type CardState } from './cards
 import { AgentSidebarMenu, readSidebarCollapsed, writeSidebarCollapsed } from './layout/AgentSidebarMenu';
 import { AgentTopBar } from './layout/AgentTopBar';
 import { AgentContext, type AgentMessage } from './AgentContext';
+import { InboxContext, useWorkspaceWs, getFocusedMessages, getFocusedCardStates } from './inbox';
 
 export function AgentWorkstationPage() {
   const [lang, setLang] = useState<Lang>('zh');
@@ -57,6 +58,15 @@ export function AgentWorkstationPage() {
 
   // ── 跟随客户侧用户切换 ────────────────────────────────────────────────────────
   useAgentUserSync(setUserPhone);
+
+  // ── Workspace WS (Inbox model — Phase 2) ────────────────────────────────────
+  // Uses a demo agent ID for now; will be replaced with actual auth in production
+  const DEMO_AGENT_ID = 'agent-demo-001';
+  const workspaceWs = useWorkspaceWs({ agentId: DEMO_AGENT_ID, enabled: true });
+
+  // Derive focused interaction's messages/cards for AgentContext compatibility
+  const inboxMessages = getFocusedMessages(workspaceWs.inbox);
+  const inboxCardStates = getFocusedCardStates(workspaceWs.inbox);
 
   // ── 初始加载用户及外呼任务数据 + 卡片可见性配置 ──────────────────────────────
   useEffect(() => {
@@ -357,17 +367,31 @@ export function AgentWorkstationPage() {
     onUpdateCards: setCardStates,
   }), [lang, isConnected, messages, cardStates, inputValue, isTyping, botMode]);
 
+  const inboxCtxValue = useMemo(() => ({
+    inbox: workspaceWs.inbox,
+    isConnected: workspaceWs.isConnected,
+    focusInteraction: workspaceWs.focusInteraction,
+    acceptOffer: workspaceWs.acceptOffer,
+    declineOffer: workspaceWs.declineOffer,
+    sendMessage: workspaceWs.sendMessage,
+    wrapUp: workspaceWs.wrapUp,
+    transferInteraction: workspaceWs.transferInteraction,
+    setPresence: workspaceWs.setPresence,
+  }), [workspaceWs]);
+
   return (
     <AgentContext.Provider value={ctxValue}>
-      <div className="flex flex-col h-screen bg-muted font-sans text-foreground overflow-hidden">
-        <AgentTopBar lang={lang} setLang={setLang} isConnected={isConnected} />
-        <div className="flex-1 flex overflow-hidden">
-          <AgentSidebarMenu lang={lang} collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />
-          <div className="flex-1 overflow-hidden">
-            <Outlet />
+      <InboxContext.Provider value={inboxCtxValue}>
+        <div className="flex flex-col h-screen bg-muted font-sans text-foreground overflow-hidden">
+          <AgentTopBar lang={lang} setLang={setLang} isConnected={isConnected} />
+          <div className="flex-1 flex overflow-hidden">
+            <AgentSidebarMenu lang={lang} collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />
+            <div className="flex-1 overflow-hidden">
+              <Outlet />
+            </div>
           </div>
         </div>
-      </div>
+      </InboxContext.Provider>
     </AgentContext.Provider>
   );
 }

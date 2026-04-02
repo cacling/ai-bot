@@ -6,7 +6,7 @@ import * as schema from './schema';
 // ── platform.db（backend 独占的运行时表：sessions, messages, staff, skill_instances 等）──
 const platformDbPath =
   process.env.PLATFORM_DB_PATH ??
-  fileURLToPath(new URL('../../../data/platform.db', import.meta.url));
+  fileURLToPath(new URL('../../data/platform.db', import.meta.url));
 
 const platformSqlite = new Database(platformDbPath, { create: true });
 platformSqlite.exec('PRAGMA journal_mode = WAL');

@@ -24,6 +24,7 @@ export const workItems = sqliteTable('work_items', {
   source_skill_version: integer('source_skill_version'),
   source_step_id: text('source_step_id'),
   source_instance_id: text('source_instance_id'),
+  source_interaction_id: text('source_interaction_id'),  // FK → ix_interactions.interaction_id (Phase 3)
   customer_phone: text('customer_phone'),
   customer_name: text('customer_name'),
   requester_id: text('requester_id'),

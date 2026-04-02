@@ -16,9 +16,9 @@ import {
 const CDP_BASE = `http://localhost:${process.env.CDP_SERVICE_PORT ?? 18020}/api/cdp`;
 
 const businessDbPath = process.env.BUSINESS_DB_PATH ??
-  fileURLToPath(new URL('../../data/business.db', import.meta.url));
+  fileURLToPath(new URL('../../mock_apis/data/business.db', import.meta.url));
 const platformDbPath = process.env.PLATFORM_DB_PATH ??
-  fileURLToPath(new URL('../../data/platform.db', import.meta.url));
+  fileURLToPath(new URL('../../backend/data/platform.db', import.meta.url));
 
 // ── 辅助 ──────────────────────────────────────────────────────────────────
 

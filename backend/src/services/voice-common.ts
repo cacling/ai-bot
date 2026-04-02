@@ -18,6 +18,7 @@ import { logger } from './logger';
 import { sessionBus } from './session-bus';
 import { t } from './i18n';
 import type { VoiceSessionState, HandoffContext } from './voice-session';
+import { mapPhoneToIdentity } from './identity-mapper';
 import type NodeWebSocket from 'ws';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -219,6 +220,23 @@ export function triggerHandoff(
       logger.info(config.channel, 'transfer_to_human_done', { session: sessionId, intent: ctx.customer_intent, via: reason });
       try { ws.send(JSON.stringify({ type: 'transfer_to_human', context: ctx })); } catch {}
       sessionBus.publish(state.phone, { source: 'voice', type: 'handoff_card', data: ctx as unknown as Record<string, unknown>, msg_id: crypto.randomUUID() });
+
+      // Fire-and-forget: materialize interaction in platform
+      const platformUrl = process.env.INTERACTION_PLATFORM_URL ?? 'http://localhost:18022';
+      mapPhoneToIdentity(state.phone).then(identity => {
+        if (!identity.partyId) return;
+        fetch(`${platformUrl}/api/interactions/materialize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_party_id: identity.partyId,
+            channel: config.channel === 'voice' ? 'phone' : config.channel,
+            work_model: 'live_voice',
+            queue_code: 'default_voice',
+            handoff_summary: ctx.session_summary ?? `Voice session ${sessionId} transferred to human`,
+          }),
+        }).catch(err => logger.warn(config.channel, 'materialize_error', { phone: state.phone, session: sessionId, error: String(err) }));
+      }).catch(err => logger.warn(config.channel, 'materialize_identity_error', { phone: state.phone, error: String(err) }));
     });
 }
 

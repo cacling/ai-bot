@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "types": ["bun-types"],
+    "paths": {
+      "openclaw/plugin-sdk/*": ["./src/runtime-plane/sdk-compat/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}

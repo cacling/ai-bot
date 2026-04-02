@@ -142,6 +142,14 @@ logger.info('server', 'starting', {
 // Initialize Query Normalizer dictionaries
 loadLexicons(resolve(import.meta.dir, 'services/query-normalizer/dictionaries'));
 
+// Pre-warm skill registry cache so getSkillRegistrySync() has data on first WS connection
+import { getSkillRegistry } from './services/km-client';
+getSkillRegistry().then(rows => {
+  logger.info('server', 'skill_registry_warmed', { count: rows.length });
+}).catch(err => {
+  logger.warn('server', 'skill_registry_warmup_failed', { error: String(err) });
+});
+
 // Clean expired staff sessions on startup + hourly
 cleanExpiredSessions();
 setInterval(cleanExpiredSessions, 60 * 60 * 1000);

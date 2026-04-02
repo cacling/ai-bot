@@ -4,6 +4,7 @@ import path from 'path'
 
 const FRONTEND_PORT = Number(process.env.FRONTEND_PORT ?? 5173);
 const BACKEND_PORT = Number(process.env.BACKEND_PORT ?? 18472);
+const INTERACTION_PLATFORM_PORT = Number(process.env.INTERACTION_PLATFORM_PORT ?? 18022);
 
 export default defineConfig({
   plugins: [react()],
@@ -23,6 +24,18 @@ export default defineConfig({
         target: `ws://localhost:${BACKEND_PORT}`,
         ws: true,
         rewriteWsOrigin: true,
+      },
+      // Interaction Platform API proxy
+      '/ix-api': {
+        target: `http://localhost:${INTERACTION_PLATFORM_PORT}`,
+        rewrite: (p) => p.replace(/^\/ix-api/, ''),
+      },
+      // Interaction Platform WebSocket proxy
+      '/ix-ws': {
+        target: `ws://localhost:${INTERACTION_PLATFORM_PORT}`,
+        ws: true,
+        rewriteWsOrigin: true,
+        rewrite: (p) => p.replace(/^\/ix-ws/, ''),
       },
     },
   },

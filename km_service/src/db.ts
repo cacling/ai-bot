@@ -13,7 +13,7 @@ const schema = { ...kmSchema, ...platformSchema };
 
 const dbPath =
   process.env.SQLITE_PATH ??
-  fileURLToPath(new URL('../../data/km.db', import.meta.url));
+  fileURLToPath(new URL('../data/km.db', import.meta.url));
 
 const sqlite = new Database(dbPath, { create: true });
 sqlite.exec('PRAGMA journal_mode = WAL');

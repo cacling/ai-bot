@@ -363,3 +363,165 @@ export const cdpCustomerEvents = sqliteTable('cdp_customer_events', {
   idxTypeTime: index('cdp_ce_tenant_type_time').on(t.tenant_id, t.event_type, t.event_time),
   idxSource: index('cdp_ce_tenant_source').on(t.tenant_id, t.source_system, t.source_event_id),
 }));
+
+// ── 17. audit_log — 操作审计日志 ──────────────────────────────────────────
+
+export const cdpAuditLogs = sqliteTable('cdp_audit_logs', {
+  audit_log_id: text('audit_log_id').primaryKey(),                   // uuid
+  tenant_id: text('tenant_id').notNull().default('default'),
+  object_type: text('object_type').notNull(),                        // party | tag | segment | lifecycle | consent | import_task
+  object_id: text('object_id').notNull(),
+  action: text('action').notNull(),                                  // create | update | delete | merge | split | blacklist | import | export
+  operator_id: text('operator_id'),                                  // staff_accounts.id
+  operator_name: text('operator_name'),
+  before_value: text('before_value'),                                // JSON snapshot
+  after_value: text('after_value'),                                  // JSON snapshot
+  ip: text('ip'),
+  created_at: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+}, (t) => ({
+  idxObject: index('cdp_al_tenant_object').on(t.tenant_id, t.object_type, t.object_id),
+  idxOperator: index('cdp_al_tenant_operator').on(t.tenant_id, t.operator_id),
+  idxTime: index('cdp_al_tenant_time').on(t.tenant_id, t.created_at),
+}));
+
+// ── 18. tag — 标签定义 ───────────────────────────────────────────────────
+
+export const cdpTags = sqliteTable('cdp_tags', {
+  tag_id: text('tag_id').primaryKey(),                                 // uuid
+  tenant_id: text('tenant_id').notNull().default('default'),
+  tag_name: text('tag_name').notNull(),
+  tag_category: text('tag_category'),                                  // 业务标签 | 行为标签 | 模型标签
+  tag_type: text('tag_type').notNull(),                                // manual | rule | model
+  description: text('description'),
+  rule_config: text('rule_config'),                                    // JSON: 规则型标签的条件配置
+  status: text('status').notNull().default('active'),                  // active | disabled
+  cover_count: integer('cover_count').notNull().default(0),            // 命中人数缓存
+  created_by: text('created_by'),
+  created_at: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  updated_at: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+}, (t) => ({
+  uniqName: uniqueIndex('cdp_tag_tenant_name').on(t.tenant_id, t.tag_name),
+  idxCategory: index('cdp_tag_tenant_category').on(t.tenant_id, t.tag_category),
+}));
+
+// ── 19. party_tag — 客户-标签关系 ────────────────────────────────────────
+
+export const cdpPartyTags = sqliteTable('cdp_party_tags', {
+  party_tag_id: text('party_tag_id').primaryKey(),                     // uuid
+  tenant_id: text('tenant_id').notNull().default('default'),
+  party_id: text('party_id').notNull().references(() => cdpParties.party_id),
+  tag_id: text('tag_id').notNull().references(() => cdpTags.tag_id),
+  tag_value: text('tag_value'),                                        // 标签值（如等级标签的具体值）
+  source: text('source').notNull().default('manual'),                  // manual | rule | model | import
+  start_time: integer('start_time', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+  end_time: integer('end_time', { mode: 'timestamp' }),                // NULL = 永久
+  created_at: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+}, (t) => ({
+  uniqPartyTag: uniqueIndex('cdp_pt_tenant_party_tag').on(t.tenant_id, t.party_id, t.tag_id),
+  idxTag: index('cdp_pt_tenant_tag').on(t.tenant_id, t.tag_id),
+}));
+
+// ── 20. blacklist — 黑名单 ──────────────────────────────────────────────
+
+export const cdpBlacklist = sqliteTable('cdp_blacklist', {
+  blacklist_id: text('blacklist_id').primaryKey(),                     // uuid
+  tenant_id: text('tenant_id').notNull().default('default'),
+  party_id: text('party_id').notNull().references(() => cdpParties.party_id),
+  reason: text('reason').notNull(),
+  source: text('source').notNull().default('manual'),                  // manual | import | system
+  operator_id: text('operator_id'),
+  operator_name: text('operator_name'),
+  status: text('status').notNull().default('active'),                  // active | removed
+  created_at: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  removed_at: integer('removed_at', { mode: 'timestamp' }),
+  removed_by: text('removed_by'),
+}, (t) => ({
+  idxPartyStatus: index('cdp_bl_tenant_party_status').on(t.tenant_id, t.party_id, t.status),
+  idxStatus: index('cdp_bl_tenant_status').on(t.tenant_id, t.status),
+}));
+
+// ── 21. segment — 客户分群定义 ──────────────────────────────────────────
+
+export const cdpSegments = sqliteTable('cdp_segments', {
+  segment_id: text('segment_id').primaryKey(),                         // uuid
+  tenant_id: text('tenant_id').notNull().default('default'),
+  segment_name: text('segment_name').notNull(),
+  segment_type: text('segment_type').notNull(),                        // dynamic | static
+  description: text('description'),
+  conditions: text('conditions'),                                      // JSON: 条件编排配置
+  estimated_count: integer('estimated_count').notNull().default(0),
+  status: text('status').notNull().default('draft'),                   // draft | active | disabled
+  created_by: text('created_by'),
+  created_at: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  updated_at: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+}, (t) => ({
+  idxTenantStatus: index('cdp_seg_tenant_status').on(t.tenant_id, t.status),
+}));
+
+// ── 22. segment_member — 分群成员（静态分群） ─────────────────────────────
+
+export const cdpSegmentMembers = sqliteTable('cdp_segment_members', {
+  member_id: text('member_id').primaryKey(),                           // uuid
+  tenant_id: text('tenant_id').notNull().default('default'),
+  segment_id: text('segment_id').notNull().references(() => cdpSegments.segment_id),
+  party_id: text('party_id').notNull().references(() => cdpParties.party_id),
+  added_at: integer('added_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+}, (t) => ({
+  idxSegment: index('cdp_sm_tenant_segment').on(t.tenant_id, t.segment_id),
+  idxParty: index('cdp_sm_tenant_party').on(t.tenant_id, t.party_id),
+  uniqMember: uniqueIndex('cdp_sm_tenant_segment_party').on(t.tenant_id, t.segment_id, t.party_id),
+}));
+
+// ── 23. lifecycle_stage — 生命周期阶段定义 ──────────────────────────────
+
+export const cdpLifecycleStages = sqliteTable('cdp_lifecycle_stages', {
+  stage_id: text('stage_id').primaryKey(),                             // uuid
+  tenant_id: text('tenant_id').notNull().default('default'),
+  stage_name: text('stage_name').notNull(),
+  stage_order: integer('stage_order').notNull(),
+  description: text('description'),
+  rule_config: text('rule_config'),                                    // JSON: 进入/退出条件
+  color: text('color'),                                                // 前端渲染用色
+  status: text('status').notNull().default('active'),                  // active | disabled
+  created_at: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  updated_at: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+}, (t) => ({
+  idxTenantOrder: index('cdp_ls_tenant_order').on(t.tenant_id, t.stage_order),
+}));
+
+// ── 24. party_lifecycle — 客户当前生命周期阶段 ──────────────────────────
+
+export const cdpPartyLifecycle = sqliteTable('cdp_party_lifecycle', {
+  party_lifecycle_id: text('party_lifecycle_id').primaryKey(),          // uuid
+  tenant_id: text('tenant_id').notNull().default('default'),
+  party_id: text('party_id').notNull().references(() => cdpParties.party_id),
+  stage_id: text('stage_id').notNull().references(() => cdpLifecycleStages.stage_id),
+  entered_at: integer('entered_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  exited_at: integer('exited_at', { mode: 'timestamp' }),
+}, (t) => ({
+  idxParty: index('cdp_pl_tenant_party').on(t.tenant_id, t.party_id),
+  idxStage: index('cdp_pl_tenant_stage').on(t.tenant_id, t.stage_id),
+}));
+
+// ── 25. import_export_task — 导入导出任务 ───────────────────────────────
+
+export const cdpImportExportTasks = sqliteTable('cdp_import_export_tasks', {
+  task_id: text('task_id').primaryKey(),                               // uuid
+  tenant_id: text('tenant_id').notNull().default('default'),
+  task_type: text('task_type').notNull(),                              // import | export
+  task_name: text('task_name'),
+  status: text('status').notNull().default('pending'),                 // pending | running | success | partial_fail | failed
+  file_name: text('file_name'),
+  total_count: integer('total_count').notNull().default(0),
+  success_count: integer('success_count').notNull().default(0),
+  fail_count: integer('fail_count').notNull().default(0),
+  fail_detail: text('fail_detail'),                                    // JSON: 失败行及原因
+  field_mapping: text('field_mapping'),                                // JSON: 字段映射配置
+  operator_id: text('operator_id'),
+  operator_name: text('operator_name'),
+  created_at: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  finished_at: integer('finished_at', { mode: 'timestamp' }),
+}, (t) => ({
+  idxTenantStatus: index('cdp_iet_tenant_status').on(t.tenant_id, t.status),
+  idxTenantType: index('cdp_iet_tenant_type').on(t.tenant_id, t.task_type),
+}));

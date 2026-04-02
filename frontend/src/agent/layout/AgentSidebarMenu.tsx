@@ -1,6 +1,6 @@
 import { memo, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Headset, Settings, BookOpen, ClipboardList, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Headset, Settings, BookOpen, ClipboardList, Route, Users, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { type Lang } from '../../i18n';
 import { MENU_TREE } from '../nav';
@@ -17,6 +17,8 @@ const ICONS: Record<string, React.ReactNode> = {
   operations: <Settings size={18} />,
   knowledge: <BookOpen size={16} />,
   workorders: <ClipboardList size={16} />,
+  routing: <Route size={16} />,
+  customers: <Users size={16} />,
 };
 
 const STORAGE_KEY = 'agent.sidebar.collapsed';

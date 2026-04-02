@@ -9,7 +9,7 @@ export default defineConfig({
   out: './drizzle-platform',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.PLATFORM_DB_PATH ?? '../data/platform.db',
+    url: process.env.PLATFORM_DB_PATH ?? 'data/platform.db',
   },
   tablesFilter: [
     'sessions', 'messages', 'outbound_tasks', 'users',

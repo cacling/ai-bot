@@ -216,7 +216,11 @@ export default function App() {
     fetchTestPersonas(undefined, lang).then(setAllPersonas).catch(console.error);
     fetchTestPersonas('inbound', lang).then(personas => {
       setInboundPersonas(personas);
-      if (personas.length > 0) setChatUserPhone((personas[0].context.phone as string) ?? '');
+      if (personas.length > 0) {
+        setChatUserPhone((personas[0].context.phone as string) ?? '');
+        // 新 sessionId 确保带真实 phone 的 WS 连接触发 greeting + suggestions
+        setSessionId(crypto.randomUUID());
+      }
     }).catch(console.error);
     fetchOutboundTasks().then(setOutboundTasks).catch(console.error);
   }, []);

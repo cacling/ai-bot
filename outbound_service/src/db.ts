@@ -8,7 +8,7 @@ import * as outboundSchema from '@ai-bot/shared-db/schema/outbound';
 
 const dbPath =
   process.env.OUTBOUND_DB_PATH ??
-  fileURLToPath(new URL('../../data/outbound.db', import.meta.url));
+  fileURLToPath(new URL('../data/outbound.db', import.meta.url));
 
 const sqlite = new Database(dbPath, { create: true });
 sqlite.exec('PRAGMA journal_mode = WAL');

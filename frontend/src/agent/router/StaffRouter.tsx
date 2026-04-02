@@ -14,6 +14,8 @@ import { WorkbenchPage } from '../pages/WorkbenchPage';
 import { OperationsLayout } from '../pages/OperationsLayout';
 import { KnowledgeLayout } from '../knowledge/KnowledgeLayout';
 import { WorkOrdersLayout } from '../workorders/WorkOrdersLayout';
+import { RoutingLayout } from '../routing/RoutingLayout';
+import { CustomerLayout } from '../customers/CustomerLayout';
 
 /** 已登录访问 /staff/login → 按角色跳默认首页 */
 function LoginGuard() {
@@ -74,6 +76,27 @@ export function StaffRouter() {
                     <Route path="items" element={null} />
                     <Route path="intakes" element={null} />
                     <Route path="threads" element={null} />
+                  </Route>
+                  <Route path="routing" element={<RoutingLayout />}>
+                    <Route index element={<Navigate to="overview" replace />} />
+                    <Route path="overview" element={null} />
+                    <Route path="rules" element={null} />
+                    <Route path="scoring" element={null} />
+                    <Route path="overflow" element={null} />
+                    <Route path="monitor" element={null} />
+                    <Route path="logs" element={null} />
+                  </Route>
+                  <Route path="customers" element={<CustomerLayout />}>
+                    <Route index element={<Navigate to="list" replace />} />
+                    <Route path="list" element={null} />
+                    <Route path="detail/:partyId" element={null} />
+                    <Route path="tags" element={null} />
+                    <Route path="segments" element={null} />
+                    <Route path="lifecycle" element={null} />
+                    <Route path="identity-merge" element={null} />
+                    <Route path="import-export" element={null} />
+                    <Route path="blacklist-consent" element={null} />
+                    <Route path="audit-log" element={null} />
                   </Route>
                 </Route>
               </Route>

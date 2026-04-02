@@ -1,181 +1,204 @@
 # 测试用例 — service-cancel v1
 
-> 自动生成于 2026-03-31T16:20:32.455Z | source_checksum: `b60c1fff355e2632` | generator: v1.1
+> 自动生成于 2026-04-02T06:44:57.143Z | source_checksum: `b60c1fff355e2632` | generator: v1.1
 
 ## Overview
 
-- 需求数: 18
-- 用例数: 11
-- 分类: functional(4) / edge(1) / error(4) / state(2)
+- 需求数: 16
+- 用例数: 14
+- 分类: functional(5) / edge(2) / error(3) / state(4)
 
 ## Requirements
 
-- **REQ-001** [frontmatter]: 技能应在用户表达退订增值业务、处理未知扣费或误订退款意图时被加载
-- **REQ-002** [frontmatter]: 技能不处理主套餐变更、销户、费用明细解读（无退订诉求）或App技术故障，应正确转向其他技能或渠道
-- **REQ-003** [trigger]: 用户请求取消视频会员、短信包、流量包等增值业务时应触发标准退订流程
-- **REQ-004** [trigger]: 用户发现账单中有不认识的扣费项并希望退订时应触发未知扣费流程
-- **REQ-005** [trigger]: 用户声称误订某项业务并要求退款时应触发误订退款流程
-- **REQ-006** [tool]: 退订流程开始时应优先使用 get_cancel_context 工具一次性获取用户信息、套餐和账单上下文
-- **REQ-007** [tool]: 系统必须先查询用户已订业务或账单明细，再执行退订操作，不得擅自退订
-- **REQ-008** [tool]: 执行 cancel_service 前必须获得用户明确确认，且每次仅调用一次该工具
-- **REQ-009** [workflow]: 标准退订流程中，若用户未明确指定业务，应列出所有已订增值业务供用户选择
-- **REQ-010** [workflow]: 退订前必须告知用户：本月费用仍正常收取，退订将于次月1日生效，且操作不可撤回
-- **REQ-011** [workflow]: 未知扣费流程中，必须先解释每笔费用的来源和用途，再询问用户是否仍需退订
-- **REQ-012** [workflow]: 误订退款流程中，需根据订购时间判断是否符合24小时内全额退款条件
-- **REQ-013** [workflow]: 当用户否认订购某项业务（如'我没订过这个'）时，应升级至人工核查
-- **REQ-014** [workflow]: 多业务退订时，每完成一个退订就反馈结果，并询问是否继续退订下一个
-- **REQ-015** [workflow]: 当用户请求退订主套餐时，应引导其前往营业厅办理或转至套餐查询技能
-- **REQ-016** [workflow]: 工具调用失败（如 query_subscriber 或 cancel_service 异常）时，应提示稍后重试或拨打10086
-- **REQ-017** [workflow]: 用户取消退订操作或表示不再需要时，应礼貌结束对话
-- **REQ-018** [workflow]: 退订成功后应按规范模板告知业务名称、生效时间及剩余可退订业务（如有）
+- **REQ-001** [frontmatter]: 技能应仅处理视频会员、短信包、流量包等增值业务的退订与误订退款，不处理主套餐变更或销户
+- **REQ-002** [trigger]: 用户表达取消增值服务、发现不明扣费或声称误订时应触发本技能
+- **REQ-003** [trigger]: 用户询问退订生效时间或本月费用处理方式时应进入退订流程
+- **REQ-004** [workflow]: 系统应根据用户请求类型（标准退订、未知扣费、误订退款）进入对应处理分支
+- **REQ-005** [tool]: 退订流程开始时应优先使用 get_cancel_context 工具一次性获取用户完整上下文
+- **REQ-006** [workflow]: 标准退订流程中，若用户未明确指定业务，应列出已订增值业务供用户选择
+- **REQ-007** [workflow]: 执行退订前必须向用户说明退订影响（本月仍收费、次月1日生效、不可撤回）并获得确认
+- **REQ-008** [workflow]: 未知扣费场景下，应先解释费用来源再询问是否退订，不得直接引导取消
+- **REQ-009** [workflow]: 误订退款场景需确认订购时间，24小时内可申请全额退款，超过24小时则按次月生效处理
+- **REQ-010** [workflow]: 主套餐退订请求应引导用户前往营业厅或转至套餐查询技能，不得通过本技能处理
+- **REQ-011** [workflow]: 多业务退订时应逐个处理，每次只调用一次 cancel_service，等待结果后再处理下一个
+- **REQ-012** [workflow]: 用户否认订购某项业务时应升级核查，不得直接执行退订
+- **REQ-013** [workflow]: 工具调用失败时应提示用户稍后重试或拨打10086
+- **REQ-014** [workflow]: 用户要求转人工时应引导拨打10086
+- **REQ-015** [compliance]: 禁止未经用户明确确认擅自执行退订操作
+- **REQ-016** [compliance]: 退款表述必须符合政策规范，不得承诺具体退款金额或时效，需说明需人工审核
 
 ## Functional Tests
 
 ### TC-001: 标准退订流程-用户明确指定业务
 
 - **Priority**: P1
-- **Requirements**: REQ-001, REQ-003, REQ-006, REQ-007, REQ-008, REQ-010, REQ-018
+- **Requirements**: REQ-001, REQ-002, REQ-004, REQ-005
 - **Turns**:
   1. "帮我退订腾讯视频会员"
 - **Assertions**:
   - `tool_called`: get_cancel_context
-  - `tool_called`: cancel_service
-  - `tool_called_before`: get_cancel_context, cancel_service
-  - `contains`: 次月1日生效
-  - `contains`: 腾讯视频会员
+  - `contains`: 腾讯视频
+  - `response_mentions_any`: 本月, 次月, 生效
 
-### TC-002: 未知扣费流程-解释费用后退订
+### TC-002: 未知扣费场景-先解释费用来源再询问退订
 
 - **Priority**: P1
-- **Requirements**: REQ-001, REQ-004, REQ-006, REQ-007, REQ-008, REQ-011
+- **Requirements**: REQ-002, REQ-004, REQ-005, REQ-008
 - **Turns**:
-  1. "我账单里有个不认识的视频会员扣费，帮我看看是什么并退掉"
+  1. "账单里有个不认识的视频会员扣费，帮我看看是什么"
 - **Assertions**:
-  - `tool_called_any_of`: get_cancel_context, query_bill
-  - `contains`: 视频会员
-  - `response_mentions_any`: 来源, 用途, 订阅
+  - `tool_called`: query_bill
+  - `contains`: 费用来源
+  - `not_contains`: 直接退订
 
-### TC-003: 误订退款流程-24小时内申请
+### TC-003: 误订退款-24小时内申请全额退款
 
 - **Priority**: P1
-- **Requirements**: REQ-001, REQ-005, REQ-006, REQ-007, REQ-008, REQ-012
+- **Requirements**: REQ-002, REQ-004, REQ-005, REQ-009, REQ-016
 - **Turns**:
-  1. "我不小心订了个流量包，刚订的，能退吗？"
+  1. "我刚不小心订了个流量包，现在就想退，能退款吗？"
 - **Assertions**:
-  - `tool_called`: get_cancel_context
-  - `tool_called`: cancel_service
-  - `response_mentions_any`: 退款, 原路退回, 1-3个工作日
+  - `tool_called`: query_subscriber
+  - `contains`: 人工审核
+  - `not_contains`: 已退款
 
-### TC-004: 标准退订-未指定业务时列出选项
+### TC-004: 询问退订生效时间-进入退订流程
 
 - **Priority**: P2
-- **Requirements**: REQ-009, REQ-010
+- **Requirements**: REQ-003
 - **Turns**:
-  1. "我想退订一些增值服务"
+  1. "退订视频会员后什么时候生效？这个月的钱还能退吗？"
 - **Assertions**:
-  - `tool_called`: get_cancel_context
-  - `response_mentions_any`: 以下, 列表, 可选
   - `contains`: 次月1日生效
+  - `contains`: 本月仍收费
+
+### TC-005: 标准退订-未明确业务时列出已订列表
+
+- **Priority**: P2
+- **Requirements**: REQ-006
+- **Turns**:
+  1. "我想退订一个增值服务"
+- **Assertions**:
+  - `tool_called`: query_subscriber
+  - `response_mentions_any`: 腾讯视频, 爱奇艺, 流量包, 短信包
 
 ## Edge Case Tests
 
-### TC-009: 误订超24小时-无法退款但可退订
+### TC-008: 未知扣费-用户要求直接退订但系统先解释
+
+- **Priority**: P2
+- **Requirements**: REQ-008, REQ-015
+- **Turns**:
+  1. "那个不认识的扣费直接给我退掉！"
+- **Assertions**:
+  - `contains`: 先为您说明这笔费用的来源
+  - `tool_not_called`: cancel_service
+
+### TC-009: 误订超24小时-无法退款但可次月生效
+
+- **Priority**: P2
+- **Requirements**: REQ-009, REQ-016
+- **Turns**:
+  1. "三天前误订的视频会员能退款吗？"
+- **Assertions**:
+  - `contains`: 本月费用不退
+  - `contains`: 需人工审核
+
+## Error Tests
+
+### TC-011: 用户否认订购-升级核查不直接退订
 
 - **Priority**: P2
 - **Requirements**: REQ-012
 - **Turns**:
-  1. "三天前不小心订了个短信包，现在能退钱吗？"
-- **Assertions**:
-  - `contains`: 本月费用不退
-  - `contains`: 次月生效
-
-## Error Tests
-
-### TC-007: 请求退订主套餐-引导至营业厅
-
-- **Priority**: P2
-- **Requirements**: REQ-002, REQ-015
-- **Turns**:
-  1. "我要退订我的主套餐"
+  1. "我没订过这个视频会员，为什么在扣费？"
 - **Assertions**:
   - `tool_not_called`: cancel_service
-  - `response_mentions_any`: 营业厅, 身份证, 线下办理
+  - `response_mentions_any`: 升级核查, 安全团队
 
-### TC-008: 超出范围请求-App故障转技能
+### TC-012: 主套餐退订请求-引导至营业厅或套餐查询
+
+- **Priority**: P2
+- **Requirements**: REQ-001, REQ-010
+- **Turns**:
+  1. "我想退订我的主套餐"
+- **Assertions**:
+  - `tool_not_called`: cancel_service
+  - `response_mentions_any`: 营业厅, 套餐查询
+
+### TC-013: 工具调用失败-提示重试或拨打10086
 
 - **Priority**: P3
-- **Requirements**: REQ-002
-- **Turns**:
-  1. "你们App打不开，一直闪退"
-- **Assertions**:
-  - `tool_not_called`: get_cancel_context
-  - `response_mentions_any`: App, 技术, 故障
-
-### TC-010: 否认订购-升级人工核查
-
-- **Priority**: P2
 - **Requirements**: REQ-013
 - **Turns**:
-  1. "我没订过这个视频会员，为什么扣我钱？"
-- **Assertions**:
-  - `tool_not_called`: cancel_service
-  - `response_mentions_any`: 人工, 核查, 10086
-
-### TC-011: 工具调用失败-提示重试或拨打10086
-
-- **Priority**: P2
-- **Requirements**: REQ-016
-- **Turns**:
-  1. "帮我退订流量包"
+  1. "退订流量包"
 - **Assertions**:
   - `contains`: 稍后重试
   - `contains`: 10086
-- **Notes**: 模拟 get_cancel_context 或 cancel_service 工具异常
+- **Notes**: 模拟工具调用失败场景
 
 ## State Tests
 
-### TC-005: 多业务退订-逐个确认并反馈
+### TC-006: 退订前确认影响-用户确认后执行
 
 - **Priority**: P1
-- **Requirements**: REQ-010, REQ-014, REQ-018
+- **Requirements**: REQ-007, REQ-015
 - **Turns**:
-  1. "帮我退订腾讯视频和爱奇艺会员"
-  2. "先退腾讯视频吧"
+  1. "退订爱奇艺会员"
+  2. "好的，我知道了，确认退订"
+- **Assertions**:
+  - `tool_called`: cancel_service
+  - `contains`: 不可撤回
+
+### TC-007: 退订前确认影响-用户拒绝后终止
+
+- **Priority**: P2
+- **Requirements**: REQ-007, REQ-015
+- **Turns**:
+  1. "退订游戏加速包"
+  2. "算了，我不退了"
+- **Assertions**:
+  - `tool_not_called`: cancel_service
+  - `contains`: 尊重您的选择
+
+### TC-010: 多业务退订-逐个处理并等待确认
+
+- **Priority**: P2
+- **Requirements**: REQ-011
+- **Turns**:
+  1. "我要退订腾讯视频和爱奇艺会员"
+  2. "先退腾讯视频"
   3. "好的，再退爱奇艺"
 - **Assertions**:
   - `tool_called`: cancel_service
-  - `response_mentions_all`: 腾讯视频, 爱奇艺, 次月1日生效
+  - `response_mentions_all`: 腾讯视频, 爱奇艺
 
-### TC-006: 用户中途取消退订
+### TC-014: 用户要求转人工-引导拨打10086
 
 - **Priority**: P2
-- **Requirements**: REQ-017
+- **Requirements**: REQ-014
 - **Turns**:
-  1. "我想退订视频会员"
-  2. "算了，不用退了"
+  1. "我要转人工客服"
 - **Assertions**:
-  - `tool_not_called`: cancel_service
-  - `response_mentions_any`: 好的, 再见, 随时
+  - `response_mentions_any`: 10086, 人工客服
 
 ## Coverage Matrix
 
 | Requirement | Covered By |
 |-------------|------------|
-| REQ-001 | TC-001, TC-002, TC-003 |
-| REQ-002 | TC-007, TC-008 |
-| REQ-003 | TC-001 |
-| REQ-004 | TC-002 |
-| REQ-005 | TC-003 |
-| REQ-006 | TC-001, TC-002, TC-003 |
-| REQ-007 | TC-001, TC-002, TC-003 |
-| REQ-008 | TC-001, TC-002, TC-003 |
-| REQ-009 | TC-004 |
-| REQ-010 | TC-001, TC-004, TC-005 |
-| REQ-011 | TC-002 |
-| REQ-012 | TC-003, TC-009 |
-| REQ-013 | TC-010 |
-| REQ-014 | TC-005 |
-| REQ-015 | TC-007 |
-| REQ-016 | TC-011 |
-| REQ-017 | TC-006 |
-| REQ-018 | TC-001, TC-005 |
+| REQ-001 | TC-001, TC-012 |
+| REQ-002 | TC-001, TC-002, TC-003 |
+| REQ-003 | TC-004 |
+| REQ-004 | TC-001, TC-002, TC-003 |
+| REQ-005 | TC-001, TC-002, TC-003 |
+| REQ-006 | TC-005 |
+| REQ-007 | TC-006, TC-007 |
+| REQ-008 | TC-002, TC-008 |
+| REQ-009 | TC-003, TC-009 |
+| REQ-010 | TC-012 |
+| REQ-011 | TC-010 |
+| REQ-012 | TC-011 |
+| REQ-013 | TC-013 |
+| REQ-014 | TC-014 |
+| REQ-015 | TC-006, TC-007, TC-008 |
+| REQ-016 | TC-003, TC-009 |

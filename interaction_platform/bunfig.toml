@@ -1,0 +1,4 @@
+[test]
+# Run test files sequentially — each file creates its own SQLite DB
+# but they share the db.ts module singleton in the same process.
+concurrency = 1

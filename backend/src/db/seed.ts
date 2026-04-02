@@ -16,7 +16,7 @@ import { fileURLToPath } from 'url';
 // ── Business DB（独立 SQLite 文件，供 mock_apis 使用）───────────────────────
 const businessDbPath =
   process.env.BUSINESS_DB_PATH ??
-  fileURLToPath(new URL('../../../data/business.db', import.meta.url));
+  fileURLToPath(new URL('../../../mock_apis/data/business.db', import.meta.url));
 const businessSqlite = new Database(businessDbPath, { create: true });
 businessSqlite.exec('PRAGMA journal_mode = WAL');
 businessSqlite.exec('PRAGMA busy_timeout = 5000');
@@ -25,7 +25,7 @@ const businessDb = drizzle(businessSqlite);
 // ── KM DB（km_service 独占：MCP tools/servers, skill registry/versions 等）──
 const kmDbPath =
   process.env.SQLITE_PATH ??
-  fileURLToPath(new URL('../../../data/km.db', import.meta.url));
+  fileURLToPath(new URL('../../../km_service/data/km.db', import.meta.url));
 const kmSqlite = new Database(kmDbPath, { create: true });
 kmSqlite.exec('PRAGMA journal_mode = WAL');
 kmSqlite.exec('PRAGMA busy_timeout = 5000');

@@ -29,7 +29,7 @@ const SOURCE_SYSTEM = 'business_db';
 // 打开 business.db（只读）
 const businessDbPath =
   process.env.BUSINESS_DB_PATH ??
-  fileURLToPath(new URL('../../data/business.db', import.meta.url));
+  fileURLToPath(new URL('../../mock_apis/data/business.db', import.meta.url));
 
 const businessDb = new Database(businessDbPath, { readonly: true });
 

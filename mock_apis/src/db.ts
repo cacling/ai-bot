@@ -7,7 +7,7 @@ import * as businessSchema from "@ai-bot/shared-db/schema/business";
 
 const dbUrl = process.env.BUSINESS_DB_PATH
   ? (process.env.BUSINESS_DB_PATH.startsWith("file:") ? process.env.BUSINESS_DB_PATH : `file:${process.env.BUSINESS_DB_PATH}`)
-  : new URL("../../data/business.db", import.meta.url).href;
+  : new URL("../data/business.db", import.meta.url).href;
 
 const client = createClient({ url: dbUrl });
 await client.execute('PRAGMA busy_timeout = 5000');

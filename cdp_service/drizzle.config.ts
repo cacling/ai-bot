@@ -5,6 +5,6 @@ export default defineConfig({
   out: './drizzle',
   dialect: 'sqlite',
   dbCredentials: {
-    url: process.env.CDP_DB_PATH ?? '../data/cdp.db',
+    url: process.env.CDP_DB_PATH ?? 'data/cdp.db',
   },
 });
