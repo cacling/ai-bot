@@ -35,7 +35,6 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/componen
 import { MermaidRenderer } from '../shared/MermaidRenderer';
 import { ToolCallPlanPanel } from './components/ToolCallPlanPanel';
 import { VisionTaskCard } from './components/VisionTaskCard';
-import { PipelinePanel, type PipelineStage } from './components/PipelinePanel';
 import { SkillDiagramWorkbench } from './components/SkillDiagramWorkbench';
 import { SkillDiagramPanel } from './components/SkillDiagramPanel';
 import { TestCasePanel, type TestCaseEntry, type CaseResult } from './components/TestCasePanel';
@@ -411,8 +410,6 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
   }, [handleSave, selectedFile]);
 
   // ── 版本管理 ────────────────────────────────────────────────────────────────
-  const [pipelineStage, setPipelineStage] = useState<PipelineStage>('draft');
-  const [sandboxId, setSandboxId] = useState<string | null>(null);
   const [pipelineSaving, setPipelineSaving] = useState(false);
 
   interface VersionInfo { id: number; version_no: number; status: string; snapshot_path: string | null; change_description: string | null; created_at: string }
@@ -434,8 +431,6 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
     if (!activeSkill) return;
     reloadVersions();
     setViewingVersion(null);
-    setSandboxId(null);
-    setPipelineStage('draft');
     // Reset test state
     setTestingVersion(null);
     setTestMessages([]);
@@ -454,8 +449,6 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
   const selectedVersion = viewingVersion !== null
     ? versions.find(v => v.version_no === viewingVersion)
     : versions.find(v => v.status === 'published');
-  const effectiveStage: PipelineStage = selectedVersion?.status === 'published' ? 'production'
-    : pipelineStage === 'sandbox' ? 'sandbox' : 'draft';
   const isPublishedVersion = selectedVersion?.status === 'published';
 
   // Find SKILL.md node in a tree (recursive)
@@ -752,24 +745,6 @@ export function SkillManagerPage({ lang = 'zh', onOpenToolContract }: SkillManag
     return { channels, version };
   };
   const meta = parseMetaFromContent(editorContent);
-
-  const handlePublishToSandbox = useCallback(async () => {
-    // This is now handled by handleStartSandbox per-version
-  }, []);
-
-  const handlePublishDone = useCallback(() => {
-    setSandboxId(null);
-    setPipelineStage('draft');
-    reloadVersions();
-  }, [reloadVersions]);
-
-  const handleDiscardSandbox = useCallback(async () => {
-    if (!sandboxId) return;
-    if (!confirm('确定丢弃沙箱？所有测试数据将被清除，此操作不可恢复。')) return;
-    try { await fetch(`/api/sandbox/${sandboxId}`, { method: 'DELETE' }); } catch {}
-    setSandboxId(null);
-    setPipelineStage('draft');
-  }, [sandboxId]);
 
   const handleRollbackDone = useCallback(() => {
     if (selectedFile) handleSelectFile(selectedFile);

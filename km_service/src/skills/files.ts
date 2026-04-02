@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { resolve, join, relative, extname, basename, sep } from 'node:path';
+import { resolve, join, extname, basename, sep } from 'node:path';
 import { readdir, readFile, writeFile, stat, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { logger } from '../logger';
@@ -10,13 +10,22 @@ const files = new Hono();
 import { REPO_ROOT } from '../paths';
 
 // Allowed roots for file scanning — only these directories are visible to the file API
-const ALLOWED_ROOTS = [
-  resolve(REPO_ROOT, 'km_service/skills'),
-  resolve(REPO_ROOT, 'mcp_servers'),
+// Each entry: [absPath, shortAlias] — alias is the path prefix exposed to consumers
+const ALLOWED_ROOTS_MAP: Array<[string, string]> = [
+  [resolve(REPO_ROOT, 'km_service/skills'), 'skills'],
+  [resolve(REPO_ROOT, 'mcp_servers'), 'mcp_servers'],
 ];
+const ALLOWED_ROOTS = ALLOWED_ROOTS_MAP.map(([abs]) => abs);
 
-// PROJECT_ROOT = REPO_ROOT for backward compat
-const PROJECT_ROOT = REPO_ROOT;
+/** Resolve a consumer-facing path (e.g. "skills/biz-skills/...") to an absolute path */
+function resolveConsumerPath(filePath: string): string {
+  for (const [absRoot, alias] of ALLOWED_ROOTS_MAP) {
+    if (filePath === alias || filePath.startsWith(alias + '/')) {
+      return resolve(absRoot, filePath.slice(alias.length + 1) || '.');
+    }
+  }
+  return resolve(REPO_ROOT, filePath);
+}
 
 // Directories to exclude from scanning
 const EXCLUDED_DIRS = new Set([
@@ -77,7 +86,7 @@ async function scanDir(absPath: string, relPath: string): Promise<FileNode[]> {
 }
 
 function isPathSafe(filePath: string): boolean {
-  const resolved = resolve(PROJECT_ROOT, filePath);
+  const resolved = resolveConsumerPath(filePath);
   return ALLOWED_ROOTS.some(root => resolved.startsWith(root + sep) || resolved === root);
 }
 
@@ -85,11 +94,10 @@ function isPathSafe(filePath: string): boolean {
 files.get('/tree', async (c) => {
   // Scan each allowed root and present as top-level entries
   const allNodes: FileNode[] = [];
-  for (const root of ALLOWED_ROOTS) {
-    const label = relative(REPO_ROOT, root); // e.g., "km_service/skills" or "mcp_servers"
+  for (const [root, alias] of ALLOWED_ROOTS_MAP) {
     if (!existsSync(root)) continue;
-    const children = await scanDir(root, label);
-    allNodes.push({ name: basename(root), path: label, type: 'dir', children });
+    const children = await scanDir(root, alias);
+    allNodes.push({ name: basename(root), path: alias, type: 'dir', children });
   }
   const nodes = allNodes;
   const count = nodes.reduce(function count(acc: number, n: FileNode): number {
@@ -116,7 +124,7 @@ files.get('/content', async (c) => {
     return c.json({ error: '路径不合法' }, 403);
   }
 
-  const absPath = resolve(PROJECT_ROOT, filePath);
+  const absPath = resolveConsumerPath(filePath);
   const draftPath = absPath + '.draft';
   try {
     // Check for draft first
@@ -155,7 +163,7 @@ files.put('/content', requireRole('config_editor'), async (c) => {
   }
 
   // 直接写入文件，不创建版本（版本由用户在版本列表手动创建）
-  const absPath = resolve(PROJECT_ROOT, filePath);
+  const absPath = resolveConsumerPath(filePath);
   try {
     await writeFile(absPath, content, 'utf-8');
     logger.info('files', 'write_ok', { path: filePath, bytes: Buffer.byteLength(content) });
@@ -174,7 +182,7 @@ files.put('/draft', async (c) => {
   if (!filePath || content === undefined) return c.json({ error: 'path 和 content 不能为空' }, 400);
   if (!isPathSafe(filePath)) return c.json({ error: '路径不合法' }, 403);
 
-  const draftPath = resolve(PROJECT_ROOT, filePath) + '.draft';
+  const draftPath = resolveConsumerPath(filePath) + '.draft';
   try {
     await writeFile(draftPath, content, 'utf-8');
     return c.json({ ok: true });
@@ -189,7 +197,7 @@ files.delete('/draft', async (c) => {
   if (!filePath) return c.json({ error: 'path 参数缺失' }, 400);
   if (!isPathSafe(filePath)) return c.json({ error: '路径不合法' }, 403);
 
-  const draftPath = resolve(PROJECT_ROOT, filePath) + '.draft';
+  const draftPath = resolveConsumerPath(filePath) + '.draft';
   try {
     if (existsSync(draftPath)) await unlink(draftPath);
     return c.json({ ok: true });
@@ -206,7 +214,7 @@ files.post('/create-file', async (c) => {
   if (!isPathSafe(filePath)) return c.json({ error: '路径不合法' }, 403);
   if (!/^[\w\-./]+$/.test(filePath)) return c.json({ error: '文件名包含非法字符' }, 400);
 
-  const absPath = resolve(PROJECT_ROOT, filePath);
+  const absPath = resolveConsumerPath(filePath);
   if (existsSync(absPath)) return c.json({ error: '文件已存在' }, 409);
 
   try {
@@ -228,7 +236,7 @@ files.post('/create-folder', async (c) => {
   if (!isPathSafe(filePath)) return c.json({ error: '路径不合法' }, 403);
   if (!/^[\w\-./]+$/.test(filePath)) return c.json({ error: '名称包含非法字符' }, 400);
 
-  const absPath = resolve(PROJECT_ROOT, filePath);
+  const absPath = resolveConsumerPath(filePath);
   if (existsSync(absPath)) return c.json({ error: '文件夹已存在' }, 409);
 
   try {

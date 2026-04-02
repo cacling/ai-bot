@@ -1,7 +1,7 @@
 /**
  * assertion-evaluator.ts — 共享断言引擎
  *
- * 从 sandbox.ts 提取，供 sandbox 回归测试 和 version-based testcase runner 共用。
+ * 供 version-based testcase runner 使用。
  */
 
 // ── 类型 ─────────────────────────────────────────────────────────────────────

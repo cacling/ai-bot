@@ -109,13 +109,15 @@ app.post('/api/test/run-agent', async (c) => {
 });
 
 // ── KM Service Proxy ─────────────────────────────────────────────────────────
-// Routes for KM, MCP, Skills, Sandbox, etc. are served by km_service (port 18010).
+// Routes for KM, MCP, Skills, etc. are served by km_service (port 18010).
 // In production, the frontend proxy sends these directly to km_service.
 // This reverse proxy is a convenience for dev/test when only the backend is running.
 import { mountKmProxy } from './services/km-proxy';
 import { mountWorkOrderProxy } from './services/work-order-proxy';
+import { mountCdpProxy } from './services/cdp-proxy';
 mountKmProxy(app);
 mountWorkOrderProxy(app);
+mountCdpProxy(app);
 
 // Mount voice WebSocket route: GET /ws/voice
 app.route('/', voiceRoutes);

@@ -186,7 +186,7 @@ const outbound = new Hono();
 
 outbound.get(
   '/ws/outbound',
-  upgradeWebSocket((c) => {
+  upgradeWebSocket(async (c) => {
     const userPhone  = c.req.query('phone') ?? DEFAULT_PHONE;
     const taskParam  = (c.req.query('task') ?? 'marketing') as 'collection' | 'marketing';
     const lang       = (c.req.query('lang') ?? 'zh') as 'zh' | 'en';

@@ -10,7 +10,7 @@ const KM_SERVICE_URL = process.env.KM_SERVICE_URL ?? `http://localhost:${process
 
 export const KM_PROXY_PREFIXES = [
   '/api/km/', '/api/mcp/', '/api/files/', '/api/skills/', '/api/skill-versions/',
-  '/api/sandbox/', '/api/canary/', '/api/change-requests/',
+  '/api/canary/', '/api/change-requests/',
   '/api/test-cases/', '/api/skill-creator/',
 ];
 

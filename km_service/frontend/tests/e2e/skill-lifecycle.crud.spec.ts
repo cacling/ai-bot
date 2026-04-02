@@ -1,7 +1,7 @@
 /**
  * 07-skill-lifecycle.spec.ts — 技能全生命周期 E2E 测试
  *
- * 验证：创建技能 → 沙盒验证 → 发布到生产 → 在线客服中生效
+ * 验证：创建技能 → 发布到生产 → 在线客服中生效
  *
  * 前置条件：全栈服务已启动（./start.sh），frontend(:5173) + backend(:18472) + km_service(:18010)
  */
@@ -145,81 +145,7 @@ test.describe('技能创建', () => {
   });
 });
 
-// ── 2. 沙盒验证测试 ──────────────────────────────────────────────────────────
-
-test.describe('沙盒验证', () => {
-  // sandboxId must persist across tests in this serial describe
-  let sandboxId = '';
-
-  test('TC-LIFECYCLE-06 创建沙盒', async ({ request }) => {
-    const res = await request.post(`${BASE}/api/sandbox/create`, {
-      data: {
-        skill_path: `skills/biz-skills/${SKILL_NAME}/SKILL.md`,
-      },
-    });
-    expect(res.ok()).toBeTruthy();
-    const body = await res.json();
-    expect(body.ok).toBe(true);
-    expect(body.sandbox_id).toBeDefined();
-    sandboxId = body.sandbox_id;
-    // Persist for subsequent tests via a temp file
-    const fs = await import('node:fs');
-    fs.writeFileSync('/tmp/e2e-sandbox-id.txt', sandboxId);
-  });
-
-  test('TC-LIFECYCLE-07 沙盒静态验证返回结果', async ({ request }) => {
-    const fs = await import('node:fs');
-    if (!sandboxId) sandboxId = fs.readFileSync('/tmp/e2e-sandbox-id.txt', 'utf-8').trim();
-    const res = await request.post(`${BASE}/api/sandbox/${sandboxId}/validate`);
-    expect(res.ok()).toBeTruthy();
-    const body = await res.json();
-    // validate API returns {valid, issues} — issues may exist for stateDiagram
-    expect('valid' in body).toBe(true);
-    expect(Array.isArray(body.issues)).toBe(true);
-  });
-
-  test('TC-LIFECYCLE-08 沙盒对话测试', async ({ request }) => {
-    test.setTimeout(120_000);
-    const fs = await import('node:fs');
-    if (!sandboxId) sandboxId = fs.readFileSync('/tmp/e2e-sandbox-id.txt', 'utf-8').trim();
-    const res = await request.post(`${BASE}/api/sandbox/${sandboxId}/test`, {
-      data: {
-        message: '帮我做个E2E测试验证',
-        phone: '13800000001',
-      },
-    });
-    expect(res.ok()).toBeTruthy();
-    const body = await res.json();
-    expect(body.text).toBeDefined();
-  });
-
-  test('TC-LIFECYCLE-09 沙盒回归测试', async ({ request }) => {
-    test.setTimeout(120_000);
-    const fs = await import('node:fs');
-    if (!sandboxId) sandboxId = fs.readFileSync('/tmp/e2e-sandbox-id.txt', 'utf-8').trim();
-    const res = await request.post(`${BASE}/api/sandbox/${sandboxId}/regression`);
-    expect(res.ok()).toBeTruthy();
-    const body = await res.json();
-    expect(body.total).toBe(1);
-    expect(body.results).toHaveLength(1);
-    expect(body.results[0].assertions).toBeDefined();
-    expect(body.results[0].assertions.length).toBe(2);
-  });
-
-  test('TC-LIFECYCLE-10 沙盒发布到生产', async ({ request }) => {
-    const fs = await import('node:fs');
-    if (!sandboxId) sandboxId = fs.readFileSync('/tmp/e2e-sandbox-id.txt', 'utf-8').trim();
-    const res = await request.post(`${BASE}/api/sandbox/${sandboxId}/publish`, {
-      headers: { 'x-user-role': 'flow_manager' },
-    });
-    expect(res.ok()).toBeTruthy();
-    const body = await res.json();
-    expect(body.ok).toBe(true);
-    expect(body.versionId).toBeDefined();
-  });
-});
-
-// ── 3. 在线客服生效验证 ──────────────────────────────────────────────────────
+// ── 2. 在线客服生效验证 ──────────────────────────────────────────────────────
 
 test.describe('在线客服生效', () => {
   test('TC-LIFECYCLE-11 新技能在 skill 列表或文件系统中可见', async ({ request }) => {

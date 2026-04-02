@@ -37,7 +37,6 @@ export default defineConfig({
       '/api/files': 'http://localhost:18010',
       '/api/skills': 'http://localhost:18010',
       '/api/skill-versions': 'http://localhost:18010',
-      '/api/sandbox': 'http://localhost:18010',
       '/api/canary': 'http://localhost:18010',
       '/api/change-requests': 'http://localhost:18010',
       '/api/test-cases': 'http://localhost:18010',

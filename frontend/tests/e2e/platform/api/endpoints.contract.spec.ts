@@ -6,6 +6,8 @@
  */
 import { test, expect } from '@playwright/test';
 
+const BACKEND = 'http://127.0.0.1:18472';
+
 // ── 辅助类型 ─────────────────────────────────────────────────────────────────
 interface FileNode {
   name: string;
@@ -285,7 +287,8 @@ test.describe('DELETE /api/sessions/:id', () => {
 
 test.describe('GET /health', () => {
   test('TC-API-27 返回 200 和 status:ok', async ({ request }) => {
-    const res = await request.get('/health');
+    // /health 不经过 Vite 代理，直接请求后端
+    const res = await request.get(`${BACKEND}/health`);
     expect(res.ok()).toBeTruthy();
     const body = await res.json() as { status: string };
     expect(body.status).toBe('ok');

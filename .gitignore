@@ -26,7 +26,6 @@ build/
 *.tsbuildinfo
 
 # 测试产生的临时文件
-km_service/skills/.sandbox/
 km_service/skills/biz-skills/test-skill-*/
 
 # 测试产物

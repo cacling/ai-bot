@@ -5,7 +5,6 @@
 #   npx promptfoo eval -c evals/promptfooconfig.yaml --no-cache        # 不用缓存
 #   npx promptfoo eval -c evals/config-multi-turn.yaml                 # 多轮对话
 #   npx promptfoo eval -c evals/config-sop-guard.yaml                  # SOP 约束
-#   npx promptfoo eval -c evals/config-sandbox.yaml                    # 沙箱验证
 #   npx promptfoo view                                                  # 查看结果
 #
 # 依赖: 服务已启动 (./start.sh)

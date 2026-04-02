@@ -744,7 +744,7 @@ export async function runAgent(
       ];
 
       const runProgressTracking = async () => {
-        // 优先从技能缓存读（标准目录），sandbox 场景回退到文件读取
+        // 优先从技能缓存读（标准目录），overrideSkillsDir 场景回退到文件读取
         let rawMermaid = overrideSkillsDir ? null : getSkillMermaid(progressSkill);
         if (!rawMermaid) {
           const skillPath = resolve(effectiveSkillsDir, progressSkill, 'SKILL.md');
