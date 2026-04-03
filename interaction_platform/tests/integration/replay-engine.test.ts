@@ -6,7 +6,11 @@ import { initTestDb } from '../helpers/test-db';
 
 const testDb = initTestDb('replay');
 
-beforeAll(async () => { await testDb.pushSchema(); });
+beforeAll(async () => {
+  await testDb.pushSchema();
+  const { loadAllPlugins } = await import('../../src/plugins/loader');
+  await loadAllPlugins();
+});
 afterAll(() => testDb.cleanup());
 
 const { replayRouting, batchReplay } = await import('../../src/services/replay-engine');

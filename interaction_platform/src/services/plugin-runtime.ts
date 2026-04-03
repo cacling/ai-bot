@@ -52,6 +52,9 @@ export interface InteractionSnapshot {
   priority: number;
   customer_party_id?: string | null;
   handoff_summary?: string | null;
+  intent_code?: string;
+  wait_seconds?: number;
+  queue_backlog?: number;
 }
 
 export interface QueueSelectorResult {
@@ -92,10 +95,10 @@ export interface ResolvedBinding {
  * Built-in plugin handlers, keyed by handler_module name.
  * External plugins would load from file system (future).
  */
-type CandidateScorerFn = (candidates: AgentCandidate[], interaction: InteractionSnapshot, config: Record<string, unknown>) => Promise<ScoredCandidate[]>;
-type QueueSelectorFn = (interaction: InteractionSnapshot, config: Record<string, unknown>) => Promise<QueueSelectorResult>;
-type OfferStrategyFn = (interaction: InteractionSnapshot, candidates: AgentCandidate[], config: Record<string, unknown>) => Promise<OfferStrategyResult>;
-type OverflowPolicyFn = (interaction: InteractionSnapshot, config: Record<string, unknown>) => Promise<OverflowPolicyResult>;
+export type CandidateScorerFn = (candidates: AgentCandidate[], interaction: InteractionSnapshot, config: Record<string, unknown>) => Promise<ScoredCandidate[]>;
+export type QueueSelectorFn = (interaction: InteractionSnapshot, config: Record<string, unknown>) => Promise<QueueSelectorResult>;
+export type OfferStrategyFn = (interaction: InteractionSnapshot, candidates: AgentCandidate[], config: Record<string, unknown>) => Promise<OfferStrategyResult>;
+export type OverflowPolicyFn = (interaction: InteractionSnapshot, config: Record<string, unknown>) => Promise<OverflowPolicyResult>;
 
 const candidateScorerHandlers = new Map<string, CandidateScorerFn>();
 const queueSelectorHandlers = new Map<string, QueueSelectorFn>();
@@ -121,42 +124,6 @@ export function registerOfferStrategy(name: string, handler: OfferStrategyFn) {
 export function registerOverflowPolicy(name: string, handler: OverflowPolicyFn) {
   overflowPolicyHandlers.set(name, handler);
 }
-
-// ── Built-in Plugins ──────────────────────────────────────────────────────
-
-/** Core least-loaded scorer (default fallback) */
-registerCandidateScorer('core_least_loaded', async (candidates) => {
-  return candidates.map((c) => ({
-    ...c,
-    score: c.available_slots,
-    reason: `available_slots=${c.available_slots}`,
-  })).sort((a, b) => b.score - a.score);
-});
-
-/** VIP priority scorer: boosts agents with fewer active sessions */
-registerCandidateScorer('vip_priority_scorer', async (candidates, interaction, config) => {
-  const vipBoost = (config.vip_boost as number) ?? 10;
-  const isVip = interaction.priority <= 20;
-  return candidates.map((c) => ({
-    ...c,
-    score: c.available_slots + (isVip ? vipBoost : 0),
-    reason: isVip ? `VIP boost +${vipBoost}` : `standard`,
-  })).sort((a, b) => b.score - a.score);
-});
-
-/** Skill-based queue selector: routes by interaction work_model */
-registerQueueSelector('skill_based_selector', async (interaction) => {
-  const mapping: Record<string, string> = {
-    live_voice: 'voice_queue',
-    live_chat: 'default_chat',
-    async_thread: 'async_queue',
-    async_public_engagement: 'social_queue',
-  };
-  return {
-    queue_code: mapping[interaction.work_model] ?? 'default_chat',
-    reason: `Routed by work_model=${interaction.work_model}`,
-  };
-});
 
 // ── Binding Resolution ────────────────────────────────────────────────────
 
@@ -291,28 +258,36 @@ export async function executeCandidateScorers(
     }
   }
 
-  // Fallback to core least-loaded
+  // Fallback to core least-loaded (or inline fallback if handler not yet registered)
   if (!primaryResult) {
-    const coreFn = candidateScorerHandlers.get('core_least_loaded')!;
-    primaryResult = await coreFn(candidates, interaction, {});
+    const coreFn = candidateScorerHandlers.get('core_least_loaded');
+    if (coreFn) {
+      primaryResult = await coreFn(candidates, interaction, {});
+    } else {
+      primaryResult = candidates.map((c) => ({
+        ...c,
+        score: c.available_slots,
+        reason: `available_slots=${c.available_slots} (inline fallback)`,
+      })).sort((a, b) => b.score - a.score);
+    }
   }
 
   return { scored: primaryResult, shadow_results: shadowResults };
 }
 
 /**
- * Execute queue_selector plugins. Returns selected queue_code.
+ * Execute queue_selector plugins. Returns selected queue_code + shadow results.
  * Falls back to interaction's existing queue_code if no plugins match.
  */
 export async function executeQueueSelector(
   currentQueueCode: string,
   interaction: InteractionSnapshot,
-): Promise<QueueSelectorResult> {
+): Promise<{ result: QueueSelectorResult; shadow_results: Array<{ plugin: string; result: QueueSelectorResult }> }> {
   const bindings = await resolveBindings(currentQueueCode, 'queue_selector');
+  const shadowResults: Array<{ plugin: string; result: QueueSelectorResult }> = [];
+  let primaryResult: QueueSelectorResult | null = null;
 
   for (const binding of bindings) {
-    if (binding.shadow_mode) continue; // skip shadow for queue selection
-
     const handler = queueSelectorHandlers.get(binding.handler_module);
     if (!handler) continue;
 
@@ -323,13 +298,21 @@ export async function executeQueueSelector(
         binding.timeout_ms,
       );
       await logExecution(interaction.interaction_id, binding, interaction, result, Date.now() - start, 'success');
-      return result;
+
+      if (binding.shadow_mode) {
+        shadowResults.push({ plugin: binding.plugin_name, result });
+      } else if (!primaryResult) {
+        primaryResult = result;
+      }
     } catch (err) {
       await logExecution(interaction.interaction_id, binding, interaction, null, Date.now() - start, err instanceof Error && err.message === 'timeout' ? 'timeout' : 'error', String(err));
     }
   }
 
-  return { queue_code: currentQueueCode, reason: 'No queue selector plugin, using default' };
+  return {
+    result: primaryResult ?? { queue_code: currentQueueCode, reason: 'No queue selector plugin, using default' },
+    shadow_results: shadowResults,
+  };
 }
 
 /**
@@ -366,18 +349,18 @@ export async function executeOfferStrategy(
 }
 
 /**
- * Execute overflow_policy plugins. Returns overflow action.
+ * Execute overflow_policy plugins. Returns overflow action + shadow results.
  * Falls back to 'wait'.
  */
 export async function executeOverflowPolicy(
   queueCode: string,
   interaction: InteractionSnapshot,
-): Promise<OverflowPolicyResult> {
+): Promise<{ result: OverflowPolicyResult; shadow_results: Array<{ plugin: string; result: OverflowPolicyResult }> }> {
   const bindings = await resolveBindings(queueCode, 'overflow_policy');
+  const shadowResults: Array<{ plugin: string; result: OverflowPolicyResult }> = [];
+  let primaryResult: OverflowPolicyResult | null = null;
 
   for (const binding of bindings) {
-    if (binding.shadow_mode) continue;
-
     const handler = overflowPolicyHandlers.get(binding.handler_module);
     if (!handler) continue;
 
@@ -388,11 +371,19 @@ export async function executeOverflowPolicy(
         binding.timeout_ms,
       );
       await logExecution(interaction.interaction_id, binding, interaction, result, Date.now() - start, 'success');
-      return result;
+
+      if (binding.shadow_mode) {
+        shadowResults.push({ plugin: binding.plugin_name, result });
+      } else if (!primaryResult) {
+        primaryResult = result;
+      }
     } catch (err) {
       await logExecution(interaction.interaction_id, binding, null, null, Date.now() - start, err instanceof Error && err.message === 'timeout' ? 'timeout' : 'error', String(err));
     }
   }
 
-  return { action: 'wait', reason: 'No overflow policy plugin, using default wait' };
+  return {
+    result: primaryResult ?? { action: 'wait', reason: 'No overflow policy plugin, using default wait' },
+    shadow_results: shadowResults,
+  };
 }

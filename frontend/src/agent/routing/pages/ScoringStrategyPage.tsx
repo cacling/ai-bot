@@ -80,6 +80,15 @@ export function ScoringStrategyPage() {
     fetchLogs(p.plugin_id);
   }
 
+  async function selectPluginById(pluginId: string) {
+    const cached = scorerPlugins.find((p) => p.plugin_id === pluginId);
+    if (cached) { selectPlugin(cached); return; }
+    try {
+      const res = await fetch(`${IX_API}/api/plugins/catalog/${pluginId}`).then((r) => r.json());
+      if (res.plugin_id) selectPlugin(res as Plugin);
+    } catch { /* ignore */ }
+  }
+
   async function toggleShadow(b: Binding) {
     await fetch(`${IX_API}/api/plugins/bindings/${b.binding_id}`, {
       method: 'PUT',
@@ -107,7 +116,7 @@ export function ScoringStrategyPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{zh ? '打分策略管理' : 'Scoring Strategy'}</h2>
         <div className="flex items-center gap-3">
-          <Select value={selectedQueue} onValueChange={setSelectedQueue}>
+          <Select value={selectedQueue} onValueChange={(v) => v && setSelectedQueue(v)}>
             <SelectTrigger className="w-48 h-8 text-xs">
               <SelectValue placeholder={zh ? '选择队列' : 'Select queue'} />
             </SelectTrigger>
@@ -123,11 +132,47 @@ export function ScoringStrategyPage() {
         </div>
       </div>
 
+      {/* ── Row 1: Scorer Plugin Catalog (overview) ── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">{zh ? '评分插件目录' : 'Scorer Plugin Catalog'}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">{zh ? '名称' : 'Name'}</TableHead>
+                <TableHead className="text-xs">Handler</TableHead>
+                <TableHead className="text-xs">Timeout</TableHead>
+                <TableHead className="text-xs">Fallback</TableHead>
+                <TableHead className="text-xs">{zh ? '状态' : 'Status'}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {scorerPlugins.map((p) => (
+                <TableRow key={p.plugin_id} className={`${selectedPlugin?.plugin_id === p.plugin_id ? 'bg-muted' : ''}`}>
+                  <TableCell className="text-xs">
+                    <Button variant="link" size="sm" className="h-auto p-0 text-xs font-medium" onClick={() => selectPlugin(p)}>
+                      {p.display_name_zh}
+                    </Button>
+                  </TableCell>
+                  <TableCell className="text-xs font-mono">{p.handler_module}</TableCell>
+                  <TableCell className="text-xs">{p.timeout_ms}ms</TableCell>
+                  <TableCell className="text-xs">{p.fallback_behavior}</TableCell>
+                  <TableCell><Badge variant={p.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">{p.status}</Badge></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* ── Row 2: Bindings (1/3) + Detail & Logs (2/3) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Bindings list */}
         <Card className="lg:col-span-1">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">{zh ? '评分插件绑定' : 'Scorer Bindings'}</CardTitle>
+            <CardTitle className="text-sm">{zh ? '队列绑定' : 'Queue Bindings'}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -152,10 +197,13 @@ export function ScoringStrategyPage() {
                   return (
                     <TableRow
                       key={b.binding_id}
-                      className={`cursor-pointer ${selectedPlugin?.plugin_id === b.plugin_id ? 'bg-muted' : ''} ${!b.enabled ? 'opacity-50' : ''}`}
-                      onClick={() => plugin && selectPlugin(plugin)}
+                      className={`${selectedPlugin?.plugin_id === b.plugin_id ? 'bg-muted' : ''} ${!b.enabled ? 'opacity-50' : ''}`}
                     >
-                      <TableCell className="text-xs">{plugin?.display_name_zh ?? b.plugin_id.slice(0, 8)}</TableCell>
+                      <TableCell className="text-xs">
+                        <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={() => selectPluginById(b.plugin_id)}>
+                          {plugin?.display_name_zh ?? b.plugin_id.slice(0, 8)}
+                        </Button>
+                      </TableCell>
                       <TableCell className="text-xs text-center">{b.priority_order}</TableCell>
                       <TableCell className="text-center">
                         <Checkbox checked={b.shadow_mode} onCheckedChange={() => toggleShadow(b)} />
@@ -171,96 +219,68 @@ export function ScoringStrategyPage() {
           </CardContent>
         </Card>
 
-        {/* Plugin detail */}
-        <Card className="lg:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">{zh ? '插件详情' : 'Plugin Detail'}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {selectedPlugin ? (
-              <div className="space-y-3 text-xs">
-                <div><span className="text-muted-foreground">Name:</span> <span className="font-mono">{selectedPlugin.name}</span></div>
-                <div><span className="text-muted-foreground">Handler:</span> <span className="font-mono">{selectedPlugin.handler_module}</span></div>
-                <div><span className="text-muted-foreground">Timeout:</span> {selectedPlugin.timeout_ms}ms</div>
-                <div><span className="text-muted-foreground">Fallback:</span> <Badge variant="outline" className="text-[10px]">{selectedPlugin.fallback_behavior}</Badge></div>
-                <div><span className="text-muted-foreground">Version:</span> {selectedPlugin.version}</div>
-                <div><span className="text-muted-foreground">Status:</span> <Badge variant={selectedPlugin.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">{selectedPlugin.status}</Badge></div>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">{zh ? '点击左侧绑定查看详情' : 'Click a binding to view details'}</p>
-            )}
-          </CardContent>
-        </Card>
+        {/* Plugin detail + Recent logs */}
+        <div className="lg:col-span-2 space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{zh ? '插件详情' : 'Plugin Detail'}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {selectedPlugin ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
+                  <div><span className="text-muted-foreground">Name:</span> <span className="font-mono">{selectedPlugin.name}</span></div>
+                  <div><span className="text-muted-foreground">Handler:</span> <span className="font-mono">{selectedPlugin.handler_module}</span></div>
+                  <div><span className="text-muted-foreground">Timeout:</span> {selectedPlugin.timeout_ms}ms</div>
+                  <div><span className="text-muted-foreground">Fallback:</span> <Badge variant="outline" className="text-[10px]">{selectedPlugin.fallback_behavior}</Badge></div>
+                  <div><span className="text-muted-foreground">Version:</span> {selectedPlugin.version}</div>
+                  <div><span className="text-muted-foreground">Status:</span> <Badge variant={selectedPlugin.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">{selectedPlugin.status}</Badge></div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">{zh ? '点击插件名称查看详情' : 'Click a plugin name to view details'}</p>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Recent execution logs */}
-        <Card className="lg:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">{zh ? '最近执行日志' : 'Recent Logs'}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs">Interaction</TableHead>
-                  <TableHead className="text-xs text-right">ms</TableHead>
-                  <TableHead className="text-xs">{zh ? '状态' : 'Status'}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentLogs.length === 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{zh ? '最近执行日志' : 'Recent Logs'}{selectedPlugin ? ` — ${selectedPlugin.display_name_zh}` : ''}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center text-muted-foreground text-xs py-6">
-                      {zh ? '暂无日志' : 'No logs'}
-                    </TableCell>
+                    <TableHead className="text-xs">Interaction</TableHead>
+                    <TableHead className="text-xs text-right">ms</TableHead>
+                    <TableHead className="text-xs">{zh ? '状态' : 'Status'}</TableHead>
+                    <TableHead className="text-xs">{zh ? '时间' : 'Time'}</TableHead>
                   </TableRow>
-                )}
-                {recentLogs.map((l) => (
-                  <TableRow key={l.log_id}>
-                    <TableCell className="text-xs font-mono">{l.interaction_id.slice(0, 8)}...</TableCell>
-                    <TableCell className="text-xs text-right">{l.duration_ms ?? '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant={l.status === 'success' ? 'default' : 'destructive'} className="text-[10px]">
-                        {l.shadow ? 'shadow/' : ''}{l.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {recentLogs.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground text-xs py-6">
+                        {selectedPlugin ? (zh ? '暂无执行日志' : 'No execution logs') : (zh ? '选择插件后查看日志' : 'Select a plugin to view logs')}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {recentLogs.map((l) => (
+                    <TableRow key={l.log_id}>
+                      <TableCell className="text-xs font-mono">{l.interaction_id.slice(0, 12)}...</TableCell>
+                      <TableCell className="text-xs text-right">{l.duration_ms ?? '-'}</TableCell>
+                      <TableCell>
+                        <Badge variant={l.status === 'success' ? 'default' : 'destructive'} className="text-[10px]">
+                          {l.shadow ? 'shadow/' : ''}{l.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{new Date(l.created_at).toLocaleTimeString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      {/* All scorer plugins catalog */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">{zh ? '评分插件目录' : 'Scorer Plugin Catalog'}</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs">{zh ? '名称' : 'Name'}</TableHead>
-                <TableHead className="text-xs">Handler</TableHead>
-                <TableHead className="text-xs">Timeout</TableHead>
-                <TableHead className="text-xs">Fallback</TableHead>
-                <TableHead className="text-xs">{zh ? '状态' : 'Status'}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {scorerPlugins.map((p) => (
-                <TableRow key={p.plugin_id} className="cursor-pointer" onClick={() => selectPlugin(p)}>
-                  <TableCell className="text-xs font-medium">{p.display_name_zh}</TableCell>
-                  <TableCell className="text-xs font-mono">{p.handler_module}</TableCell>
-                  <TableCell className="text-xs">{p.timeout_ms}ms</TableCell>
-                  <TableCell className="text-xs">{p.fallback_behavior}</TableCell>
-                  <TableCell><Badge variant={p.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">{p.status}</Badge></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
     </div>
   );
 }

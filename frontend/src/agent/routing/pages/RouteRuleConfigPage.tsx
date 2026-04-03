@@ -37,6 +37,10 @@ import { useAgentContext } from '../../AgentContext';
 
 const IX_API = '/ix-api';
 
+interface Plugin { plugin_id: string; name: string; display_name_zh: string; plugin_type: string; handler_module: string; timeout_ms: number; fallback_behavior: string; status: string; version: string; }
+interface Binding { binding_id: string; queue_code: string; plugin_id: string; slot: string; priority_order: number; enabled: boolean; config_override_json: string | null; shadow_mode: boolean; }
+interface LogEntry { log_id: number; interaction_id: string; plugin_id: string; slot: string; shadow: boolean; duration_ms: number | null; status: string; output_snapshot_json: string | null; created_at: string; }
+
 interface RouteRule {
   rule_id: string;
   rule_name: string;
@@ -97,6 +101,12 @@ export function RouteRuleConfigPage() {
   const [form, setForm] = useState<RuleForm>(EMPTY_FORM);
   const [loading, setLoading] = useState(false);
 
+  // ── Queue selector plugin state ──
+  const [selectorPlugins, setSelectorPlugins] = useState<Plugin[]>([]);
+  const [selectorBindings, setSelectorBindings] = useState<Binding[]>([]);
+  const [selectedSelectorPlugin, setSelectedSelectorPlugin] = useState<Plugin | null>(null);
+  const [selectorLogs, setSelectorLogs] = useState<LogEntry[]>([]);
+
   const fetchRules = useCallback(async () => {
     setLoading(true);
     try {
@@ -112,6 +122,60 @@ export function RouteRuleConfigPage() {
   }, []);
 
   useEffect(() => { fetchRules(); }, [fetchRules]);
+
+  // ── Queue selector plugin fetchers ──
+  const fetchSelectorPlugins = useCallback(async () => {
+    const res = await fetch(`${IX_API}/api/plugins/catalog?type=queue_selector`).then((r) => r.json());
+    setSelectorPlugins(res.items ?? []);
+  }, []);
+
+  const fetchSelectorBindings = useCallback(async () => {
+    const res = await fetch(`${IX_API}/api/plugins/bindings?slot=queue_selector`).then((r) => r.json());
+    setSelectorBindings(res.items ?? []);
+  }, []);
+
+  const fetchSelectorLogs = useCallback(async (pluginId: string) => {
+    const res = await fetch(`${IX_API}/api/plugins/logs?plugin_id=${pluginId}&slot=queue_selector&limit=20`).then((r) => r.json());
+    setSelectorLogs(res.items ?? []);
+  }, []);
+
+  useEffect(() => { fetchSelectorPlugins(); fetchSelectorBindings(); }, [fetchSelectorPlugins, fetchSelectorBindings]);
+
+  function selectSelectorPlugin(p: Plugin) {
+    setSelectedSelectorPlugin(p);
+    fetchSelectorLogs(p.plugin_id);
+  }
+
+  async function selectSelectorPluginById(pluginId: string) {
+    const cached = selectorPlugins.find((p) => p.plugin_id === pluginId);
+    if (cached) { selectSelectorPlugin(cached); return; }
+    try {
+      const res = await fetch(`${IX_API}/api/plugins/catalog/${pluginId}`).then((r) => r.json());
+      if (res.plugin_id) selectSelectorPlugin(res as Plugin);
+    } catch { /* ignore */ }
+  }
+
+  async function toggleSelectorShadow(b: Binding) {
+    await fetch(`${IX_API}/api/plugins/bindings/${b.binding_id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shadow_mode: !b.shadow_mode }),
+    });
+    fetchSelectorBindings();
+  }
+
+  async function toggleSelectorEnabled(b: Binding) {
+    await fetch(`${IX_API}/api/plugins/bindings/${b.binding_id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !b.enabled }),
+    });
+    fetchSelectorBindings();
+  }
+
+  function selectorPluginName(pluginId: string): string {
+    return selectorPlugins.find((p) => p.plugin_id === pluginId)?.display_name_zh ?? pluginId.slice(0, 8);
+  }
 
   function openCreate() {
     setEditingId(null);
@@ -310,7 +374,7 @@ export function RouteRuleConfigPage() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">{zh ? '规则类型' : 'Rule Type'}</Label>
-                <Select value={form.rule_type} onValueChange={(v) => setForm({ ...form, rule_type: v })}>
+                <Select value={form.rule_type} onValueChange={(v) => v && setForm({ ...form, rule_type: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="condition_match">{zh ? '条件匹配' : 'Condition Match'}</SelectItem>
@@ -323,7 +387,7 @@ export function RouteRuleConfigPage() {
 
             <div className="space-y-1.5">
               <Label className="text-xs">{zh ? '目标队列' : 'Target Queue'}</Label>
-              <Select value={form.queue_code} onValueChange={(v) => setForm({ ...form, queue_code: v })}>
+              <Select value={form.queue_code} onValueChange={(v) => v && setForm({ ...form, queue_code: v })}>
                 <SelectTrigger><SelectValue placeholder={zh ? '选择队列' : 'Select queue'} /></SelectTrigger>
                 <SelectContent>
                   {queues.map((q) => (
@@ -380,6 +444,163 @@ export function RouteRuleConfigPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Queue Selector Plugins ── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">{zh ? '队列选择插件' : 'Queue Selector Plugins'}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">{zh ? '名称' : 'Name'}</TableHead>
+                <TableHead className="text-xs">Handler</TableHead>
+                <TableHead className="text-xs">Timeout</TableHead>
+                <TableHead className="text-xs">Fallback</TableHead>
+                <TableHead className="text-xs">{zh ? '状态' : 'Status'}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {selectorPlugins.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground text-xs py-6">
+                    {zh ? '暂无队列选择插件' : 'No queue selector plugins'}
+                  </TableCell>
+                </TableRow>
+              )}
+              {selectorPlugins.map((p) => (
+                <TableRow key={p.plugin_id} className={`${selectedSelectorPlugin?.plugin_id === p.plugin_id ? 'bg-muted' : ''}`}>
+                  <TableCell className="text-xs">
+                    <Button variant="link" size="sm" className="h-auto p-0 text-xs font-medium" onClick={() => selectSelectorPlugin(p)}>
+                      {p.display_name_zh}
+                    </Button>
+                  </TableCell>
+                  <TableCell className="text-xs font-mono">{p.handler_module}</TableCell>
+                  <TableCell className="text-xs">{p.timeout_ms}ms</TableCell>
+                  <TableCell className="text-xs">{p.fallback_behavior}</TableCell>
+                  <TableCell><Badge variant={p.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">{p.status}</Badge></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* ── Selector Bindings + Detail & Logs ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Bindings list */}
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">{zh ? '选择插件绑定' : 'Selector Bindings'}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">{zh ? '插件' : 'Plugin'}</TableHead>
+                  <TableHead className="text-xs text-center">{zh ? '顺序' : 'Order'}</TableHead>
+                  <TableHead className="text-xs text-center">Shadow</TableHead>
+                  <TableHead className="text-xs text-center">{zh ? '启用' : 'On'}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectorBindings.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground text-xs py-6">
+                      {zh ? '暂无队列选择插件绑定' : 'No selector bindings'}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {selectorBindings.map((b) => {
+                  const plugin = selectorPlugins.find((p) => p.plugin_id === b.plugin_id);
+                  return (
+                    <TableRow
+                      key={b.binding_id}
+                      className={`${selectedSelectorPlugin?.plugin_id === b.plugin_id ? 'bg-muted' : ''} ${!b.enabled ? 'opacity-50' : ''}`}
+                    >
+                      <TableCell className="text-xs">
+                        <Button variant="link" size="sm" className="h-auto p-0 text-xs font-normal" onClick={() => selectSelectorPluginById(b.plugin_id)}>
+                          {plugin?.display_name_zh ?? b.plugin_id.slice(0, 8)}
+                        </Button>
+                      </TableCell>
+                      <TableCell className="text-xs text-center">{b.priority_order}</TableCell>
+                      <TableCell className="text-center">
+                        <Checkbox checked={b.shadow_mode} onCheckedChange={() => toggleSelectorShadow(b)} />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Checkbox checked={b.enabled} onCheckedChange={() => toggleSelectorEnabled(b)} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* Plugin detail + Recent logs */}
+        <div className="lg:col-span-2 space-y-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{zh ? '插件详情' : 'Plugin Detail'}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {selectedSelectorPlugin ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-xs">
+                  <div><span className="text-muted-foreground">Name:</span> <span className="font-mono">{selectedSelectorPlugin.name}</span></div>
+                  <div><span className="text-muted-foreground">Handler:</span> <span className="font-mono">{selectedSelectorPlugin.handler_module}</span></div>
+                  <div><span className="text-muted-foreground">Timeout:</span> {selectedSelectorPlugin.timeout_ms}ms</div>
+                  <div><span className="text-muted-foreground">Fallback:</span> <Badge variant="outline" className="text-[10px]">{selectedSelectorPlugin.fallback_behavior}</Badge></div>
+                  <div><span className="text-muted-foreground">Version:</span> {selectedSelectorPlugin.version}</div>
+                  <div><span className="text-muted-foreground">Status:</span> <Badge variant={selectedSelectorPlugin.status === 'active' ? 'default' : 'secondary'} className="text-[10px]">{selectedSelectorPlugin.status}</Badge></div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">{zh ? '点击插件名称查看详情' : 'Click a plugin name to view details'}</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{zh ? '最近执行日志' : 'Recent Logs'}{selectedSelectorPlugin ? ` — ${selectedSelectorPlugin.display_name_zh}` : ''}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs">Interaction</TableHead>
+                    <TableHead className="text-xs text-right">ms</TableHead>
+                    <TableHead className="text-xs">{zh ? '状态' : 'Status'}</TableHead>
+                    <TableHead className="text-xs">{zh ? '时间' : 'Time'}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectorLogs.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground text-xs py-6">
+                        {selectedSelectorPlugin ? (zh ? '暂无执行日志' : 'No execution logs') : (zh ? '选择插件后查看日志' : 'Select a plugin to view logs')}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {selectorLogs.map((l) => (
+                    <TableRow key={l.log_id}>
+                      <TableCell className="text-xs font-mono">{l.interaction_id.slice(0, 12)}...</TableCell>
+                      <TableCell className="text-xs text-right">{l.duration_ms ?? '-'}</TableCell>
+                      <TableCell>
+                        <Badge variant={l.status === 'success' ? 'default' : 'destructive'} className="text-[10px]">
+                          {l.shadow ? 'shadow/' : ''}{l.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{new Date(l.created_at).toLocaleTimeString()}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

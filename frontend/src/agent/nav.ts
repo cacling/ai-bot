@@ -25,7 +25,7 @@ export const MENU_TREE: MenuItem[] = [
     path: '/staff/operations',
     roles: ['operations'],
     children: [
-      { id: 'knowledge', label: { zh: '知识和工具库', en: 'Knowledge & Tools' }, path: '/staff/operations/knowledge' },
+      { id: 'knowledge', label: { zh: '知识与技能', en: 'Knowledge & Skills' }, path: '/staff/operations/knowledge' },
       { id: 'workorders', label: { zh: '工单管理', en: 'Work Orders' }, path: '/staff/operations/workorders' },
       { id: 'routing', label: { zh: '路由管理', en: 'Routing Management' }, path: '/staff/operations/routing' },
       { id: 'customers', label: { zh: '客户管理', en: 'Customers' }, path: '/staff/operations/customers' },
@@ -37,7 +37,7 @@ export const MENU_TREE: MenuItem[] = [
 export const BREADCRUMB_LABELS: Record<string, Record<Lang, string>> = {
   workbench: { zh: '坐席工作台', en: 'Workbench' },
   operations: { zh: '运营管理', en: 'Operations' },
-  knowledge: { zh: '知识和工具库', en: 'Knowledge & Tools' },
+  knowledge: { zh: '知识与技能', en: 'Knowledge & Skills' },
   workorders: { zh: '工单管理', en: 'Work Orders' },
   documents: { zh: '知识管理', en: 'Documents' },
   skills: { zh: '技能管理', en: 'Skills' },

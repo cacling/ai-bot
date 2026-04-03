@@ -128,7 +128,7 @@ export async function replayRouting(input: ReplayInput): Promise<ReplayResult> {
 
   // 6. Re-run queue selector (if override or testing)
   const queueCode = snapshot.queue_code ?? 'default_chat';
-  const queueSelectorResult = await executeQueueSelector(queueCode, snapshot);
+  const { result: queueSelectorResult } = await executeQueueSelector(queueCode, snapshot);
 
   // 7. Re-run candidate scorers with current plugins
   const { scored, shadow_results } = await executeCandidateScorers(

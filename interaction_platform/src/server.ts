@@ -64,6 +64,9 @@ const PORT = Number(process.env.INTERACTION_PLATFORM_PORT ?? 18022);
 
 const entryFile = process.argv[1]?.replaceAll('\\', '/');
 if (entryFile && import.meta.url.endsWith(entryFile)) {
+  const { loadAllPlugins } = await import('./plugins/loader');
+  await loadAllPlugins();
+
   const app = createApp();
   console.log(`[interaction-platform] Starting on port ${PORT}...`);
   Bun.serve({

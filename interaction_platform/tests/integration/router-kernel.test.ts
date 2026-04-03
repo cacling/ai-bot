@@ -6,7 +6,11 @@ import { initTestDb } from '../helpers/test-db';
 
 const testDb = initTestDb('router-kernel');
 
-beforeAll(async () => { await testDb.pushSchema(); });
+beforeAll(async () => {
+  await testDb.pushSchema();
+  const { loadAllPlugins } = await import('../../src/plugins/loader');
+  await loadAllPlugins();
+});
 afterAll(() => testDb.cleanup());
 
 const { routeInteraction } = await import('../../src/services/router-kernel');

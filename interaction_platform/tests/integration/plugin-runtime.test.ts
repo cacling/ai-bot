@@ -7,7 +7,11 @@ import { initTestDb } from '../helpers/test-db';
 
 const testDb = initTestDb('plugin-runtime');
 
-beforeAll(async () => { await testDb.pushSchema(); });
+beforeAll(async () => {
+  await testDb.pushSchema();
+  const { loadAllPlugins } = await import('../../src/plugins/loader');
+  await loadAllPlugins();
+});
 afterAll(() => testDb.cleanup());
 
 const {
@@ -62,19 +66,8 @@ describe('plugin-runtime', () => {
 
   describe('built-in vip_priority_scorer', () => {
     test('registers and can be resolved', async () => {
-      // Seed a plugin + binding
-      const pluginId = 'test-vip-scorer';
-      await db.insert(ixPluginCatalog).values({
-        plugin_id: pluginId,
-        name: 'vip_priority_scorer',
-        display_name_zh: 'VIP评分',
-        display_name_en: 'VIP Scorer',
-        plugin_type: 'candidate_scorer',
-        handler_module: 'vip_priority_scorer',
-        default_config_json: JSON.stringify({ vip_boost: 10 }),
-        timeout_ms: 3000,
-        fallback_behavior: 'use_core',
-      });
+      // Bind the existing loader-registered VIP scorer to a test queue
+      const pluginId = 'plugin-vip-priority'; // from loader
       await db.insert(ixPluginBindings).values({
         binding_id: 'test-binding-vip',
         queue_code: 'test_vip_queue',
@@ -93,16 +86,16 @@ describe('plugin-runtime', () => {
     test('boosts score for VIP interactions', async () => {
       const vipSnapshot = { ...SNAPSHOT, priority: 10 }; // VIP = priority <= 20
       const { scored } = await executeCandidateScorers('test_vip_queue', CANDIDATES, vipSnapshot);
-      // VIP boost of 10 should be added to all scores
+      // VIP boost should be added to all scores
       for (const c of scored) {
-        expect(c.reason).toContain('VIP');
+        expect(c.reason).toContain('vip_boost');
       }
     });
 
     test('no boost for standard interactions', async () => {
       const { scored } = await executeCandidateScorers('test_vip_queue', CANDIDATES, SNAPSHOT);
       for (const c of scored) {
-        expect(c.reason).toBe('standard');
+        expect(c.reason).not.toContain('vip_boost');
       }
     });
   });
@@ -221,22 +214,12 @@ describe('plugin-runtime', () => {
 
   describe('queue selector', () => {
     test('no plugin → returns current queue_code', async () => {
-      const result = await executeQueueSelector('default_chat', SNAPSHOT);
+      const { result } = await executeQueueSelector('default_chat', SNAPSHOT);
       expect(result.queue_code).toBe('default_chat');
     });
 
     test('skill_based_selector routes by work_model', async () => {
-      const selectorId = 'test-skill-selector';
-      await db.insert(ixPluginCatalog).values({
-        plugin_id: selectorId,
-        name: 'skill_based_selector',
-        display_name_zh: '技能选择器',
-        display_name_en: 'Skill Selector',
-        plugin_type: 'queue_selector',
-        handler_module: 'skill_based_selector',
-        timeout_ms: 2000,
-        fallback_behavior: 'use_core',
-      });
+      const selectorId = 'plugin-skill-selector'; // from loader
       await db.insert(ixPluginBindings).values({
         binding_id: 'test-binding-selector',
         queue_code: 'test_selector_queue',
@@ -248,7 +231,7 @@ describe('plugin-runtime', () => {
       });
 
       const voiceSnapshot = { ...SNAPSHOT, work_model: 'live_voice' };
-      const result = await executeQueueSelector('test_selector_queue', voiceSnapshot);
+      const { result } = await executeQueueSelector('test_selector_queue', voiceSnapshot);
       expect(result.queue_code).toBe('voice_queue');
     });
   });
@@ -262,7 +245,7 @@ describe('plugin-runtime', () => {
 
   describe('overflow policy', () => {
     test('no plugin → returns wait', async () => {
-      const result = await executeOverflowPolicy('nonexistent_queue', SNAPSHOT);
+      const { result } = await executeOverflowPolicy('nonexistent_queue', SNAPSHOT);
       expect(result.action).toBe('wait');
     });
   });

@@ -43,9 +43,12 @@ router.get('/catalog', async (c) => {
   const status = c.req.query('status');
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
 
+  const conditions = [];
+  if (pluginType) conditions.push(eq(ixPluginCatalog.plugin_type, pluginType));
+  if (status) conditions.push(eq(ixPluginCatalog.status, status));
+
   let query = db.select().from(ixPluginCatalog).$dynamic();
-  if (pluginType) query = query.where(eq(ixPluginCatalog.plugin_type, pluginType));
-  if (status) query = query.where(eq(ixPluginCatalog.status, status));
+  if (conditions.length) query = query.where(and(...conditions));
 
   const rows = await query.orderBy(desc(ixPluginCatalog.created_at)).limit(limit).all();
   return c.json({ items: rows });
@@ -159,10 +162,13 @@ router.get('/bindings', async (c) => {
   const pluginId = c.req.query('plugin_id');
   const slot = c.req.query('slot');
 
+  const conditions = [];
+  if (queueCode) conditions.push(eq(ixPluginBindings.queue_code, queueCode));
+  if (pluginId) conditions.push(eq(ixPluginBindings.plugin_id, pluginId));
+  if (slot) conditions.push(eq(ixPluginBindings.slot, slot));
+
   let query = db.select().from(ixPluginBindings).$dynamic();
-  if (queueCode) query = query.where(eq(ixPluginBindings.queue_code, queueCode));
-  if (pluginId) query = query.where(eq(ixPluginBindings.plugin_id, pluginId));
-  if (slot) query = query.where(eq(ixPluginBindings.slot, slot));
+  if (conditions.length) query = query.where(and(...conditions));
 
   const rows = await query.orderBy(ixPluginBindings.queue_code, ixPluginBindings.slot, ixPluginBindings.priority_order).all();
   return c.json({ items: rows });
@@ -244,11 +250,14 @@ router.get('/logs', async (c) => {
   const status = c.req.query('status');
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
 
+  const conditions = [];
+  if (interactionId) conditions.push(eq(ixPluginExecutionLogs.interaction_id, interactionId));
+  if (pluginId) conditions.push(eq(ixPluginExecutionLogs.plugin_id, pluginId));
+  if (slot) conditions.push(eq(ixPluginExecutionLogs.slot, slot));
+  if (status) conditions.push(eq(ixPluginExecutionLogs.status, status));
+
   let query = db.select().from(ixPluginExecutionLogs).$dynamic();
-  if (interactionId) query = query.where(eq(ixPluginExecutionLogs.interaction_id, interactionId));
-  if (pluginId) query = query.where(eq(ixPluginExecutionLogs.plugin_id, pluginId));
-  if (slot) query = query.where(eq(ixPluginExecutionLogs.slot, slot));
-  if (status) query = query.where(eq(ixPluginExecutionLogs.status, status));
+  if (conditions.length) query = query.where(and(...conditions));
 
   const rows = await query.orderBy(desc(ixPluginExecutionLogs.created_at)).limit(limit).all();
   return c.json({ items: rows });

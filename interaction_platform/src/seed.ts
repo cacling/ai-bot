@@ -449,6 +449,37 @@ async function seed() {
       enabled: false,
       shadow_mode: false,
     },
+    // Intent queue selector — shadow mode for safe rollout
+    {
+      binding_id: 'binding-intent-selector',
+      queue_code: 'default_chat',
+      plugin_id: 'plugin-intent-selector',
+      slot: 'queue_selector',
+      priority_order: 1,
+      enabled: true,
+      shadow_mode: true,
+    },
+    // SLA overflow guard — shadow mode for safe rollout
+    {
+      binding_id: 'binding-sla-overflow-fault',
+      queue_code: 'fault_chat',
+      plugin_id: 'plugin-sla-overflow',
+      slot: 'overflow_policy',
+      priority_order: 0,
+      enabled: true,
+      shadow_mode: true,
+      config_override_json: JSON.stringify({ max_wait_seconds: 120, overflow_queue: 'default_chat' }),
+    },
+    {
+      binding_id: 'binding-sla-overflow-voice',
+      queue_code: 'default_voice',
+      plugin_id: 'plugin-sla-overflow',
+      slot: 'overflow_policy',
+      priority_order: 0,
+      enabled: true,
+      shadow_mode: true,
+      config_override_json: JSON.stringify({ max_wait_seconds: 60, overflow_queue: 'default_chat' }),
+    },
   ];
 
   for (const b of extBindings) {

@@ -11,7 +11,8 @@
  *
  * Phase 5: 所有决策点支持插件化，core 逻辑作为 fallback。
  */
-import { db, ixAgentPresence, ixInteractions, ixAssignments, ixInteractionEvents, eq, and } from '../db';
+import { db, ixAgentPresence, ixInteractions, ixConversations, ixAssignments, ixInteractionEvents, eq, and, count } from '../db';
+import { pushToAgent } from '../routes/workspace-ws';
 import {
   type AgentCandidate,
   type InteractionSnapshot,
@@ -21,6 +22,15 @@ import {
   executeOverflowPolicy,
 } from './plugin-runtime';
 import { evaluateRules } from './rule-evaluator';
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+/** Extract intent code from handoff_summary. Convention: `[intent:XXX]` prefix. */
+function parseIntentCode(summary: string | null | undefined): string | undefined {
+  if (!summary) return undefined;
+  const match = summary.match(/\[intent:([^\]]+)\]/);
+  return match?.[1];
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -56,16 +66,24 @@ export async function routeInteraction(interactionId: string): Promise<RouteResu
     return { success: false, error: `Cannot route interaction in state '${interaction.state}'` };
   }
 
+  // Load conversation to get channel
+  const conversation = await db.query.ixConversations.findFirst({
+    where: eq(ixConversations.conversation_id, interaction.conversation_id),
+  });
+
   // Build interaction snapshot for plugins
   const snapshot: InteractionSnapshot = {
     interaction_id: interaction.interaction_id,
     tenant_id: interaction.tenant_id,
     conversation_id: interaction.conversation_id,
     work_model: interaction.work_model,
+    channel: conversation?.channel,
     queue_code: interaction.queue_code ?? undefined,
     priority: interaction.priority,
     customer_party_id: interaction.customer_party_id,
     handoff_summary: interaction.handoff_summary,
+    intent_code: parseIntentCode(interaction.handoff_summary),
+    wait_seconds: Math.floor((Date.now() - interaction.created_at.getTime()) / 1000),
   };
 
   // 1.5 Route rule evaluation (before plugin queue_selector)
@@ -81,7 +99,7 @@ export async function routeInteraction(interactionId: string): Promise<RouteResu
 
   // 2. Queue selection (plugin hook)
   const queueCode = ruleQueue ?? interaction.queue_code ?? 'default_chat';
-  const queueResult = await executeQueueSelector(queueCode, snapshot);
+  const { result: queueResult } = await executeQueueSelector(queueCode, snapshot);
   const resolvedQueue = queueResult.queue_code;
 
   // Update queue_code if plugin changed it
@@ -105,27 +123,38 @@ export async function routeInteraction(interactionId: string): Promise<RouteResu
     .all();
 
   const eligible: AgentCandidate[] = candidates
-    .map((a) => ({
-      agent_id: a.agent_id,
-      presence_status: a.presence_status,
-      active_chat_count: a.active_chat_count,
-      active_voice_count: a.active_voice_count,
-      max_chat_slots: a.max_chat_slots,
-      max_voice_slots: a.max_voice_slots,
-      available_slots: isVoice
-        ? a.max_voice_slots - a.active_voice_count
-        : a.max_chat_slots - a.active_chat_count,
-    }))
+    .map((a) => {
+      const queueCodes: string[] = a.queue_codes_json ? JSON.parse(a.queue_codes_json) : [];
+      return {
+        agent_id: a.agent_id,
+        presence_status: a.presence_status,
+        active_chat_count: a.active_chat_count,
+        active_voice_count: a.active_voice_count,
+        max_chat_slots: a.max_chat_slots,
+        max_voice_slots: a.max_voice_slots,
+        available_slots: isVoice
+          ? a.max_voice_slots - a.active_voice_count
+          : a.max_chat_slots - a.active_chat_count,
+        queue_codes: queueCodes,
+      };
+    })
     .filter((a) => {
       if (isVoice) {
         return a.active_voice_count < a.max_voice_slots && a.active_chat_count === 0;
       }
       return a.active_chat_count < a.max_chat_slots && a.active_voice_count === 0;
-    });
+    })
+    // Queue eligibility: agents with no queue assignment match all queues (backward compat)
+    .filter((a) => a.queue_codes!.length === 0 || a.queue_codes!.includes(resolvedQueue));
 
   if (eligible.length === 0) {
+    // Enrich snapshot with queue backlog for overflow decisions
+    const backlogRows = await db.select({ value: count() }).from(ixInteractions)
+      .where(and(eq(ixInteractions.queue_code, resolvedQueue), eq(ixInteractions.state, 'queued')));
+    snapshot.queue_backlog = backlogRows[0]?.value ?? 0;
+
     // 6. Overflow policy (plugin hook)
-    const overflow = await executeOverflowPolicy(resolvedQueue, snapshot);
+    const { result: overflow } = await executeOverflowPolicy(resolvedQueue, snapshot);
 
     if (overflow.action === 'overflow' && overflow.overflow_queue) {
       // Re-route to overflow queue
@@ -215,6 +244,23 @@ export async function routeInteraction(interactionId: string): Promise<RouteResu
       score_reason: winner.reason,
     }),
   });
+
+  // Push interaction_assigned to agent's workspace WS
+  const updatedInteraction = await db.query.ixInteractions.findFirst({
+    where: eq(ixInteractions.interaction_id, interactionId),
+  });
+  if (updatedInteraction) {
+    pushToAgent(winner.agent_id, {
+      type: 'interaction_assigned',
+      interaction: updatedInteraction,
+      routing_metadata: {
+        routing_mode: offerStrategy.routing_mode,
+        matched_rule: winner.reason ?? null,
+        from_queue: interaction.queue_code,
+        is_overflow: false,
+      },
+    });
+  }
 
   return { success: true, assigned_agent_id: winner.agent_id, assignment_id: assignmentId };
 }
