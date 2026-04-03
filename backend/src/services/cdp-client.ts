@@ -105,3 +105,19 @@ export async function getSubscriberInfo(phone: string): Promise<SubscriberInfo |
     partyId: resolved.party_id,
   };
 }
+
+/**
+ * 获取客户等级 — 用于路由优先级决策
+ *
+ * 返回 customer_tier: 'vip' | 'premium' | 'standard' | 'delinquent' | null
+ */
+export async function getCustomerTier(partyId: string): Promise<string | null> {
+  const ctx = await cdpFetch<CustomerContext>(`/api/cdp/party/${partyId}/context`);
+  if (!ctx?.profile?.basic_profile_json) return null;
+  try {
+    const basic = JSON.parse(ctx.profile.basic_profile_json);
+    return basic.customer_tier ?? null;
+  } catch {
+    return null;
+  }
+}

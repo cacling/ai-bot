@@ -9,23 +9,56 @@
  * Drag-to-reorder: swaps order values when a card is dropped onto another.
  */
 
-import { memo, useState, useMemo, useCallback } from 'react';
+import { memo, useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { CardShell } from './CardShell';
 import { getCardDef, getAllCardDefs, type CardState } from './registry';
 import { useCardPacking } from './useCardPacking';
+import { getQueueLayout, applyQueueLayout } from './queue-layouts';
 import type { Lang } from '../../i18n';
 
 interface Props {
   cards: CardState[];
   lang: Lang;
+  /** Current queue code of focused interaction. Used to deprioritize irrelevant cards. */
+  queueCode?: string | null;
   onUpdate: (cards: CardState[]) => void;
 }
 
-export const CardPanel = memo(function CardPanel({ cards, lang, onUpdate }: Props) {
+export const CardPanel = memo(function CardPanel({ cards, lang, queueCode, onUpdate }: Props) {
   const [draggingId, setDraggingId]   = useState<string | null>(null);
   const [dragOverId,  setDragOverId]  = useState<string | null>(null);
+  // Track whether user has manually adjusted cards for this queue
+  const userAdjustedRef = useRef(false);
+  const appliedQueueRef = useRef<string | null>(null);
 
-  const sorted  = useMemo(() => [...cards].sort((a, b) => a.order - b.order), [cards]);
+  // Auto-apply queue layout when queueCode changes
+  useEffect(() => {
+    if (queueCode === appliedQueueRef.current) return;
+    appliedQueueRef.current = queueCode ?? null;
+    userAdjustedRef.current = false; // Reset on queue change
+
+    const layout = getQueueLayout(queueCode);
+    if (!layout) return;
+
+    const updated = applyQueueLayout(cards, layout);
+    onUpdate(updated);
+  }, [queueCode]); // intentionally exclude cards/onUpdate to avoid loops
+
+  // Sort cards by order, then deprioritize cards irrelevant to current queue
+  const sorted = useMemo(() => {
+    const sorted = [...cards].sort((a, b) => a.order - b.order);
+    if (!queueCode) return sorted;
+    return sorted.sort((a, b) => {
+      const defA = getCardDef(a.id);
+      const defB = getCardDef(b.id);
+      const relevantA = !defA?.relevantQueues || defA.relevantQueues.includes(queueCode);
+      const relevantB = !defB?.relevantQueues || defB.relevantQueues.includes(queueCode);
+      if (relevantA && !relevantB) return -1;
+      if (!relevantA && relevantB) return 1;
+      return a.order - b.order;
+    });
+  }, [cards, queueCode]);
+
   const visible = useMemo(() => sorted.filter(s => s.isOpen), [sorted]);
   const closed  = useMemo(() => sorted.filter(s => !s.isOpen), [sorted]);
 
@@ -63,14 +96,17 @@ export const CardPanel = memo(function CardPanel({ cards, lang, onUpdate }: Prop
   }, [draggingId, cards, onUpdate, resetDrag]);
 
   const toggleCollapse = useCallback((id: string) => {
+    userAdjustedRef.current = true;
     onUpdate(cards.map(c => c.id === id ? { ...c, isCollapsed: !c.isCollapsed } : c));
   }, [cards, onUpdate]);
 
   const closeCard = useCallback((id: string) => {
+    userAdjustedRef.current = true;
     onUpdate(cards.map(c => c.id === id ? { ...c, isOpen: false } : c));
   }, [cards, onUpdate]);
 
   const reopenCard = useCallback((id: string) => {
+    userAdjustedRef.current = true;
     onUpdate(cards.map(c => c.id === id ? { ...c, isOpen: true } : c));
   }, [cards, onUpdate]);
 

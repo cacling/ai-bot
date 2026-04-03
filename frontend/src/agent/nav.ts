@@ -20,6 +20,12 @@ export const MENU_TREE: MenuItem[] = [
     path: '/staff/workbench',
   },
   {
+    id: 'supervisor',
+    label: { zh: '主管监控', en: 'Supervisor' },
+    path: '/staff/supervisor',
+    roles: ['operations'],
+  },
+  {
     id: 'operations',
     label: { zh: '运营管理', en: 'Operations' },
     path: '/staff/operations',
@@ -36,6 +42,7 @@ export const MENU_TREE: MenuItem[] = [
 /** Breadcrumb path segment labels */
 export const BREADCRUMB_LABELS: Record<string, Record<Lang, string>> = {
   workbench: { zh: '坐席工作台', en: 'Workbench' },
+  supervisor: { zh: '主管监控', en: 'Supervisor' },
   operations: { zh: '运营管理', en: 'Operations' },
   knowledge: { zh: '知识与技能', en: 'Knowledge & Skills' },
   workorders: { zh: '工单管理', en: 'Work Orders' },

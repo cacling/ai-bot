@@ -922,6 +922,11 @@ async function seed() {
     { id: 'agent_callback_01', username: 'wang.lei', display_name: '王蕾',    password: '123456', primary_staff_role: 'agent', staff_roles: ['agent'],              platform_role: 'auditor',      team_code: 'callback_team',    seat_code: 'C01',  default_queue_code: 'callback_team', is_demo: false },
     { id: 'ops_001',        username: 'chen.min',   display_name: '陈敏',     password: '123456',   primary_staff_role: 'operations', staff_roles: ['operations'],     platform_role: 'flow_manager', team_code: 'ops_knowledge',    seat_code: null,   default_queue_code: null,        is_demo: false },
     { id: 'ops_002',        username: 'zhao.ning',  display_name: '赵宁',     password: '123456',   primary_staff_role: 'operations', staff_roles: ['operations'],     platform_role: 'flow_manager', team_code: 'ops_workorder',    seat_code: null,   default_queue_code: null,        is_demo: false },
+    // WFM 新增坐席
+    { id: 'agent_003',      username: 'zhao.min',   display_name: '赵敏',     password: '123456', primary_staff_role: 'agent', staff_roles: ['agent'],              platform_role: 'auditor',      team_code: 'frontline_online', seat_code: 'A03',  default_queue_code: 'frontline', is_demo: false },
+    { id: 'agent_004',      username: 'liu.yang',   display_name: '刘洋',     password: '123456', primary_staff_role: 'agent', staff_roles: ['agent'],              platform_role: 'auditor',      team_code: 'frontline_online', seat_code: 'A04',  default_queue_code: 'frontline', is_demo: false },
+    { id: 'agent_005',      username: 'ma.chao',    display_name: '马超',     password: '123456', primary_staff_role: 'agent', staff_roles: ['agent'],              platform_role: 'auditor',      team_code: 'frontline_voice',  seat_code: 'V01',  default_queue_code: 'voice',     is_demo: false },
+    { id: 'agent_006',      username: 'fang.lin',   display_name: '方琳',     password: '123456', primary_staff_role: 'agent', staff_roles: ['agent'],              platform_role: 'auditor',      team_code: 'frontline_voice',  seat_code: 'V02',  default_queue_code: 'voice',     is_demo: false },
   ];
 
   for (const s of STAFF_SEED) {
@@ -955,7 +960,7 @@ async function seed() {
       },
     }).run();
   }
-  console.log('[seed] 员工账号写入完成（6 条）');
+  console.log('[seed] 员工账号写入完成（10 条）');
 
   // ── 8. 知识管理演示数据 ────────────────────────────────────────────────────
   console.log('[seed] 写入知识管理演示数据...');

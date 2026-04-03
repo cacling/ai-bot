@@ -2,7 +2,7 @@
   "meta": {
     "skill_id": "telecom-app",
     "version_no": 1,
-    "generated_at": "2026-04-02T06:48:17.342Z",
+    "generated_at": "2026-04-02T10:22:23.666Z",
     "source_checksum": "c964f45cfdac085c",
     "generator_version": "1.1"
   },
@@ -15,262 +15,223 @@
     {
       "id": "REQ-002",
       "source": "trigger",
-      "description": "客户反映 App 无法打开、闪退、卡顿时应触发本技能"
+      "description": "当用户反映 App 无法打开、闪退、卡顿时，应触发 app_crash 类型的诊断流程"
     },
     {
       "id": "REQ-003",
       "source": "trigger",
-      "description": "客户无法登录（密码错误、OTP 未收到、账号被锁）时应触发本技能"
+      "description": "当用户无法登录（密码错误、OTP 未收到、账号被锁）时，应触发 login_issue 类型的处理流程"
     },
     {
       "id": "REQ-004",
       "source": "trigger",
-      "description": "App 内功能异常（查话费、缴费、办理业务等页面报错或无响应）时应触发本技能"
+      "description": "当用户报告 App 内功能异常（如查话费、缴费、办理业务页面报错或无响应）时，应触发 feature_error 类型的排查流程"
     },
     {
       "id": "REQ-005",
       "source": "trigger",
-      "description": "客户无法安装 App 或无法升级至新版本时应触发本技能"
+      "description": "当用户无法安装 App 或无法升级至新版本时，应触发 install_update 类型的引导流程"
     },
     {
       "id": "REQ-006",
       "source": "trigger",
-      "description": "App 提示设备环境异常、安全检测不通过时应触发本技能"
+      "description": "当 App 提示设备环境异常、安全检测不通过，或账号显示可疑活动、被风控限制时，应触发 security_check 类型的安全诊断"
     },
     {
       "id": "REQ-007",
       "source": "trigger",
-      "description": "账号显示可疑活动、被风控限制或疑似被盗时应触发本技能"
+      "description": "当用户询问附近营业厅地址、线下网点位置或如何前往营业厅时，应触发 store_locator 类型的位置服务流程"
     },
     {
       "id": "REQ-008",
-      "source": "trigger",
-      "description": "客户询问附近营业厅地址、线下网点位置、如何前往营业厅时应触发本技能"
+      "source": "workflow",
+      "description": "系统应在接收问题后根据用户描述准确分类 issue_type，并进入对应的子流程（app_crash / login_issue / feature_error / install_update / security_check / store_locator）"
     },
     {
       "id": "REQ-009",
       "source": "workflow",
-      "description": "系统应根据客户描述准确分类问题类型为 app_crash、login_issue、feature_error、install_update、security_check 或 store_locator"
+      "description": "对于 app_crash 问题，应先检查 App 版本，若版本过旧则引导更新；若版本正常则引导清缓存、重启、清存储，并在无效时升级 frontline"
     },
     {
       "id": "REQ-010",
-      "source": "tool",
-      "description": "对于 security_check 和登录安全相关场景，系统应调用 diagnose_app 工具执行安全诊断并获取诊断结果"
+      "source": "workflow",
+      "description": "对于 login_issue 问题，应根据具体子类型（密码错误、OTP 未达、账号锁定、生物识别失败）分别引导重置密码、OTP 排查、安全诊断或重新录入生物特征"
     },
     {
       "id": "REQ-011",
-      "source": "workflow",
-      "description": "对于 app_crash 问题，系统应先检查 App 版本，版本过旧则引导更新，版本正常则引导清缓存、重启、清存储"
+      "source": "tool",
+      "description": "涉及账号安全或设备风险的登录问题，必须调用 diagnose_app 工具获取诊断结果，不得凭空推断"
     },
     {
       "id": "REQ-012",
       "source": "workflow",
-      "description": "对于 login_issue 问题，系统应根据具体场景分别处理：账号被锁进行安全诊断、密码错误引导重置、OTP 未收到进行排查、生物识别失败引导重新设置"
+      "description": "对于 feature_error 问题，应先确认具体异常类型（页面/按钮/支付/账号状态），再针对性排查网络、版本、缓存或账户状态"
     },
     {
       "id": "REQ-013",
-      "source": "workflow",
-      "description": "对于 feature_error 问题，系统应先确认具体异常类型（页面/按钮/支付/账号状态），再针对性排查"
+      "source": "tool",
+      "description": "当 feature_error 涉及账号状态异常提示时，必须先调用 query_subscriber 工具核实用户真实状态，再决定是否引导缴费或继续排查"
     },
     {
       "id": "REQ-014",
-      "source": "tool",
-      "description": "对于 feature_error 中的账号状态异常，系统应调用 query_subscriber 工具核实用户账号状态"
+      "source": "workflow",
+      "description": "对于 install_update 问题，应引导用户检查系统版本、存储空间和网络，并在自助无效时提供官方下载渠道"
     },
     {
       "id": "REQ-015",
       "source": "workflow",
-      "description": "对于 install_update 问题，系统应引导客户检查系统版本、存储空间、网络，并在失败时提供官方下载渠道"
+      "description": "对于 security_check 问题，必须调用 diagnose_app 工具执行安全诊断，并根据风险等级决定是告知硬性限制、引导修复还是升级 security_team"
     },
     {
       "id": "REQ-016",
       "source": "workflow",
-      "description": "对于 security_check 问题，系统应调用 diagnose_app 工具进行安全诊断，并根据风险等级采取不同处理措施"
+      "description": "当 diagnose_app 返回设备存在 Root/模拟器等硬性限制时，若用户否认，应升级 frontline 人工核查设备状态"
     },
     {
       "id": "REQ-017",
-      "source": "tool",
-      "description": "对于 store_locator 问题，系统应调用 maps_around_search 工具搜索附近营业厅，并可根据用户需求调用 maps_direction_walking 规划路线"
+      "source": "workflow",
+      "description": "对于 store_locator 问题，应先获取用户位置，再调用 maps_around_search 搜索附近营业厅，并可按需调用 maps_direction_walking 提供步行导航"
     },
     {
       "id": "REQ-018",
       "source": "workflow",
-      "description": "所有问题处理流程中，用户要求转人工时应立即转接人工客服"
+      "description": "所有问题处理流程中，若用户表示问题已解决，应礼貌结束对话；若未解决，应统一升级 frontline"
     },
     {
       "id": "REQ-019",
       "source": "workflow",
-      "description": "所有问题解决路径后应确认用户问题是否已解决，未解决则升级 frontline"
+      "description": "用户在任何阶段要求转人工时，应立即转接人工客服并结束流程"
     },
     {
       "id": "REQ-020",
-      "source": "workflow",
-      "description": "对于高风险安全场景（Root/永久锁定/诈骗嫌疑/屏幕共享），系统应升级 security_team 并进行反诈提醒"
-    },
-    {
-      "id": "REQ-021",
-      "source": "workflow",
-      "description": "对于设备硬性限制（Root或模拟器），系统应告知用户须使用正常设备，并在用户声明未Root时升级 frontline 人工核查"
-    },
-    {
-      "id": "REQ-022",
-      "source": "compliance",
-      "description": "系统不得凭空猜测设备状态，安全诊断数据必须通过 diagnose_app 工具获取"
-    },
-    {
-      "id": "REQ-023",
-      "source": "compliance",
-      "description": "系统不得向客户索要密码、OTP 验证码内容或完整身份证号码"
-    },
-    {
-      "id": "REQ-024",
-      "source": "compliance",
-      "description": "系统不得未经用户确认擅自执行账号变更操作"
-    },
-    {
-      "id": "REQ-025",
-      "source": "compliance",
-      "description": "系统不得未经 query_subscriber 核实就直接断言账户欠费/停机"
-    },
-    {
-      "id": "REQ-026",
-      "source": "compliance",
-      "description": "OTP 场景中系统不得反复引导重发超过 2 次，仍失败应切换验证方式或升级"
+      "source": "boundary",
+      "description": "当用户提到'App 里 XXX 不行'时，应先澄清是 App 技术故障还是业务操作问题，仅在确认为技术故障时才进入本技能流程"
     }
   ],
   "cases": [
     {
       "id": "TC-001",
-      "title": "App 闪退 - 正常版本引导清缓存",
+      "title": "App 闪退问题处理流程",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-002",
-        "REQ-009",
-        "REQ-011",
-        "REQ-019"
+        "REQ-008",
+        "REQ-009"
       ],
       "turns": [
         "App 一打开就闪退，根本进不去"
       ],
       "assertions": [
         {
-          "type": "contains",
-          "value": "缓存"
-        },
-        {
-          "type": "contains",
-          "value": "重启"
-        },
-        {
-          "type": "response_has_next_step",
-          "value": ""
-        },
-        {
-          "type": "tool_not_called",
+          "type": "tool_called",
           "value": "diagnose_app"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "版本, 更新, 缓存, 重启"
+        },
+        {
+          "type": "contains",
+          "value": "闪退"
         }
       ]
     },
     {
       "id": "TC-002",
-      "title": "登录失败 - 密码错误引导重置",
+      "title": "登录失败（OTP 未收到）处理流程",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-003",
-        "REQ-009",
-        "REQ-012",
-        "REQ-019",
-        "REQ-024"
+        "REQ-008",
+        "REQ-010",
+        "REQ-011"
       ],
       "turns": [
-        "密码明明是对的，但就是登不进去"
+        "登录时收不到验证码，试了好几次都没收到"
       ],
       "assertions": [
         {
-          "type": "contains",
-          "value": "忘记密码"
+          "type": "tool_called",
+          "value": "diagnose_app"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "验证码, 手机号, 等待, 切换"
         },
         {
           "type": "not_contains",
-          "value": "重置您的密码"
-        },
-        {
-          "type": "response_has_next_step",
-          "value": ""
+          "value": "密码"
         }
       ]
     },
     {
       "id": "TC-003",
-      "title": "功能异常 - 页面白屏加载失败",
+      "title": "功能异常（查话费页面报错）处理流程",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-004",
-        "REQ-009",
-        "REQ-013",
-        "REQ-019"
+        "REQ-008",
+        "REQ-012",
+        "REQ-013"
       ],
       "turns": [
-        "查话费页面一直白屏，啥也看不到"
+        "App 里查话费页面一直报错，打不开"
       ],
       "assertions": [
         {
-          "type": "contains",
-          "value": "网络"
+          "type": "tool_called",
+          "value": "query_subscriber"
+        },
+        {
+          "type": "response_mentions_all",
+          "value": "网络, 版本, 缓存"
         },
         {
           "type": "contains",
-          "value": "缓存"
-        },
-        {
-          "type": "response_has_next_step",
-          "value": ""
+          "value": "查话费"
         }
       ]
     },
     {
       "id": "TC-004",
-      "title": "安装更新失败 - 引导检查空间和网络",
+      "title": "App 更新失败处理流程",
       "category": "functional",
       "priority": 2,
       "requirement_refs": [
         "REQ-005",
-        "REQ-009",
-        "REQ-015",
-        "REQ-019"
+        "REQ-008",
+        "REQ-014"
       ],
       "turns": [
-        "App 更新一直失败，提示下载错误"
+        "App 提示要更新，但应用商店点更新没反应"
       ],
       "assertions": [
         {
           "type": "response_mentions_all",
-          "value": "存储空间,网络,应用商店"
+          "value": "系统版本, 存储空间, 网络"
         },
         {
-          "type": "response_has_next_step",
-          "value": ""
+          "type": "response_mentions_any",
+          "value": "下载, 官方, 商店"
         }
       ]
     },
     {
       "id": "TC-005",
-      "title": "安全检测不通过 - 调用 diagnose_app 获取诊断结果",
+      "title": "设备安全检测不通过处理流程",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-006",
-        "REQ-009",
-        "REQ-010",
-        "REQ-016",
-        "REQ-019",
-        "REQ-022"
+        "REQ-008",
+        "REQ-011",
+        "REQ-015"
       ],
       "turns": [
-        "App 提示设备环境异常，不让登录"
+        "App 提示我的设备不安全，不让登录"
       ],
       "assertions": [
         {
@@ -278,27 +239,28 @@
           "value": "diagnose_app"
         },
         {
-          "type": "contains",
-          "value": "安全诊断"
-        },
-        {
-          "type": "response_has_next_step",
-          "value": ""
+          "type": "response_mentions_any",
+          "value": "Root, 模拟器, VPN, 安全"
         }
       ]
     },
     {
       "id": "TC-006",
-      "title": "账单查询需求 - 应转出而非处理",
+      "title": "边界场景：用户想查账单但误入本技能",
       "category": "error",
       "priority": 2,
       "requirement_refs": [
-        "REQ-001"
+        "REQ-001",
+        "REQ-020"
       ],
       "turns": [
-        "我想查一下这个月的话费是多少"
+        "App 里查不了话费，帮我看看怎么回事"
       ],
       "assertions": [
+        {
+          "type": "contains",
+          "value": "是 App 本身出了故障"
+        },
         {
           "type": "tool_not_called",
           "value": "diagnose_app"
@@ -306,143 +268,50 @@
         {
           "type": "tool_not_called",
           "value": "query_subscriber"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "账单,费用,话费"
-        },
-        {
-          "type": "not_contains",
-          "value": "缓存"
         }
       ],
-      "notes": "验证技能边界，纯业务问题不应触发技术排障"
+      "notes": "验证高冲突场景澄清逻辑"
     },
     {
       "id": "TC-007",
-      "title": "OTP 未收到 - 合规引导不超过2次",
-      "category": "edge",
+      "title": "边界场景：用户想退订业务但误入本技能",
+      "category": "error",
       "priority": 2,
       "requirement_refs": [
-        "REQ-003",
-        "REQ-012",
-        "REQ-023",
-        "REQ-026"
+        "REQ-001",
+        "REQ-020"
       ],
       "turns": [
-        "登录时收不到验证码短信"
+        "App 里退订不了视频包，怎么办"
       ],
       "assertions": [
         {
-          "type": "not_contains",
-          "value": "验证码内容"
+          "type": "contains",
+          "value": "是 App 本身出了故障"
         },
         {
-          "type": "not_contains",
-          "value": "再发第三次"
+          "type": "tool_not_called",
+          "value": "diagnose_app"
         },
         {
           "type": "response_mentions_any",
-          "value": "等待,重发,其他方式"
+          "value": "业务, 退订, 转"
         }
       ]
     },
     {
       "id": "TC-008",
-      "title": "功能异常 - 账号状态异常需 query_subscriber 核实",
+      "title": "营业厅位置查询完整流程",
       "category": "functional",
       "priority": 2,
       "requirement_refs": [
-        "REQ-004",
-        "REQ-013",
-        "REQ-014",
-        "REQ-025"
-      ],
-      "turns": [
-        "缴费时提示账号异常，不能操作"
-      ],
-      "assertions": [
-        {
-          "type": "tool_called",
-          "value": "query_subscriber"
-        },
-        {
-          "type": "not_contains",
-          "value": "您已欠费"
-        },
-        {
-          "type": "contains",
-          "value": "核实"
-        }
-      ]
-    },
-    {
-      "id": "TC-009",
-      "title": "App 闪退 - 版本过旧引导更新",
-      "category": "edge",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-002",
-        "REQ-011"
-      ],
-      "turns": [
-        "App 打不开，我手机很老了"
-      ],
-      "assertions": [
-        {
-          "type": "contains",
-          "value": "版本过低"
-        },
-        {
-          "type": "contains",
-          "value": "更新"
-        }
-      ]
-    },
-    {
-      "id": "TC-010",
-      "title": "高风险安全场景 - Root 设备且用户否认，升级 security_team",
-      "category": "error",
-      "priority": 1,
-      "requirement_refs": [
-        "REQ-006",
         "REQ-007",
-        "REQ-016",
-        "REQ-020",
-        "REQ-021",
-        "REQ-022"
-      ],
-      "turns": [
-        "App 说我设备被 Root 了，但我没做过啊，是不是被盗号了？"
-      ],
-      "assertions": [
-        {
-          "type": "tool_called",
-          "value": "diagnose_app"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "security_team,反诈,人工核查"
-        },
-        {
-          "type": "not_contains",
-          "value": "自行修复"
-        }
-      ]
-    },
-    {
-      "id": "TC-011",
-      "title": "查询附近营业厅 - 调用地图工具并规划路线",
-      "category": "functional",
-      "priority": 2,
-      "requirement_refs": [
         "REQ-008",
-        "REQ-009",
         "REQ-017"
       ],
       "turns": [
-        "最近的电信营业厅在哪？",
-        "我在北京市海淀区中关村"
+        "最近的电信营业厅在哪",
+        "我在北京市朝阳区国贸附近"
       ],
       "assertions": [
         {
@@ -450,65 +319,73 @@
           "value": "maps_around_search"
         },
         {
-          "type": "contains",
-          "value": "营业厅"
-        },
-        {
-          "type": "response_has_next_step",
-          "value": ""
+          "type": "response_mentions_any",
+          "value": "营业厅, 地址, 位置"
         }
       ]
     },
     {
-      "id": "TC-012",
-      "title": "套餐变更需求 - 应转出而非处理",
-      "category": "error",
+      "id": "TC-009",
+      "title": "硬性限制反馈后用户否认，升级人工核查",
+      "category": "edge",
       "priority": 2,
       "requirement_refs": [
-        "REQ-001"
+        "REQ-016"
       ],
       "turns": [
-        "我想在 App 里把套餐改成 59 元那个"
+        "App 说我设备 Root 了，但我没 Root 过",
+        "我不接受这个说法，请人工核实"
       ],
       "assertions": [
         {
-          "type": "tool_not_called",
+          "type": "tool_called",
           "value": "diagnose_app"
         },
         {
           "type": "response_mentions_any",
-          "value": "套餐,办理,变更"
-        },
-        {
-          "type": "not_contains",
-          "value": "缓存"
+          "value": "人工, 核实, 升级, 前线"
         }
-      ],
-      "notes": "验证技能边界，业务办理需求不应触发技术排障"
+      ]
     },
     {
-      "id": "TC-013",
-      "title": "用户要求转人工 - 立即转接",
+      "id": "TC-010",
+      "title": "问题解决后礼貌结束对话",
       "category": "state",
-      "priority": 1,
+      "priority": 2,
       "requirement_refs": [
         "REQ-018"
       ],
       "turns": [
-        "我不想自己弄了，直接转人工客服"
+        "App 登录不了",
+        "好的，我重置密码后可以登录了，谢谢"
       ],
       "assertions": [
         {
-          "type": "contains",
-          "value": "人工客服"
+          "type": "response_mentions_any",
+          "value": "还有, 其他, 帮到, 再见"
+        }
+      ]
+    },
+    {
+      "id": "TC-011",
+      "title": "用户中途要求转人工",
+      "category": "state",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-019"
+      ],
+      "turns": [
+        "App 闪退",
+        "我不想自己操作了，直接转人工吧"
+      ],
+      "assertions": [
+        {
+          "type": "response_mentions_any",
+          "value": "转接, 人工客服, 稍等"
         },
         {
           "type": "tool_not_called",
           "value": "diagnose_app"
-        },
-        {
-          "type": "tool_not_called",
-          "value": "query_subscriber"
         }
       ]
     }

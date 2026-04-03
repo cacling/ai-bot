@@ -2,7 +2,7 @@
  * interactions.ts — Interaction CRUD + state transitions + materialize
  */
 import { Hono } from 'hono';
-import { db, ixInteractions, ixInteractionEvents, ixAgentPresence, eq, and, desc } from '../db';
+import { db, ixInteractions, ixInteractionEvents, ixAgentPresence, eq, and, desc, sql, or } from '../db';
 import { materializeInteraction, type MaterializeRequest } from '../services/materializer';
 import { routeInteraction } from '../services/router-kernel';
 import { createFollowUp, type FollowUpRequest } from '../services/work-order-bridge';
@@ -22,11 +22,12 @@ router.post('/materialize', async (c) => {
   return c.json(result, 201);
 });
 
-/** GET / — List interactions (with optional filters) */
+/** GET / — List interactions (with optional filters + search) */
 router.get('/', async (c) => {
   const state = c.req.query('state');
   const agentId = c.req.query('assigned_agent_id');
   const conversationId = c.req.query('conversation_id');
+  const search = c.req.query('search')?.trim();
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
 
   let query = db.select().from(ixInteractions).$dynamic();
@@ -35,7 +36,19 @@ router.get('/', async (c) => {
   if (agentId) query = query.where(eq(ixInteractions.assigned_agent_id, agentId));
   if (conversationId) query = query.where(eq(ixInteractions.conversation_id, conversationId));
 
-  const rows = await query.limit(limit).all();
+  // Fuzzy search across customer_party_id, handoff_summary, interaction_id
+  if (search) {
+    const pattern = `%${search}%`;
+    query = query.where(
+      or(
+        sql`${ixInteractions.customer_party_id} LIKE ${pattern}`,
+        sql`${ixInteractions.handoff_summary} LIKE ${pattern}`,
+        sql`${ixInteractions.interaction_id} LIKE ${pattern}`,
+      ),
+    );
+  }
+
+  const rows = await query.orderBy(desc(ixInteractions.updated_at)).limit(limit).all();
   return c.json({ items: rows });
 });
 
@@ -46,6 +59,17 @@ router.get('/:id', async (c) => {
   });
   if (!row) return c.json({ error: 'Interaction not found' }, 404);
   return c.json(row);
+});
+
+/** GET /:id/events — Get event history for an interaction */
+router.get('/:id/events', async (c) => {
+  const id = c.req.param('id');
+  const events = await db.select().from(ixInteractionEvents)
+    .where(eq(ixInteractionEvents.interaction_id, id))
+    .orderBy(ixInteractionEvents.created_at)
+    .limit(50)
+    .all();
+  return c.json({ items: events });
 });
 
 /** POST /:id/activate — Transition to active */
@@ -239,6 +263,34 @@ router.post('/:id/transfer', async (c) => {
     where: eq(ixInteractions.interaction_id, id),
   });
   return c.json(updated);
+});
+
+/** POST /:id/follow-up — Create a follow-up work item during an active interaction */
+router.post('/:id/follow-up', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json<FollowUpRequest>();
+  if (!body.type || !body.title) {
+    return c.json({ error: 'type and title are required' }, 400);
+  }
+
+  const interaction = await db.query.ixInteractions.findFirst({
+    where: eq(ixInteractions.interaction_id, id),
+  });
+  if (!interaction) return c.json({ error: 'Interaction not found' }, 404);
+
+  const agentId = interaction.assigned_agent_id ?? 'system';
+  const result = await createFollowUp(id, agentId, body);
+
+  // Log event
+  await db.insert(ixInteractionEvents).values({
+    interaction_id: id,
+    event_type: 'follow_up_created',
+    actor_type: 'agent',
+    actor_id: agentId,
+    payload_json: JSON.stringify({ follow_up_type: body.type, title: body.title, result }),
+  });
+
+  return c.json(result);
 });
 
 export default router;

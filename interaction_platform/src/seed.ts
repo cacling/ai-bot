@@ -297,7 +297,7 @@ async function seed() {
       rule_type: 'condition_match',
       queue_code: 'vip_chat',
       condition_json: JSON.stringify({ priority_range: [0, 25] }),
-      priority_order: 1,
+      priority_order: 0,
       enabled: true,
       grayscale_pct: 100,
     },
@@ -348,7 +348,7 @@ async function seed() {
       queue_code: 'fault_chat',
       condition_json: JSON.stringify({ priority_range: [0, 30], work_model: 'live_chat' }),
       action_json: JSON.stringify({ set_priority: 10 }),
-      priority_order: 0,
+      priority_order: 1,
       enabled: true,
       grayscale_pct: 100,
     },
@@ -449,7 +449,7 @@ async function seed() {
       enabled: false,
       shadow_mode: false,
     },
-    // Intent queue selector — shadow mode for safe rollout
+    // Intent queue selector — active mode (routes by intent/keyword)
     {
       binding_id: 'binding-intent-selector',
       queue_code: 'default_chat',
@@ -457,7 +457,7 @@ async function seed() {
       slot: 'queue_selector',
       priority_order: 1,
       enabled: true,
-      shadow_mode: true,
+      shadow_mode: false,
     },
     // SLA overflow guard — shadow mode for safe rollout
     {

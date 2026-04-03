@@ -13,6 +13,7 @@
     "./schema/cdp": "./src/schema/cdp.ts",
     "./schema/outbound": "./src/schema/outbound.ts",
     "./schema/interaction": "./src/schema/interaction.ts",
+    "./schema/wfm": "./src/schema/wfm.ts",
     "./env": "./src/env.ts",
     "./proxy": "./src/proxy.ts"
   },

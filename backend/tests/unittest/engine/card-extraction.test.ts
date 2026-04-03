@@ -28,7 +28,10 @@ const CARD_EXTRACTORS: Record<string, CardExtractor> = {
   analyze_bill_anomaly: (p) =>
     p.current_month ? { type: 'anomaly_card', data: p } : null,
   bill_card: (p) => {
-    const d = p.bill as Record<string, unknown> | undefined;
+    const raw = p.bill as Record<string, unknown> | undefined;
+    if (!raw) return null;
+    // L2 aggregated: bill is the full MCP response { bills: [...], count, ... } — unwrap
+    const d = (raw.bills ? (raw.bills as unknown[])[0] : raw) as Record<string, unknown> | undefined;
     return d ? { type: 'bill_card', data: d } : null;
   },
   anomaly_card: (p) => {
@@ -92,7 +95,21 @@ describe('extractCard', () => {
   });
 
   // Aggregated tool _cardType hint tests
-  test('get_bill_context with _cardType hint → bill_card', () => {
+  test('get_bill_context with _cardType hint → bill_card (nested MCP response)', () => {
+    // callTool('query_bill') returns the full MCP response, not a flat BillCardData
+    const card = extractCard('get_bill_context', {
+      subscriber: { phone: '138' },
+      bill: { bills: [{ month: '2026-03', total: 128, plan_fee: 50 }], count: 1, requested_month: '2026-03' },
+      anomaly: null,
+      _cardType: 'bill_card',
+    });
+    expect(card?.type).toBe('bill_card');
+    expect((card?.data as any).month).toBe('2026-03');
+    expect((card?.data as any).total).toBe(128);
+    expect((card?.data as any).plan_fee).toBe(50);
+  });
+
+  test('get_bill_context with flat bill (legacy) → bill_card', () => {
     const card = extractCard('get_bill_context', {
       subscriber: { phone: '138' },
       bill: { month: '2026-03', total: 128 },
@@ -112,14 +129,15 @@ describe('extractCard', () => {
     expect(card?.type).toBe('plan_card');
   });
 
-  test('get_cancel_context with _cardType hint → bill_card', () => {
+  test('get_cancel_context with _cardType hint → bill_card (nested MCP response)', () => {
     const card = extractCard('get_cancel_context', {
       subscriber: { phone: '138' },
       plans: [{ name: '畅享套餐' }],
-      bill: { month: '2026-03', total: 128 },
+      bill: { bills: [{ month: '2026-03', total: 128 }], count: 1 },
       _cardType: 'bill_card',
     });
     expect(card?.type).toBe('bill_card');
+    expect((card?.data as any).total).toBe(128);
   });
 
   test('unknown tool without _cardType → null', () => {

@@ -1,17 +1,32 @@
-import { memo } from 'react';
+import { memo, useState, useCallback, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Headset, Radio, ChevronRight, LogOut } from 'lucide-react';
+import { Headset, ChevronRight, LogOut, Search } from 'lucide-react';
 import { type Lang, T } from '../../i18n';
 import { BREADCRUMB_LABELS } from '../nav';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '../auth/AuthProvider';
+import { PresenceToggle } from './PresenceToggle';
+import { CapacityBadge, type AgentCapacity } from './CapacityBadge';
+import { NotificationCenter } from './NotificationCenter';
+import { type Notification } from './useNotifications';
+import { SearchDialog } from './SearchDialog';
+
+type PresenceStatus = 'online' | 'away' | 'dnd' | 'offline';
 
 interface AgentTopBarProps {
   lang: Lang;
   setLang: (lang: Lang) => void;
   isConnected: boolean;
+  presenceStatus: PresenceStatus;
+  onPresenceChange: (status: PresenceStatus) => void;
+  capacity: AgentCapacity | null;
+  notifications: Notification[];
+  unreadNotifCount: number;
+  onMarkAllRead: () => void;
+  onClearNotifications: () => void;
+  onSelectInteraction?: (interactionId: string) => void;
 }
 
 const ROLE_LABEL: Record<string, Record<Lang, string>> = {
@@ -19,11 +34,41 @@ const ROLE_LABEL: Record<string, Record<Lang, string>> = {
   operations: { zh: '运营', en: 'Ops' },
 };
 
-export const AgentTopBar = memo(function AgentTopBar({ lang, setLang, isConnected }: AgentTopBarProps) {
+export const AgentTopBar = memo(function AgentTopBar({
+  lang,
+  setLang,
+  isConnected,
+  presenceStatus,
+  onPresenceChange,
+  capacity,
+  notifications,
+  unreadNotifCount,
+  onMarkAllRead,
+  onClearNotifications,
+  onSelectInteraction,
+}: AgentTopBarProps) {
   const t = T[lang];
   const location = useLocation();
   const navigate = useNavigate();
   const { staff, logout } = useAuth();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Global Cmd+K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const handleSelectInteraction = useCallback((id: string) => {
+    onSelectInteraction?.(id);
+    setSearchOpen(false);
+  }, [onSelectInteraction]);
 
   // Build breadcrumb from path segments after /staff/ (or /agent/ for compat)
   const segments = location.pathname.replace(/^\/(staff|agent)\/?/, '').split('/').filter(Boolean);
@@ -57,18 +102,29 @@ export const AgentTopBar = memo(function AgentTopBar({ lang, setLang, isConnecte
 
       <div className="flex-1" />
 
-      {isConnected && (
-        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-full">
-          <Radio size={11} className="text-primary animate-pulse" />
-          <span className="text-[11px] text-primary font-medium">{t.agent_status_active}</span>
-        </div>
-      )}
+      {/* Presence status toggle */}
+      <PresenceToggle lang={lang} status={presenceStatus} onStatusChange={onPresenceChange} />
 
-      {/* Global search placeholder */}
-      <Input
-        placeholder={t.topbar_search}
-        className="w-48 h-8 text-xs"
-        disabled
+      {/* Capacity display */}
+      <CapacityBadge lang={lang} capacity={capacity} />
+
+      {/* Global search trigger (Cmd+K) */}
+      <button
+        onClick={() => setSearchOpen(true)}
+        className="flex items-center gap-2 w-48 h-8 px-2 text-xs text-muted-foreground bg-muted/50 border border-border rounded-md hover:bg-muted transition-colors"
+      >
+        <Search size={12} />
+        <span className="flex-1 text-left">{t.topbar_search}</span>
+        <kbd className="text-[10px] bg-muted px-1 py-0.5 rounded font-mono">⌘K</kbd>
+      </button>
+
+      {/* Notification center */}
+      <NotificationCenter
+        lang={lang}
+        notifications={notifications}
+        unreadCount={unreadNotifCount}
+        onMarkAllRead={onMarkAllRead}
+        onClearAll={onClearNotifications}
       />
 
       {/* Lang switcher */}
@@ -101,6 +157,12 @@ export const AgentTopBar = memo(function AgentTopBar({ lang, setLang, isConnecte
           </Button>
         </div>
       )}
+      <SearchDialog
+        open={searchOpen}
+        lang={lang}
+        onClose={() => setSearchOpen(false)}
+        onSelectInteraction={handleSelectInteraction}
+      />
     </nav>
   );
 });

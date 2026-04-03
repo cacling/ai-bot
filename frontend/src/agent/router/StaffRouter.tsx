@@ -16,6 +16,13 @@ import { KnowledgeLayout } from '../knowledge/KnowledgeLayout';
 import { WorkOrdersLayout } from '../workorders/WorkOrdersLayout';
 import { RoutingLayout } from '../routing/RoutingLayout';
 import { CustomerLayout } from '../customers/CustomerLayout';
+import { SupervisorDashboard } from '../supervisor/SupervisorDashboard';
+import { useAgentContext } from '../AgentContext';
+
+function SupervisorPage() {
+  const { lang } = useAgentContext();
+  return <SupervisorDashboard lang={lang} />;
+}
 
 /** 已登录访问 /staff/login → 按角色跳默认首页 */
 function LoginGuard() {
@@ -60,6 +67,7 @@ export function StaffRouter() {
             <Route element={<AgentWorkstationPage />}>
               <Route index element={<StaffIndex />} />
               <Route path="workbench" element={<WorkbenchPage />} />
+              <Route path="supervisor" element={<SupervisorPage />} />
 
               {/* 运营管理：需要 operations 角色 */}
               <Route path="operations" element={<RoleRoute required="operations" />}>

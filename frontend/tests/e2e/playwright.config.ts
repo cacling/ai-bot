@@ -36,7 +36,6 @@ export default defineConfig({
     video: 'retain-on-failure',
     locale: 'zh-CN',
     ...devices['Desktop Chrome'],
-    channel: 'chrome',
   },
   projects: [
     {

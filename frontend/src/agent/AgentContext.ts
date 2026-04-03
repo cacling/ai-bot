@@ -1,12 +1,11 @@
 import { createContext, useContext } from 'react';
 import { type Lang } from '../i18n';
 import { type CardData } from '../chat/CardMessage';
-import { type CardState } from './cards/registry';
 
 export interface AgentMessage {
   id: number;
   msgId?: string;
-  sender: 'bot' | 'agent' | 'customer';
+  sender: 'bot' | 'agent' | 'customer' | 'system';
   text: string;
   translated_text?: string;
   time: string;
@@ -14,22 +13,23 @@ export interface AgentMessage {
   _ms?: number;
 }
 
+/**
+ * AgentContext — Layout-level context (slimmed down).
+ *
+ * Messages, cards, typing, botMode, inputValue are now in InboxContext
+ * (per-interaction). AgentContext retains only shared layout state.
+ */
 export interface AgentContextValue {
   lang: Lang;
   setLang: (lang: Lang) => void;
+  /** Legacy WS connection (for bot/card events). */
   isConnected: boolean;
-  messages: AgentMessage[];
-  cardStates: CardState[];
-  inputValue: string;
-  isTyping: boolean;
-  botMode: 'bot' | 'human';
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onInputChange: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
   onTransferToBot: () => void;
-  onUpdateCards: (cards: CardState[]) => void;
 }
 
 export const AgentContext = createContext<AgentContextValue | null>(null);

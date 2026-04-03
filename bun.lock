@@ -235,6 +235,22 @@
         "typescript": "^5.9.3",
       },
     },
+    "wfm_service": {
+      "name": "@ai-bot/wfm-service",
+      "version": "1.0.0",
+      "dependencies": {
+        "@ai-bot/shared-db": "workspace:*",
+        "@hono/node-server": "^1.14.3",
+        "drizzle-orm": "^0.43.1",
+        "hono": "^4.7.5",
+      },
+      "devDependencies": {
+        "@types/node": "^25.5.0",
+        "bun-types": "^1.2.8",
+        "drizzle-kit": "^0.31.1",
+        "typescript": "^5.9.3",
+      },
+    },
     "work_order_service": {
       "name": "@ai-bot/work-order-service",
       "version": "1.0.0",
@@ -301,6 +317,8 @@
     "@ai-bot/outbound-service": ["@ai-bot/outbound-service@workspace:outbound_service"],
 
     "@ai-bot/shared-db": ["@ai-bot/shared-db@workspace:packages/shared-db"],
+
+    "@ai-bot/wfm-service": ["@ai-bot/wfm-service@workspace:wfm_service"],
 
     "@ai-bot/wo-frontend": ["@ai-bot/wo-frontend@workspace:work_order_service/frontend"],
 

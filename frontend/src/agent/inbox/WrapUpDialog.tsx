@@ -47,8 +47,7 @@ const FOLLOW_UP_TYPES: { value: string; zh: string; en: string }[] = [
   { value: 'appointment', zh: '预约', en: 'Appointment' },
 ];
 
-const INTERACTION_PLATFORM_URL =
-  (import.meta as unknown as { env: Record<string, string> }).env?.VITE_INTERACTION_PLATFORM_URL ?? 'http://localhost:18022';
+const IX_API_BASE = '/ix-api';
 
 export const WrapUpDialog = memo(function WrapUpDialog({
   open,
@@ -65,9 +64,11 @@ export const WrapUpDialog = memo(function WrapUpDialog({
   const [followUpDesc, setFollowUpDesc] = useState('');
   const [followUpDue, setFollowUpDue] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     setSubmitting(true);
+    setError(null);
     try {
       const data: WrapUpData = {
         wrap_up_code: code,
@@ -82,15 +83,21 @@ export const WrapUpDialog = memo(function WrapUpDialog({
         };
       }
 
-      // Call the close API
-      await fetch(`${INTERACTION_PLATFORM_URL}/api/interactions/${interactionId}/close`, {
+      const res = await fetch(`${IX_API_BASE}/api/interactions/${interactionId}/close`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
 
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
+
       onSubmit(data);
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
     }
@@ -198,6 +205,10 @@ export const WrapUpDialog = memo(function WrapUpDialog({
             </div>
           )}
         </div>
+
+        {error && (
+          <p className="text-sm text-destructive">{lang === 'zh' ? '操作失败：' : 'Error: '}{error}</p>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{lang === 'zh' ? '取消' : 'Cancel'}</Button>

@@ -251,7 +251,10 @@ const CARD_EXTRACTORS: Record<string, CardExtractor> = {
 
   // L2 aggregated tool results (nested structure)
   bill_card: (p) => {
-    const d = (p.bill as BillCardData | undefined);
+    const raw = p.bill as Record<string, unknown> | undefined;
+    if (!raw) return null;
+    // L2 aggregated: bill is the full MCP response { bills: [...], count, ... } — unwrap
+    const d = (raw.bills ? (raw.bills as unknown[])[0] : raw) as BillCardData | undefined;
     return d ? { type: 'bill_card', data: d } : null;
   },
   anomaly_card: (p) => {

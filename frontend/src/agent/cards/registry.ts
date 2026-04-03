@@ -27,6 +27,8 @@ export interface CardDef {
   wsEvents: string[];    // WS message types this card handles
   dataExtractor: (msg: Record<string, unknown>) => unknown;
   component: ComponentType<{ data: unknown; lang: Lang }>;
+  /** Queue codes where this card is relevant. null = relevant everywhere. */
+  relevantQueues?: string[] | null;
 }
 
 export interface CardState {

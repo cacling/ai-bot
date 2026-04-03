@@ -2,7 +2,7 @@
   "meta": {
     "skill_id": "fault-diagnosis",
     "version_no": 1,
-    "generated_at": "2026-04-02T06:30:30.067Z",
+    "generated_at": "2026-04-02T10:10:26.633Z",
     "source_checksum": "633cb7bdfa23ee9f",
     "generator_version": "1.1"
   },
@@ -14,95 +14,104 @@
     },
     {
       "id": "REQ-002",
-      "source": "frontmatter",
-      "description": "技能不应处理长期流量不足或套餐限速问题，应引导至套餐查询技能"
+      "source": "trigger",
+      "description": "用户反映最近突然变慢的网速问题应触发本技能，而非套餐查询"
     },
     {
       "id": "REQ-003",
       "source": "trigger",
-      "description": "用户反映最近突然变慢的网速问题应触发本技能，而非月底流量用尽导致的限速"
+      "description": "当用户描述'月底限速'或'流量用尽'等长期问题时，不应进入本技能，应转至套餐查询"
     },
     {
       "id": "REQ-004",
-      "source": "trigger",
-      "description": "用户询问所在区域是否有基站故障应触发本技能"
+      "source": "workflow",
+      "description": "系统在接收用户故障描述后，应立即调用 diagnose_network 工具进行预诊断，不得先反复追问问题细节"
     },
     {
       "id": "REQ-005",
-      "source": "workflow",
-      "description": "系统应在【接收并诊断】状态立即调用 diagnose_network 工具进行预检，不得先反复追问故障细节"
+      "source": "tool",
+      "description": "diagnose_network 工具必须根据用户描述准确映射 issue_type（no_signal / slow_data / call_drop / no_network）"
     },
     {
       "id": "REQ-006",
       "source": "workflow",
-      "description": "根据 diagnose_network 返回的异常项，应准确进入对应的分支状态（如账号停机、流量耗尽、APN异常等）"
+      "description": "诊断结果中若账号状态为欠费停机，应进入【账号停机】状态并告知充值方式及恢复时间"
     },
     {
       "id": "REQ-007",
       "source": "workflow",
-      "description": "当用户描述模糊无法确定 issue_type 时，应先安抚并询问具体故障现象，再进行诊断"
+      "description": "诊断结果中若流量已耗尽，应进入【流量耗尽】状态并推荐加油包或升级套餐"
     },
     {
       "id": "REQ-008",
       "source": "workflow",
-      "description": "在【APN异常】状态，应引导用户重置 APN 并询问操作后是否恢复"
+      "description": "诊断结果中若存在 APN 配置异常，应引导用户重置 APN 并等待操作反馈"
     },
     {
       "id": "REQ-009",
       "source": "workflow",
-      "description": "在【用户自查】状态，应逐步引导用户执行单一操作（如确认飞行模式、插拔SIM卡、重启手机），每步后询问结果"
+      "description": "诊断结果中若基站信号异常，应说明需人工跟进，建议转人工提交工单，不得声称已提交或提供工单号"
     },
     {
       "id": "REQ-010",
       "source": "workflow",
-      "description": "在【确认恢复】状态，应仅询问用户问题是否已解决，不得调用工具或提供新建议"
+      "description": "诊断结果全部正常时，应进入【用户自查】状态，并逐步引导用户执行单一操作（如关飞行模式、插拔SIM卡、重启手机），每步确认结果"
     },
     {
       "id": "REQ-011",
       "source": "workflow",
-      "description": "当 diagnose_network 调用失败时，应进入【诊断失败兜底】状态并建议转人工"
+      "description": "在【确认恢复】状态，系统应仅询问'问题是否解决'，不得调用工具或给出新建议"
     },
     {
       "id": "REQ-012",
       "source": "workflow",
-      "description": "在【基站异常】状态，应告知用户需转人工提交工单，不得声称已提交工单或提供工单号"
+      "description": "用户确认问题未解决或自查无效后，应进入【升级处理】状态，建议转人工或前往营业厅"
     },
     {
       "id": "REQ-013",
       "source": "workflow",
-      "description": "任何状态下用户要求转人工时，应尊重意愿并转接人工客服或引导拨打10086"
+      "description": "diagnose_network 工具调用失败时，应进入【诊断失败兜底】状态，告知无法获取数据并建议转人工"
     },
     {
       "id": "REQ-014",
-      "source": "tool",
-      "description": "所有故障诊断结论必须基于 diagnose_network 工具返回的数据，不得凭空猜测"
+      "source": "workflow",
+      "description": "任何状态下用户要求转人工，应立即进入【转接人工】状态，尊重用户意愿"
     },
     {
       "id": "REQ-015",
-      "source": "workflow",
-      "description": "当用户反馈问题已解决时，应进入【已解决】状态并礼貌结束对话"
+      "source": "compliance",
+      "description": "系统不得在无 diagnose_network 诊断数据的情况下断言故障原因或给出结论性建议"
     },
     {
       "id": "REQ-016",
+      "source": "compliance",
+      "description": "每轮对话只能执行一个操作步骤，不得合并多个引导动作到同一轮回复"
+    },
+    {
+      "id": "REQ-017",
       "source": "workflow",
-      "description": "当用户反馈问题未解决且满足升级条件（如基站故障、连续重启无效）时，应进入【升级处理】状态"
+      "description": "网络拥塞（高峰期）场景下，应说明原因并建议等待或切换 Wi-Fi，随后进入【确认恢复】"
+    },
+    {
+      "id": "REQ-018",
+      "source": "boundary",
+      "description": "当用户模糊描述'网速慢'时，系统应先澄清是'最近突然变慢'还是'月底限速'，再决定是否进入本技能"
     }
   ],
   "cases": [
     {
       "id": "TC-001",
-      "title": "网速突然变慢-诊断后进入APN异常分支",
+      "title": "网速突然变慢-正常诊断流程",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-001",
-        "REQ-003",
-        "REQ-005",
-        "REQ-006",
-        "REQ-014"
+        "REQ-002",
+        "REQ-004",
+        "REQ-005"
       ],
       "turns": [
-        "最近两天网特别卡，刷视频都转圈，帮我看看怎么回事"
+        "最近两天网速特别慢，刷视频都卡"
       ],
       "assertions": [
         {
@@ -115,24 +124,26 @@
         },
         {
           "type": "contains",
-          "value": "APN"
+          "value": "网速"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "诊断, 检测, 查看"
         }
       ]
     },
     {
       "id": "TC-002",
-      "title": "询问区域基站故障-进入基站异常并升级处理",
+      "title": "无信号问题-触发 no_signal 类型",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-001",
         "REQ-004",
-        "REQ-006",
-        "REQ-012",
-        "REQ-016"
+        "REQ-005"
       ],
       "turns": [
-        "我们这栋楼最近信号特别差，是不是附近基站坏了？"
+        "手机完全没有信号了，怎么办？"
       ],
       "assertions": [
         {
@@ -140,32 +151,23 @@
           "value": "diagnose_network"
         },
         {
-          "type": "response_mentions_all",
-          "value": "基站, 覆盖, 人工"
-        },
-        {
-          "type": "not_contains",
-          "value": "工单号"
-        },
-        {
-          "type": "not_contains",
-          "value": "已提交"
+          "type": "contains",
+          "value": "信号"
         }
       ]
     },
     {
       "id": "TC-003",
-      "title": "无法上网-诊断后进入流量耗尽分支",
+      "title": "通话中断-触发 call_drop 类型",
       "category": "functional",
-      "priority": 2,
+      "priority": 1,
       "requirement_refs": [
         "REQ-001",
-        "REQ-005",
-        "REQ-006",
-        "REQ-014"
+        "REQ-004",
+        "REQ-005"
       ],
       "turns": [
-        "手机有信号但上不了网，什么情况？"
+        "打电话老是掉线，听不清对方说话"
       ],
       "assertions": [
         {
@@ -174,170 +176,323 @@
         },
         {
           "type": "contains",
-          "value": "流量"
+          "value": "通话"
         }
       ]
     },
     {
       "id": "TC-004",
-      "title": "模糊描述故障-先澄清再诊断",
+      "title": "模糊描述但可推断 issue_type-仍调用诊断",
       "category": "functional",
       "priority": 2,
       "requirement_refs": [
-        "REQ-007"
-      ],
-      "turns": [
-        "网络有问题"
-      ],
-      "assertions": [
-        {
-          "type": "response_mentions_any",
-          "value": "具体, 什么, 现象"
-        },
-        {
-          "type": "tool_not_called",
-          "value": "diagnose_network"
-        }
-      ]
-    },
-    {
-      "id": "TC-005",
-      "title": "APN异常-引导重置并确认恢复",
-      "category": "state",
-      "priority": 1,
-      "requirement_refs": [
-        "REQ-008",
-        "REQ-010",
+        "REQ-004",
         "REQ-015"
       ],
       "turns": [
-        "最近两天网特别卡，刷视频都转圈，帮我看看怎么回事",
-        "好的，我重置了APN，现在能上网了"
-      ],
-      "assertions": [
-        {
-          "type": "contains",
-          "value": "请问问题现在解决了吗"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "感谢, 配合, 再见"
-        }
-      ]
-    },
-    {
-      "id": "TC-006",
-      "title": "用户自查-逐步引导并最终升级",
-      "category": "state",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-009",
-        "REQ-010",
-        "REQ-016"
-      ],
-      "turns": [
-        "手机突然没信号了",
-        "飞行模式关着呢",
-        "SIM卡也重新插了",
-        "重启了还是没信号"
-      ],
-      "assertions": [
-        {
-          "type": "response_mentions_all",
-          "value": "重启, 手机"
-        },
-        {
-          "type": "contains",
-          "value": "请问问题现在解决了吗"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "人工, 客服, 营业厅"
-        }
-      ]
-    },
-    {
-      "id": "TC-007",
-      "title": "月底限速问题-引导至套餐查询",
-      "category": "error",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-002"
-      ],
-      "turns": [
-        "每个月月底网速都特别慢，是不是被限速了？"
-      ],
-      "assertions": [
-        {
-          "type": "tool_not_called",
-          "value": "diagnose_network"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "套餐, 流量, 查询"
-        }
-      ]
-    },
-    {
-      "id": "TC-008",
-      "title": "口语化表达网速慢-识别为突发故障",
-      "category": "edge",
-      "priority": 2,
-      "requirement_refs": [
-        "REQ-003"
-      ],
-      "turns": [
-        "网好慢啊"
+        "上不了网"
       ],
       "assertions": [
         {
           "type": "tool_called",
           "value": "diagnose_network"
+        },
+        {
+          "type": "not_contains",
+          "value": "是什么问题"
+        },
+        {
+          "type": "not_contains",
+          "value": "请详细描述"
+        }
+      ],
+      "notes": "验证即使描述简短，也直接诊断而非反复追问"
+    },
+    {
+      "id": "TC-005",
+      "title": "模糊'网速慢'-需澄清是否突发",
+      "category": "edge",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-002",
+        "REQ-018"
+      ],
+      "turns": [
+        "网速好慢"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "最近突然变慢"
+        },
+        {
+          "type": "contains",
+          "value": "月底流量不够用"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "diagnose_network"
+        }
+      ],
+      "notes": "验证对模糊表述先澄清再决定是否进入技能"
+    },
+    {
+      "id": "TC-006",
+      "title": "明确为月底限速-不应进入本技能",
+      "category": "error",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-003",
+        "REQ-015"
+      ],
+      "turns": [
+        "每个月底流量用完就限速，太慢了"
+      ],
+      "assertions": [
+        {
+          "type": "tool_not_called",
+          "value": "diagnose_network"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "套餐, 流量包, plan-inquiry"
+        }
+      ]
+    },
+    {
+      "id": "TC-007",
+      "title": "诊断结果为欠费停机",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-006"
+      ],
+      "persona_id": "arrears_user",
+      "turns": [
+        "手机突然不能上网了"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "欠费"
+        },
+        {
+          "type": "contains",
+          "value": "充值"
+        },
+        {
+          "type": "contains",
+          "value": "恢复时间"
+        }
+      ]
+    },
+    {
+      "id": "TC-008",
+      "title": "诊断结果为流量耗尽",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-007"
+      ],
+      "turns": [
+        "突然上不了网"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "流量已用完"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "加油包, 套餐升级"
         }
       ]
     },
     {
       "id": "TC-009",
-      "title": "诊断工具调用失败-兜底转人工",
-      "category": "error",
-      "priority": 2,
+      "title": "APN配置异常-引导重置",
+      "category": "functional",
+      "priority": 1,
       "requirement_refs": [
-        "REQ-011"
+        "REQ-008"
       ],
       "turns": [
-        "手机突然上不了网了"
+        "有信号但上不了网"
       ],
       "assertions": [
         {
           "type": "contains",
-          "value": "系统暂时无法获取诊断数据"
+          "value": "APN"
         },
         {
-          "type": "response_mentions_any",
-          "value": "人工, 客服"
+          "type": "contains",
+          "value": "重置为默认"
+        },
+        {
+          "type": "response_has_next_step",
+          "value": ""
         }
       ]
     },
     {
       "id": "TC-010",
-      "title": "用户中途要求转人工",
+      "title": "基站信号异常-建议转人工",
+      "category": "functional",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-009"
+      ],
+      "turns": [
+        "家里信号特别差，经常断"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "基站"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "转人工, 提交工单"
+        },
+        {
+          "type": "not_contains",
+          "value": "已提交工单"
+        },
+        {
+          "type": "not_contains",
+          "value": "工单号"
+        }
+      ]
+    },
+    {
+      "id": "TC-011",
+      "title": "诊断全部正常-逐步引导用户自查",
       "category": "state",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-010",
+        "REQ-012",
+        "REQ-016"
+      ],
+      "turns": [
+        "网速很慢",
+        "飞行模式没开",
+        "SIM卡拔了又插",
+        "还是不行"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "重启手机"
+        },
+        {
+          "type": "response_has_next_step",
+          "value": ""
+        }
+      ],
+      "notes": "验证多轮自查，每轮只做一件事，最后进入升级处理"
+    },
+    {
+      "id": "TC-012",
+      "title": "确认恢复状态-仅询问是否解决",
+      "category": "state",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-011",
+        "REQ-012"
+      ],
+      "turns": [
+        "突然不能上网",
+        "好的"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "问题现在解决了吗"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "diagnose_network"
+        },
+        {
+          "type": "not_contains",
+          "value": "建议"
+        },
+        {
+          "type": "not_contains",
+          "value": "可以尝试"
+        }
+      ]
+    },
+    {
+      "id": "TC-013",
+      "title": "diagnose_network 工具调用失败",
+      "category": "error",
       "priority": 2,
       "requirement_refs": [
         "REQ-013"
       ],
       "turns": [
-        "最近通话老是断线",
-        "我不想自己弄了，直接转人工吧"
+        "手机没信号了"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "无法获取诊断数据"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "转人工, 人工客服"
+        }
+      ],
+      "notes": "模拟工具调用失败场景"
+    },
+    {
+      "id": "TC-014",
+      "title": "任何状态下用户要求转人工",
+      "category": "state",
+      "priority": 1,
+      "requirement_refs": [
+        "REQ-014"
+      ],
+      "turns": [
+        "网速慢",
+        "直接转人工吧"
       ],
       "assertions": [
         {
           "type": "response_mentions_any",
-          "value": "转接, 人工, 10086"
+          "value": "转接人工, 10086"
         },
         {
           "type": "tool_not_called",
           "value": "diagnose_network"
+        }
+      ]
+    },
+    {
+      "id": "TC-015",
+      "title": "网络拥塞-高峰期说明并建议等待",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-017"
+      ],
+      "turns": [
+        "晚上七八点网特别卡"
+      ],
+      "assertions": [
+        {
+          "type": "contains",
+          "value": "高峰期"
+        },
+        {
+          "type": "contains",
+          "value": "网络拥塞"
+        },
+        {
+          "type": "response_mentions_any",
+          "value": "等待, 切换 Wi-Fi"
         }
       ]
     }

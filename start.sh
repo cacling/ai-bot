@@ -48,6 +48,7 @@ WORK_ORDER_PORT="${WORK_ORDER_PORT:-18009}"
 CDP_SERVICE_PORT="${CDP_SERVICE_PORT:-18020}"
 OUTBOUND_SERVICE_PORT="${OUTBOUND_SERVICE_PORT:-18021}"
 INTERACTION_PLATFORM_PORT="${INTERACTION_PLATFORM_PORT:-18022}"
+WFM_SERVICE_PORT="${WFM_SERVICE_PORT:-18023}"
 CHANNEL_HOST_PORT="${CHANNEL_HOST_PORT:-18030}"
 BAILEYS_GATEWAY_PORT="${BAILEYS_GATEWAY_PORT:-18031}"
 FEISHU_GATEWAY_PORT="${FEISHU_GATEWAY_PORT:-18032}"
@@ -56,7 +57,7 @@ FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 MCP_PORTS=("$MCP_INTERNAL_PORT")
 MCP_SERVICES=("internal_service")
 MCP_LABELS=("内部服务")
-ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$CDP_SERVICE_PORT" "$OUTBOUND_SERVICE_PORT" "$CHANNEL_HOST_PORT" "$BAILEYS_GATEWAY_PORT" "$FEISHU_GATEWAY_PORT" "$FRONTEND_PORT")
+ALL_PORTS=("$BACKEND_PORT" "${MCP_PORTS[@]}" "$MOCK_APIS_PORT" "$WORK_ORDER_PORT" "$KM_SERVICE_PORT" "$CDP_SERVICE_PORT" "$OUTBOUND_SERVICE_PORT" "$INTERACTION_PLATFORM_PORT" "$WFM_SERVICE_PORT" "$CHANNEL_HOST_PORT" "$BAILEYS_GATEWAY_PORT" "$FEISHU_GATEWAY_PORT" "$FRONTEND_PORT")
 
 # ── PID 记录 ────────────────────────────────────────────────────────────────
 WRAPPER_PIDS=()
@@ -143,6 +144,10 @@ log "cdp_service: bun install"
 cd "$BASE_DIR/cdp_service" && "$BUN" install 2>&1 | tail -3
 ok "cdp_service 依赖就绪"
 
+log "wfm_service: bun install"
+cd "$BASE_DIR/wfm_service" && "$BUN" install 2>&1 | tail -3
+ok "wfm_service 依赖就绪"
+
 log "outbound_service: bun install"
 cd "$BASE_DIR/outbound_service" && "$BUN" install 2>&1 | tail -3
 ok "outbound_service 依赖就绪"
@@ -183,7 +188,7 @@ fi
 echo -e "\n${BLU}══════ 数据库准备 ══════${NC}"
 
 # 各模块 data/ 目录（DB 文件归属各自模块）
-for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data; do
+for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data wfm_service/data; do
   mkdir -p "$BASE_DIR/$svc_data"
 done
 export SQLITE_PATH="$BASE_DIR/km_service/data/km.db"
@@ -193,6 +198,7 @@ export WORKORDER_DB_PATH="$BASE_DIR/work_order_service/data/workorder.db"
 export CDP_DB_PATH="$BASE_DIR/cdp_service/data/cdp.db"
 export OUTBOUND_DB_PATH="$BASE_DIR/outbound_service/data/outbound.db"
 export INTERACTION_DB_PATH="$BASE_DIR/interaction_platform/data/interaction.db"
+export WFM_DB_PATH="$BASE_DIR/wfm_service/data/wfm.db"
 
 # Schema 同步（6 DB：telecom/platform/business/workorder/cdp/outbound）
 log "同步数据库 Schema..."
@@ -225,7 +231,11 @@ OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
 cd "$BASE_DIR/interaction_platform"
 INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
 
-ok "数据库 Schema 就绪（km.db + business.db + workorder.db + cdp.db + outbound.db + interaction.db）"
+# 8) wfm_service schema → wfm.db
+cd "$BASE_DIR/wfm_service"
+WFM_DB_PATH="$WFM_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+
+ok "数据库 Schema 就绪（km.db + business.db + workorder.db + cdp.db + outbound.db + interaction.db + wfm.db）"
 
 # 数据初始化
 if [[ "$RESET_MODE" == true ]]; then
@@ -233,7 +243,7 @@ if [[ "$RESET_MODE" == true ]]; then
   cd "$BASE_DIR/backend"
 
   # 删除所有 DB + WAL/SHM（各模块 data/ 目录）
-  for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data; do
+  for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data wfm_service/data; do
     rm -f "$BASE_DIR/$svc_data"/*.db "$BASE_DIR/$svc_data"/*.db-wal "$BASE_DIR/$svc_data"/*.db-shm
   done
   # 兼容清理：旧 data/ 根目录残留
@@ -293,10 +303,12 @@ if [[ "$RESET_MODE" == true ]]; then
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/outbound_service" && OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+  cd "$BASE_DIR/wfm_service" && WFM_DB_PATH="$WFM_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" run db:seed 2>&1 | tail -5
   cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
+  cd "$BASE_DIR/wfm_service" && WFM_DB_PATH="$WFM_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   # outbound seed 依赖 CDP（phone → party_id 解析），需要先启动 CDP 服务
   # 这里先跳过，在 CDP 服务启动后再 seed（见下方 start_service 后的 seed 步骤）
   ok "数据已重置为初始状态"
@@ -307,6 +319,7 @@ else
   cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
+  cd "$BASE_DIR/wfm_service" && WFM_DB_PATH="$WFM_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   ok "初始数据就绪"
 fi
 
@@ -382,6 +395,10 @@ start_service "outbound-service" "$BASE_DIR/outbound_service" \
 start_service "interaction-platform" "$BASE_DIR/interaction_platform" \
   "INTERACTION_PLATFORM_PORT=$INTERACTION_PLATFORM_PORT INTERACTION_DB_PATH=$INTERACTION_DB_PATH $BUN src/server.ts"
 
+# WFM Service (排班管理)
+start_service "wfm-service" "$BASE_DIR/wfm_service" \
+  "WFM_SERVICE_PORT=$WFM_SERVICE_PORT WFM_DB_PATH=$WFM_DB_PATH $BUN src/server.ts"
+
 # Channel Host (渠道适配层)
 start_service "channel-host" "$BASE_DIR/channel_host" \
   "CHANNEL_HOST_PORT=$CHANNEL_HOST_PORT CDP_URL=http://127.0.0.1:$CDP_SERVICE_PORT INTERACTION_PLATFORM_URL=http://127.0.0.1:$INTERACTION_PLATFORM_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT BAILEYS_GATEWAY_URL=http://127.0.0.1:$BAILEYS_GATEWAY_PORT FEISHU_GATEWAY_URL=http://127.0.0.1:$FEISHU_GATEWAY_PORT PROXY_URL=${PROXY_URL:-} WHATSAPP_NEEDS_PROXY=${WHATSAPP_NEEDS_PROXY:-false} $BUN src/index.ts"
@@ -445,6 +462,7 @@ if [[ "$READY" == true ]]; then
   ok "KM Service   → http://127.0.0.1:${KM_SERVICE_PORT}"
   ok "CDP Service  → http://127.0.0.1:${CDP_SERVICE_PORT}"
   ok "Outbound Svc → http://127.0.0.1:${OUTBOUND_SERVICE_PORT}"
+  ok "WFM Service  → http://127.0.0.1:${WFM_SERVICE_PORT}"
   ok "Channel Host → http://127.0.0.1:${CHANNEL_HOST_PORT}"
   if lsof -ti :"$BAILEYS_GATEWAY_PORT" >/dev/null 2>&1; then
     ok "Baileys GW   → http://127.0.0.1:${BAILEYS_GATEWAY_PORT}"

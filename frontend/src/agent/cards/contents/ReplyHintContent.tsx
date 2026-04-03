@@ -24,7 +24,7 @@ interface ReplyHintData {
 
 const RISK_COLORS: Record<string, string> = {
   low: 'bg-primary/10 text-primary',
-  medium: 'bg-yellow-500/10 text-yellow-700',
+  medium: 'bg-warning/10 text-warning',
   high: 'bg-destructive/10 text-destructive',
 };
 

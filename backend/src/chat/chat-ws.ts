@@ -22,7 +22,7 @@ import { asc, eq } from 'drizzle-orm';
 import { type CoreMessage } from 'ai';
 import { platformDb as db } from '../db';
 import { messages, sessions } from '../db/schema';
-import { getSubscriberInfo } from '../services/cdp-client';
+import { getSubscriberInfo, getCustomerTier } from '../services/cdp-client';
 import { runAgent, getMcpToolsForRuntime } from '../engine/runner';
 import { buildNodeTypeMap, stripMermaidMarkers } from '../services/mermaid';
 import { routeSkill, shouldUseRuntime } from '../engine/skill-router';
@@ -45,11 +45,36 @@ import { mapPhoneToIdentity } from '../services/identity-mapper';
 
 const INTERACTION_PLATFORM_URL = process.env.INTERACTION_PLATFORM_URL ?? 'http://localhost:18022';
 
+/** Priority mapping by customer tier from CDP */
+const TIER_PRIORITY: Record<string, number> = {
+  vip: 15,
+  premium: 25,
+  standard: 50,
+  delinquent: 60,
+};
+
 /** Fire-and-forget: materialize an interaction when handoff happens. */
-async function materializeOnHandoff(phone: string, sessionId: string) {
+async function materializeOnHandoff(
+  phone: string,
+  sessionId: string,
+  transferArgs?: { current_intent?: string; recommended_action?: string },
+) {
   try {
     const identity = await mapPhoneToIdentity(phone);
     if (!identity.partyId) return;
+
+    // Query CDP for customer tier → priority
+    const tier = await getCustomerTier(identity.partyId);
+    const priority = TIER_PRIORITY[tier ?? 'standard'] ?? 50;
+
+    // Build handoff_summary with intent tag for plugin routing
+    const intent = transferArgs?.current_intent;
+    const summary = [
+      intent ? `[intent:${intent}]` : null,
+      transferArgs?.current_intent ?? null,
+      transferArgs?.recommended_action ? `处理建议：${transferArgs.recommended_action}` : null,
+    ].filter(Boolean).join(' ') || `Chat session ${sessionId} transferred to human`;
+
     await fetch(`${INTERACTION_PLATFORM_URL}/api/interactions/materialize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -58,9 +83,11 @@ async function materializeOnHandoff(phone: string, sessionId: string) {
         channel: 'webchat',
         work_model: 'live_chat',
         queue_code: 'default_chat',
-        handoff_summary: `Chat session ${sessionId} transferred to human`,
+        priority,
+        handoff_summary: summary,
       }),
     });
+    logger.info('chat-ws', 'materialize_sent', { phone, session: sessionId, tier, priority, intent });
   } catch (err) {
     logger.warn('chat-ws', 'materialize_error', { phone, session: sessionId, error: String(err) });
   }
@@ -327,7 +354,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
             try { ws.send(JSON.stringify({ type: 'transfer_to_human', msg_id })); } catch { /* ws closed */ }
             sessionBus.publish(phone, { source: 'user', type: 'transfer_data', msg_id });
             logger.info('chat-ws', 'bot_disabled', { phone, session: sessionId });
-            materializeOnHandoff(phone, sessionId);
+            materializeOnHandoff(phone, sessionId); // skill-runtime path: no transferArgs
           }
 
           // Track metrics
@@ -552,7 +579,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
         botEnabled = false;
         logger.info('chat-ws', 'bot_disabled', { phone, session: sessionId });
         try { ws.send(JSON.stringify({ type: 'transfer_to_human' })); } catch { /* ws closed */ }
-        materializeOnHandoff(phone, sessionId);
+        materializeOnHandoff(phone, sessionId, args as { current_intent?: string; recommended_action?: string });
       }
 
       logger.info('chat-ws', 'response_sent', { session: sessionId });

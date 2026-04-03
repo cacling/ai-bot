@@ -22,7 +22,7 @@
  */
 import { createBunWebSocket } from 'hono/bun';
 import { Hono } from 'hono';
-import { db, ixInteractions, ixOffers, ixAgentPresence, ixInteractionEvents, eq, and } from '../db';
+import { db, ixInteractions, ixConversations, ixOffers, ixAgentPresence, ixInteractionEvents, eq, and } from '../db';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -73,7 +73,24 @@ async function buildInboxSnapshot(agentId: string) {
     (i) => !['closed', 'abandoned'].includes(i.state),
   );
 
-  const offers = await db.select().from(ixOffers)
+  // Join offers with interactions + conversations for rich offer data
+  const rawOffers = await db.select({
+    offer_id: ixOffers.offer_id,
+    interaction_id: ixOffers.interaction_id,
+    agent_id: ixOffers.agent_id,
+    status: ixOffers.status,
+    offered_at: ixOffers.offered_at,
+    responded_at: ixOffers.responded_at,
+    expires_at: ixOffers.expires_at,
+    queue_code: ixInteractions.queue_code,
+    channel: ixConversations.channel,
+    priority: ixInteractions.priority,
+    handoff_summary: ixInteractions.handoff_summary,
+    customer_party_id: ixInteractions.customer_party_id,
+  })
+    .from(ixOffers)
+    .leftJoin(ixInteractions, eq(ixOffers.interaction_id, ixInteractions.interaction_id))
+    .leftJoin(ixConversations, eq(ixInteractions.conversation_id, ixConversations.conversation_id))
     .where(
       and(
         eq(ixOffers.agent_id, agentId),
@@ -81,8 +98,26 @@ async function buildInboxSnapshot(agentId: string) {
       ),
     )
     .all();
+  const offers = rawOffers;
 
-  return { assigned: activeInteractions, offers };
+  // Fetch agent presence/capacity
+  const presenceRows = await db.select().from(ixAgentPresence)
+    .where(eq(ixAgentPresence.agent_id, agentId))
+    .all();
+  const presence = presenceRows[0] ?? null;
+
+  return {
+    assigned: activeInteractions,
+    offers,
+    presence: presence ? {
+      status: presence.presence_status,
+      active_chat_count: presence.active_chat_count,
+      max_chat_slots: presence.max_chat_slots,
+      active_voice_count: presence.active_voice_count,
+      max_voice_slots: presence.max_voice_slots,
+      queue_codes: presence.queue_codes_json ? JSON.parse(presence.queue_codes_json) : [],
+    } : null,
+  };
 }
 
 // ── WebSocket setup ────────────────────────────────────────────────────────
@@ -197,6 +232,37 @@ wsRouter.get(
             await db.update(ixOffers)
               .set({ status: 'declined', responded_at: new Date() })
               .where(eq(ixOffers.offer_id, offerId));
+            break;
+          }
+
+          case 'agent_internal_note': {
+            const interactionId = msg.interaction_id as string;
+            const text = msg.text as string;
+            if (!interactionId || !text) break;
+
+            // Store as interaction event
+            await db.insert(ixInteractionEvents).values({
+              interaction_id: interactionId,
+              event_type: 'internal_note',
+              actor_type: 'agent',
+              actor_id: agentId,
+              payload_json: JSON.stringify({ text }),
+            });
+
+            // Push to other agents focused on this interaction
+            const allConns = agentConnections.get(agentId);
+            // Also push to any other agent that has this interaction assigned
+            // For now, broadcast to the sending agent's other connections
+            pushToFocusedAgent(agentId, interactionId, {
+              type: 'interaction_message',
+              interaction_id: interactionId,
+              message: {
+                sender: 'internal_note',
+                text,
+                agent_id: agentId,
+                time: new Date().toISOString(),
+              },
+            });
             break;
           }
 

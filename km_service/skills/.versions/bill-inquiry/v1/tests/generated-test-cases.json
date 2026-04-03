@@ -2,7 +2,7 @@
   "meta": {
     "skill_id": "bill-inquiry",
     "version_no": 1,
-    "generated_at": "2026-04-02T10:08:23.172Z",
+    "generated_at": "2026-04-02T10:37:04.157Z",
     "source_checksum": "323365130152a7f3",
     "generator_version": "1.1"
   },
@@ -10,7 +10,7 @@
     {
       "id": "REQ-001",
       "source": "frontmatter",
-      "description": "技能应在用户表达账单、欠费、发票或费用异常相关意图时被加载"
+      "description": "技能应在用户表达账单查询、欠费、发票或费用异常相关意图时被加载"
     },
     {
       "id": "REQ-002",
@@ -50,7 +50,7 @@
     {
       "id": "REQ-009",
       "source": "tool",
-      "description": "回复中引用账单数据时必须基于工具返回的具体字段，禁止自行计算或捏造数字"
+      "description": "回复中必须直接复述 analyze_bill_anomaly 返回的 summary 和 changed_items_text 字段，禁止自行计算或拼接数字"
     },
     {
       "id": "REQ-010",
@@ -60,7 +60,7 @@
     {
       "id": "REQ-011",
       "source": "workflow",
-      "description": "欠费处理流程应根据欠费天数区分普通欠费、预销号和号码已回收三种情况并给出对应指引"
+      "description": "欠费处理流程应根据欠费天数区分普通欠费、预销号和号码已回收三种情况并给出相应指引"
     },
     {
       "id": "REQ-012",
@@ -70,12 +70,12 @@
     {
       "id": "REQ-013",
       "source": "workflow",
-      "description": "异常费用分析流程中，若涨幅超过20%应定位具体原因并提供解决方案"
+      "description": "异常费用分析流程中，若涨幅超过20%应定位具体原因并提供针对性建议"
     },
     {
       "id": "REQ-014",
       "source": "workflow",
-      "description": "异常费用分析中用户不认可解释时应升级至10086投诉热线"
+      "description": "异常分析后若用户不认可解释，应升级至10086投诉热线"
     },
     {
       "id": "REQ-015",
@@ -90,12 +90,12 @@
     {
       "id": "REQ-017",
       "source": "workflow",
-      "description": "账单对比模式中应优先复述 analyze_bill_anomaly 返回的 summary 和 changed_items_text 字段内容"
+      "description": "工具调用失败时应提示稍后重试或拨打10086，不得捏造账单数据"
     },
     {
       "id": "REQ-018",
       "source": "workflow",
-      "description": "工具调用失败时应提示稍后重试或拨打10086，不得继续猜测或输出不完整数据"
+      "description": "费用解读时必须引用 query_bill 返回的具体项目名和金额，避免含糊表述"
     }
   ],
   "cases": [
@@ -135,17 +135,17 @@
     },
     {
       "id": "TC-002",
-      "title": "费用疑问-解读具体扣费项",
+      "title": "费用疑问-解读具体项目",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-003",
         "REQ-007",
-        "REQ-009",
-        "REQ-010"
+        "REQ-010",
+        "REQ-018"
       ],
       "turns": [
-        "我账单里有个‘国际漫游流量费’50元，这是什么？"
+        "我账单里有个视频会员流量包 ¥20，我没订过啊"
       ],
       "assertions": [
         {
@@ -154,18 +154,18 @@
         },
         {
           "type": "contains",
-          "value": "国际漫游流量费"
+          "value": "视频会员流量包"
         },
         {
-          "type": "regex",
-          "value": "50[\\.0]*元"
+          "type": "contains",
+          "value": "¥20"
         }
       ],
-      "notes": "验证系统引用工具返回的具体项目名和金额，不捏造数据"
+      "notes": "验证回复引用 query_bill 返回的具体项目名和金额"
     },
     {
       "id": "TC-003",
-      "title": "欠费停机-区分欠费类型并引导",
+      "title": "欠费停机-普通欠费场景",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
@@ -185,18 +185,18 @@
         },
         {
           "type": "response_mentions_any",
-          "value": "欠费, 停机, 充值"
+          "value": "欠费, 充值, 恢复"
         },
         {
-          "type": "response_mentions_any",
-          "value": "APP, 官网, 营业厅"
+          "type": "contains",
+          "value": "30分钟内自动恢复"
         }
       ],
-      "notes": "根据欠费天数区分处理，普通欠费引导自助充值"
+      "notes": "验证区分欠费类型并给出对应指引"
     },
     {
       "id": "TC-004",
-      "title": "发票申请-确认缴清后引导开票",
+      "title": "发票申请-已缴清账单",
       "category": "functional",
       "priority": 2,
       "requirement_refs": [
@@ -205,38 +205,33 @@
       ],
       "turns": [
         "我想开上个月的电子发票",
-        "好的，我已经缴清了"
+        "已经交过了"
       ],
       "assertions": [
         {
           "type": "contains",
-          "value": "发票"
-        },
-        {
-          "type": "response_mentions_any",
-          "value": "APP, 自助申请"
+          "value": "APP自助申请"
         },
         {
           "type": "not_contains",
           "value": "代为开具"
         }
       ],
-      "notes": "多轮确认已缴清，再引导自助开票"
+      "notes": "验证确认缴清后引导自助开票"
     },
     {
       "id": "TC-005",
-      "title": "话费异常偏高-启动 analyze_bill_anomaly 并复述结果",
+      "title": "话费异常偏高-自动分析并复述 summary",
       "category": "functional",
       "priority": 1,
       "requirement_refs": [
         "REQ-006",
         "REQ-008",
-        "REQ-013",
-        "REQ-016",
-        "REQ-017"
+        "REQ-009",
+        "REQ-007"
       ],
       "turns": [
-        "这个月话费怎么突然变高了？比上个月贵了好多"
+        "这个月话费怎么突然变高了？"
       ],
       "assertions": [
         {
@@ -244,119 +239,152 @@
           "value": "analyze_bill_anomaly"
         },
         {
-          "type": "tool_called_before",
-          "value": "get_bill_context, analyze_bill_anomaly"
-        },
-        {
-          "type": "contains",
-          "value": "summary"
-        },
-        {
-          "type": "response_has_next_step",
-          "value": ""
+          "type": "llm_rubric",
+          "value": "回复直接复述 analyze_bill_anomaly 返回的 summary 字段内容，未自行计算或改写数字"
         }
       ],
-      "notes": "进入账单对比模式，优先调用 analyze_bill_anomaly，复述 summary 和 changed_items_text"
+      "notes": "验证优先调用 analyze_bill_anomaly 并原样复述结果"
     },
     {
       "id": "TC-006",
-      "title": "模糊表达-口语化触发技能",
-      "category": "edge",
-      "priority": 2,
+      "title": "超出技能范围的请求",
+      "category": "error",
+      "priority": 3,
       "requirement_refs": [
         "REQ-001"
       ],
       "turns": [
-        "话费多少啊"
+        "帮我办理宽带安装"
       ],
       "assertions": [
         {
-          "type": "tool_called_any_of",
-          "value": "get_bill_context, query_bill"
+          "type": "tool_not_called",
+          "value": "get_bill_context"
         },
         {
           "type": "response_mentions_any",
-          "value": "账单, 话费, 金额"
+          "value": "抱歉, 无法处理, 其他业务"
         }
       ],
-      "notes": "极简口语输入，验证意图识别覆盖 REQ-001 的多种表述"
+      "notes": "验证不在技能范围内的请求不会触发账单工具"
     },
     {
       "id": "TC-007",
-      "title": "指定月份查询-上月账单",
-      "category": "edge",
+      "title": "账单对比-精确模式（数据完整）",
+      "category": "functional",
       "priority": 2,
       "requirement_refs": [
-        "REQ-002"
+        "REQ-002",
+        "REQ-016",
+        "REQ-018"
       ],
       "turns": [
-        "上个月的话费是多少？"
+        "这个月为什么比上个月贵？"
       ],
       "assertions": [
         {
           "type": "tool_called",
-          "value": "get_bill_context"
+          "value": "analyze_bill_anomaly"
         },
         {
-          "type": "contains",
-          "value": "上月"
+          "type": "regex",
+          "value": "从 ¥\\d+\\.?\\d* 变为 ¥\\d+\\.?\\d*"
+        },
+        {
+          "type": "response_mentions_all",
+          "value": "总额, 变化, 建议"
         }
-      ]
+      ],
+      "notes": "验证满足数据完整性闸门时输出精确对比"
     },
     {
       "id": "TC-008",
-      "title": "异常分析后用户不认可-升级投诉",
-      "category": "error",
+      "title": "异常分析-涨幅超20%并定位原因",
+      "category": "functional",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-006",
+        "REQ-008",
+        "REQ-009",
+        "REQ-013"
+      ],
+      "turns": [
+        "话费比上个月多了50块，怎么回事？"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "analyze_bill_anomaly"
+        },
+        {
+          "type": "llm_rubric",
+          "value": "回复包含具体变化项、金额差异，并提供针对性建议（如退订、升级套餐等）"
+        },
+        {
+          "type": "contains",
+          "value": "changed_items_text"
+        }
+      ],
+      "notes": "验证涨幅>20%时定位原因并给建议"
+    },
+    {
+      "id": "TC-009",
+      "title": "异常分析-用户不认可解释",
+      "category": "state",
       "priority": 2,
       "requirement_refs": [
         "REQ-014"
       ],
       "turns": [
-        "这个月话费涨太多了",
-        "你说的数据不对，我不认可"
+        "话费怎么突然多了这么多？",
+        "我不接受这个解释，我要投诉"
       ],
       "assertions": [
         {
-          "type": "response_mentions_any",
-          "value": "10086, 投诉, 热线"
+          "type": "contains",
+          "value": "10086"
         },
         {
-          "type": "tool_not_called",
-          "value": "query_subscriber"
+          "type": "response_mentions_any",
+          "value": "投诉, 热线, 人工"
         }
       ],
-      "notes": "用户不认可解释时，应升级至10086投诉热线"
+      "notes": "验证用户不认可时升级至10086"
     },
     {
-      "id": "TC-009",
-      "title": "任意节点要求转人工",
-      "category": "error",
+      "id": "TC-010",
+      "title": "任意节点转人工",
+      "category": "state",
       "priority": 2,
       "requirement_refs": [
         "REQ-015"
       ],
       "turns": [
-        "我要转人工客服"
+        "查一下我这个月话费",
+        "转人工"
       ],
       "assertions": [
         {
-          "type": "response_mentions_any",
-          "value": "10086, 人工客服, 拨打"
+          "type": "contains",
+          "value": "10086"
+        },
+        {
+          "type": "tool_not_called",
+          "value": "query_bill"
         }
       ],
-      "notes": "全局转人工条件，任意节点都应引导拨打10086"
+      "notes": "验证任意节点可转人工"
     },
     {
-      "id": "TC-010",
-      "title": "工具调用失败-账单对比 fallback",
-      "category": "error",
-      "priority": 3,
+      "id": "TC-011",
+      "title": "账单对比-数据不完整 fallback",
+      "category": "edge",
+      "priority": 2,
       "requirement_refs": [
-        "REQ-016",
-        "REQ-018"
+        "REQ-016"
       ],
       "turns": [
-        "帮我对比本月和上个月的话费变化"
+        "帮我对比本月和上个月账单"
       ],
       "assertions": [
         {
@@ -369,14 +397,37 @@
         },
         {
           "type": "contains",
-          "value": "无法准确定位"
+          "value": "无法准确定位具体项目变化"
+        }
+      ],
+      "notes": "模拟工具返回不完整数据，验证 fallback 话术"
+    },
+    {
+      "id": "TC-012",
+      "title": "工具调用失败-异常处理",
+      "category": "error",
+      "priority": 2,
+      "requirement_refs": [
+        "REQ-017"
+      ],
+      "turns": [
+        "查一下我上个月的话费"
+      ],
+      "assertions": [
+        {
+          "type": "tool_called",
+          "value": "get_bill_context"
+        },
+        {
+          "type": "not_contains",
+          "value": "¥"
         },
         {
           "type": "response_mentions_any",
           "value": "稍后重试, 10086"
         }
       ],
-      "notes": "模拟工具失败场景，验证不输出具体金额变化，使用 fallback 话术"
+      "notes": "模拟工具失败，验证不捏造数据"
     }
   ]
 }

@@ -9,7 +9,7 @@
  *   2. Call registerCard() here
  */
 
-import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle, ShieldAlert, BotMessageSquare, ClipboardList, Clock, CalendarCheck, MessageSquareShare } from 'lucide-react';
+import { GitBranch, Smile, PhoneForwarded, PhoneCall, UserCircle, ShieldAlert, BotMessageSquare, ClipboardList, Clock, CalendarCheck, MessageSquareShare, Route } from 'lucide-react';
 import { registerCard } from './registry';
 import { DiagramContent      } from './contents/DiagramContent';
 import { EmotionContent      } from './contents/EmotionContent';
@@ -22,6 +22,7 @@ import { WorkOrderSummaryContent  } from './contents/WorkOrderSummaryContent';
 import { WorkOrderTimelineContent } from './contents/WorkOrderTimelineContent';
 import { AppointmentPanelContent  } from './contents/AppointmentPanelContent';
 import { EngagementContent        } from './contents/EngagementContent';
+import { RouteContextContent      } from './contents/RouteContextContent';
 
 // Priority determines layout position (1 = highest, 10 = lowest).
 // Higher-priority cards are placed higher in the layout.
@@ -57,6 +58,7 @@ registerCard({
   wsEvents: ['outbound_task'],   // injected directly from AgentWorkstationPage
   dataExtractor: (msg) => msg.data,
   component: OutboundTaskContent,
+  relevantQueues: ['outbound'],
 });
 
 // ── 情感分析卡片 (col-span-1) ────────────────────────────────────────────────
@@ -198,6 +200,23 @@ registerCard({
   wsEvents: ['engagement_context'],
   dataExtractor: (msg) => msg.data,
   component: EngagementContent,
+  relevantQueues: ['public_engagement'],
+});
+
+// ── 路由上下文卡片 (col-span-1) ────────────────────────────────────────────
+registerCard({
+  id: 'route_context',
+  title: { zh: '路由上下文', en: 'Route Context' },
+  Icon: Route,
+  headerClass: 'bg-gradient-to-r from-indigo-600 to-indigo-500',
+  colSpan: 1,
+  priority: 2,
+  defaultHeight: 180,
+  defaultOpen: true,
+  defaultCollapsed: true,
+  wsEvents: ['interaction_assigned'],
+  dataExtractor: (msg) => msg.interaction,
+  component: RouteContextContent,
 });
 
 // ── 工单时间线卡片 (col-span-2, full width) ─────────────────────────────────

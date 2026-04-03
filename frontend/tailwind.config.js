@@ -38,6 +38,7 @@ export default {
           DEFAULT: 'var(--destructive)',
           foreground: 'var(--destructive-foreground)',
         },
+        warning: 'var(--warning)',
         border: 'var(--border)',
         input: 'var(--input)',
         ring: 'var(--ring)',

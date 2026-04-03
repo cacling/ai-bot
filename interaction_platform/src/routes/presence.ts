@@ -22,6 +22,8 @@ router.put('/:agentId', async (c) => {
     status?: string;
     max_chat_slots?: number;
     max_voice_slots?: number;
+    active_chat_count?: number;
+    active_voice_count?: number;
   }>();
 
   const existing = await db.query.ixAgentPresence.findFirst({
@@ -44,6 +46,8 @@ router.put('/:agentId', async (c) => {
     if (body.status) updates.presence_status = body.status;
     if (body.max_chat_slots !== undefined) updates.max_chat_slots = body.max_chat_slots;
     if (body.max_voice_slots !== undefined) updates.max_voice_slots = body.max_voice_slots;
+    if (body.active_chat_count !== undefined) updates.active_chat_count = body.active_chat_count;
+    if (body.active_voice_count !== undefined) updates.active_voice_count = body.active_voice_count;
 
     await db.update(ixAgentPresence)
       .set(updates)

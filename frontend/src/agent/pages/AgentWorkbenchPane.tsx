@@ -1,18 +1,22 @@
-import React, { memo } from 'react';
+import React, { memo, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Bot, Send, Headset, User, MessageSquare, PlusCircle, Smile } from 'lucide-react';
+import { Bot, Send, Headset, User, MessageSquare, PlusCircle, Smile, StickyNote } from 'lucide-react';
 import { CardMessage, type CardData } from '../../chat/CardMessage';
 import { type Lang, T } from '../../i18n';
 import { type CardState } from '../cards/registry';
 import { CardPanel } from '../cards/CardPanel';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Button } from '@/components/ui/button';
+import { ActionBar } from './ActionBar';
+import { ReplyChips } from './ReplyChips';
+import { ConversationHeader } from './ConversationHeader';
+import { type InboxInteraction } from '../inbox/InboxContext';
 
 interface AgentMessage {
   id: number;
   msgId?: string;
-  sender: 'bot' | 'agent' | 'customer';
+  sender: 'bot' | 'agent' | 'customer' | 'system';
   text: string;
   translated_text?: string;
   time: string;
@@ -28,13 +32,18 @@ interface AgentWorkbenchPaneProps {
   isTyping: boolean;
   isConnected: boolean;
   botMode: 'bot' | 'human';
+  interactionId: string | null;
+  interaction: InboxInteraction | undefined;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onInputChange: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
   onTransferToBot: () => void;
+  onTransferQueue: (targetQueue: string) => void;
+  onWrapUp: (interactionId: string, code?: string, note?: string) => void;
   onUpdateCards: (cards: CardState[]) => void;
+  onSendNote?: (text: string) => void;
 }
 
 export const AgentWorkbenchPane = memo(function AgentWorkbenchPane({
@@ -44,15 +53,38 @@ export const AgentWorkbenchPane = memo(function AgentWorkbenchPane({
   inputValue,
   isTyping,
   isConnected,
+  interactionId,
+  interaction,
   textareaRef,
   messagesEndRef,
   onInputChange,
   onKeyDown,
   onSend,
   onTransferToBot,
+  onTransferQueue,
+  onWrapUp,
   onUpdateCards,
+  onSendNote,
 }: AgentWorkbenchPaneProps) {
   const t = T[lang];
+  const [noteMode, setNoteMode] = useState(false);
+
+  const handleSend = useCallback(() => {
+    if (noteMode && onSendNote) {
+      onSendNote(inputValue);
+    } else {
+      onSend();
+    }
+  }, [noteMode, onSendNote, onSend, inputValue]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (noteMode && e.key === 'Enter' && !e.shiftKey && onSendNote) {
+      e.preventDefault();
+      onSendNote(inputValue);
+      return;
+    }
+    onKeyDown(e);
+  }, [noteMode, onSendNote, onKeyDown, inputValue]);
 
   return (
     <div className="h-full overflow-hidden p-4">
@@ -67,6 +99,9 @@ export const AgentWorkbenchPane = memo(function AgentWorkbenchPane({
             <MessageSquare size={15} className="text-muted-foreground mr-2" />
             <span className="text-sm font-medium text-foreground">{t.agent_dialog_title}</span>
           </div>
+
+          {/* Conversation context header */}
+          <ConversationHeader lang={lang} interaction={interaction} cardStates={cardStates} />
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -83,6 +118,17 @@ export const AgentWorkbenchPane = memo(function AgentWorkbenchPane({
             )}
 
             {messages.map(msg => {
+              // System events render as centered divider lines
+              if (msg.sender === 'system') {
+                return (
+                  <div key={msg.id} className="flex items-center gap-2 py-1">
+                    <div className="flex-1 border-t border-border" />
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">{msg.text}</span>
+                    <div className="flex-1 border-t border-border" />
+                  </div>
+                );
+              }
+
               const isLeft  = msg.sender === 'bot' || msg.sender === 'customer';
               const isAgent = msg.sender === 'agent';
               return (
@@ -165,34 +211,62 @@ export const AgentWorkbenchPane = memo(function AgentWorkbenchPane({
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Toolbar */}
-          <div className="bg-background/60 backdrop-blur-md border-t border-border px-3 py-2.5 flex-shrink-0">
-            <div className="flex items-center space-x-2 overflow-x-auto scrollbar-hide">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onTransferToBot}
-                disabled={!isConnected}
-                className="whitespace-nowrap rounded-full text-xs shadow-sm hover:border-primary hover:text-primary transition"
-              >
-                {t.transfer_to_bot}
-              </Button>
-            </div>
-          </div>
+          {/* Action toolbar */}
+          <ActionBar
+            lang={lang}
+            isConnected={isConnected}
+            interactionId={interactionId}
+            queueCode={interaction?.queue_code}
+            channel={interaction?.channel}
+            onTransferToBot={onTransferToBot}
+            onTransferQueue={onTransferQueue}
+            onWrapUp={onWrapUp}
+          />
+
+          {/* Recommended reply chips */}
+          <ReplyChips lang={lang} cardStates={cardStates} />
 
           {/* Input area */}
-          <div className="bg-background p-3 pt-2 pb-3 border-t border-border flex-shrink-0">
+          <div className={`p-3 pt-2 pb-3 border-t flex-shrink-0 transition-colors ${
+            noteMode ? 'bg-warning/5 border-warning/30' : 'bg-background border-border'
+          }`}>
+            {/* Note mode indicator */}
+            {noteMode && (
+              <div className="flex items-center gap-1.5 mb-1.5 text-[10px] text-warning font-medium">
+                <StickyNote size={10} />
+                {lang === 'zh' ? '内部备注模式 — 仅坐席可见' : 'Internal Note — visible to agents only'}
+              </div>
+            )}
             <div className="flex items-end space-x-2">
               <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary flex-shrink-0 mb-1">
                 <PlusCircle size={24} strokeWidth={1.5} />
               </Button>
-              <div className="flex-1 bg-muted border border-border rounded-2xl flex items-end relative overflow-hidden focus-within:border-ring focus-within:ring-1 focus-within:ring-ring transition-all">
+
+              {/* Note mode toggle */}
+              <Button
+                variant={noteMode ? 'secondary' : 'ghost'}
+                size="icon"
+                onClick={() => setNoteMode(!noteMode)}
+                className={`flex-shrink-0 mb-1 ${noteMode ? 'text-warning bg-warning/10' : 'text-muted-foreground hover:text-warning'}`}
+                title={lang === 'zh' ? '切换内部备注' : 'Toggle internal note'}
+              >
+                <StickyNote size={18} strokeWidth={1.5} />
+              </Button>
+
+              <div className={`flex-1 border rounded-2xl flex items-end relative overflow-hidden transition-all ${
+                noteMode
+                  ? 'bg-warning/5 border-warning/30 focus-within:border-warning focus-within:ring-1 focus-within:ring-warning'
+                  : 'bg-muted border-border focus-within:border-ring focus-within:ring-1 focus-within:ring-ring'
+              }`}>
                 <textarea
                   ref={textareaRef}
                   value={inputValue}
                   onChange={e => onInputChange(e.target.value)}
-                  onKeyDown={onKeyDown}
-                  placeholder={t.agent_reply_placeholder}
+                  onKeyDown={handleKeyDown}
+                  placeholder={noteMode
+                    ? (lang === 'zh' ? '输入内部备注...' : 'Type internal note...')
+                    : t.agent_reply_placeholder
+                  }
                   disabled={isTyping || !isConnected}
                   className="w-full bg-transparent max-h-24 min-h-[40px] px-3 py-2.5 outline-none text-sm text-foreground resize-none scrollbar-hide disabled:opacity-60"
                   rows={1}
@@ -204,11 +278,13 @@ export const AgentWorkbenchPane = memo(function AgentWorkbenchPane({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={onSend}
+                onClick={handleSend}
                 disabled={!inputValue.trim() || isTyping || !isConnected}
                 className={`p-2.5 rounded-full flex-shrink-0 mb-0.5 transition-all shadow-sm ${
                   inputValue.trim() && !isTyping && isConnected
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    ? noteMode
+                      ? 'bg-warning text-warning-foreground hover:bg-warning/90'
+                      : 'bg-primary text-primary-foreground hover:bg-primary/90'
                     : 'bg-muted text-muted-foreground cursor-not-allowed'
                 }`}
               >
@@ -224,7 +300,7 @@ export const AgentWorkbenchPane = memo(function AgentWorkbenchPane({
         {/* Right: Card panel */}
         <ResizablePanel id="agent-cards" defaultSize="70%" minSize="40%">
         <div className="h-full overflow-y-auto pb-4">
-          <CardPanel cards={cardStates} lang={lang} onUpdate={onUpdateCards} />
+          <CardPanel cards={cardStates} lang={lang} queueCode={interaction?.queue_code} onUpdate={onUpdateCards} />
         </div>
         </ResizablePanel>
       </ResizablePanelGroup>

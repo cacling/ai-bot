@@ -60,7 +60,7 @@ interface KbAnswer {
 
 const RISK_COLORS: Record<string, string> = {
   low: 'bg-primary/10 text-primary',
-  medium: 'bg-yellow-500/10 text-yellow-700',
+  medium: 'bg-warning/10 text-warning',
   high: 'bg-destructive/10 text-destructive',
 };
 
@@ -314,6 +314,46 @@ export const AgentCopilotContent = memo(function AgentCopilotContent({
           </div>
         )}
       </div>
+
+      {/* ── Next step suggestions (clickable) ── */}
+      {d.recommendations.next_actions.length > 0 && (
+        <div className="bg-accent/50 rounded-lg px-2.5 py-2 space-y-1.5">
+          <div className="text-[10px] font-medium text-muted-foreground">
+            {lang === 'zh' ? '下一步建议' : 'Next Steps'}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {d.recommendations.next_actions.map((action, i) => {
+              // Detect action keywords and map to dialog actions
+              const isWorkOrder = /工单|work.?order/i.test(action);
+              const isCallback = /回呼|callback/i.test(action);
+              const isTransfer = /转接|transfer/i.test(action);
+              const isWrapUp = /收尾|wrap.?up|close/i.test(action);
+
+              const actionType = isWorkOrder ? 'create_wo'
+                : isCallback ? 'callback'
+                : isTransfer ? 'transfer'
+                : isWrapUp ? 'wrap_up'
+                : null;
+
+              return (
+                <Button
+                  key={i}
+                  variant="outline"
+                  size="xs"
+                  className="text-[10px] h-6 bg-background"
+                  onClick={() => {
+                    if (actionType) {
+                      dispatchAction('open_dialog', { dialog: actionType });
+                    }
+                  }}
+                >
+                  {action}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <Separator />
 
