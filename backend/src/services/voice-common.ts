@@ -115,8 +115,8 @@ export function runProgressTracking(
       // 输出带高亮行的 mermaid 片段，用于调试渲染问题
       const hlLines = mermaid.split('\n').filter(l => l.includes(':::'));
       logger.info(channel, 'progress_highlight_result', { session: sessionId, state: stateName, highlightApplied: !same, mermaidLen: mermaid.length, hlLines });
-      try { ws.send(JSON.stringify({ type: 'skill_diagram_update', skill_name: skillName, mermaid })); } catch {}
-      sessionBus.publish(userPhone, { source: 'voice', type: 'skill_diagram_update', skill_name: skillName, mermaid, msg_id: crypto.randomUUID() });
+      try { ws.send(JSON.stringify({ type: 'skill_diagram_update', skill_name: skillName, mermaid, progress_state: stateName })); } catch {}
+      sessionBus.publish(userPhone, { source: 'voice', type: 'skill_diagram_update', skill_name: skillName, mermaid, progress_state: stateName, msg_id: crypto.randomUUID() });
     })
     .catch((err) => {
       logger.error(channel, 'progress_tracking_error', { session: sessionId, error: String(err) });
