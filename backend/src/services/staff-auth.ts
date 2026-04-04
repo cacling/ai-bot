@@ -39,66 +39,71 @@ staffAuthRoutes.post('/login', async (c) => {
     return c.json({ error: '请提供用户名和密码' }, 400);
   }
 
-  const rows = db
-    .select()
-    .from(staffAccounts)
-    .where(eq(staffAccounts.username, username))
-    .limit(1)
-    .all();
+  try {
+    const rows = db
+      .select()
+      .from(staffAccounts)
+      .where(eq(staffAccounts.username, username))
+      .limit(1)
+      .all();
 
-  if (rows.length === 0) {
-    logger.warn('staff-auth', 'login_user_not_found', { username });
-    return c.json({ error: '用户名或密码错误' }, 401);
+    if (rows.length === 0) {
+      logger.warn('staff-auth', 'login_user_not_found', { username });
+      return c.json({ error: '用户名或密码错误' }, 401);
+    }
+
+    const staff = rows[0];
+    if (staff.status !== 'active') {
+      logger.warn('staff-auth', 'login_disabled', { username, staffId: staff.id });
+      return c.json({ error: '账号已禁用' }, 403);
+    }
+
+    const valid = await Bun.password.verify(password, staff.password_hash);
+    if (!valid) {
+      logger.warn('staff-auth', 'login_bad_password', { username });
+      return c.json({ error: '用户名或密码错误' }, 401);
+    }
+
+    // Create session
+    const token = crypto.randomUUID();
+    const tokenHash = hashToken(token);
+    const sessionId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+
+    db.insert(staffSessions).values({
+      id: sessionId,
+      staff_id: staff.id,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+      last_seen_at: now,
+      user_agent: c.req.header('user-agent') ?? null,
+      ip: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null,
+    }).run();
+
+    // Update last_login_at
+    db.update(staffAccounts)
+      .set({ last_login_at: now })
+      .where(eq(staffAccounts.id, staff.id))
+      .run();
+
+    setCookie(c, SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: SESSION_TTL_MS / 1000,
+    });
+
+    logger.info('staff-auth', 'login_ok', { staffId: staff.id, username });
+
+    return c.json({
+      ok: true,
+      staff: buildStaffResponse(staff),
+    });
+  } catch (err) {
+    logger.error('staff-auth', 'login_error', { username, error: String(err) });
+    return c.json({ error: '服务暂时不可用，请稍后重试' }, 503);
   }
-
-  const staff = rows[0];
-  if (staff.status !== 'active') {
-    logger.warn('staff-auth', 'login_disabled', { username, staffId: staff.id });
-    return c.json({ error: '账号已禁用' }, 403);
-  }
-
-  const valid = await Bun.password.verify(password, staff.password_hash);
-  if (!valid) {
-    logger.warn('staff-auth', 'login_bad_password', { username });
-    return c.json({ error: '用户名或密码错误' }, 401);
-  }
-
-  // Create session
-  const token = crypto.randomUUID();
-  const tokenHash = hashToken(token);
-  const sessionId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-
-  db.insert(staffSessions).values({
-    id: sessionId,
-    staff_id: staff.id,
-    token_hash: tokenHash,
-    expires_at: expiresAt,
-    last_seen_at: now,
-    user_agent: c.req.header('user-agent') ?? null,
-    ip: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null,
-  }).run();
-
-  // Update last_login_at
-  db.update(staffAccounts)
-    .set({ last_login_at: now })
-    .where(eq(staffAccounts.id, staff.id))
-    .run();
-
-  setCookie(c, SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'Lax',
-    path: '/',
-    maxAge: SESSION_TTL_MS / 1000,
-  });
-
-  logger.info('staff-auth', 'login_ok', { staffId: staff.id, username });
-
-  return c.json({
-    ok: true,
-    staff: buildStaffResponse(staff),
-  });
 });
 
 // POST /logout

@@ -21,7 +21,7 @@ export const MENU_TREE: MenuItem[] = [
   },
   {
     id: 'supervisor',
-    label: { zh: '主管监控', en: 'Supervisor' },
+    label: { zh: '运营监控', en: 'Live Operations' },
     path: '/staff/supervisor',
     roles: ['operations'],
   },
@@ -35,6 +35,7 @@ export const MENU_TREE: MenuItem[] = [
       { id: 'workorders', label: { zh: '工单管理', en: 'Work Orders' }, path: '/staff/operations/workorders' },
       { id: 'routing', label: { zh: '路由管理', en: 'Routing Management' }, path: '/staff/operations/routing' },
       { id: 'customers', label: { zh: '客户管理', en: 'Customers' }, path: '/staff/operations/customers' },
+      { id: 'wfm', label: { zh: '排班管理', en: 'Workforce' }, path: '/staff/operations/wfm' },
     ],
   },
 ];
@@ -42,7 +43,7 @@ export const MENU_TREE: MenuItem[] = [
 /** Breadcrumb path segment labels */
 export const BREADCRUMB_LABELS: Record<string, Record<Lang, string>> = {
   workbench: { zh: '坐席工作台', en: 'Workbench' },
-  supervisor: { zh: '主管监控', en: 'Supervisor' },
+  supervisor: { zh: '运营监控', en: 'Live Operations' },
   operations: { zh: '运营管理', en: 'Operations' },
   knowledge: { zh: '知识与技能', en: 'Knowledge & Skills' },
   workorders: { zh: '工单管理', en: 'Work Orders' },
@@ -69,4 +70,9 @@ export const BREADCRUMB_LABELS: Record<string, Record<Lang, string>> = {
   'import-export': { zh: '导入导出', en: 'Import/Export' },
   'blacklist-consent': { zh: '黑名单/隐私', en: 'Blacklist/Consent' },
   'audit-log': { zh: '操作日志', en: 'Audit Log' },
+  wfm: { zh: '排班管理', en: 'Workforce' },
+  plans: { zh: '排班计划', en: 'Schedule Plans' },
+  master: { zh: '主数据', en: 'Master Data' },
+  leaves: { zh: '假勤管理', en: 'Leave Mgmt' },
+  'rule-config': { zh: '规则配置', en: 'Rule Config' },
 };

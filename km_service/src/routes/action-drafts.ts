@@ -2,7 +2,7 @@
  * action-drafts.ts — 动作草案 CRUD + 执行（写回滚点+更新资产+写审计）
  */
 import { Hono } from 'hono';
-import { eq, desc, and, SQL } from 'drizzle-orm';
+import { eq, desc, and, SQL, sql } from 'drizzle-orm';
 import { db } from '../db';
 import {
   kmActionDrafts, kmAssets, kmAssetVersions,
@@ -52,7 +52,7 @@ app.get('/', async (c) => {
   const offset = (Math.max(Number(page) || 1, 1) - 1) * limit;
   const rows = await db.select().from(kmActionDrafts).where(where)
     .orderBy(desc(kmActionDrafts.updated_at)).limit(limit).offset(offset);
-  const [{ count }] = await db.select({ count: db.$count(kmActionDrafts, where) }).from(kmActionDrafts);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(kmActionDrafts).where(where);
   return c.json({ items: rows, total: count });
 });
 

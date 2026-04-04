@@ -2,7 +2,7 @@
  * audit.ts — 审计日志（只读）
  */
 import { Hono } from 'hono';
-import { eq, desc, and, SQL } from 'drizzle-orm';
+import { eq, desc, and, SQL, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { kmAuditLogs } from '../db';
 
@@ -21,7 +21,7 @@ app.get('/', async (c) => {
   const offset = (Math.max(Number(page) || 1, 1) - 1) * limit;
   const rows = await db.select().from(kmAuditLogs).where(where)
     .orderBy(desc(kmAuditLogs.created_at)).limit(limit).offset(offset);
-  const [{ count }] = await db.select({ count: db.$count(kmAuditLogs, where) }).from(kmAuditLogs);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(kmAuditLogs).where(where);
   return c.json({ items: rows, total: count });
 });
 

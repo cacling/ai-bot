@@ -11,6 +11,8 @@ const platformDbPath =
 const platformSqlite = new Database(platformDbPath, { create: true });
 platformSqlite.exec('PRAGMA journal_mode = WAL');
 platformSqlite.exec('PRAGMA busy_timeout = 5000');
+// Checkpoint WAL on startup so seed data from prior process is visible
+platformSqlite.exec('PRAGMA wal_checkpoint(TRUNCATE)');
 
 export const platformDb = drizzle(platformSqlite, { schema });
 export { platformSqlite };

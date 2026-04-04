@@ -119,7 +119,7 @@ export function KnowledgeManagementPage() {
       </nav>
 
       {/* 右侧内容区 */}
-      <main className="flex-1 overflow-auto">
+      <main className={`flex-1 ${page.view === 'candidate-detail' ? 'overflow-hidden' : 'overflow-auto'}`}>
         {renderPage(page, navigate)}
       </main>
     </div>

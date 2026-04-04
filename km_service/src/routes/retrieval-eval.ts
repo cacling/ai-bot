@@ -2,7 +2,7 @@
  * retrieval-eval.ts — 检索评测 API
  */
 import { Hono } from 'hono';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { kmRetrievalEvalCases } from '../db';
 import { searchKnowledgeAssets } from '../services/reply-copilot';
@@ -42,7 +42,7 @@ app.get('/cases', async (c) => {
   const rows = await db.select().from(kmRetrievalEvalCases)
     .orderBy(desc(kmRetrievalEvalCases.created_at))
     .limit(limit).offset(offset);
-  const [{ count }] = await db.select({ count: db.$count(kmRetrievalEvalCases) }).from(kmRetrievalEvalCases);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(kmRetrievalEvalCases);
 
   return c.json({ items: rows, total: count, page: Number(page), size: limit });
 });

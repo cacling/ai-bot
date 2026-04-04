@@ -2,7 +2,7 @@
  * tasks.ts — 治理任务 CRUD
  */
 import { Hono } from 'hono';
-import { eq, desc, and, SQL } from 'drizzle-orm';
+import { eq, desc, and, SQL, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { kmGovernanceTasks } from '../db';
 import { nanoid, writeAudit } from './helpers';
@@ -22,7 +22,7 @@ app.get('/', async (c) => {
   const offset = (Math.max(Number(page) || 1, 1) - 1) * limit;
   const rows = await db.select().from(kmGovernanceTasks).where(where)
     .orderBy(desc(kmGovernanceTasks.created_at)).limit(limit).offset(offset);
-  const [{ count }] = await db.select({ count: db.$count(kmGovernanceTasks, where) }).from(kmGovernanceTasks);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(kmGovernanceTasks).where(where);
   return c.json({ items: rows, total: count });
 });
 

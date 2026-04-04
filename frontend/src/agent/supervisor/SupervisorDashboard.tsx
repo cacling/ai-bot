@@ -50,7 +50,7 @@ interface RiskInteraction {
 
 const T = {
   zh: {
-    title: '主管监控面板',
+    title: '运营监控面板',
     refresh: '刷新',
     queueLoad: '队列实时负载',
     agentStatus: '坐席状态分布',
@@ -74,7 +74,7 @@ const T = {
     overdue: '已超时',
   },
   en: {
-    title: 'Supervisor Dashboard',
+    title: 'Live Operations Dashboard',
     refresh: 'Refresh',
     queueLoad: 'Queue Load',
     agentStatus: 'Agent Status',

@@ -53,7 +53,7 @@ app.get('/details', async (c) => {
   const rows = await db.select().from(kmReplyFeedback).where(where)
     .orderBy(desc(kmReplyFeedback.created_at))
     .limit(limit).offset(offset);
-  const [{ count }] = await db.select({ count: db.$count(kmReplyFeedback, where) }).from(kmReplyFeedback);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(kmReplyFeedback).where(where);
 
   return c.json({ items: rows, total: count, page: Number(page), size: limit });
 });

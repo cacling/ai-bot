@@ -2,7 +2,7 @@
  * candidates.ts — 知识候选 CRUD + 门槛校验
  */
 import { Hono } from 'hono';
-import { eq, desc, and, like, or, SQL } from 'drizzle-orm';
+import { eq, desc, and, like, or, SQL, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { kmCandidates, kmEvidenceRefs, kmConflictRecords } from '../db';
 import { logger } from '../logger';
@@ -30,7 +30,7 @@ app.get('/', async (c) => {
 
   const rows = await db.select().from(kmCandidates).where(where)
     .orderBy(desc(kmCandidates.updated_at)).limit(limit).offset(offset);
-  const [{ count }] = await db.select({ count: db.$count(kmCandidates, where) }).from(kmCandidates);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(kmCandidates).where(where);
 
   return c.json({ items: rows, total: count, page: Number(page), size: limit });
 });

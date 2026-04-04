@@ -20,7 +20,7 @@ app.get('/', async (c) => {
   const offset = (Math.max(Number(page) || 1, 1) - 1) * limit;
   const rows = await db.select().from(kmAssets).where(where)
     .orderBy(desc(kmAssets.updated_at)).limit(limit).offset(offset);
-  const [{ count }] = await db.select({ count: db.$count(kmAssets, where) }).from(kmAssets);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(kmAssets).where(where);
   return c.json({ items: rows, total: count, page: Number(page), size: limit });
 });
 

@@ -2,7 +2,7 @@
  * review-packages.ts — 评审包 CRUD + 提交门槛阻断 + 审批
  */
 import { Hono } from 'hono';
-import { eq, desc, inArray, and, SQL } from 'drizzle-orm';
+import { eq, desc, inArray, and, SQL, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { kmReviewPackages, kmCandidates, kmConflictRecords } from '../db';
 import { logger } from '../logger';
@@ -20,7 +20,7 @@ app.get('/', async (c) => {
   const offset = (Math.max(Number(page) || 1, 1) - 1) * limit;
   const rows = await db.select().from(kmReviewPackages).where(where)
     .orderBy(desc(kmReviewPackages.updated_at)).limit(limit).offset(offset);
-  const [{ count }] = await db.select({ count: db.$count(kmReviewPackages, where) }).from(kmReviewPackages);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(kmReviewPackages).where(where);
   return c.json({ items: rows, total: count, page: Number(page), size: limit });
 });
 
