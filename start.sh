@@ -27,6 +27,15 @@ warn() { echo -e "  ${YEL}!${NC} $*"; }
 
 mkdir -p "$LOG_DIR"
 
+# ── 迁移检查：清理过时的 backend/.env ──────────────────────────────────────
+if [[ -f "$BASE_DIR/backend/.env" ]]; then
+  if grep -q "^SKILLS_DIR=" "$BASE_DIR/backend/.env" 2>/dev/null; then
+    warn "检测到过时的 backend/.env 含 SKILLS_DIR，已自动移除（路径由 paths.ts 默认值处理）"
+    sed -i.bak '/^SKILLS_DIR=/d' "$BASE_DIR/backend/.env"
+    rm -f "$BASE_DIR/backend/.env.bak"
+  fi
+fi
+
 # ── 加载环境变量（根目录 .env）──────────────────────────────────────────────
 if [[ -f "$BASE_DIR/.env" ]]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
