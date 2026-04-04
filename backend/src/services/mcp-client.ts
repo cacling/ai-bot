@@ -29,6 +29,7 @@ export async function callMcpTool(
   channel: 'voice' | 'outbound' = 'voice',
 ): Promise<{ text: string; success: boolean }> {
   const runtime = getRuntime();
+  await runtime.ensureContractsLoaded();
 
   const result = await runtime.call({
     toolName: name,
