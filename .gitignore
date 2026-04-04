@@ -30,6 +30,9 @@ build/
 .vite/
 *.tsbuildinfo
 
+# 技能沙箱快照（Tool Studio 编辑产生的临时副本）
+**/.sandbox/
+
 # 测试产生的临时文件
 km_service/skills/biz-skills/test-skill-*/
 
