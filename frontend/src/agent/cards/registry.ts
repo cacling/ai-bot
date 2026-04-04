@@ -25,6 +25,8 @@ export interface CardDef {
   defaultOpen: boolean;
   defaultCollapsed: boolean;
   wsEvents: string[];    // WS message types this card handles
+  /** When true, card starts hidden and only appears when data arrives via WS event. */
+  showOnDataOnly?: boolean;
   dataExtractor: (msg: Record<string, unknown>) => unknown;
   component: ComponentType<{ data: unknown; lang: Lang }>;
   /** Queue codes where this card is relevant. null = relevant everywhere. */
@@ -64,7 +66,7 @@ export function buildInitialCardStates(): CardState[] {
   return Array.from(registry.values()).map((def, index) => ({
     id: def.id,
     order: index,
-    isOpen: def.defaultOpen,
+    isOpen: def.showOnDataOnly ? false : def.defaultOpen,
     isCollapsed: def.defaultCollapsed,
     data: null,
   }));
