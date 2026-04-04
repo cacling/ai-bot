@@ -11,6 +11,8 @@ import { resolve } from 'path';
 import { logger } from './services/logger';
 import { runAgent } from './engine/runner';
 import { loadLexicons } from './services/query-normalizer';
+import { platformDb } from './db';
+import { staffAccounts } from './db/schema';
 
 const app = new Hono();
 
@@ -25,7 +27,18 @@ app.use(
   })
 );
 
-app.get('/health', (c) => c.json({ status: 'ok' }));
+app.get('/health', async (c) => {
+  try {
+    const rows = platformDb.select({ id: staffAccounts.id }).from(staffAccounts).limit(1).all();
+    return c.json({ status: 'ok', db: rows.length > 0 ? 'seeded' : 'empty' });
+  } catch {
+    return c.json({ status: 'db_not_ready' }, 503);
+  }
+});
+
+// Internal API（供 Temporal Activity 调用，不需要 staff auth）
+import internalRouter from './routes/internal/index';
+app.route('/api/internal', internalRouter);
 
 // ── Staff Auth ──────────────────────────────────────────────────────────────
 import { staffAuthRoutes, staffSessionMiddleware, cleanExpiredSessions } from './services/staff-auth';
@@ -115,9 +128,11 @@ app.post('/api/test/run-agent', async (c) => {
 import { mountKmProxy } from './services/km-proxy';
 import { mountWorkOrderProxy } from './services/work-order-proxy';
 import { mountCdpProxy } from './services/cdp-proxy';
+import { mountWfmProxy } from './services/wfm-proxy';
 mountKmProxy(app);
 mountWorkOrderProxy(app);
 mountCdpProxy(app);
+mountWfmProxy(app);
 
 // Mount voice WebSocket route: GET /ws/voice
 app.route('/', voiceRoutes);

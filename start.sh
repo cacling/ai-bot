@@ -49,6 +49,7 @@ CDP_SERVICE_PORT="${CDP_SERVICE_PORT:-18020}"
 OUTBOUND_SERVICE_PORT="${OUTBOUND_SERVICE_PORT:-18021}"
 INTERACTION_PLATFORM_PORT="${INTERACTION_PLATFORM_PORT:-18022}"
 WFM_SERVICE_PORT="${WFM_SERVICE_PORT:-18023}"
+TEMPORAL_ORCHESTRATOR_PORT="${TEMPORAL_ORCHESTRATOR_PORT:-18040}"
 CHANNEL_HOST_PORT="${CHANNEL_HOST_PORT:-18030}"
 BAILEYS_GATEWAY_PORT="${BAILEYS_GATEWAY_PORT:-18031}"
 FEISHU_GATEWAY_PORT="${FEISHU_GATEWAY_PORT:-18032}"
@@ -152,6 +153,10 @@ log "outbound_service: bun install"
 cd "$BASE_DIR/outbound_service" && "$BUN" install 2>&1 | tail -3
 ok "outbound_service 依赖就绪"
 
+log "temporal_orchestrator: bun install"
+cd "$BASE_DIR/temporal_orchestrator" && "$BUN" install 2>&1 | tail -3
+ok "temporal_orchestrator 依赖就绪"
+
 log "channel_host: bun install"
 cd "$BASE_DIR/channel_host" && "$BUN" install 2>&1 | tail -3
 ok "channel_host 依赖就绪"
@@ -205,35 +210,35 @@ log "同步数据库 Schema..."
 
 # 1) platform.db (backend 独占运行时表)
 cd "$BASE_DIR/backend"
-PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" drizzle-kit push --config drizzle-platform.config.ts 2>&1 | tail -1
+PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN"x --bun drizzle-kit push --config drizzle-platform.config.ts 2>&1 | tail -1
 
 # 2) km_service schema → km.db (platform + km 表，km_service 独占)
 cd "$BASE_DIR/km_service"
-"$BUN" drizzle-kit push 2>&1 | tail -1
+"$BUN"x --bun drizzle-kit push 2>&1 | tail -1
 
 # 3) mock_apis schema → business.db
 cd "$BASE_DIR/backend"
-BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" drizzle-kit push --config drizzle-business.config.ts 2>&1 | tail -1
+BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN"x --bun drizzle-kit push --config drizzle-business.config.ts 2>&1 | tail -1
 
 # 4) work_order_service schema → workorder.db
 cd "$BASE_DIR/backend"
-WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
+WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN"x --bun drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
 
 # 5) cdp_service schema → cdp.db
 cd "$BASE_DIR/cdp_service"
-CDP_DB_PATH="$CDP_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+CDP_DB_PATH="$CDP_DB_PATH" "$BUN"x --bun drizzle-kit push 2>&1 | tail -1
 
 # 6) outbound_service schema → outbound.db
 cd "$BASE_DIR/outbound_service"
-OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN"x --bun drizzle-kit push 2>&1 | tail -1
 
 # 7) interaction_platform schema → interaction.db
 cd "$BASE_DIR/interaction_platform"
-INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN"x --bun drizzle-kit push 2>&1 | tail -1
 
 # 8) wfm_service schema → wfm.db
 cd "$BASE_DIR/wfm_service"
-WFM_DB_PATH="$WFM_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+WFM_DB_PATH="$WFM_DB_PATH" "$BUN"x --bun drizzle-kit push 2>&1 | tail -1
 
 ok "数据库 Schema 就绪（km.db + business.db + workorder.db + cdp.db + outbound.db + interaction.db + wfm.db）"
 
@@ -296,19 +301,20 @@ if [[ "$RESET_MODE" == true ]]; then
   ok "草稿文件已清理"
 
   # 重新 push schema + seed（多 DB）
-  cd "$BASE_DIR/backend" && PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" drizzle-kit push --config drizzle-platform.config.ts 2>&1 | tail -1
-  cd "$BASE_DIR/km_service" && "$BUN" drizzle-kit push 2>&1 | tail -1
-  cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" drizzle-kit push --config drizzle-business.config.ts 2>&1 | tail -1
-  cd "$BASE_DIR/backend" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
-  cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
-  cd "$BASE_DIR/outbound_service" && OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
-  cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
-  cd "$BASE_DIR/wfm_service" && WFM_DB_PATH="$WFM_DB_PATH" "$BUN" drizzle-kit push 2>&1 | tail -1
+  cd "$BASE_DIR/backend" && PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN"x --bun drizzle-kit push --config drizzle-platform.config.ts 2>&1 | tail -1
+  cd "$BASE_DIR/km_service" && "$BUN"x --bun drizzle-kit push 2>&1 | tail -1
+  cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN"x --bun drizzle-kit push --config drizzle-business.config.ts 2>&1 | tail -1
+  cd "$BASE_DIR/backend" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN"x --bun drizzle-kit push --config drizzle-workorder.config.ts 2>&1 | tail -1
+  cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" "$BUN"x --bun drizzle-kit push 2>&1 | tail -1
+  cd "$BASE_DIR/outbound_service" && OUTBOUND_DB_PATH="$OUTBOUND_DB_PATH" "$BUN"x --bun drizzle-kit push 2>&1 | tail -1
+  cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN"x --bun drizzle-kit push 2>&1 | tail -1
+  cd "$BASE_DIR/wfm_service" && WFM_DB_PATH="$WFM_DB_PATH" "$BUN"x --bun drizzle-kit push 2>&1 | tail -1
   cd "$BASE_DIR/backend" && BUSINESS_DB_PATH="$BUSINESS_DB_PATH" PLATFORM_DB_PATH="$PLATFORM_DB_PATH" "$BUN" run db:seed 2>&1 | tail -5
   cd "$BASE_DIR/work_order_service" && WORKORDER_DB_PATH="$WORKORDER_DB_PATH" "$BUN" --import tsx/esm src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/wfm_service" && WFM_DB_PATH="$WFM_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
+  cd "$BASE_DIR/km_service" && SQLITE_PATH="$SQLITE_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   # outbound seed 依赖 CDP（phone → party_id 解析），需要先启动 CDP 服务
   # 这里先跳过，在 CDP 服务启动后再 seed（见下方 start_service 后的 seed 步骤）
   ok "数据已重置为初始状态"
@@ -320,6 +326,7 @@ else
   cd "$BASE_DIR/cdp_service" && CDP_DB_PATH="$CDP_DB_PATH" BUSINESS_DB_PATH="$BUSINESS_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/interaction_platform" && INTERACTION_DB_PATH="$INTERACTION_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   cd "$BASE_DIR/wfm_service" && WFM_DB_PATH="$WFM_DB_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
+  cd "$BASE_DIR/km_service" && SQLITE_PATH="$SQLITE_PATH" "$BUN" src/seed.ts 2>&1 | tail -3
   ok "初始数据就绪"
 fi
 
@@ -389,7 +396,7 @@ start_service "cdp-service" "$BASE_DIR/cdp_service" \
 
 # Outbound Service (外呼任务与营销活动管理)
 start_service "outbound-service" "$BASE_DIR/outbound_service" \
-  "OUTBOUND_SERVICE_PORT=$OUTBOUND_SERVICE_PORT OUTBOUND_DB_PATH=$OUTBOUND_DB_PATH CDP_SERVICE_PORT=$CDP_SERVICE_PORT $BUN src/server.ts"
+  "OUTBOUND_SERVICE_PORT=$OUTBOUND_SERVICE_PORT OUTBOUND_DB_PATH=$OUTBOUND_DB_PATH CDP_SERVICE_PORT=$CDP_SERVICE_PORT TEMPORAL_API_URL=http://127.0.0.1:$TEMPORAL_ORCHESTRATOR_PORT $BUN src/server.ts"
 
 # Interaction Platform (实时互动中枢)
 start_service "interaction-platform" "$BASE_DIR/interaction_platform" \
@@ -434,6 +441,11 @@ if [[ "$RESET_MODE" == true ]]; then
   ok "outbound 数据已初始化"
 fi
 
+# Temporal Orchestrator（Node.js，非 Bun）
+# 需要本地 Temporal Server 运行：temporal server start-dev --namespace default
+start_service "temporal-orchestrator" "$BASE_DIR/temporal_orchestrator" \
+  "TEMPORAL_ORCHESTRATOR_PORT=$TEMPORAL_ORCHESTRATOR_PORT BACKEND_URL=http://127.0.0.1:$BACKEND_PORT OUTBOUND_SERVICE_URL=http://127.0.0.1:$OUTBOUND_SERVICE_PORT WORK_ORDER_SERVICE_URL=http://127.0.0.1:$WORK_ORDER_PORT KM_SERVICE_URL=http://127.0.0.1:$KM_SERVICE_PORT WFM_SERVICE_URL=http://127.0.0.1:$WFM_SERVICE_PORT $NODE --import tsx/esm src/main.ts"
+
 # Backend
 start_service "backend" "$BASE_DIR/backend" "PORT=$BACKEND_PORT $BUN src/index.ts"
 
@@ -449,7 +461,8 @@ log "等待服务就绪（最多 ${HEALTH_TIMEOUT}s）..."
 # 等待 backend
 READY=false
 for i in $(seq 1 "$HEALTH_TIMEOUT"); do
-  if curl -sf --noproxy '*' http://127.0.0.1:${BACKEND_PORT}/health >/dev/null 2>&1; then
+  HEALTH_RESP=$(curl -sf --noproxy '*' http://127.0.0.1:${BACKEND_PORT}/health 2>/dev/null || true)
+  if echo "$HEALTH_RESP" | grep -q '"seeded"'; then
     READY=true; break
   fi
   printf "."; sleep 1
@@ -463,6 +476,11 @@ if [[ "$READY" == true ]]; then
   ok "CDP Service  → http://127.0.0.1:${CDP_SERVICE_PORT}"
   ok "Outbound Svc → http://127.0.0.1:${OUTBOUND_SERVICE_PORT}"
   ok "WFM Service  → http://127.0.0.1:${WFM_SERVICE_PORT}"
+  if lsof -ti :"$TEMPORAL_ORCHESTRATOR_PORT" >/dev/null 2>&1; then
+    ok "Temporal Orch → http://127.0.0.1:${TEMPORAL_ORCHESTRATOR_PORT}"
+  else
+    warn "Temporal Orch → 端口 ${TEMPORAL_ORCHESTRATOR_PORT} 未启动（需 Temporal Server）"
+  fi
   ok "Channel Host → http://127.0.0.1:${CHANNEL_HOST_PORT}"
   if lsof -ti :"$BAILEYS_GATEWAY_PORT" >/dev/null 2>&1; then
     ok "Baileys GW   → http://127.0.0.1:${BAILEYS_GATEWAY_PORT}"

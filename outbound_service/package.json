@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ai-bot/shared-db": "workspace:*",
+    "@ai-bot/shared-temporal": "workspace:*",
     "@hono/node-server": "^1.14.3",
     "drizzle-orm": "^0.43.1",
     "hono": "^4.7.5"

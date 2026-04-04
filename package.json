@@ -15,6 +15,9 @@
     "interaction_platform",
     "channel_host",
     "wfm_service",
+    "wfm_service/frontend",
+    "temporal_orchestrator",
+    "ontology_service",
     "packages/*"
   ],
   "scripts": {
@@ -28,6 +31,8 @@
     "check:mcp": "npm --workspace @ai-bot/mcp-servers run check",
     "check:km": "npm --workspace @ai-bot/km-service run check",
     "dev:cdp": "npm --workspace @ai-bot/cdp-service run dev",
-    "check:cdp": "npm --workspace @ai-bot/cdp-service run check"
+    "check:cdp": "npm --workspace @ai-bot/cdp-service run check",
+    "dev:ontology": "npm --workspace @ai-bot/ontology-service run dev",
+    "check:ontology": "npm --workspace @ai-bot/ontology-service run check"
   }
 }

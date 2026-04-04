@@ -3,6 +3,7 @@ import campaignsRoutes from './campaigns';
 import tasksRoutes from './tasks';
 import resultsRoutes from './results';
 import testPersonasRoutes from './test-personas';
+import internalRoutes from './internal';
 
 const router = new Hono();
 
@@ -17,5 +18,8 @@ router.route('/results', resultsRoutes);
 
 // 测试 Persona
 router.route('/test-personas', testPersonasRoutes);
+
+// 内部 API（供 Temporal Activity 调用）
+router.route('/internal', internalRoutes);
 
 export default router;
