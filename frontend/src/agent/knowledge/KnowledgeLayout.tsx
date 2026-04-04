@@ -9,7 +9,9 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Library, Wrench, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { KnowledgeManagementPage, SkillManagerPage, McpManagementPage } from '@ai-bot/km-frontend';
+import { KnowledgeManagementPage } from './pages/KnowledgeManagementPage';
+import { SkillManagerPage } from './pages/SkillManagerPage';
+import { McpManagementPage } from './pages/mcp/McpManagementPage';
 import { useAgentContext } from '../AgentContext';
 
 type KnowledgeSub = 'documents' | 'skills' | 'tools';

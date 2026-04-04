@@ -5,14 +5,16 @@
  * Instead, always renders all 3 WO pages with CSS hidden toggling,
  * so component internal state is preserved across tab switches.
  *
- * Pages are imported from @ai-bot/wo-frontend (independent module).
+ * Pages live in ./pages/ (migrated from work_order_service/frontend).
  */
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ClipboardList, Inbox, GitMerge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAgentContext } from '../AgentContext';
 import { type Lang } from '../../i18n';
-import { WorkItemsPage, IntakesPage, ThreadsPage } from '@ai-bot/wo-frontend';
+import { WorkItemsPage } from './pages/WorkItemsPage';
+import { IntakesPage } from './pages/IntakesPage';
+import { ThreadsPage } from './pages/ThreadsPage';
 
 type WoSub = 'items' | 'intakes' | 'threads';
 

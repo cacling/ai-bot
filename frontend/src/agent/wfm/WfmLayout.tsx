@@ -5,14 +5,17 @@
  * Instead, always renders all 4 WFM pages with CSS hidden toggling,
  * so component internal state is preserved across tab switches.
  *
- * Pages are imported from @ai-bot/wfm-frontend (independent module).
+ * Pages live in ./pages/ (migrated from wfm_service/frontend).
  */
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CalendarDays, Database, CalendarOff, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAgentContext } from '../AgentContext';
 import { type Lang } from '../../i18n';
-import { SchedulePlanPage, MasterDataPage, LeaveManagementPage, RuleConfigPage } from '@ai-bot/wfm-frontend';
+import { SchedulePlanPage } from './pages/SchedulePlanPage';
+import { MasterDataPage } from './pages/MasterDataPage';
+import { LeaveManagementPage } from './pages/LeaveManagementPage';
+import { RuleConfigPage } from './pages/RuleConfigPage';
 
 type WfmSub = 'plans' | 'master' | 'leaves' | 'rule-config';
 

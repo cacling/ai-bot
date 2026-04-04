@@ -1,10 +1,12 @@
 import { memo, useState } from 'react';
 import { Library, Wrench, Server } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { KnowledgeManagementPage, SkillManagerPage, McpManagementPage } from '@ai-bot/km-frontend';
+import { KnowledgeManagementPage } from '../knowledge/pages/KnowledgeManagementPage';
+import { SkillManagerPage } from '../knowledge/pages/SkillManagerPage';
+import { McpManagementPage } from '../knowledge/pages/mcp/McpManagementPage';
 import { type Lang, T } from '../../i18n';
 import { type OperationsView } from '../nav';
-import { WorkOrderManagementPage } from '@ai-bot/wo-frontend';
+import { WorkOrderManagementPage } from '../workorders/pages/WorkOrderManagementPage';
 
 type KnowledgeSubTab = 'knowledge' | 'skill' | 'mcp';
 
