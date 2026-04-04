@@ -4,6 +4,7 @@
  */
 import { Hono } from 'hono';
 import { logger } from '../../services/logger';
+import { agentConnectionManager } from '../../services/agent-connection-manager';
 
 const router = new Hono();
 
@@ -17,8 +18,6 @@ router.post('/workbench', async (c) => {
     payload?: Record<string, unknown>;
   }>();
 
-  // P1 阶段：仅记录日志，不实际推送 WS
-  // P2 阶段将接入 AgentConnectionManager 做真实推送
   logger.info('internal-notify', 'workbench_event', {
     event_type: body.event_type,
     handoff_id: body.handoff_id,
@@ -26,11 +25,22 @@ router.post('/workbench', async (c) => {
     phone: body.phone,
   });
 
-  // TODO: P2 — 接入 AgentConnectionManager
-  // const manager = getAgentConnectionManager();
-  // const delivered = manager.broadcastToQueue(queueName, body);
+  const event = {
+    type: body.event_type,
+    handoff_id: body.handoff_id,
+    callback_task_id: body.callback_task_id,
+    phone: body.phone,
+    ...(body.payload ?? {}),
+  };
 
-  return c.json({ delivered: false, reason: 'ws_bridge_not_yet_implemented' });
+  // 有 phone 则定向推送，否则广播
+  if (body.phone) {
+    const delivered = agentConnectionManager.sendToPhone(body.phone, event);
+    return c.json({ delivered, phone: body.phone });
+  }
+
+  const count = agentConnectionManager.broadcast(event);
+  return c.json({ delivered: count > 0, broadcast: true, count });
 });
 
 // POST /sms — 发送短信提醒（P1 阶段 mock）

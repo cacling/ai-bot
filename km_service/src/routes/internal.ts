@@ -21,6 +21,7 @@ import {
   kmGovernanceTasks,
 } from '../db';
 import { logger } from '../logger';
+import { executeStage, type PipelineStage } from '../services/pipeline-executor';
 
 const app = new Hono();
 
@@ -288,14 +289,14 @@ app.put('/pipeline/jobs/:id/status', async (c) => {
   return c.json({ ok: true, job_id: jobId, status: body.status });
 });
 
-/** POST /pipeline/jobs/:id/execute — 执行 pipeline stage（P3 mock） */
+/** POST /pipeline/jobs/:id/execute — 执行 pipeline stage */
 app.post('/pipeline/jobs/:id/execute', async (c) => {
   const jobId = c.req.param('id');
   const body = await c.req.json<{ stage: string }>();
 
-  // P3 mock: 每个 stage 返回成功
-  logger.info('internal', 'pipeline_stage_executed', { job_id: jobId, stage: body.stage });
-  return c.json({ status: 'completed', result: { stage: body.stage, mock: true } });
+  const result = await executeStage(jobId, body.stage as PipelineStage);
+  logger.info('internal', 'pipeline_stage_executed', { job_id: jobId, stage: body.stage, status: result.status });
+  return c.json(result);
 });
 
 /** POST /governance/tasks — 创建治理任务（幂等） */

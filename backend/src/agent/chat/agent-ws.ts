@@ -34,6 +34,7 @@ import { translateText } from '../../services/translate-lang';
 import { checkCompliance } from '../../services/keyword-filter';
 import { t, TOOL_LABELS } from '../../services/i18n';
 import { getCookie } from 'hono/cookie';
+import { agentConnectionManager } from '../../services/agent-connection-manager';
 
 const agentWs = new Hono();
 
@@ -98,9 +99,16 @@ agentWs.get('/ws/agent', upgradeWebSocket((c) => {
   const interactionId  = c.req.query('interaction_id') ?? null; // Phase 2: optional interaction context
 
   let unsubscribe: (() => void) | null = null;
+  let unregisterConn: (() => void) | null = null;
 
   return {
     onOpen: (_, ws) => {
+      // Register in AgentConnectionManager for internal API pushes
+      unregisterConn = agentConnectionManager.register({
+        phone,
+        send: (data: string) => { try { ws.send(data); } catch { /* ws closed */ } },
+      });
+
       // Register agent language
       setAgentLang(phone, langParam);
       logger.info('agent-ws', 'open', { phone, initLang: langParam, interactionId, langs: getLangs(phone) });
@@ -266,6 +274,7 @@ agentWs.get('/ws/agent', upgradeWebSocket((c) => {
 
     onClose: () => {
       unsubscribe?.();
+      unregisterConn?.();
       logger.info('agent-ws', 'closed', { phone });
     },
   };

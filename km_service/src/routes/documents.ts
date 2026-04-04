@@ -11,22 +11,9 @@ import { kmDocuments, kmDocVersions, kmDocChunks, kmPipelineJobs, kmCandidates }
 import { logger } from '../logger';
 import { nanoid, writeAudit } from './helpers';
 import { signalTemporal } from '@ai-bot/shared-temporal';
+import { resolveDocContentPath } from '../paths';
 
 const app = new Hono();
-const BACKEND_ROOT = resolve(import.meta.dir, '../../../../');
-
-function resolveDocContentPath(filePath: string | null): string | null {
-  if (!filePath) return null;
-  if (isAbsolute(filePath)) return filePath;
-
-  const cwdResolved = resolve(process.cwd(), filePath);
-  if (existsSync(cwdResolved)) return cwdResolved;
-
-  const backendResolved = resolve(BACKEND_ROOT, filePath);
-  if (existsSync(backendResolved)) return backendResolved;
-
-  return cwdResolved;
-}
 
 // GET / — 文档列表
 app.get('/', async (c) => {

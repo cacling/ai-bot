@@ -28,6 +28,20 @@ export const SKILLS_ROOT = process.env.SKILLS_DIR
   ? resolve(process.cwd(), process.env.SKILLS_DIR)
   : resolve(REPO_ROOT, 'km_service/skills');
 
+/** 解析文档内容文件路径（支持绝对/相对路径，fallback 到 REPO_ROOT） */
+export function resolveDocContentPath(filePath: string | null): string | null {
+  if (!filePath) return null;
+  if (filePath.startsWith('/')) return filePath;
+
+  const cwdResolved = resolve(process.cwd(), filePath);
+  if (existsSync(cwdResolved)) return cwdResolved;
+
+  const repoResolved = resolve(REPO_ROOT, filePath);
+  if (existsSync(repoResolved)) return repoResolved;
+
+  return cwdResolved;
+}
+
 /** biz-skills 目录 */
 export const BIZ_SKILLS_DIR = resolve(SKILLS_ROOT, 'biz-skills');
 
