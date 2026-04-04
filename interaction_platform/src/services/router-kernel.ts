@@ -260,6 +260,21 @@ export async function routeInteraction(interactionId: string): Promise<RouteResu
         is_overflow: false,
       },
     });
+
+    // Push handoff_card if handoff_summary is present (so agent workbench shows the handoff card)
+    if (updatedInteraction.handoff_summary) {
+      const summary = updatedInteraction.handoff_summary;
+      const intentMatch = summary.match(/\[intent:([^\]]+)\]/);
+      pushToAgent(winner.agent_id, {
+        type: 'handoff_card',
+        interaction_id: interactionId,
+        data: {
+          session_summary: summary,
+          customer_intent: intentMatch ? intentMatch[1] : undefined,
+          handoff_reason: 'bot_transfer',
+        },
+      });
+    }
   }
 
   return { success: true, assigned_agent_id: winner.agent_id, assignment_id: assignmentId };

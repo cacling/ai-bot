@@ -184,50 +184,109 @@ async function resetAllAgents() {
 }
 
 /** Verify agent workbench received the interaction in inbox, then check route_context card */
-async function verifyAgentInboxAndCards(agentPage: Page, opts: {
+/** Helper: find a card by zh title, expand if collapsed, return its container locator */
+async function findAndExpandCard(agentPage: Page, title: string) {
+  const cardShell = agentPage.locator('.rounded-2xl').filter({ hasText: title }).first();
+  await expect(cardShell).toBeVisible({ timeout: 10_000 });
+
+  // Expand if collapsed — check if .p-3 content area is visible
+  const contentArea = cardShell.locator('.p-3');
+  const isExpanded = await contentArea.isVisible().catch(() => false);
+  if (!isExpanded) {
+    await cardShell.locator('button').first().click();
+    await agentPage.waitForTimeout(500);
+  }
+  return cardShell;
+}
+
+/**
+ * Full card panel verification after handoff.
+ *
+ * Checks all 12 cards in 3 tiers:
+ *   Tier 1 — has data: verify content (route_context, handoff)
+ *   Tier 2 — visible but empty: verify placeholder text
+ *   Tier 3 — closed/hidden: verify NOT visible
+ */
+async function verifyAllCards(agentPage: Page, opts: {
   handoffSummaryPattern: RegExp;
   expectedQueue: string;
-  expectedPriorityLabel: string; // 'P1' | 'P2' | 'P3'
-  expectedRoutingMode?: string;  // e.g. '直接分配'
+  expectedPriorityLabel: string;
+  expectedIntentBadge?: string;
 }) {
-  // 1. Verify the interaction appears in the agent's inbox with the handoff summary
+  // ── Focus the inbox item ──
   const inboxItems = agentPage.getByText(opts.handoffSummaryPattern);
   await expect(inboxItems.first()).toBeVisible({ timeout: 15_000 });
-
-  // 2. Click the LAST matching inbox item (newest, from THIS test run — stale items from prior runs come first)
   await inboxItems.last().click();
-  await agentPage.waitForTimeout(2000); // allow card data + re-render
+  await agentPage.waitForTimeout(2000);
 
-  // 3. Verify route_context card renders with correct data
-  //    Card title is "路由上下文" (zh), rendered in CardShell header
-  const routeCardTitle = agentPage.getByText('路由上下文');
-  await expect(routeCardTitle).toBeVisible({ timeout: 15_000 });
+  // Helper: card panel container (right side)
+  const cardPanel = agentPage.locator('[id="agent-cards"]').first()
+    .or(agentPage.locator('.overflow-y-auto').last());
 
-  // Find the card container (rounded-2xl parent)
-  const cardShell = agentPage.locator('.rounded-2xl').filter({ hasText: '路由上下文' }).first();
-  await expect(cardShell).toBeVisible({ timeout: 5_000 });
+  // ────────────────────────────────────────────────────────────────────────
+  // Tier 1: Cards WITH data — verify content
+  // ────────────────────────────────────────────────────────────────────────
 
-  // Expand the card if collapsed — click the collapse toggle button next to title
-  const expandBtn = cardShell.locator('button').first();
-  if (expandBtn) {
-    // Always click to ensure expanded (toggle)
-    const contentArea = cardShell.locator('.p-3');
-    const isExpanded = await contentArea.isVisible().catch(() => false);
-    if (!isExpanded) {
-      await expandBtn.click();
-      await agentPage.waitForTimeout(500);
-    }
+  // Card 1: 路由上下文 — queue + priority
+  const routeCard = await findAndExpandCard(agentPage, '路由上下文');
+  await expect(routeCard.getByText(opts.expectedQueue)).toBeVisible({ timeout: 5_000 });
+  await expect(routeCard.getByText(opts.expectedPriorityLabel)).toBeVisible({ timeout: 5_000 });
+
+  // Card 2: 转人工摘要 — session_summary + intent badge + handoff_reason
+  const handoffCard = await findAndExpandCard(agentPage, '转人工摘要');
+  await expect(handoffCard.getByText('bot_transfer')).toBeVisible({ timeout: 5_000 });
+  if (opts.expectedIntentBadge) {
+    await expect(handoffCard.getByText(opts.expectedIntentBadge)).toBeVisible({ timeout: 5_000 });
+  }
+  // Verify session summary block exists (会话摘要 section)
+  await expect(handoffCard.getByText('会话摘要')).toBeVisible({ timeout: 5_000 });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Tier 2: Visible cards in empty/placeholder state — verify placeholder text
+  // ────────────────────────────────────────────────────────────────────────
+
+  // Card 3: 用户详情 — may show data or "等待客户接入"
+  await expect(agentPage.getByText('用户详情')).toBeVisible({ timeout: 5_000 });
+
+  // Card 4: 情感分析 — empty state shows emoji labels
+  await expect(agentPage.getByText('情感分析')).toBeVisible({ timeout: 5_000 });
+
+  // Card 5: 合规监控 — empty state: "暂无合规告警"
+  const complianceCard = agentPage.locator('.rounded-2xl').filter({ hasText: '合规监控' }).first();
+  if (await complianceCard.isVisible().catch(() => false)) {
+    await expect(complianceCard.getByText('暂无合规告警')).toBeVisible({ timeout: 3_000 });
   }
 
-  // Verify queue_code
-  await expect(cardShell.getByText(opts.expectedQueue)).toBeVisible({ timeout: 5_000 });
+  // Card 6: 工单概要 — empty state: "暂无关联工单"
+  const woCard = agentPage.locator('.rounded-2xl').filter({ hasText: '工单概要' }).first();
+  if (await woCard.isVisible().catch(() => false)) {
+    await expect(woCard.getByText('暂无关联工单')).toBeVisible({ timeout: 3_000 });
+  }
 
-  // Verify priority label (e.g. "P2 (15)")
-  await expect(cardShell.getByText(opts.expectedPriorityLabel)).toBeVisible({ timeout: 5_000 });
+  // Card 7: 流程图 — empty state: "当前流程没有流程图"
+  const diagramCard = agentPage.locator('.rounded-2xl').filter({ hasText: '流程图' }).first();
+  if (await diagramCard.isVisible().catch(() => false)) {
+    await expect(diagramCard.getByText('当前流程没有流程图')).toBeVisible({ timeout: 3_000 });
+  }
 
-  // Verify routing mode if specified
-  if (opts.expectedRoutingMode) {
-    await expect(cardShell.getByText(opts.expectedRoutingMode)).toBeVisible({ timeout: 5_000 });
+  // Card 8: 工单时间线 — collapsed by default, just verify title visible
+  await expect(agentPage.getByText('工单时间线')).toBeVisible({ timeout: 5_000 });
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Tier 3: Closed/hidden cards — verify NOT visible in the card panel
+  // ────────────────────────────────────────────────────────────────────────
+
+  // These cards should be in the bottom toolbar (closed state), not in the card area
+  // outbound_task: relevantQueues=['outbound'], closed for chat queues
+  // engagement_context: relevantQueues=['public_engagement'], closed for chat queues
+  // appointment_panel: defaultOpen=false
+  const closedTitles = ['外呼任务详情', '公域互动', '预约详情'];
+  for (const title of closedTitles) {
+    // The title may appear in the bottom toolbar buttons — that's fine.
+    // But it should NOT appear as an expanded card (inside a .rounded-2xl card shell)
+    const cardInPanel = agentPage.locator('.rounded-2xl').filter({ hasText: title }).first();
+    const isCardVisible = await cardInPanel.isVisible().catch(() => false);
+    expect(isCardVisible, `Card "${title}" should be closed/hidden in card panel`).toBe(false);
   }
 }
 
@@ -270,9 +329,8 @@ test.describe('Bot handoff routing E2E', () => {
     const ix = await getInteraction(interaction.interaction_id);
     expect(ix.queue_code).toBe('vip_chat');
 
-    // Verify agent workbench received the VIP interaction and route_context card
-    // Priority 15 → P2 (getPriorityLabel: ≤10=P1, ≤30=P2, >30=P3)
-    await verifyAgentInboxAndCards(agentPage, {
+    // Verify all agent workbench cards (VIP has no intent code)
+    await verifyAllCards(agentPage, {
       handoffSummaryPattern: new RegExp(String(ts1)),
       expectedQueue: 'vip_chat',
       expectedPriorityLabel: 'P2',
@@ -312,12 +370,12 @@ test.describe('Bot handoff routing E2E', () => {
     expect(interaction, '张三(普通) billing should be assigned to agent_001 (张琦)').toBeTruthy();
     expect(interaction.assigned_agent_id).toBe('agent_001');
 
-    // Verify agent workbench received the billing interaction and route_context card
-    // Priority 50 → P3 (getPriorityLabel: ≤10=P1, ≤30=P2, >30=P3)
-    await verifyAgentInboxAndCards(agentPage, {
+    // Verify all agent workbench cards
+    await verifyAllCards(agentPage, {
       handoffSummaryPattern: new RegExp(String(ts2)),
       expectedQueue: 'bill_chat',
       expectedPriorityLabel: 'P3',
+      expectedIntentBadge: 'bill-inquiry',
     });
 
     await clientPage.context().close();
@@ -355,12 +413,12 @@ test.describe('Bot handoff routing E2E', () => {
     expect(interaction, '王五(欠费) fault should be assigned to demo_admin_001').toBeTruthy();
     expect(interaction.assigned_agent_id).toBe('demo_admin_001');
 
-    // Verify agent workbench received the fault interaction and route_context card
-    // Priority 60 → P3
-    await verifyAgentInboxAndCards(agentPage, {
+    // Verify all agent workbench cards
+    await verifyAllCards(agentPage, {
       handoffSummaryPattern: new RegExp(String(ts3)),
       expectedQueue: 'fault_chat',
       expectedPriorityLabel: 'P3',
+      expectedIntentBadge: 'fault-diagnosis',
     });
 
     await clientPage.context().close();

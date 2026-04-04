@@ -16,6 +16,7 @@ import { KnowledgeLayout } from '../knowledge/KnowledgeLayout';
 import { WorkOrdersLayout } from '../workorders/WorkOrdersLayout';
 import { RoutingLayout } from '../routing/RoutingLayout';
 import { CustomerLayout } from '../customers/CustomerLayout';
+import { WfmLayout } from '../wfm/WfmLayout';
 import { SupervisorDashboard } from '../supervisor/SupervisorDashboard';
 import { useAgentContext } from '../AgentContext';
 
@@ -105,6 +106,13 @@ export function StaffRouter() {
                     <Route path="import-export" element={null} />
                     <Route path="blacklist-consent" element={null} />
                     <Route path="audit-log" element={null} />
+                  </Route>
+                  <Route path="wfm" element={<WfmLayout />}>
+                    <Route index element={<Navigate to="plans" replace />} />
+                    <Route path="plans" element={null} />
+                    <Route path="master" element={null} />
+                    <Route path="leaves" element={null} />
+                    <Route path="rule-config" element={null} />
                   </Route>
                 </Route>
               </Route>

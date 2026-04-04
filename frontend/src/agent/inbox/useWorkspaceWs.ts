@@ -264,6 +264,25 @@ export function useWorkspaceWs({ agentId, enabled = true, lang = 'zh' }: UseWork
             break;
           }
 
+          case 'handoff_card': {
+            // Populate handoff card data for the interaction
+            const iid = msg.interaction_id as string;
+            if (!iid) break;
+            const cardDef = findCardByEvent('handoff_card');
+            if (cardDef) {
+              setInbox((prev) => {
+                const newCardMap = new Map(prev.cardStatesMap);
+                const cardStates = newCardMap.get(iid) ?? buildInitialCardStates();
+                const updated = cardStates.map((c) =>
+                  c.id === cardDef.id ? { ...c, data: cardDef.dataExtractor(msg), isOpen: true, isCollapsed: false } : c,
+                );
+                newCardMap.set(iid, updated);
+                return { ...prev, cardStatesMap: newCardMap };
+              });
+            }
+            break;
+          }
+
           case 'unread_updated': {
             const interactionId = msg.interaction_id as string;
             const count = msg.count as number;
