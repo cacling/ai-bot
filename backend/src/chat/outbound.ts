@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { logger } from '../services/logger';
+import { signalTemporal } from '@ai-bot/shared-temporal';
 import { upgradeWebSocket } from './voice';
 import { VoiceSessionState } from '../services/voice-session';
 import { sessionBus } from '../services/session-bus';
@@ -230,6 +231,9 @@ outbound.get(
           sessionBus.clearHistory(userPhone);
           sessionBus.publish(userPhone, { source: 'system', type: 'new_session', channel: 'outbound', msg_id: crypto.randomUUID() });
           textSession.start(ws);
+          signalTemporal(`/api/temporal/outbound/tasks/${taskId}/start`, {
+            taskId, taskType: taskParam, phone: userPhone, sessionId, source: 'ws_connected',
+          });
         },
         onMessage(evt, ws) { textSession.handleMessage(evt.data as string, ws); },
         onClose() { logger.info('outbound', 'text_mode_disconnected', { session: sessionId }); },
@@ -308,6 +312,10 @@ outbound.get(
         sessionBus.clearHistory(userPhone);
         sessionBus.publish(userPhone, { source: 'system', type: 'new_session', channel: 'outbound', msg_id: crypto.randomUUID() });
         controller.start(ws);
+        // Fire-and-forget: notify Temporal orchestrator that outbound call started
+        signalTemporal(`/api/temporal/outbound/tasks/${taskId}/start`, {
+          taskId, taskType: taskParam, phone: userPhone, sessionId, source: 'ws_connected',
+        });
       },
       onMessage(evt) {
         controller.forwardToGlm(evt.data.toString());

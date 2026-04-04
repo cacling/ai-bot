@@ -7,7 +7,7 @@ export const SERVICE_URLS = {
   backend: process.env.BACKEND_URL ?? 'http://127.0.0.1:18001',
   outbound: process.env.OUTBOUND_SERVICE_URL ?? 'http://127.0.0.1:18008',
   workOrder: process.env.WORK_ORDER_SERVICE_URL ?? 'http://127.0.0.1:18009',
-  km: process.env.KM_SERVICE_URL ?? 'http://127.0.0.1:18006',
+  km: process.env.KM_SERVICE_URL ?? 'http://127.0.0.1:18010',
   wfm: process.env.WFM_SERVICE_URL ?? 'http://127.0.0.1:18023',
 } as const;
 

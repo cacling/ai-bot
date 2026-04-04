@@ -5,11 +5,12 @@ import { Hono } from 'hono';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
-import { eq, desc, like, and, SQL, inArray } from 'drizzle-orm';
+import { eq, desc, like, and, sql, SQL, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { kmDocuments, kmDocVersions, kmDocChunks, kmPipelineJobs, kmCandidates } from '../db';
 import { logger } from '../logger';
 import { nanoid, writeAudit } from './helpers';
+import { signalTemporal } from '@ai-bot/shared-temporal';
 
 const app = new Hono();
 const BACKEND_ROOT = resolve(import.meta.dir, '../../../../');
@@ -41,7 +42,7 @@ app.get('/', async (c) => {
 
   const rows = await db.select().from(kmDocuments).where(where)
     .orderBy(desc(kmDocuments.updated_at)).limit(limit).offset(offset);
-  const [{ count }] = await db.select({ count: db.$count(kmDocuments, where) }).from(kmDocuments);
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(kmDocuments).where(where);
 
   return c.json({ items: rows, total: count, page: Number(page), size: limit });
 });
@@ -176,6 +177,18 @@ app.post('/versions/:vid/parse', async (c) => {
   const body = await c.req.json<{ stages?: string[] }>().catch(() => ({ stages: undefined }));
   const stages = body.stages ?? ['parse', 'chunk', 'generate', 'validate'];
 
+  // Dual-path: try Temporal orchestration first, fall back to direct insert
+  const temporalOk = await signalTemporal(`/api/temporal/km/doc-versions/${vid}/start`, {
+    docVersionId: vid, stages, trigger: 'manual',
+  });
+
+  if (temporalOk) {
+    await db.update(kmDocVersions).set({ status: 'parsing' }).where(eq(kmDocVersions.id, vid));
+    logger.info('km', 'parse_triggered_via_temporal', { vid, stages });
+    return c.json({ jobs: [], temporal: true }, 201);
+  }
+
+  // Fallback: direct insert (original logic)
   const jobs: { id: string; stage: string }[] = [];
   for (const stage of stages) {
     const jobId = nanoid();

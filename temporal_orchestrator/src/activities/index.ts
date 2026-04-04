@@ -7,6 +7,12 @@ export {
   triggerOutboundCall,
   createHandoffCase,
   updateHandoffStatus,
+  // P2
+  getOutboundTask,
+  updateOutboundTaskStatus,
+  checkAllowedHours,
+  checkDnd,
+  initiateOutboundCall,
 } from './outbound.js';
 
 export {
@@ -19,11 +25,11 @@ export {
   startWorkflowRun,
 } from './work-order.js';
 
-// P3:
-// export * from './km.js';
+// P3
+export * from './km.js';
 
-// P4:
-// export * from './wfm.js';
+// P4
+export * from './wfm.js';
 
-// P5:
-// export * from './analytics.js';
+// P5
+export * from './analytics.js';

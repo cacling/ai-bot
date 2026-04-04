@@ -5,7 +5,7 @@
  * 使 backend 不再直接读取 km.db。
  */
 import { Hono } from 'hono';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, lte, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import {
   db,
   skillRegistry,
@@ -14,6 +14,11 @@ import {
   mcpTools,
   toolImplementations,
   connectors,
+  kmAssets,
+  kmDocVersions,
+  kmPipelineJobs,
+  kmRegressionWindows,
+  kmGovernanceTasks,
 } from '../db';
 import { logger } from '../logger';
 
@@ -178,6 +183,162 @@ app.post('/db/query', async (c) => {
   } catch (err) {
     return c.json({ error: String(err) }, 500);
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Temporal 配套端点（P3 新增）
+// ══════════════════════════════════════════════════════════════════════════
+
+/** GET /assets/scan-expired — 扫描 next_review_date 到期的资产 */
+app.get('/assets/scan-expired', (c) => {
+  const asOfDate = c.req.query('as_of_date') ?? new Date().toISOString().slice(0, 10);
+  const rows = db.select({ id: kmAssets.id }).from(kmAssets)
+    .where(and(lte(kmAssets.next_review_date, asOfDate), eq(kmAssets.status, 'online')))
+    .all();
+  return c.json({ asset_ids: rows.map((r) => r.id) });
+});
+
+/** GET /doc-versions/scan-pending — 扫描未处理的文档版本 */
+app.get('/doc-versions/scan-pending', (c) => {
+  const busyVersionIds = db.select({ dvId: kmPipelineJobs.doc_version_id }).from(kmPipelineJobs)
+    .where(inArray(kmPipelineJobs.status, ['pending', 'running']))
+    .all()
+    .map((r) => r.dvId);
+
+  let q = db.select({ id: kmDocVersions.id }).from(kmDocVersions)
+    .where(inArray(kmDocVersions.status, ['draft', 'pending']));
+  const rows = q.all().filter((r) => !busyVersionIds.includes(r.id));
+  return c.json({ doc_version_ids: rows.map((r) => r.id) });
+});
+
+/** GET /regression-windows/scan-expired — 扫描 observe_until 到期的回归窗口 */
+app.get('/regression-windows/scan-expired', (c) => {
+  const asOfDate = c.req.query('as_of_date') ?? new Date().toISOString().slice(0, 10);
+  const rows = db.select({ id: kmRegressionWindows.id }).from(kmRegressionWindows)
+    .where(and(lte(kmRegressionWindows.observe_until, asOfDate), isNull(kmRegressionWindows.concluded_at)))
+    .all();
+  return c.json({ window_ids: rows.map((r) => r.id) });
+});
+
+/** PUT /regression-windows/:id/conclude — 关闭回归窗口 */
+app.put('/regression-windows/:id/conclude', async (c) => {
+  const windowId = c.req.param('id');
+  const { verdict } = await c.req.json<{ verdict: 'pass' | 'fail' | 'inconclusive' }>();
+
+  const existing = db.select().from(kmRegressionWindows).where(eq(kmRegressionWindows.id, windowId)).all();
+  if (existing.length === 0) return c.json({ error: 'regression window not found' }, 404);
+  if (existing[0].concluded_at) return c.json({ ok: true, window_id: windowId, verdict });
+
+  db.update(kmRegressionWindows)
+    .set({ verdict, concluded_at: new Date().toISOString() })
+    .where(eq(kmRegressionWindows.id, windowId))
+    .run();
+  return c.json({ ok: true, window_id: windowId, verdict });
+});
+
+/** POST /pipeline/jobs — 创建流水线 jobs（幂等） */
+app.post('/pipeline/jobs', async (c) => {
+  const body = await c.req.json<{
+    doc_version_id: string;
+    stages: string[];
+    idempotency_key?: string;
+  }>();
+
+  // 幂等：检查是否已有 pending/running jobs
+  const existing = db.select({ id: kmPipelineJobs.id, stage: kmPipelineJobs.stage, status: kmPipelineJobs.status })
+    .from(kmPipelineJobs)
+    .where(and(eq(kmPipelineJobs.doc_version_id, body.doc_version_id), inArray(kmPipelineJobs.status, ['pending', 'running'])))
+    .all();
+
+  if (existing.length > 0) {
+    return c.json({ jobs: existing });
+  }
+
+  const now = new Date().toISOString();
+  const jobs: Array<{ id: string; stage: string; status: string }> = [];
+  for (const stage of body.stages) {
+    const id = `JOB-${body.doc_version_id}-${stage}-${Date.now()}`;
+    db.insert(kmPipelineJobs).values({
+      id, doc_version_id: body.doc_version_id, stage, status: 'pending', created_at: now,
+    }).run();
+    jobs.push({ id, stage, status: 'pending' });
+  }
+  return c.json({ jobs }, 201);
+});
+
+/** PUT /pipeline/jobs/:id/status — 更新 job 状态 */
+app.put('/pipeline/jobs/:id/status', async (c) => {
+  const jobId = c.req.param('id');
+  const body = await c.req.json<{
+    status: 'running' | 'completed' | 'failed';
+    error_code?: string;
+    error_message?: string;
+    candidate_count?: number;
+  }>();
+
+  const now = new Date().toISOString();
+  const updates: Record<string, unknown> = { status: body.status };
+  if (body.error_code) updates.error_code = body.error_code;
+  if (body.error_message) updates.error_message = body.error_message;
+  if (body.candidate_count != null) updates.candidate_count = body.candidate_count;
+  if (body.status === 'running') updates.started_at = now;
+  if (body.status === 'completed' || body.status === 'failed') updates.finished_at = now;
+
+  db.update(kmPipelineJobs).set(updates).where(eq(kmPipelineJobs.id, jobId)).run();
+  return c.json({ ok: true, job_id: jobId, status: body.status });
+});
+
+/** POST /pipeline/jobs/:id/execute — 执行 pipeline stage（P3 mock） */
+app.post('/pipeline/jobs/:id/execute', async (c) => {
+  const jobId = c.req.param('id');
+  const body = await c.req.json<{ stage: string }>();
+
+  // P3 mock: 每个 stage 返回成功
+  logger.info('internal', 'pipeline_stage_executed', { job_id: jobId, stage: body.stage });
+  return c.json({ status: 'completed', result: { stage: body.stage, mock: true } });
+});
+
+/** POST /governance/tasks — 创建治理任务（幂等） */
+app.post('/governance/tasks', async (c) => {
+  const body = await c.req.json<{
+    task_type: string;
+    source_type: string;
+    source_ref_id: string;
+    issue_category?: string;
+    severity?: string;
+    priority?: string;
+  }>();
+
+  // 幂等：同 (source_type, source_ref_id, issue_category) 返回已有
+  if (body.issue_category) {
+    const existing = db.select({ id: kmGovernanceTasks.id }).from(kmGovernanceTasks)
+      .where(and(
+        eq(kmGovernanceTasks.source_type, body.source_type),
+        eq(kmGovernanceTasks.source_ref_id, body.source_ref_id),
+        eq(kmGovernanceTasks.issue_category, body.issue_category),
+        eq(kmGovernanceTasks.status, 'open'),
+      ))
+      .all();
+    if (existing.length > 0) {
+      return c.json({ ok: true, task_id: existing[0].id });
+    }
+  }
+
+  const id = `GOV-${Date.now()}`;
+  const now = new Date().toISOString();
+  db.insert(kmGovernanceTasks).values({
+    id,
+    task_type: body.task_type,
+    source_type: body.source_type,
+    source_ref_id: body.source_ref_id,
+    issue_category: body.issue_category ?? null,
+    severity: body.severity ?? 'medium',
+    priority: body.priority ?? 'medium',
+    status: 'open',
+    created_at: now,
+    updated_at: now,
+  }).run();
+  return c.json({ ok: true, task_id: id }, 201);
 });
 
 export default app;

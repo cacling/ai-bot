@@ -388,7 +388,7 @@ start_service "work-order" "$BASE_DIR/work_order_service" \
 
 # KM Service (知识管理微服务，使用 bun:sqlite 需 bun 运行时)
 start_service "km-service" "$BASE_DIR/km_service" \
-  "$BUN src/server.ts"
+  "TEMPORAL_API_URL=http://127.0.0.1:$TEMPORAL_ORCHESTRATOR_PORT $BUN src/server.ts"
 
 # CDP Service (客户数据平台，使用 bun:sqlite 需 bun 运行时)
 start_service "cdp-service" "$BASE_DIR/cdp_service" \

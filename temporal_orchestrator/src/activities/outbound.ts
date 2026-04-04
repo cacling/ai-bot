@@ -52,6 +52,72 @@ export async function triggerOutboundCall(callbackTaskId: string) {
   return await resp.json() as { delivered: boolean };
 }
 
+// ─── Outbound Task Activities (P2) ───
+
+export async function getOutboundTask(taskId: string) {
+  const resp = await fetch(
+    `${SERVICE_URLS.outbound}/api/outbound/tasks/${taskId}`,
+  );
+  if (!resp.ok) throw new Error(`getOutboundTask failed: ${resp.status}`);
+  return await resp.json() as {
+    id: string;
+    phone: string;
+    task_type: 'collection' | 'marketing';
+    status: string;
+    data: string;
+  };
+}
+
+export async function updateOutboundTaskStatus(
+  taskId: string,
+  status: 'in_progress' | 'completed' | 'cancelled' | 'dnd_blocked' | 'max_retry_reached',
+) {
+  const resp = await fetch(
+    `${SERVICE_URLS.outbound}/api/outbound/internal/tasks/${taskId}/status`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    },
+  );
+  if (!resp.ok) throw new Error(`updateOutboundTaskStatus failed: ${resp.status}`);
+  return await resp.json() as { ok: boolean };
+}
+
+export async function checkAllowedHours(taskType: string): Promise<{
+  allowed: boolean;
+  nextWindowAt?: string;
+}> {
+  const resp = await fetch(
+    `${SERVICE_URLS.outbound}/api/outbound/internal/check-allowed-hours?task_type=${taskType}`,
+  );
+  if (!resp.ok) throw new Error(`checkAllowedHours failed: ${resp.status}`);
+  return await resp.json() as { allowed: boolean; nextWindowAt?: string };
+}
+
+export async function checkDnd(phone: string): Promise<boolean> {
+  const resp = await fetch(
+    `${SERVICE_URLS.outbound}/api/outbound/internal/check-dnd?phone=${phone}`,
+  );
+  if (!resp.ok) throw new Error(`checkDnd failed: ${resp.status}`);
+  const data = await resp.json() as { is_dnd: boolean };
+  return data.is_dnd;
+}
+
+export async function initiateOutboundCall(taskId: string, sessionId?: string) {
+  // 调 backend 内部 API 发起外呼（backend 负责创建 WS 会话和启动 GlmRealtimeController）
+  const resp = await fetch(
+    `${SERVICE_URLS.backend}/api/internal/outbound/initiate`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_id: taskId, session_id: sessionId }),
+    },
+  );
+  if (!resp.ok) throw new Error(`initiateOutboundCall failed: ${resp.status}`);
+  return await resp.json() as { session_id: string; status: string };
+}
+
 // ─── Handoff Activities ───
 
 export async function createHandoffCase(input: {

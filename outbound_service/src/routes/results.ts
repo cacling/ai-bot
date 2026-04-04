@@ -3,6 +3,7 @@
  */
 import { Hono } from 'hono';
 import { db, obCallResults, obMarketingResults, obSmsEvents, obHandoffCases, eq, desc } from '../db';
+import { signalTemporal } from '@ai-bot/shared-temporal';
 
 const router = new Hono();
 
@@ -24,6 +25,13 @@ router.post('/call-results', async (c) => {
     ptp_date: body.ptp_date ?? null,
     created_at: new Date().toISOString(),
   }).run();
+  // Fire-and-forget: notify Temporal orchestrator of call result
+  if (body.task_id) {
+    signalTemporal(`/api/temporal/outbound/tasks/${body.task_id}/call-result`, {
+      taskId: body.task_id, result: body.result, remark: body.remark,
+      callbackTime: body.callback_time, ptpDate: body.ptp_date,
+    });
+  }
   return c.json({ ok: true, result_id: resultId }, 201);
 });
 
