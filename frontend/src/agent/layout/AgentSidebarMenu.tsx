@@ -1,6 +1,6 @@
 import { memo, useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Headset, Activity, Settings, BookOpen, ClipboardList, Route, Users, CalendarClock, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Headset, Activity, Settings, BookOpen, ClipboardList, Route, Users, CalendarClock, Phone, ChevronRight, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { type Lang } from '../../i18n';
 import { MENU_TREE } from '../nav';
@@ -21,6 +21,7 @@ const ICONS: Record<string, React.ReactNode> = {
   routing: <Route size={16} />,
   customers: <Users size={16} />,
   wfm: <CalendarClock size={16} />,
+  outbound: <Phone size={16} />,
 };
 
 const STORAGE_KEY = 'agent.sidebar.collapsed';

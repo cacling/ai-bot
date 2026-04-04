@@ -129,10 +129,12 @@ import { mountKmProxy } from './services/km-proxy';
 import { mountWorkOrderProxy } from './services/work-order-proxy';
 import { mountCdpProxy } from './services/cdp-proxy';
 import { mountWfmProxy } from './services/wfm-proxy';
+import { mountOutboundProxy } from './services/outbound-proxy';
 mountKmProxy(app);
 mountWorkOrderProxy(app);
 mountCdpProxy(app);
 mountWfmProxy(app);
+mountOutboundProxy(app);
 
 // Mount voice WebSocket route: GET /ws/voice
 app.route('/', voiceRoutes);

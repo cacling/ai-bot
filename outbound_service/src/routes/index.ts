@@ -4,6 +4,7 @@ import tasksRoutes from './tasks';
 import resultsRoutes from './results';
 import testPersonasRoutes from './test-personas';
 import internalRoutes from './internal';
+import dashboardRoutes from './dashboard';
 
 const router = new Hono();
 
@@ -21,5 +22,8 @@ router.route('/test-personas', testPersonasRoutes);
 
 // 内部 API（供 Temporal Activity 调用）
 router.route('/internal', internalRoutes);
+
+// 效果看板聚合
+router.route('/dashboard', dashboardRoutes);
 
 export default router;

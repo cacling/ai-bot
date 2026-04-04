@@ -17,6 +17,7 @@ import { WorkOrdersLayout } from '../workorders/WorkOrdersLayout';
 import { RoutingLayout } from '../routing/RoutingLayout';
 import { CustomerLayout } from '../customers/CustomerLayout';
 import { WfmLayout } from '../wfm/WfmLayout';
+import { OutboundLayout } from '../outbound/OutboundLayout';
 import { SupervisorDashboard } from '../supervisor/SupervisorDashboard';
 import { useAgentContext } from '../AgentContext';
 
@@ -113,6 +114,12 @@ export function StaffRouter() {
                     <Route path="master" element={null} />
                     <Route path="leaves" element={null} />
                     <Route path="rule-config" element={null} />
+                  </Route>
+                  <Route path="outbound" element={<OutboundLayout />}>
+                    <Route index element={<Navigate to="campaigns" replace />} />
+                    <Route path="campaigns" element={null} />
+                    <Route path="call-records" element={null} />
+                    <Route path="dashboard" element={null} />
                   </Route>
                 </Route>
               </Route>
