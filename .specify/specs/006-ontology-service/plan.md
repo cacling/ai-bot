@@ -11,6 +11,10 @@
 > - API 契约与时序见 [api-contract.md](api-contract.md)
 > - 本体建模治理与 OWL 语义文件见 [ontology-modeling.md](ontology-modeling.md)
 > - 运营管理低保真界面与图谱交互见 [ui-lowfi.md](ui-lowfi.md)
+> - AI 运营智能助理应用层设计见 [ai-ops-assistant.md](ai-ops-assistant.md)
+> - AI 运营智能助理 UI 元数据与交互协议见 [ai-ops-ui-model.md](ai-ops-ui-model.md) 与 [ai-ops-protocol.md](ai-ops-protocol.md)
+> - AI 运营智能助理应用层 API、共享类型与核心工作台低保真见 [ai-ops-api-types.md](ai-ops-api-types.md) 与 [ai-ops-lowfi.md](ai-ops-lowfi.md)
+> - 架构决策清单与后续专题文档见 [architecture-decisions.md](architecture-decisions.md)
 
 ---
 

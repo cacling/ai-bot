@@ -12,6 +12,10 @@
 > - REST / 事件接口、命令边界与端到端时序见 [api-contract.md](api-contract.md)
 > - `M1-M7 + Event` 模型治理、YAML 到 OWL 的管理方式见 [ontology-modeling.md](ontology-modeling.md)
 > - 运营管理中的本体建模工作台、图谱页低保真与交互定义见 [ui-lowfi.md](ui-lowfi.md)
+> - AI 运营智能助理的定位、场景、标签页、协议与接口关系见 [ai-ops-assistant.md](ai-ops-assistant.md)
+> - AI 运营智能助理的 UI 元数据与协议 schema 见 [ai-ops-ui-model.md](ai-ops-ui-model.md) 与 [ai-ops-protocol.md](ai-ops-protocol.md)
+> - AI 运营智能助理的应用层 API、共享类型与核心工作台低保真见 [ai-ops-api-types.md](ai-ops-api-types.md) 与 [ai-ops-lowfi.md](ai-ops-lowfi.md)
+> - 投影 freshness、规则/函数边界、执行 Saga、集成契约、版本钉住、图服务、安全模型、namespace 与 NFR 决策汇总见 [architecture-decisions.md](architecture-decisions.md)
 
 ## 系统概述
 
