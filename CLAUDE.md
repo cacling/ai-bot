@@ -19,7 +19,7 @@
 | 层 | 技术 |
 |---|------|
 | 后端 | Hono + Bun（TypeScript strict） |
-| 前端 | React 18 + Vite + Tailwind CSS |
+| 前端 | React 18 + Vite + Tailwind CSS v3 |
 | AI | Vercel AI SDK（generateText + tool, maxSteps=10） |
 | LLM | SiliconFlow（文字）、GLM-Realtime（语音） |
 | MCP | @modelcontextprotocol/sdk（StreamableHTTP） |

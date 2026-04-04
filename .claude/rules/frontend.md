@@ -22,6 +22,7 @@ paths:
 
 ### 前端 UI 组件规范
 
+- **CSS 框架**：Tailwind CSS v3（`^3.4.17`），所有微服务前端统一版本。v3 不支持 `data-[attr=value]:` 任意值变体，需用条件 className 或在 `tailwind.config.js` 的 `theme.extend.data` 中配置
 - **组件库**：统一使用 shadcn/ui（`@/components/ui/`），禁止使用原生 HTML 表单元素（`<button>`、`<input>`、`<select>`、`<textarea>`、`<table>` 等）
 - **配色**：统一使用 shadcn 语义色变量（`text-primary`、`bg-destructive`、`border-border` 等），禁止硬编码 Tailwind 色值（如 `text-red-500`、`bg-blue-600`）
 - **例外**：数据可视化（如情绪渐变条）可保留具体色值
