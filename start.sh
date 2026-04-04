@@ -193,7 +193,7 @@ fi
 echo -e "\n${BLU}══════ 数据库准备 ══════${NC}"
 
 # 各模块 data/ 目录（DB 文件归属各自模块）
-for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data wfm_service/data; do
+for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data wfm_service/data channel_host/data; do
   mkdir -p "$BASE_DIR/$svc_data"
 done
 export SQLITE_PATH="$BASE_DIR/km_service/data/km.db"
@@ -248,7 +248,7 @@ if [[ "$RESET_MODE" == true ]]; then
   cd "$BASE_DIR/backend"
 
   # 删除所有 DB + WAL/SHM（各模块 data/ 目录）
-  for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data wfm_service/data; do
+  for svc_data in backend/data km_service/data mock_apis/data work_order_service/data cdp_service/data outbound_service/data interaction_platform/data wfm_service/data channel_host/data; do
     rm -f "$BASE_DIR/$svc_data"/*.db "$BASE_DIR/$svc_data"/*.db-wal "$BASE_DIR/$svc_data"/*.db-shm
   done
   # 兼容清理：旧 data/ 根目录残留
