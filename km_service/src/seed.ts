@@ -403,10 +403,76 @@ const REPLY_COPILOT_DOCS = [
     effectiveTo: '2026-12-31',
     diffSummary: '首版：覆盖异常使用停机、身份核验与复机处理口径',
   },
+  {
+    idSuffix: 'doc-5g-plans',
+    versionIdSuffix: 'dv-5g-plans-v1',
+    title: '5G套餐资费说明（2026Q1）',
+    owner: '李四',
+    classification: 'internal',
+    source: 'upload',
+    filePath: 'data/km-documents/5g-plans-v1.md',
+    scopeJson: JSON.stringify({ region: '全国', channel: '在线客服' }),
+    effectiveFrom: '2026-03-01',
+    effectiveTo: '2026-12-31',
+    diffSummary: '首版：覆盖5G套餐资费与合约期说明',
+  },
+  {
+    idSuffix: 'doc-billing-rules',
+    versionIdSuffix: 'dv-billing-rules-v1',
+    title: '计费规则与争议处理规范',
+    owner: '王五',
+    classification: 'internal',
+    source: 'upload',
+    filePath: 'data/km-documents/billing-rules-v1.md',
+    scopeJson: JSON.stringify({ region: '全国', channel: '在线客服' }),
+    effectiveFrom: '2026-03-01',
+    effectiveTo: '2026-12-31',
+    diffSummary: '首版：覆盖计费规则、异常账单争议处理口径',
+  },
+  {
+    idSuffix: 'doc-cancel-policy',
+    versionIdSuffix: 'dv-cancel-policy-v1',
+    title: '增值业务退订政策（2026版）',
+    owner: '赵六',
+    classification: 'internal',
+    source: 'upload',
+    filePath: 'data/km-documents/cancel-policy-v1.md',
+    scopeJson: JSON.stringify({ region: '全国', channel: '在线客服' }),
+    effectiveFrom: '2026-03-01',
+    effectiveTo: '2026-12-31',
+    diffSummary: '首版：覆盖增值业务退订政策与合约期限制',
+  },
+  {
+    idSuffix: 'doc-complaint-guide',
+    versionIdSuffix: 'dv-complaint-guide-v1',
+    title: '客户投诉处理操作指引',
+    owner: '钱八',
+    classification: 'internal',
+    source: 'upload',
+    filePath: 'data/km-documents/complaint-guide-v1.md',
+    scopeJson: JSON.stringify({ region: '全国', channel: '在线客服' }),
+    effectiveFrom: '2026-03-01',
+    effectiveTo: '2026-12-31',
+    diffSummary: '首版：覆盖投诉受理、升级、回访全流程',
+  },
+  {
+    idSuffix: 'doc-network-faq',
+    versionIdSuffix: 'dv-network-faq-v1',
+    title: '宽带故障排查FAQ手册',
+    owner: '孙九',
+    classification: 'internal',
+    source: 'upload',
+    filePath: 'data/km-documents/network-faq-v1.md',
+    scopeJson: JSON.stringify({ region: '全国', channel: '在线客服' }),
+    effectiveFrom: '2026-03-01',
+    effectiveTo: '2026-12-31',
+    diffSummary: '首版：覆盖宽带常见故障排查与处理方案',
+  },
 ];
 
 function resolveSceneDocVersionId(sourceRefId: string, idPrefix: string): string {
-  if (sourceRefId === 'dv-mobile-service-v1' || sourceRefId === 'dv-security-v1') {
+  const knownPrefixes = REPLY_COPILOT_DOCS.map(d => d.versionIdSuffix);
+  if (knownPrefixes.includes(sourceRefId)) {
     return `${idPrefix}-${sourceRefId}`;
   }
   return sourceRefId;
