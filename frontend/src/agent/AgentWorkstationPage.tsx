@@ -77,7 +77,18 @@ export function AgentWorkstationPage() {
 
   // Derive phone from focused interaction (fallback to userPhone for legacy compat)
   const focusedInteraction = getFocusedInteraction(workspaceWs.inbox);
-  const effectivePhone = focusedInteraction?.customer_party_id ?? userPhone;
+  // Extract phone from handoff_summary [phone:xxx] tag — customer_party_id may be a CDP party UUID
+  const resolvedPhone = (() => {
+    if (!focusedInteraction) return null;
+    const cpid = focusedInteraction.customer_party_id;
+    // Synthetic interactions use phone directly as customer_party_id
+    if (cpid && /^1\d{10}$/.test(cpid)) return cpid;
+    // Real interactions: extract phone from handoff_summary
+    const m = focusedInteraction.handoff_summary?.match(/\[phone:([^\]]+)\]/);
+    if (m) return m[1];
+    return cpid;
+  })();
+  const effectivePhone = resolvedPhone ?? userPhone;
 
   // ── Presence change handler ────────────────────────────────────────────────
   const handlePresenceChange = useCallback((status: 'online' | 'away' | 'dnd' | 'offline') => {
