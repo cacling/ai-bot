@@ -56,6 +56,7 @@ export function AgentWorkstationPage() {
   const hiddenCardsRef  = useRef<Set<string>>(new Set());
   const textareaRef     = useRef<HTMLTextAreaElement>(null);
   const msgIdCounter    = useRef(0);
+  const botModeMapRef   = useRef<Map<string, string>>(new Map());
   const nextMsgId = () => ++msgIdCounter.current;
 
   // Ref to track focused interaction ID inside WS callbacks
@@ -162,6 +163,11 @@ export function AgentWorkstationPage() {
     if (task) workspaceWs.dispatchExternalCardEvent(fid, 'outbound_task', task);
   }, [effectivePhone, allPersonas, outboundTasksList, workspaceWs.inbox.focusedInteractionId]);
 
+  // Keep botModeMapRef in sync with React state (avoids stale closure in WS handler)
+  useEffect(() => {
+    botModeMapRef.current = workspaceWs.inbox.botModeMap;
+  }, [workspaceWs.inbox.botModeMap]);
+
   // ── 持久 WebSocket 生命周期（随 effectivePhone 重建）────────────────────────
   useEffect(() => {
     // Reset streaming state
@@ -207,6 +213,8 @@ export function AgentWorkstationPage() {
 
       if (msg.type === 'new_session') {
         workspaceWs.clearMessages(iid);
+        botModeMapRef.current = new Map(botModeMapRef.current);
+        botModeMapRef.current.set(iid, 'bot');
         workspaceWs.setBotMode(iid, 'bot');
         workspaceWs.setTyping(iid, false);
         pendingBotRef.current = null;
@@ -220,7 +228,7 @@ export function AgentWorkstationPage() {
       }
 
       if (msg.type === 'user_message') {
-        const currentMode = workspaceWs.inbox.botModeMap.get(iid) ?? 'bot';
+        const currentMode = botModeMapRef.current.get(iid) ?? 'bot';
         if (msg.source === 'voice') {
           workspaceWs.dispatchExternalMessage(iid, {
             id: nextMsgId(), sender: 'customer', text: msg.text as string,
@@ -299,9 +307,21 @@ export function AgentWorkstationPage() {
           pendingBotIxRef.current = null;
         }
         workspaceWs.setTyping(iid, false);
+      } else if (msg.type === 'bot_mode_switch') {
+        // Immediate mode switch (before handoff_card arrives).
+        // Don't clear pendingBotRef here — the final translated response may still
+        // be in-flight (P2 fix). handoff_card handler already cleans up pending bot.
+        const mode = (msg.mode as string) === 'bot' ? 'bot' : 'human';
+        // Update ref immediately so subsequent WS messages in this tick see the new mode
+        botModeMapRef.current = new Map(botModeMapRef.current);
+        botModeMapRef.current.set(iid, mode);
+        workspaceWs.setBotMode(iid, mode);
+        workspaceWs.setTyping(iid, false);
       } else {
         // Card events
         if (msg.type === 'handoff_card') {
+          botModeMapRef.current = new Map(botModeMapRef.current);
+          botModeMapRef.current.set(iid, 'human');
           workspaceWs.setBotMode(iid, 'human');
           const id = pendingBotRef.current;
           const ix = pendingBotIxRef.current;

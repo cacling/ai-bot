@@ -156,6 +156,9 @@ agentWs.get('/ws/agent', upgradeWebSocket((c) => {
         if (event.source !== 'user') return;
 
         if (event.type === 'transfer_data') {
+          // Immediately notify workstation to switch to human mode (before async analysis)
+          logger.info('agent-ws', 'sending_bot_mode_switch', { phone, mode: 'human' });
+          try { ws.send(JSON.stringify({ type: 'bot_mode_switch', mode: 'human' })); } catch { /* ws closed */ }
           // Run handoff analysis on agent side; don't forward raw transfer_data to agent WS
           const { agent: agentLang } = getLangs(phone);
           runHandoffAnalysis(ws, event.turns as TurnRecord[], event.toolRecords as ToolRecord[], event.args, event.userMessage, agentLang)

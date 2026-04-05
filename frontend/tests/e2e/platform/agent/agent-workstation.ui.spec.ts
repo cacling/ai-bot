@@ -655,6 +655,50 @@ test.describe('卡片交互', () => {
   });
 });
 
+// ── 7.5 转人工后 bot 模式切换验证 ───────────────────────────────────────────
+
+test.describe('转人工后 bot 模式切换', () => {
+  test.setTimeout(200_000);
+
+  test('AGENT-UI-HANDOFF-01: 转人工后客户发消息不触发机器人占位符', async ({ browser }) => {
+    await resetAgentPresence('demo_admin_001');
+
+    // Open client chat (张三)
+    const clientPage = await openClientChat(browser);
+    // Open agent workstation — capture console logs for debugging
+    const agentPage = await loginAgentInContext(browser);
+    await waitForWs(agentPage, '/ws/agent');
+
+    // Customer asks to transfer to human — triggers bot handoff flow
+    await sendClientMessage(clientPage, '帮我转人工客服');
+    await waitForBotReply(clientPage);
+
+    // Wait for handoff to complete: handoff_card or bot_mode_switch should arrive
+    // Check that agent side shows 转人工摘要 card (confirms handoff happened)
+    const handoffCard = findCardById(agentPage, 'handoff');
+    await expect(handoffCard).toBeVisible({ timeout: 30_000 });
+
+    // Now customer sends a new message AFTER transfer
+    await sendClientMessage(clientPage, '帮我查一下本月账单明细');
+
+    // Wait for the message to appear on agent side
+    const chatPanel = agentPage.locator('#agent-chat');
+    await expect(chatPanel.getByText('帮我查一下本月账单明细')).toBeVisible({ timeout: 15_000 });
+
+    // Wait a moment for any bot placeholder to potentially appear
+    await agentPage.waitForTimeout(3000);
+
+    // Key assertion: there should be NO bot typing indicator (animate-bounce dots)
+    // in the agent chat panel after transfer to human
+    const bounceDots = chatPanel.locator('.animate-bounce');
+    const bounceCount = await bounceDots.count();
+    expect(bounceCount, 'No bot typing indicator should appear after transfer to human').toBe(0);
+
+    await clientPage.context().close();
+    await agentPage.context().close();
+  });
+});
+
 // ── 8. 跨窗口用户同步 ───────────────────────────────────────────────────────
 
 test.describe('跨窗口用户同步', () => {
