@@ -8,6 +8,8 @@
  * stops overriding for that interaction.
  */
 
+import { getCardDef } from './registry';
+
 export interface QueueCardLayout {
   /** Cards that should be open and expanded */
   open: string[];
@@ -83,10 +85,16 @@ export function applyQueueLayout(
   const closedSet = new Set(layout.closed);
 
   return cards.map((card) => {
+    const def = getCardDef(card.id);
+    const dataOnly = def?.showOnDataOnly && card.data == null;
+
     if (openSet.has(card.id)) {
+      // Don't force-open a showOnDataOnly card that has no data yet
+      if (dataOnly) return { ...card, isOpen: false, isCollapsed: false };
       return { ...card, isOpen: true, isCollapsed: false };
     }
     if (collapsedSet.has(card.id)) {
+      if (dataOnly) return { ...card, isOpen: false, isCollapsed: true };
       return { ...card, isOpen: true, isCollapsed: true };
     }
     if (closedSet.has(card.id)) {

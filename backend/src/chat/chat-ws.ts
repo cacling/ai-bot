@@ -294,6 +294,13 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
 
           const msg_id = crypto.randomUUID();
 
+          // ── 立即禁用 bot（防止流式推送期间用户新消息触发二次处理）──
+          if (turnResult.transferRequested) {
+            botEnabled = false;
+            transferTriggered = true;
+            logger.info('chat-ws', 'bot_disabled_early', { phone, session: sessionId });
+          }
+
           // Persist messages
           const rtMsgRows: Array<{ sessionId: string; role: string; content: string }> = [
             { sessionId, role: 'user', content: message },
@@ -348,12 +355,10 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
             msg_id,
           });
 
-          // Handle transfer
+          // Handle transfer (botEnabled already set to false earlier)
           if (turnResult.transferRequested) {
-            botEnabled = false;
             try { ws.send(JSON.stringify({ type: 'transfer_to_human', msg_id })); } catch { /* ws closed */ }
             sessionBus.publish(phone, { source: 'user', type: 'transfer_data', msg_id });
-            logger.info('chat-ws', 'bot_disabled', { phone, session: sessionId });
             materializeOnHandoff(phone, sessionId); // skill-runtime path: no transferArgs
           }
 
@@ -418,10 +423,16 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
         return;
       }
 
+      // ── 立即禁用 bot（防止流式推送期间用户新消息触发二次 runAgent）──
+      if (result.transferData) {
+        botEnabled = false;
+        transferTriggered = true;
+        logger.info('chat-ws', 'bot_disabled_early', { phone, session: sessionId });
+      }
+
       // 统计指标
       messageCount += 2; // user + assistant
       if (result.card) toolCallCount++;
-      if (result.transferData) { transferTriggered = true; }
       // 从 steps 提取工具调用统计
       for (const step of (result as any).steps ?? []) {
         for (const tc of step.toolCalls ?? []) {
@@ -576,8 +587,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       if (result.transferData) {
         const { turns, toolRecords, args, userMessage: um } = result.transferData;
         sessionBus.publish(phone, { source: 'user', type: 'transfer_data', turns, toolRecords, args, userMessage: um, msg_id: crypto.randomUUID() });
-        botEnabled = false;
-        logger.info('chat-ws', 'bot_disabled', { phone, session: sessionId });
+        // botEnabled already set to false earlier (before streaming)
         try { ws.send(JSON.stringify({ type: 'transfer_to_human' })); } catch { /* ws closed */ }
         materializeOnHandoff(phone, sessionId, args as { current_intent?: string; recommended_action?: string });
       }

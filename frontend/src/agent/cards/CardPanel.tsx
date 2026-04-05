@@ -154,6 +154,8 @@ export const CardPanel = memo(function CardPanel({ cards, lang, queueCode, onUpd
           {closed.map(state => {
             const def = getCardDef(state.id);
             if (!def) return null;
+            // Hide restore chip for showOnDataOnly cards that have no data yet
+            if (def.showOnDataOnly && state.data == null) return null;
             return (
               <button
                 key={state.id}
