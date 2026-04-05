@@ -41,7 +41,20 @@ export const SchedulePlanPage = memo(function SchedulePlanPage({ lang }: { lang:
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', startDate: '', endDate: '' });
   const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [staffNames, setStaffNames] = useState<Record<string, string>>({});
   const resizingRef = useRef(false);
+
+  // Load staff id→display_name mapping
+  useEffect(() => {
+    fetch('/api/staff-auth/staff-list')
+      .then(r => r.json())
+      .then(data => {
+        const map: Record<string, string> = {};
+        for (const s of data.items ?? []) map[s.id] = s.display_name;
+        setStaffNames(map);
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Sidebar resize drag ──
   const onResizeStart = useCallback((e: React.MouseEvent) => {
@@ -66,10 +79,22 @@ export const SchedulePlanPage = memo(function SchedulePlanPage({ lang }: { lang:
   const loadPlans = useCallback(async () => {
     const res = await fetch('/api/wfm/plans');
     const data = await res.json();
-    setPlans(data.items ?? []);
+    const items: Plan[] = data.items ?? [];
+    setPlans(items);
+    return items;
   }, []);
 
-  useEffect(() => { loadPlans(); }, [loadPlans]);
+  // Track whether user has manually selected a plan
+  const hasUserSelected = useRef(false);
+
+  // Auto-select first plan on initial load (only if user hasn't selected one)
+  useEffect(() => {
+    loadPlans().then(items => {
+      if (items.length > 0 && !hasUserSelected.current) {
+        selectPlan(items[0]);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadTimeline = useCallback(async (planId: number, date: string) => {
     const [tlRes, planRes] = await Promise.all([
@@ -143,6 +168,7 @@ export const SchedulePlanPage = memo(function SchedulePlanPage({ lang }: { lang:
   };
 
   const selectPlan = (plan: Plan) => {
+    hasUserSelected.current = true;
     setSelectedPlan(plan);
     setTimelineDate(plan.startDate);
     loadTimeline(plan.id, plan.startDate);
@@ -248,6 +274,7 @@ export const SchedulePlanPage = memo(function SchedulePlanPage({ lang }: { lang:
                 planStatus={selectedPlan.status}
                 versionNo={selectedPlan.versionNo}
                 entries={timeline}
+                staffNames={staffNames}
                 onRefresh={() => loadTimeline(selectedPlan.id, timelineDate)}
               />
             </>

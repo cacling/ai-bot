@@ -135,6 +135,20 @@ staffAuthRoutes.get('/me', async (c) => {
   return c.json({ staff: buildStaffResponse(staff) });
 });
 
+// GET /staff-list — lightweight id→display_name map for internal UIs (e.g. WFM timeline)
+staffAuthRoutes.get('/staff-list', async (c) => {
+  // Require valid session (this route is mounted before staffSessionMiddleware)
+  const token = getCookie(c, SESSION_COOKIE);
+  if (!token || !resolveSession(token)) {
+    return c.json({ error: '未登录' }, 401);
+  }
+  const rows = db
+    .select({ id: staffAccounts.id, display_name: staffAccounts.display_name })
+    .from(staffAccounts)
+    .all();
+  return c.json({ items: rows });
+});
+
 // ── Session 中间件 ──────────────────────────────────────────────────────────
 
 export async function staffSessionMiddleware(c: Context, next: Next) {

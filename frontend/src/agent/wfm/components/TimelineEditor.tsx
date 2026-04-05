@@ -41,11 +41,13 @@ interface TimelineEditorProps {
   planStatus: string;
   versionNo: number;
   entries: TimelineEntry[];
+  staffNames?: Record<string, string>;
   onRefresh: () => void;
 }
 
 // ── 常量 ──
 
+const LABEL_WIDTH = 100;        // px — staff label column width (w-[100px])
 const HOUR_WIDTH = 80;          // px per hour（同 wfm-demo）
 const PX_PER_MINUTE = HOUR_WIDTH / 60;
 const SNAP_MINUTES = 15;
@@ -115,7 +117,7 @@ interface ValState {
 // ── 组件 ──
 
 export const TimelineEditor = memo(function TimelineEditor({
-  lang, planId, planStatus, versionNo, entries, onRefresh,
+  lang, planId, planStatus, versionNo, entries, staffNames, onRefresh,
 }: TimelineEditorProps) {
   const editable = planStatus === 'generated' || planStatus === 'editing';
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -123,6 +125,33 @@ export const TimelineEditor = memo(function TimelineEditor({
   const [selectedBlockId, setSelectedBlockId] = useState<number | null>(null);
   const [validation, setValidation] = useState<ValState | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const rulerRef = useRef<HTMLDivElement>(null);
+  const hasAutoScrolled = useRef(false);
+
+  // ── Auto-scroll to first block's start time when entries load ──
+  useEffect(() => {
+    if (!bodyRef.current || entries.length === 0) return;
+    // Only auto-scroll once per plan selection (not on every edit refresh)
+    if (hasAutoScrolled.current) return;
+    // Find earliest block start across all entries
+    let earliestX = Infinity;
+    for (const entry of entries) {
+      for (const block of entry.blocks) {
+        const x = timeToX(block.startTime);
+        if (x < earliestX) earliestX = x;
+      }
+    }
+    if (earliestX < Infinity) {
+      // Scroll so the earliest block is ~100px from the left edge
+      bodyRef.current.scrollLeft = Math.max(0, earliestX - 100);
+      hasAutoScrolled.current = true;
+    }
+  }, [entries]);
+
+  // Reset auto-scroll flag when plan changes
+  useEffect(() => {
+    hasAutoScrolled.current = false;
+  }, [planId]);
 
   // ── 通用 commit 请求（含 validation 弹窗） ──
 
@@ -222,8 +251,9 @@ export const TimelineEditor = memo(function TimelineEditor({
 
     const { activityId } = JSON.parse(raw);
     const rect = bodyRef.current.getBoundingClientRect();
-    const relX = e.clientX - rect.left + bodyRef.current.scrollLeft;
-    const relY = e.clientY - rect.top + bodyRef.current.scrollTop;
+    const rulerH = rulerRef.current?.offsetHeight ?? 0;
+    const relX = e.clientX - rect.left + bodyRef.current.scrollLeft - LABEL_WIDTH;
+    const relY = e.clientY - rect.top + bodyRef.current.scrollTop - rulerH;
 
     const rowIdx = Math.floor(relY / ROW_HEIGHT);
     if (rowIdx < 0 || rowIdx >= entries.length) return;
@@ -307,7 +337,7 @@ export const TimelineEditor = memo(function TimelineEditor({
         onDrop={onDrop}
       >
         {/* Hour ruler */}
-        <div className="sticky top-0 bg-background z-10 flex border-b border-border">
+        <div ref={rulerRef} className="sticky top-0 bg-background z-10 flex border-b border-border">
           <div className="w-[100px] flex-shrink-0 sticky left-0 z-[3] bg-background" />
           {Array.from({ length: 24 }, (_, h) => (
             <div key={h} className="text-[10px] text-muted-foreground border-l border-border/50 flex-shrink-0" style={{ width: HOUR_WIDTH, paddingLeft: 2 }}>
@@ -320,8 +350,8 @@ export const TimelineEditor = memo(function TimelineEditor({
         {entries.map((entry, rowIdx) => (
           <div key={entry.id} className="flex border-b border-border hover:bg-accent/20" style={{ height: ROW_HEIGHT }}>
             {/* Staff label — sticky on horizontal scroll */}
-            <div className="w-[100px] flex-shrink-0 sticky left-0 z-[2] px-2 text-[11px] flex items-center text-muted-foreground truncate border-r border-border bg-background">
-              {entry.staffId}
+            <div className="w-[100px] flex-shrink-0 sticky left-0 z-[2] px-2 text-[11px] flex items-center text-muted-foreground truncate border-r border-border bg-background" title={entry.staffId}>
+              {staffNames?.[entry.staffId] ?? entry.staffId}
             </div>
 
             {/* Timeline row */}
