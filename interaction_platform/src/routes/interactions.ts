@@ -209,6 +209,9 @@ router.post('/:id/close', async (c) => {
     });
   }
 
+  // Notify customer that session has ended (fire-and-forget)
+  notifyCustomerClose(interaction.handoff_summary);
+
   // Create follow-up work order if requested
   let followUpResult = null;
   if (body.follow_up) {
@@ -292,5 +295,23 @@ router.post('/:id/follow-up', async (c) => {
 
   return c.json(result);
 });
+
+// ── Customer notification helper ──────────────────────────────────────────
+
+function notifyCustomerClose(handoffSummary: string | null | undefined) {
+  if (!handoffSummary) return;
+  const phoneMatch = handoffSummary.match(/\[phone:([^\]]+)\]/);
+  if (!phoneMatch) return;
+  const phone = phoneMatch[1];
+  const langMatch = handoffSummary.match(/\[lang:([^\]]+)\]/);
+  const lang = langMatch?.[1] ?? 'zh';
+  const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:18472';
+
+  fetch(`${backendUrl}/api/internal/notify/customer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, event_type: 'session_closed', lang }),
+  }).catch(() => { /* fire-and-forget */ });
+}
 
 export default router;

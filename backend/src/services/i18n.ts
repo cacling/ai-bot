@@ -148,6 +148,28 @@ const messages: Record<string, Record<Lang, MsgFn>> = {
     zh: '好的，我这就为您转接人工客服，请稍候。',
     en: "Please hold on, I'm transferring you to a human agent now.",
   },
+
+  // ── 排队 / 坐席接入 / 结束 ──
+  queue_position:               {
+    zh: (pos: number) => `您前面还有 ${pos} 位用户排队，请耐心等候。`,
+    en: (pos: number) => `There are ${pos} customer(s) ahead of you. Please wait.`,
+  },
+  queue_waiting:                {
+    zh: '当前坐席繁忙，正在为您排队，请稍候…',
+    en: 'All agents are busy. You are now in queue, please wait…',
+  },
+  agent_joined:                 {
+    zh: (name: string) => `坐席 ${name} 已接入，正在为您服务。`,
+    en: (name: string) => `Agent ${name} has joined. They will assist you now.`,
+  },
+  agent_welcome:                {
+    zh: (customerName: string, agentName: string) => `${customerName}您好，我是坐席${agentName}，很高兴为您服务，请问有什么可以帮您？`,
+    en: (customerName: string, agentName: string) => `Hello ${customerName}, I'm ${agentName}. How can I help you?`,
+  },
+  session_closed:               {
+    zh: '本次服务已结束，感谢您的咨询，祝您生活愉快！如有其他问题，随时可以继续咨询。',
+    en: 'This session has ended. Thank you for reaching out! Feel free to contact us again anytime.',
+  },
 };
 
 // ── t() 函数 ────────────────────────────────────────────────────────────────

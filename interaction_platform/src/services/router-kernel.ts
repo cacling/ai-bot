@@ -187,6 +187,10 @@ export async function routeInteraction(interactionId: string): Promise<RouteResu
       to_state: 'queued',
     });
 
+    // Notify customer of queue position
+    const backlog = snapshot.queue_backlog ?? 0;
+    notifyCustomer(interaction.handoff_summary, 'queue_position', undefined, { position: backlog });
+
     return { success: true };
   }
 
@@ -275,7 +279,38 @@ export async function routeInteraction(interactionId: string): Promise<RouteResu
         },
       });
     }
+
+    // Notify customer that agent has joined (fire-and-forget)
+    notifyCustomer(updatedInteraction.handoff_summary, 'agent_joined', winner.agent_id);
   }
 
   return { success: true, assigned_agent_id: winner.agent_id, assignment_id: assignmentId };
+}
+
+// ── Customer notification helpers ─────────────────────────────────────────
+
+/** Parse [key:value] tags from handoff_summary */
+function parseSummaryTag(summary: string | null | undefined, tag: string): string | undefined {
+  if (!summary) return undefined;
+  const match = summary.match(new RegExp(`\\[${tag}:([^\\]]+)\\]`));
+  return match?.[1];
+}
+
+/** Fire-and-forget: notify customer WS via backend's internal API */
+function notifyCustomer(
+  handoffSummary: string | null | undefined,
+  eventType: 'queue_position' | 'agent_joined' | 'session_closed',
+  agentId?: string,
+  extra?: Record<string, unknown>,
+) {
+  const phone = parseSummaryTag(handoffSummary, 'phone');
+  if (!phone) return;
+  const lang = parseSummaryTag(handoffSummary, 'lang') ?? 'zh';
+  const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:18472';
+
+  fetch(`${backendUrl}/api/internal/notify/customer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone, event_type: eventType, agent_id: agentId, lang, ...extra }),
+  }).catch(() => { /* fire-and-forget */ });
 }

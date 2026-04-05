@@ -29,10 +29,14 @@ export type BusEvent =
   | { source: 'voice'; type: 'handoff_card';          data: Record<string, unknown>; msg_id: string }
   | { source: 'voice'; type: 'compliance_alert';      data: Record<string, unknown>; msg_id: string }
   | { source: 'system'; type: 'new_session';          channel: string; msg_id: string }
-  | { source: 'system'; type: 'reply_hints';         data: Record<string, unknown>; phone: string; msg_id: string };
+  | { source: 'system'; type: 'reply_hints';         data: Record<string, unknown>; phone: string; msg_id: string }
+  | { source: 'system'; type: 'queue_position';      position: number; msg_id: string }
+  | { source: 'system'; type: 'agent_joined';        agent_name: string; msg_id: string }
+  | { source: 'system'; type: 'agent_welcome';       text: string; msg_id: string }
+  | { source: 'system'; type: 'session_closed';      text: string; msg_id: string };
 
 /** Event types stored in per-phone history ring buffer (excludes streaming deltas and internal data). */
-const HISTORY_TYPES = new Set(['user_message', 'response', 'agent_message', 'new_session', 'reply_hints']);
+const HISTORY_TYPES = new Set(['user_message', 'response', 'agent_message', 'new_session', 'reply_hints', 'agent_joined', 'agent_welcome', 'session_closed']);
 const HISTORY_MAX   = 100;
 
 type Subscriber = (event: BusEvent) => void;

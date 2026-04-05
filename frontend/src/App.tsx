@@ -44,7 +44,15 @@ export interface FaqMessage {
   loading?: boolean; // 占位态（skeleton）
 }
 
-export type Message = TextMessage | FaqMessage;
+export interface SystemMessage {
+  id: number;
+  sender: 'system';
+  type: 'system';
+  text: string;
+  time: string;
+}
+
+export type Message = TextMessage | FaqMessage | SystemMessage;
 
 // ── 消息气泡（提取到组件外 + memo，避免流式更新时所有气泡重新挂载）────────
 
@@ -58,6 +66,17 @@ interface MessageBubbleProps {
 const MessageBubble = memo(function MessageBubble({ msg, isTyping, lang, onSend }: MessageBubbleProps) {
   const isBot = msg.sender === 'bot';
   const t = T[lang];
+
+  // System notification (centered, no avatar)
+  if (msg.type === 'system') {
+    return (
+      <div className="flex w-full mb-3 justify-center">
+        <span className="inline-block text-xs text-muted-foreground bg-muted/60 px-3 py-1.5 rounded-full">
+          {msg.text}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex w-full mb-4 ${isBot ? 'justify-start' : 'justify-end'}`}>
@@ -295,6 +314,30 @@ export default function App() {
 
       } else if (msg.type === 'transfer_to_bot') {
         setBotMode('bot');
+
+      } else if (msg.type === 'queue_position') {
+        // 排队通知
+        const pos = (msg.position as number) ?? 0;
+        const text = pos > 0
+          ? (lang === 'zh' ? `您前面还有 ${pos} 位用户排队，请耐心等候。` : `There are ${pos} customer(s) ahead of you. Please wait.`)
+          : (lang === 'zh' ? '当前坐席繁忙，正在为您排队，请稍候…' : 'All agents are busy. You are now in queue, please wait…');
+        setMessages(prev => [...prev, { id: nextMsgId(), sender: 'system', type: 'system', text, time: nowTime() } as SystemMessage]);
+
+      } else if (msg.type === 'agent_joined') {
+        // 坐席接入通知
+        const agentName = (msg.agent_name as string) ?? '';
+        const text = lang === 'zh' ? `坐席 ${agentName} 已接入，正在为您服务。` : `Agent ${agentName} has joined. They will assist you now.`;
+        setBotMode('human');
+        setMessages(prev => [...prev, { id: nextMsgId(), sender: 'system', type: 'system', text, time: nowTime() } as SystemMessage]);
+
+      } else if (msg.type === 'agent_welcome') {
+        // 坐席欢迎语（显示为坐席消息）
+        setMessages(prev => [...prev, { id: nextMsgId(), sender: 'bot', type: 'text', text: msg.text as string, time: nowTime() } as TextMessage]);
+
+      } else if (msg.type === 'session_closed') {
+        // 服务结束通知
+        setBotMode('bot');
+        setMessages(prev => [...prev, { id: nextMsgId(), sender: 'system', type: 'system', text: msg.text as string, time: nowTime() } as SystemMessage]);
 
       } else if (msg.type === 'suggestions') {
         const options = ((msg.options ?? []) as Array<{ label: string }>).map(o => o.label);

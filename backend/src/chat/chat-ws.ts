@@ -53,10 +53,11 @@ const TIER_PRIORITY: Record<string, number> = {
   delinquent: 60,
 };
 
-/** Fire-and-forget: materialize an interaction when handoff happens. */
+/** Materialize an interaction and notify customer of queue/assignment status. */
 async function materializeOnHandoff(
   phone: string,
   sessionId: string,
+  lang: 'zh' | 'en',
   transferArgs?: { current_intent?: string; recommended_action?: string },
 ) {
   try {
@@ -67,18 +68,21 @@ async function materializeOnHandoff(
     const tier = await getCustomerTier(identity.partyId);
     const priority = TIER_PRIORITY[tier ?? 'standard'] ?? 50;
 
-    // Build handoff_summary with intent tag for plugin routing
+    // Build handoff_summary with parseable tags for routing + customer notifications
     const intent = transferArgs?.current_intent;
     const summary = [
+      `[phone:${phone}]`,
+      `[lang:${lang}]`,
       intent ? `[intent:${intent}]` : null,
       transferArgs?.current_intent ?? null,
       transferArgs?.recommended_action ? `处理建议：${transferArgs.recommended_action}` : null,
     ].filter(Boolean).join(' ') || `Chat session ${sessionId} transferred to human`;
 
-    await fetch(`${INTERACTION_PLATFORM_URL}/api/interactions/materialize`, {
+    const res = await fetch(`${INTERACTION_PLATFORM_URL}/api/interactions/materialize`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        conversation_id: sessionId,
         customer_party_id: identity.partyId,
         channel: 'webchat',
         work_model: 'live_chat',
@@ -87,7 +91,18 @@ async function materializeOnHandoff(
         handoff_summary: summary,
       }),
     });
-    logger.info('chat-ws', 'materialize_sent', { phone, session: sessionId, tier, priority, intent });
+
+    const result = await res.json() as { success?: boolean; state?: string; assigned_agent_id?: string; error?: string };
+    logger.info('chat-ws', 'materialize_sent', { phone, session: sessionId, tier, priority, intent, state: result.state });
+
+    // Notify customer of queue status
+    if (result.state === 'queued') {
+      sessionBus.publish(phone, {
+        source: 'system', type: 'queue_position', position: 0,
+        msg_id: crypto.randomUUID(),
+      });
+    }
+    // If immediately assigned, the interaction_platform callback will handle agent_joined
   } catch (err) {
     logger.warn('chat-ws', 'materialize_error', { phone, session: sessionId, error: String(err) });
   }
@@ -128,8 +143,19 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
       setCustomerLang(phone, langParam);
       sessionBus.setSession(phone, sessionId);
 
-      // Subscribe to agent-side events → translate if needed → forward to customer WS
+      // Subscribe to agent-side + system events → forward to customer WS
       unsubscribe = sessionBus.subscribe(phone, async (event) => {
+        // Forward system lifecycle events (queue_position, agent_joined, session_closed, etc.)
+        if (event.source === 'system' && ['queue_position', 'agent_joined', 'agent_welcome', 'session_closed'].includes(event.type)) {
+          try { ws.send(JSON.stringify(event)); } catch { /* ws closed */ }
+          // Re-enable bot when session is closed by agent
+          if (event.type === 'session_closed') {
+            botEnabled = true;
+            logger.info('chat-ws', 'bot_enabled_after_close', { phone, session: sessionId });
+          }
+          return;
+        }
+
         if (event.source !== 'agent') return;
 
         if (event.type === 'transfer_to_bot') {
@@ -359,7 +385,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
           if (turnResult.transferRequested) {
             try { ws.send(JSON.stringify({ type: 'transfer_to_human', msg_id })); } catch { /* ws closed */ }
             sessionBus.publish(phone, { source: 'user', type: 'transfer_data', msg_id });
-            materializeOnHandoff(phone, sessionId); // skill-runtime path: no transferArgs
+            materializeOnHandoff(phone, sessionId, langParam); // skill-runtime path: no transferArgs
           }
 
           // Track metrics
@@ -589,7 +615,7 @@ chatWs.get('/ws/chat', upgradeWebSocket((c) => {
         sessionBus.publish(phone, { source: 'user', type: 'transfer_data', turns, toolRecords, args, userMessage: um, msg_id: crypto.randomUUID() });
         // botEnabled already set to false earlier (before streaming)
         try { ws.send(JSON.stringify({ type: 'transfer_to_human' })); } catch { /* ws closed */ }
-        materializeOnHandoff(phone, sessionId, args as { current_intent?: string; recommended_action?: string });
+        materializeOnHandoff(phone, sessionId, langParam, args as { current_intent?: string; recommended_action?: string });
       }
 
       logger.info('chat-ws', 'response_sent', { session: sessionId });

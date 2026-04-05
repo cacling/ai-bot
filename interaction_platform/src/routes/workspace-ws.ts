@@ -196,7 +196,7 @@ wsRouter.get(
               where: eq(ixInteractions.interaction_id, interactionId),
             });
             if (interaction) {
-              const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:18001';
+              const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:18472';
               fetch(`${backendUrl}/api/agent/message`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
